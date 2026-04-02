@@ -7,7 +7,7 @@ colorized messages, and automatic rotation.
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TextIO
 from loguru import logger
 
 
@@ -16,8 +16,10 @@ def init_logger(
     log_dir: Optional[Path] = None,
     console: bool = True,
     file_logging: bool = True,
+    console_stream: Optional[TextIO] = None,
     rotation: str = "100 MB",
     retention: str = "10 days",
+    announce: bool = True,
 ) -> None:
     """
     Initialize the loguru logger with custom settings.
@@ -27,8 +29,10 @@ def init_logger(
         log_dir: Directory for log files (defaults to ./logs)
         console: Enable console output
         file_logging: Enable file output
+        console_stream: Stream for console output (defaults to sys.stdout)
         rotation: When to rotate log files (size or time-based)
         retention: How long to keep old log files
+        announce: Log a one-line initialization message after setup
     """
     # Remove default handler
     logger.remove()
@@ -42,8 +46,10 @@ def init_logger(
 
     # Console handler with colors
     if console:
+        if console_stream is None:
+            console_stream = sys.stdout
         logger.add(
-            sys.stdout,
+            console_stream,
             format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
             level=level,
             colorize=True,
@@ -62,7 +68,8 @@ def init_logger(
             enqueue=True,  # Thread-safe logging
         )
 
-    logger.info(f"Logger initialized with level: {level}")
+    if announce:
+        logger.info(f"Logger initialized with level: {level}")
 
 
 def get_logger():

@@ -10,15 +10,17 @@ import sys
 from loguru import logger
 
 from yoyopy.app import YoyoPodApp
+from yoyopy.utils.logger import init_logger
 
 
 def configure_logger() -> None:
     """Configure the default console logger for the app."""
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+    init_logger(
         level="INFO",
+        console=True,
+        file_logging=False,
+        console_stream=sys.stderr,
+        announce=False,
     )
 
 
