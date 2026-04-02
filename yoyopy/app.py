@@ -9,14 +9,13 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from loguru import logger
 
 from yoyopy.app_context import AppContext
 from yoyopy.audio.mopidy_client import MopidyClient
-from yoyopy.config import ConfigManager
+from yoyopy.config import ConfigManager, YoyoPodConfig
 from yoyopy.connectivity import VoIPConfig, VoIPManager
 from yoyopy.coordinators import (
     CallCoordinator,
@@ -66,6 +65,7 @@ class YoyoPodApp:
         self.display: Optional[Display] = None
         self.context: Optional[AppContext] = None
         self.config_manager: Optional[ConfigManager] = None
+        self.app_settings: Optional[YoyoPodConfig] = None
         self.state_machine: Optional[StateMachine] = None
         self.screen_manager: Optional[ScreenManager] = None
         self.input_manager: Optional[InputManager] = None
@@ -168,60 +168,20 @@ class YoyoPodApp:
 
         try:
             self.config_manager = ConfigManager(config_dir=self.config_dir)
-            config_file = Path(self.config_dir) / "yoyopod_config.yaml"
+            self.app_settings = self.config_manager.get_app_settings()
+            self.config = self.config_manager.get_app_config_dict()
 
-            if config_file.exists():
-                import yaml
-
-                with open(config_file, "r") as handle:
-                    self.config = yaml.safe_load(handle) or {}
-                logger.info(f"Loaded configuration from {config_file}")
+            if self.config_manager.app_config_loaded:
+                logger.info(f"Loaded configuration from {self.config_manager.app_config_file}")
             else:
-                logger.warning(f"Config file not found: {config_file}")
-                logger.info("Using default configuration")
-                self.config = self._get_default_config()
+                logger.info("Using default application configuration")
 
-            self.auto_resume_after_call = self.config.get("audio", {}).get(
-                "auto_resume_after_call",
-                True,
-            )
+            self.auto_resume_after_call = self.app_settings.audio.auto_resume_after_call
             logger.info(f"  Auto-resume after call: {self.auto_resume_after_call}")
             return True
         except Exception as exc:
             logger.error(f"Failed to load configuration: {exc}")
             return False
-
-    def _get_default_config(self) -> Dict[str, Any]:
-        """Return the default YoyoPod configuration."""
-        return {
-            "app": {
-                "name": "YoyoPod",
-                "version": "1.0.0",
-                "simulate": self.simulate,
-            },
-            "audio": {
-                "mopidy_host": "localhost",
-                "mopidy_port": 6680,
-                "auto_resume_after_call": True,
-                "default_volume": 70,
-                "ring_output_device": "",
-                "speaker_test_path": "speaker-test",
-            },
-            "voip": {
-                "config_file": "config/voip_config.yaml",
-                "priority_over_music": True,
-                "auto_answer": False,
-                "ring_duration_seconds": 30,
-            },
-            "ui": {
-                "theme": "dark",
-                "show_album_art": True,
-                "screen_timeout_seconds": 300,
-            },
-            "logging": {
-                "level": "INFO",
-            },
-        }
 
     def _init_core_components(self) -> bool:
         """Initialize display, context, state machine, input, and screen manager."""
@@ -229,7 +189,9 @@ class YoyoPodApp:
 
         try:
             logger.info("  - Display")
-            display_hardware = self.config.get("display", {}).get("hardware", "auto")
+            display_hardware = (
+                self.app_settings.display.hardware if self.app_settings else "auto"
+            )
             logger.info(f"    Hardware: {display_hardware}")
             self.display = Display(hardware=display_hardware, simulate=self.simulate)
             logger.info(f"    Dimensions: {self.display.WIDTH}x{self.display.HEIGHT}")
@@ -298,8 +260,10 @@ class YoyoPodApp:
                 logger.warning("    ⚠ VoIP failed to start (music-only mode)")
 
             logger.info("  - MopidyClient")
-            mopidy_host = self.config.get("audio", {}).get("mopidy_host", "localhost")
-            mopidy_port = self.config.get("audio", {}).get("mopidy_port", 6680)
+            mopidy_host = (
+                self.app_settings.audio.mopidy_host if self.app_settings else "localhost"
+            )
+            mopidy_port = self.app_settings.audio.mopidy_port if self.app_settings else 6680
             self.mopidy_client = MopidyClient(host=mopidy_host, port=mopidy_port)
             if self.mopidy_client.connect():
                 logger.info("    ✓ Mopidy connected successfully")

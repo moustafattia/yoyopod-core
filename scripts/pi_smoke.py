@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
 from loguru import logger
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from yoyopy.audio.mopidy_client import MopidyClient
-from yoyopy.config import ConfigManager
+from yoyopy.config import ConfigManager, YoyoPodConfig, config_to_dict, load_config_model_from_yaml
 from yoyopy.connectivity import VoIPConfig, VoIPManager
 from yoyopy.ui.display import Display, detect_hardware
 from yoyopy.ui.input import get_input_manager
@@ -49,10 +48,7 @@ def load_app_config(config_dir: Path) -> dict[str, Any]:
     config_file = config_dir / "yoyopod_config.yaml"
     if not config_file.exists():
         logger.warning(f"App config not found: {config_file}")
-        return {}
-
-    with open(config_file, "r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle) or {}
+    return config_to_dict(load_config_model_from_yaml(YoyoPodConfig, config_file))
 
 
 def environment_check() -> CheckResult:
