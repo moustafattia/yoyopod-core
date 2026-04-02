@@ -4,7 +4,6 @@ from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.display import Display
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime
-import threading
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -38,8 +37,6 @@ class InCallScreen(Screen):
         """
         super().__init__(display, context, "InCall")
         self.voip_manager = voip_manager
-        self.refresh_thread = None
-        self.refresh_stop_event = None
 
     def format_duration(self, seconds: int) -> str:
         """
@@ -246,37 +243,3 @@ class InCallScreen(Screen):
     def on_up(self, data=None) -> None:
         """Toggle microphone mute."""
         self._toggle_mute()
-
-    def enter(self) -> None:
-        """Called when screen becomes active - start auto-refresh thread."""
-        super().enter()
-        # Start refresh thread for live duration updates
-        self.refresh_stop_event = threading.Event()
-        self.refresh_thread = threading.Thread(
-            target=self._refresh_loop,
-            daemon=True
-        )
-        self.refresh_thread.start()
-        logger.debug("InCallScreen auto-refresh thread started")
-
-    def exit(self) -> None:
-        """Called when screen becomes inactive - stop auto-refresh thread."""
-        super().exit()
-        # Stop refresh thread
-        if self.refresh_stop_event:
-            self.refresh_stop_event.set()
-        if self.refresh_thread:
-            self.refresh_thread.join(timeout=1)
-            self.refresh_thread = None
-        self.refresh_stop_event = None
-        logger.debug("InCallScreen auto-refresh thread stopped")
-
-    def _refresh_loop(self) -> None:
-        """Background thread to refresh display every second."""
-        while not self.refresh_stop_event.is_set():
-            try:
-                self.render()
-            except Exception as e:
-                logger.error(f"Error in refresh loop: {e}")
-            # Wait 1 second before next refresh
-            self.refresh_stop_event.wait(1.0)

@@ -167,6 +167,20 @@ class CoordinatorRuntime:
         actual_trigger = trigger if ready else "voip_unavailable"
         return self.sync_app_state(actual_trigger)
 
+    def sync_ui_state_for_screen(self, screen_name: str | None) -> AppStateChange | None:
+        """Update the base UI state for non-call overlay screens."""
+        state_by_screen = {
+            "home": AppRuntimeState.IDLE,
+            "menu": AppRuntimeState.MENU,
+            "playlists": AppRuntimeState.PLAYLIST_BROWSER,
+            "call": AppRuntimeState.CALL_IDLE,
+            "contacts": AppRuntimeState.CALL_IDLE,
+        }
+        if screen_name is None or screen_name not in state_by_screen:
+            return None
+
+        return self.set_ui_state(state_by_screen[screen_name], trigger=f"screen:{screen_name}")
+
     def get_state_name(self) -> str:
         """Return the current derived app-state name."""
         return self.current_app_state.value

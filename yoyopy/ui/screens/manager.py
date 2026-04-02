@@ -4,7 +4,7 @@ Screen management and navigation for YoyoPod.
 Handles screen transitions, route resolution, and the navigation stack.
 """
 
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import Callable, Optional, Dict, TYPE_CHECKING
 from loguru import logger
 
 from yoyopy.ui.display import Display
@@ -36,6 +36,7 @@ class ScreenManager:
         display: Display,
         input_manager: Optional['InputManager'] = None,
         router: Optional[ScreenRouter] = None,
+        on_screen_changed: Optional[Callable[[Optional[str]], None]] = None,
     ) -> None:
         """
         Initialize the screen manager.
@@ -50,6 +51,7 @@ class ScreenManager:
         self.screen_stack: list[Screen] = []
         self.screens: Dict[str, Screen] = {}
         self.router = router or ScreenRouter()
+        self.on_screen_changed = on_screen_changed
 
         logger.info("ScreenManager initialized")
 
@@ -88,6 +90,7 @@ class ScreenManager:
         self.current_screen.enter()
         self._connect_buttons()
         self.current_screen.render()
+        self._notify_screen_changed()
 
         logger.info(f"Pushed screen: {screen_name} (stack depth: {len(self.screen_stack)})")
 
@@ -112,6 +115,7 @@ class ScreenManager:
         self.current_screen.enter()
         self._connect_buttons()
         self.current_screen.render()
+        self._notify_screen_changed()
 
         logger.info(f"Popped screen (stack depth: {len(self.screen_stack)})")
         return True
@@ -137,6 +141,7 @@ class ScreenManager:
         self.current_screen.enter()
         self._connect_buttons()
         self.current_screen.render()
+        self._notify_screen_changed()
 
         logger.info(f"Replaced screen with: {screen_name}")
 
@@ -153,6 +158,13 @@ class ScreenManager:
         """Re-render the current screen."""
         if self.current_screen:
             self.current_screen.render()
+
+    def _notify_screen_changed(self) -> None:
+        """Notify listeners when the active screen changes."""
+        if self.on_screen_changed is None:
+            return
+        route_name = self.current_screen.route_name if self.current_screen else None
+        self.on_screen_changed(route_name)
 
     def apply_navigation_request(
         self,

@@ -32,6 +32,7 @@ class FakeScreen:
 
     def __init__(self) -> None:
         self.render_calls = 0
+        self.route_name: str | None = None
 
     def render(self) -> None:
         self.render_calls += 1
@@ -54,16 +55,30 @@ class FakeScreenManager:
         self.screen_lookup = screen_lookup
         self.screen_stack: list[object] = []
         self.current_screen: object | None = None
+        self.on_screen_changed = None
+
+        for name, screen in screen_lookup.items():
+            setattr(screen, "route_name", name)
 
     def push_screen(self, name: str) -> None:
         screen = self.screen_lookup[name]
         self.screen_stack.append(screen)
         self.current_screen = screen
+        self._notify_screen_changed(name)
 
     def pop_screen(self) -> None:
         if self.screen_stack:
             self.screen_stack.pop()
         self.current_screen = self.screen_stack[-1] if self.screen_stack else None
+        route_name = getattr(self.current_screen, "route_name", None)
+        self._notify_screen_changed(route_name)
+
+    def get_current_screen(self) -> object | None:
+        return self.current_screen
+
+    def _notify_screen_changed(self, route_name: str | None) -> None:
+        if self.on_screen_changed is not None:
+            self.on_screen_changed(route_name)
 
 
 class FakeMopidyClient:
@@ -113,7 +128,9 @@ def _build_app(playback_state: str = "stopped", auto_resume: bool = True) -> tup
 
     app.menu_screen = FakeScreen()
     app.now_playing_screen = FakeScreen()
+    app.playlist_screen = FakeScreen()
     app.call_screen = FakeScreen()
+    app.contact_list_screen = FakeScreen()
     app.incoming_call_screen = FakeIncomingCallScreen()
     app.outgoing_call_screen = FakeScreen()
     app.in_call_screen = FakeScreen()
@@ -121,6 +138,8 @@ def _build_app(playback_state: str = "stopped", auto_resume: bool = True) -> tup
     screen_manager = FakeScreenManager(
         {
             "menu": app.menu_screen,
+            "playlists": app.playlist_screen,
+            "contacts": app.contact_list_screen,
             "incoming_call": app.incoming_call_screen,
             "outgoing_call": app.outgoing_call_screen,
             "in_call": app.in_call_screen,
@@ -259,3 +278,50 @@ def test_track_event_refreshes_now_playing_screen_when_visible() -> None:
     assert app.event_bus.drain() == 1
     assert app.now_playing_screen.render_calls == 1
     assert app.music_fsm.state == MusicState.IDLE
+
+
+def test_periodic_in_call_refresh_only_renders_visible_call_screen() -> None:
+    """Live in-call refreshes should come from the main loop, not a screen-owned thread."""
+    app, _, screen_manager = _build_app(playback_state="stopped")
+
+    app._update_in_call_if_needed()
+    assert app.in_call_screen.render_calls == 0
+
+    screen_manager.push_screen("in_call")
+    app._update_in_call_if_needed()
+    assert app.in_call_screen.render_calls == 1
+
+    screen_manager.pop_screen()
+    app._update_in_call_if_needed()
+    assert app.in_call_screen.render_calls == 1
+
+
+def test_navigation_updates_runtime_base_state() -> None:
+    """Idle navigation should keep the derived runtime state aligned with the active screen."""
+    app, _, screen_manager = _build_app(playback_state="stopped")
+
+    screen_manager.push_screen("contacts")
+    assert app.coordinator_runtime.current_app_state == AppRuntimeState.CALL_IDLE
+
+    screen_manager.pop_screen()
+    assert app.coordinator_runtime.current_app_state == AppRuntimeState.MENU
+
+    screen_manager.push_screen("playlists")
+    assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
+
+
+def test_call_end_restores_previous_screen_base_state() -> None:
+    """Ending a call should restore the derived state for the screen the user returns to."""
+    app, _, screen_manager = _build_app(playback_state="stopped")
+    screen_manager.push_screen("playlists")
+
+    app.call_fsm.sync(CallSessionState.ACTIVE)
+    app.coordinator_runtime.sync_app_state("call_connected")
+    screen_manager.push_screen("incoming_call")
+    screen_manager.push_screen("in_call")
+
+    _publish_from_worker(app, CallEndedEvent())
+
+    assert app.event_bus.drain() == 1
+    assert screen_manager.current_screen is app.playlist_screen
+    assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER

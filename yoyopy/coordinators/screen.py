@@ -40,6 +40,11 @@ class ScreenCoordinator:
             if playback_state == "playing":
                 self.runtime.now_playing_screen.render()
 
+    def update_in_call_if_needed(self) -> None:
+        """Refresh the in-call screen for live duration and mute updates."""
+        if self.runtime.screen_manager.current_screen == self.runtime.in_call_screen:
+            self.runtime.in_call_screen.render()
+
     def refresh_now_playing_screen(self) -> None:
         """Refresh the now playing screen if it is currently visible."""
         if self.runtime.screen_manager.current_screen == self.runtime.now_playing_screen:
