@@ -19,7 +19,7 @@ from yoyopy.events import (
     RegistrationChangedEvent,
     VoIPAvailabilityChangedEvent,
 )
-from yoyopy.connectivity import CallState, RegistrationState
+from yoyopy.voip import CallState, RegistrationState
 
 
 class CallCoordinator:

@@ -16,7 +16,7 @@ from loguru import logger
 from yoyopy.app_context import AppContext
 from yoyopy.audio.mopidy_client import MopidyClient
 from yoyopy.config import ConfigManager, YoyoPodConfig
-from yoyopy.connectivity import VoIPConfig, VoIPManager
+from yoyopy.voip import VoIPConfig, VoIPManager
 from yoyopy.coordinators import (
     AppRuntimeState,
     CallCoordinator,

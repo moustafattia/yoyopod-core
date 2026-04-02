@@ -315,8 +315,8 @@ speed_dial:
 3. Caller address extraction fails → callback not fired
 
 **Solution Applied:**
-- `yoyopy/connectivity/voip_manager.py:376-377` - Case-insensitive matching
-- `yoyopy/connectivity/voip_manager.py:382-417` - Support multiple SIP address formats
+- `yoyopy/voip/manager.py:376-377` - Case-insensitive matching
+- `yoyopy/voip/manager.py:382-417` - Support multiple SIP address formats
 
 ### Issue 2: Caller Name Not Shown During Ring
 
@@ -350,8 +350,8 @@ speed_dial:
 ## Important Code Locations
 
 ### Core VoIP Implementation
-- `yoyopy/connectivity/voip_manager.py` - VoIPManager class, linphonec interface
-- `yoyopy/connectivity/voip_config.py` - VoIP configuration dataclass
+- `yoyopy/voip/manager.py` - VoIPManager class, linphonec interface
+- `yoyopy/voip/types.py` - VoIP configuration dataclass and SIP event types
 - `yoyopy/config/config_manager.py` - Config and contact management
 
 ### UI Screens
@@ -400,7 +400,7 @@ Create minimal test scripts to isolate issues:
 
 ```python
 # Minimal VoIP test
-from yoyopy.connectivity import VoIPManager, VoIPConfig
+from yoyopy.voip import VoIPManager, VoIPConfig
 from yoyopy.config import ConfigManager
 
 cm = ConfigManager("config")

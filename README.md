@@ -27,7 +27,7 @@ The current codebase supports three display/input modes:
 - `yoyopy/fsm.py`: split `MusicFSM`, `CallFSM`, and call interruption policy
 - `yoyopy/coordinators/runtime.py`: derived `AppRuntimeState` over music, call, and UI state
 - `yoyopy/audio/mopidy_client.py`: Mopidy JSON-RPC client
-- `yoyopy/connectivity/voip_manager.py`: `linphonec` subprocess integration
+- `yoyopy/voip/manager.py`: `linphonec` subprocess integration
 - `yoyopy/ui/display/`: display HAL, factory, and adapters
 - `yoyopy/ui/input/`: input HAL, manager, and adapters
 - `yoyopy/ui/screens/`: screen base class, navigation manager, and feature screens
@@ -146,8 +146,10 @@ yoyopy/
     mopidy_client.py
   config/
     config_manager.py
-  connectivity/
-    voip_manager.py
+  voip/
+    backend.py
+    manager.py
+    types.py
   ui/
     __init__.py
     web_server.py

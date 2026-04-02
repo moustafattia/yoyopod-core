@@ -42,7 +42,7 @@ Responsibilities:
 
 ### VoIP Layer
 
-- `yoyopy/connectivity/voip_manager.py`
+- `yoyopy/voip/manager.py`
 
 Responsibilities:
 

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 from yoyopy.audio.mopidy_client import MopidyTrack
-from yoyopy.connectivity.voip_manager import CallState, RegistrationState
+from yoyopy.voip.manager import CallState, RegistrationState
 
 
 @dataclass(frozen=True, slots=True)

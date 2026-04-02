@@ -54,7 +54,7 @@ yoyopod.py / yoyopy.main
 ### Audio and VoIP
 
 - `yoyopy/audio/mopidy_client.py`: playlist loading, playback control, polling callbacks
-- `yoyopy/connectivity/voip_manager.py`: registration, call state parsing, call control
+- `yoyopy/voip/manager.py`: registration, call state parsing, call control
 
 ### UI Layer
 

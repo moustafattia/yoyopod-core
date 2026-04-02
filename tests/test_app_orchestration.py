@@ -8,7 +8,7 @@ import pytest
 
 from yoyopy.app import YoyoPodApp
 from yoyopy.app_context import AppContext
-from yoyopy.connectivity import CallState, RegistrationState
+from yoyopy.voip import CallState, RegistrationState
 from yoyopy.coordinators.runtime import AppRuntimeState
 from yoyopy.events import (
     CallEndedEvent,

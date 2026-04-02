@@ -15,7 +15,7 @@ logger.add(
     level="DEBUG"
 )
 
-from yoyopy.connectivity import VoIPManager, VoIPConfig
+from yoyopy.voip import VoIPManager, VoIPConfig
 from yoyopy.config import ConfigManager
 
 def main():
