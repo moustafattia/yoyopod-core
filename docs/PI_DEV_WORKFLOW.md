@@ -8,6 +8,7 @@ The repo now has a clear hardware smoke path, but developers still need a quick 
 
 - sync a branch onto the Raspberry Pi
 - inspect remote status
+- run one combined preflight before manual app startup
 - run the Pi smoke checks
 - launch the production app
 
@@ -88,6 +89,27 @@ uv run python scripts/pi_remote.py smoke --with-mopidy --mopidy-timeout 10
 uv run python scripts/pi_remote.py smoke --with-voip --voip-timeout 15 --verbose
 ```
 
+### Run the full preflight in one command
+
+```bash
+uv run python scripts/pi_remote.py preflight --branch main --with-mopidy --with-voip
+```
+
+What it does:
+
+1. runs local `compileall`
+2. runs local `uv run pytest -q`
+3. syncs the chosen branch to the Raspberry Pi
+4. runs the Raspberry Pi smoke pass
+
+Useful variations:
+
+```bash
+uv run python scripts/pi_remote.py preflight --branch main --skip-local
+uv run python scripts/pi_remote.py preflight --branch main --skip-sync --with-voip
+uv run python scripts/pi_remote.py preflight --branch main --skip-uv-sync --with-mopidy --with-voip
+```
+
 ### Launch the production app remotely
 
 ```bash
@@ -105,20 +127,16 @@ uv run python scripts/pi_remote.py run --app-arg=--your-extra-flag
 
 1. Run local checks: `uv run pytest -q`
 2. Push your branch
-3. Sync the target branch to the Raspberry Pi:
-   `uv run python scripts/pi_remote.py sync --branch <branch>`
-4. Run the hardware smoke pass:
-   `uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip`
-5. Launch the app:
+3. Run the combined preflight:
+   `uv run python scripts/pi_remote.py preflight --branch <branch> --with-mopidy --with-voip`
+4. Launch the app:
    `uv run python scripts/pi_remote.py run`
 
 ## Release / Pre-Merge Checklist
 
 - Local branch is green with `uv run pytest -q`
 - Branch is pushed and reviewed
-- Raspberry Pi has the intended branch checked out
-- `uv run python scripts/pi_remote.py smoke` passes
-- `uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip` passes when services are expected
+- `uv run python scripts/pi_remote.py preflight --branch <branch> --with-mopidy --with-voip` passes
 - `uv run python scripts/pi_remote.py run` starts cleanly
 - Manual sanity:
   - display renders correctly
@@ -130,5 +148,6 @@ uv run python scripts/pi_remote.py run --app-arg=--your-extra-flag
 ## Notes
 
 - `pi_remote.py run` uses an interactive SSH session so you can stop the remote app with `Ctrl+C`.
+- `pi_remote.py preflight` is intentionally non-interactive. It validates but does not launch the app.
 - The helper does not kill existing remote processes for you. If the Pi already has a stale YoyoPod or `linphonec` process, stop it first.
 - For deeper hardware debugging, use `docs/RPI_SMOKE_VALIDATION.md`.

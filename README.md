@@ -96,6 +96,7 @@ Remote Pi workflow:
 
 ```bash
 uv run python scripts/pi_remote.py status
+uv run python scripts/pi_remote.py preflight --branch main --with-mopidy --with-voip
 uv run python scripts/pi_remote.py sync --branch main
 uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip
 ```

@@ -9,6 +9,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
+from typing import Sequence
 
 
 @dataclass
@@ -94,6 +95,53 @@ def build_parser() -> argparse.ArgumentParser:
         help="VoIP registration timeout in seconds (default: 10)",
     )
 
+    preflight_parser = subparsers.add_parser(
+        "preflight",
+        help="Run local checks, sync the Pi, and execute the Pi smoke pass",
+    )
+    preflight_parser.add_argument(
+        "--skip-local",
+        action="store_true",
+        help="Skip local compile/test verification before remote work",
+    )
+    preflight_parser.add_argument(
+        "--skip-sync",
+        action="store_true",
+        help="Skip the remote git pull and dependency sync step",
+    )
+    preflight_parser.add_argument(
+        "--skip-uv-sync",
+        action="store_true",
+        help="Skip `uv sync --extra dev` during the remote sync step",
+    )
+    preflight_parser.add_argument(
+        "--with-mopidy",
+        action="store_true",
+        help="Include Mopidy connectivity checks in the remote smoke pass",
+    )
+    preflight_parser.add_argument(
+        "--with-voip",
+        action="store_true",
+        help="Include SIP registration checks in the remote smoke pass",
+    )
+    preflight_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose smoke-script logging",
+    )
+    preflight_parser.add_argument(
+        "--mopidy-timeout",
+        type=int,
+        default=5,
+        help="Mopidy request timeout in seconds (default: 5)",
+    )
+    preflight_parser.add_argument(
+        "--voip-timeout",
+        type=float,
+        default=10.0,
+        help="VoIP registration timeout in seconds (default: 10)",
+    )
+
     run_parser = subparsers.add_parser(
         "run",
         help="Start the production app on the Raspberry Pi",
@@ -153,6 +201,17 @@ def run_remote(config: RemoteConfig, remote_command: str, tty: bool = False) -> 
     return completed.returncode
 
 
+def run_local(command: Sequence[str], label: str) -> int:
+    """Execute one local command and stream its output."""
+    print("")
+    print(f"[pi-remote] local={label}")
+    print(f"[pi-remote] cmd={shlex.join(command)}")
+    print("")
+
+    completed = subprocess.run(list(command), check=False)
+    return completed.returncode
+
+
 def build_status_command() -> str:
     """Create the remote status command."""
     return " && ".join(
@@ -209,6 +268,47 @@ def build_run_command(args: argparse.Namespace) -> str:
     return " ".join(parts)
 
 
+def build_local_preflight_commands() -> list[tuple[str, list[str]]]:
+    """Create the local verification commands for preflight."""
+    return [
+        (
+            "compileall",
+            [
+                sys.executable,
+                "-m",
+                "compileall",
+                "yoyopy",
+                "tests",
+                "scripts/pi_smoke.py",
+                "scripts/pi_remote.py",
+            ],
+        ),
+        (
+            "pytest",
+            ["uv", "run", "pytest", "-q"],
+        ),
+    ]
+
+
+def run_preflight(config: RemoteConfig, args: argparse.Namespace) -> int:
+    """Run the combined local + remote preflight flow."""
+    if not args.skip_local:
+        for label, command in build_local_preflight_commands():
+            exit_code = run_local(command, label)
+            if exit_code != 0:
+                return exit_code
+
+    if not args.skip_sync:
+        exit_code = run_remote(
+            config,
+            build_sync_command(config, args.skip_uv_sync),
+        )
+        if exit_code != 0:
+            return exit_code
+
+    return run_remote(config, build_smoke_command(args))
+
+
 def main() -> int:
     """Program entry point."""
     parser = build_parser()
@@ -229,6 +329,9 @@ def main() -> int:
 
     if args.command == "smoke":
         return run_remote(config, build_smoke_command(args))
+
+    if args.command == "preflight":
+        return run_preflight(config, args)
 
     if args.command == "run":
         return run_remote(config, build_run_command(args), tty=True)

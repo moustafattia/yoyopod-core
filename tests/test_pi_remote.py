@@ -2,9 +2,12 @@
 
 from scripts.pi_remote import (
     RemoteConfig,
+    build_local_preflight_commands,
+    build_smoke_command,
     build_sync_command,
     quote_remote_project_dir,
 )
+from argparse import Namespace
 
 
 def test_quote_remote_project_dir_preserves_home_expansion() -> None:
@@ -28,3 +31,32 @@ def test_build_sync_command_includes_uv_sync_by_default() -> None:
 
     assert "uv sync --extra dev" in build_sync_command(config, skip_uv_sync=False)
     assert "uv sync --extra dev" not in build_sync_command(config, skip_uv_sync=True)
+
+
+def test_build_smoke_command_adds_optional_checks() -> None:
+    """Smoke command should include optional service-check flags when requested."""
+    args = Namespace(
+        with_mopidy=True,
+        with_voip=True,
+        verbose=True,
+        mopidy_timeout=10,
+        voip_timeout=15.0,
+    )
+
+    command = build_smoke_command(args)
+
+    assert command.startswith("uv run python scripts/pi_smoke.py")
+    assert "--with-mopidy" in command
+    assert "--with-voip" in command
+    assert "--verbose" in command
+    assert "--mopidy-timeout 10" in command
+    assert "--voip-timeout 15.0" in command
+
+
+def test_build_local_preflight_commands_cover_compile_and_pytest() -> None:
+    """Preflight should run both compileall and pytest locally."""
+    commands = build_local_preflight_commands()
+
+    assert commands[0][0] == "compileall"
+    assert commands[0][1][1:3] == ["-m", "compileall"]
+    assert commands[1] == ("pytest", ["uv", "run", "pytest", "-q"])
