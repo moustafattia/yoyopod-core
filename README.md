@@ -24,7 +24,8 @@ The current codebase supports three display/input modes:
 - `yoyopy/app.py`: `YoyoPodApp` coordinator
 - `scripts/pi_smoke.py`: Raspberry Pi smoke validator for hardware and optional service checks
 - `scripts/pi_remote.py`: SSH helper for Raspberry Pi sync, smoke, status, and run loops
-- `yoyopy/state_machine.py`: application state machine for music and call flows
+- `yoyopy/fsm.py`: split `MusicFSM`, `CallFSM`, and call interruption policy
+- `yoyopy/coordinators/runtime.py`: derived `AppRuntimeState` over music, call, and UI state
 - `yoyopy/audio/mopidy_client.py`: Mopidy JSON-RPC client
 - `yoyopy/connectivity/voip_manager.py`: `linphonec` subprocess integration
 - `yoyopy/ui/display/`: display HAL, factory, and adapters
@@ -117,6 +118,12 @@ python yoyopod.py --simulate
 
 Simulation mode starts the browser UI at `http://localhost:5000`.
 
+### Runtime Demo
+
+```bash
+python demos/demo_runtime_state.py --simulate
+```
+
 ### Installed Console Script
 
 If the package is installed from `pyproject.toml`, the same app is available as:
@@ -131,8 +138,9 @@ yoyopod
 yoyopy/
   app.py
   main.py
-  state_machine.py
+  fsm.py
   app_context.py
+  coordinators/
   audio/
     audio_manager.py
     mopidy_client.py

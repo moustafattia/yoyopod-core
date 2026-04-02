@@ -32,7 +32,8 @@ yoyopod.py / yoyopy.main
         -> navigation screens
         -> music screens
         -> voip screens
-     -> StateMachine
+     -> MusicFSM / CallFSM / CallInterruptionPolicy
+     -> CoordinatorRuntime
      -> AppContext
      -> MopidyClient
         -> Mopidy JSON-RPC over HTTP
@@ -46,7 +47,8 @@ yoyopod.py / yoyopy.main
 
 - `yoyopy/app.py`: main coordinator
 - `yoyopy/main.py`: package entry point
-- `yoyopy/state_machine.py`: music and call state model
+- `yoyopy/fsm.py`: split music and call state models
+- `yoyopy/coordinators/runtime.py`: derived app runtime state
 - `yoyopy/app_context.py`: shared app state
 
 ### Audio and VoIP
@@ -115,9 +117,14 @@ That bridge is intentional but temporary.
 
 ## State Coordination
 
-`StateMachine` in `yoyopy/state_machine.py` models both playback and calling states.
+Playback and call orchestration now use composed models:
 
-Important integrated states:
+- `MusicFSM` in `yoyopy/fsm.py`
+- `CallFSM` in `yoyopy/fsm.py`
+- `CallInterruptionPolicy` in `yoyopy/fsm.py`
+- `CoordinatorRuntime` in `yoyopy/coordinators/runtime.py`
+
+`CoordinatorRuntime` derives the current application status from those models, including:
 
 - `PLAYING_WITH_VOIP`
 - `PAUSED_BY_CALL`
@@ -151,7 +158,7 @@ and updates:
 1. screen action triggers Mopidy RPC
 2. `MopidyClient` polls track and playback state
 3. callbacks refresh `NowPlayingScreen`
-4. state machine stays synchronized with actual playback state
+4. the derived runtime state stays synchronized with actual playback state
 
 ### Simulation Mode
 
@@ -175,7 +182,8 @@ These are known implementation constraints, not architecture goals.
 For current behavior, trust these files over older notes or demos:
 
 - `yoyopy/app.py`
-- `yoyopy/state_machine.py`
+- `yoyopy/fsm.py`
+- `yoyopy/coordinators/runtime.py`
 - `yoyopy/ui/display/`
 - `yoyopy/ui/input/`
 - `yoyopy/ui/screens/`

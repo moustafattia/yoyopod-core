@@ -392,9 +392,6 @@ class YoyoPodApp:
         self.playback_coordinator.bind(self.event_bus)
         logger.info("  ✓ Event subscriptions registered")
 
-    def _setup_state_callbacks(self) -> None:
-        """Legacy no-op retained for compatibility."""
-        return None
         logger.info("  ✓ State callbacks registered")
 
     def _run_on_main_thread(self, description: str, callback: Callable[[], None]) -> None:
