@@ -110,6 +110,12 @@ def _publish_from_worker(app: YoyoPodApp, event: object) -> None:
     worker.join()
 
 
+def _navigate_from_worker(screen_manager: FakeScreenManager, screen_name: str) -> None:
+    worker = threading.Thread(target=lambda: screen_manager.push_screen(screen_name))
+    worker.start()
+    worker.join()
+
+
 def _build_app(playback_state: str = "stopped", auto_resume: bool = True) -> tuple[
     YoyoPodApp,
     FakeMopidyClient,
@@ -308,6 +314,18 @@ def test_navigation_updates_runtime_base_state() -> None:
 
     screen_manager.push_screen("playlists")
     assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
+
+
+def test_worker_navigation_waits_for_coordinator_drain_before_syncing_state() -> None:
+    """Screen-change callbacks from worker threads should queue runtime sync onto the event bus."""
+    app, _, screen_manager = _build_app(playback_state="stopped")
+
+    _navigate_from_worker(screen_manager, "contacts")
+
+    assert screen_manager.current_screen is app.contact_list_screen
+    assert app.coordinator_runtime.current_app_state == AppRuntimeState.MENU
+    assert app.event_bus.drain() == 1
+    assert app.coordinator_runtime.current_app_state == AppRuntimeState.CALL_IDLE
 
 
 def test_call_end_restores_previous_screen_base_state() -> None:

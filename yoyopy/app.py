@@ -469,6 +469,13 @@ class YoyoPodApp:
         self.call_coordinator.stop_ringing()
 
     def _handle_screen_changed(self, screen_name: str | None) -> None:
+        """Marshal screen-state sync work onto the coordinator thread."""
+        self._run_on_main_thread(
+            f"sync screen state: {screen_name or 'none'}",
+            lambda: self._sync_screen_changed(screen_name),
+        )
+
+    def _sync_screen_changed(self, screen_name: str | None) -> None:
         """Keep the derived base UI state aligned with the active screen."""
         self._ensure_coordinators()
         self.coordinator_runtime.sync_ui_state_for_screen(screen_name)
