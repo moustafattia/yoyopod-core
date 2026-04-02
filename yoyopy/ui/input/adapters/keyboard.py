@@ -64,7 +64,7 @@ class KeyboardInputAdapter(InputHAL):
 
         logger.info("Keyboard input adapter initialized")
 
-    def get_supported_actions(self) -> List[InputAction]:
+    def get_capabilities(self) -> List[InputAction]:
         """
         Get list of input actions supported by this adapter.
 
@@ -107,7 +107,7 @@ class KeyboardInputAdapter(InputHAL):
             self.callbacks.clear()
         logger.debug("Cleared all keyboard callbacks")
 
-    def _fire_callbacks(self, action: InputAction, data: Optional[Any] = None) -> None:
+    def _fire_action(self, action: InputAction, data: Optional[Any] = None) -> None:
         """
         Fire all registered callbacks for an action.
 
@@ -164,7 +164,7 @@ class KeyboardInputAdapter(InputHAL):
         # Fire callbacks if action matched
         if action:
             logger.debug(f"Keyboard input: {action.value}")
-            self._fire_callbacks(action)
+            self._fire_action(action)
 
     def start(self) -> None:
         """
@@ -224,7 +224,7 @@ class DummyKeyboardAdapter(InputHAL):
         """Initialize dummy adapter."""
         logger.warning("Using dummy keyboard adapter (no pynput)")
 
-    def get_supported_actions(self) -> List[InputAction]:
+    def get_capabilities(self) -> List[InputAction]:
         """Return empty list (no actions supported)."""
         return []
 

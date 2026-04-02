@@ -190,27 +190,40 @@ class IncomingCallScreen(Screen):
         # Update display
         self.display.update()
 
-    # Button handlers
-    def on_button_a(self) -> None:
-        """Button A: Answer call."""
+    def _answer_call(self) -> None:
+        """Answer the incoming call."""
         logger.info("Answering incoming call")
         if self.voip_manager:
             if self.voip_manager.answer_call():
                 logger.info("Call answered, transitioning to InCall screen")
-                # Navigate to in-call screen
                 if self.screen_manager:
                     self.screen_manager.push_screen("in_call")
             else:
                 logger.error("Failed to answer call")
 
-    def on_button_b(self) -> None:
-        """Button B: Reject call."""
+    def _reject_call(self) -> None:
+        """Reject the incoming call."""
         logger.info("Rejecting incoming call")
         if self.voip_manager:
             if self.voip_manager.reject_call():
                 logger.info("Call rejected, going back")
-                # Go back to previous screen
                 if self.screen_manager:
                     self.screen_manager.pop_screen()
             else:
                 logger.error("Failed to reject call")
+
+    def on_select(self, data=None) -> None:
+        """Answer the incoming call."""
+        self._answer_call()
+
+    def on_call_answer(self, data=None) -> None:
+        """Answer the incoming call from a dedicated VoIP action."""
+        self._answer_call()
+
+    def on_back(self, data=None) -> None:
+        """Reject the incoming call."""
+        self._reject_call()
+
+    def on_call_reject(self, data=None) -> None:
+        """Reject the incoming call from a dedicated VoIP action."""
+        self._reject_call()

@@ -269,22 +269,19 @@ class ContactListScreen(Screen):
         else:
             logger.error(f"Failed to initiate call to {contact.name}")
 
-    # Button handlers
-    def on_button_a(self) -> None:
-        """Button A: Call selected contact."""
+    def on_select(self, data=None) -> None:
+        """Call the selected contact."""
         self.call_selected_contact()
 
-    def on_button_b(self) -> None:
-        """Button B: Go back."""
+    def on_back(self, data=None) -> None:
+        """Go back to the previous screen."""
         if self.screen_manager:
             self.screen_manager.pop_screen()
 
-    def on_button_x(self) -> None:
-        """Button X: Move selection up."""
+    def on_up(self, data=None) -> None:
+        """Move selection up."""
         self.select_previous()
-        self.render()
 
-    def on_button_y(self) -> None:
-        """Button Y: Move selection down."""
+    def on_down(self, data=None) -> None:
+        """Move selection down."""
         self.select_next()
-        self.render()

@@ -190,7 +190,9 @@ class YoyoPodApp:
                 'mopidy_host': 'localhost',
                 'mopidy_port': 6680,
                 'auto_resume_after_call': True,
-                'default_volume': 70
+                'default_volume': 70,
+                'ring_output_device': '',
+                'speaker_test_path': 'speaker-test'
             },
             'voip': {
                 'config_file': 'config/voip_config.yaml',
@@ -521,10 +523,23 @@ class YoyoPodApp:
         self._stop_ringing()
 
         try:
-            # Use speaker-test to generate a continuous ring tone
-            # 800 Hz sine wave on the USB audio card (card 1)
+            # Use speaker-test to generate a continuous 800 Hz ring tone.
+            ring_output_device = self.config.get('audio', {}).get('ring_output_device')
+            if not ring_output_device and self.config_manager:
+                ring_output_device = self.config_manager.get_ring_output_device()
+
+            command = [
+                self.config.get('audio', {}).get('speaker_test_path', 'speaker-test'),
+                "-t",
+                "sine",
+                "-f",
+                "800",
+            ]
+            if ring_output_device:
+                command.extend(["-D", ring_output_device])
+
             self.ringing_process = subprocess.Popen(
-                ["speaker-test", "-t", "sine", "-f", "800", "-D", "plughw:1"],
+                command,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
@@ -582,11 +597,18 @@ class YoyoPodApp:
                     "auto_pause_for_call"
                 )
 
-        # Transition to incoming call state
-        self.state_machine.transition_to(
-            AppState.CALL_INCOMING,
-            "incoming_call"
-        )
+        # Transition to incoming call state using the correct trigger for the
+        # current music/call context.
+        if self.state_machine.current_state == AppState.PAUSED_BY_CALL:
+            self.state_machine.transition_to(
+                AppState.CALL_INCOMING,
+                "incoming_call_ringing"
+            )
+        else:
+            self.state_machine.transition_to(
+                AppState.CALL_INCOMING,
+                "incoming_call"
+            )
 
         # Update and push incoming call screen
         self.incoming_call_screen.caller_address = caller_address
@@ -611,15 +633,24 @@ class YoyoPodApp:
         logger.info(f"📞 Call state changed: {state.value}")
 
         if state == CallState.CONNECTED or state == CallState.STREAMS_RUNNING:
-            # Call is now active
-            if self.state_machine.has_paused_music_for_call():
-                # Music was paused, transition to call-active-music-paused
+            current_state = self.state_machine.current_state
+
+            if current_state == AppState.PAUSED_BY_CALL:
                 self.state_machine.transition_to(
                     AppState.CALL_ACTIVE_MUSIC_PAUSED,
                     "call_answered"
                 )
+            elif current_state == AppState.CALL_INCOMING and self.music_was_playing_before_call:
+                self.state_machine.transition_to(
+                    AppState.CALL_ACTIVE_MUSIC_PAUSED,
+                    "answer_call_resume_after"
+                )
+            elif current_state == AppState.CALL_OUTGOING and self.music_was_playing_before_call:
+                self.state_machine.transition_to(
+                    AppState.CALL_ACTIVE_MUSIC_PAUSED,
+                    "call_connected_music_paused"
+                )
             else:
-                # No music in background, normal call active
                 self.state_machine.transition_to(
                     AppState.CALL_ACTIVE,
                     "call_connected"
@@ -650,6 +681,8 @@ class YoyoPodApp:
         # Pop all call screens
         self._pop_call_screens()
 
+        current_state = self.state_machine.current_state
+
         # Check if we should resume music
         if self.music_was_playing_before_call and self.auto_resume_after_call:
             logger.info("  🎵 Auto-resuming music after call")
@@ -658,11 +691,16 @@ class YoyoPodApp:
             if self.mopidy_client:
                 self.mopidy_client.play()
 
-            # Transition back to playing with VoIP
-            self.state_machine.transition_to(
-                AppState.PLAYING_WITH_VOIP,
-                "call_ended_auto_resume"
-            )
+            if current_state in (AppState.CALL_ACTIVE_MUSIC_PAUSED, AppState.CALL_INCOMING):
+                self.state_machine.transition_to(
+                    AppState.PLAYING_WITH_VOIP,
+                    "call_ended_auto_resume"
+                )
+            elif current_state == AppState.PAUSED_BY_CALL:
+                self.state_machine.transition_to(
+                    AppState.PLAYING_WITH_VOIP,
+                    "call_rejected_resume"
+                )
 
             # Refresh NowPlayingScreen if visible to show play icon
             if self.screen_manager.current_screen == self.now_playing_screen:
@@ -671,11 +709,16 @@ class YoyoPodApp:
 
         elif self.music_was_playing_before_call:
             logger.info("  🎵 Music stays paused (auto-resume disabled)")
-            # Transition to paused state
-            self.state_machine.transition_to(
-                AppState.PAUSED,
-                "call_ended_stay_paused"
-            )
+            if current_state == AppState.CALL_ACTIVE_MUSIC_PAUSED:
+                self.state_machine.transition_to(
+                    AppState.PAUSED,
+                    "call_ended_stay_paused"
+                )
+            elif current_state in (AppState.CALL_INCOMING, AppState.PAUSED_BY_CALL):
+                self.state_machine.transition_to(
+                    AppState.PAUSED,
+                    "reject_call_stay_paused"
+                )
 
         else:
             # No music was playing, return to idle or menu
@@ -738,7 +781,7 @@ class YoyoPodApp:
                 # Transition to paused to reflect reality
                 self.state_machine.transition_to(
                     AppState.PAUSED,
-                    "playback_stopped"
+                    "pause"
                 )
 
         # Update now playing screen if visible
@@ -767,26 +810,39 @@ class YoyoPodApp:
         current_state = self.state_machine.current_state
 
         if playback_state == "playing":
-            # Music started playing
-            if self.voip_registered and current_state != AppState.PLAYING_WITH_VOIP:
-                # VoIP is ready, upgrade to PLAYING_WITH_VOIP
-                self.state_machine.transition_to(
-                    AppState.PLAYING_WITH_VOIP,
-                    "music_started"
-                )
-            elif not self.voip_registered and current_state != AppState.PLAYING:
-                # VoIP not ready yet, just PLAYING
-                self.state_machine.transition_to(
-                    AppState.PLAYING,
-                    "music_started"
-                )
+            if self.voip_registered:
+                if current_state == AppState.PAUSED:
+                    self.state_machine.transition_to(
+                        AppState.PLAYING_WITH_VOIP,
+                        "resume"
+                    )
+                elif current_state == AppState.PLAYING:
+                    self.state_machine.transition_to(
+                        AppState.PLAYING_WITH_VOIP,
+                        "voip_ready"
+                    )
+                elif current_state == AppState.MENU:
+                    self.state_machine.transition_to(
+                        AppState.PLAYING_WITH_VOIP,
+                        "select_media_with_voip"
+                    )
+            else:
+                if current_state == AppState.PAUSED:
+                    self.state_machine.transition_to(
+                        AppState.PLAYING,
+                        "resume"
+                    )
+                elif current_state == AppState.MENU:
+                    self.state_machine.transition_to(
+                        AppState.PLAYING,
+                        "select_media"
+                    )
 
         elif playback_state in ("paused", "stopped"):
-            # Music paused or stopped
             if self.state_machine.is_music_playing() and current_state != AppState.PAUSED:
                 self.state_machine.transition_to(
                     AppState.PAUSED,
-                    "music_paused"
+                    "pause"
                 )
 
         # Refresh NowPlayingScreen if visible to reflect new state

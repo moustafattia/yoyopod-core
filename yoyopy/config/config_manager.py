@@ -4,6 +4,7 @@ Configuration Manager for YoyoPod.
 Manages VoIP settings and contacts from YAML configuration files.
 """
 
+import os
 import yaml
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -166,7 +167,12 @@ class ConfigManager:
                 'preferred_codec': 'opus',
                 'echo_cancellation': True,
                 'mic_gain': 80,
-                'speaker_volume': 80
+                'speaker_volume': 80,
+                'playback_device_id': 'ALSA: plughw:1',
+                'ringer_device_id': 'ALSA: plughw:1',
+                'capture_device_id': 'ALSA: plughw:1',
+                'media_device_id': 'ALSA: plughw:1',
+                'ring_output_device': 'plughw:1'
             },
             'linphonec_path': '/usr/bin/linphonec',
             'auto_answer': False,
@@ -247,6 +253,60 @@ class ConfigManager:
     def get_call_timeout(self) -> int:
         """Get call timeout in seconds."""
         return self.voip_config.get('call_timeout', 60)
+
+    def _get_audio_setting(self, key: str, env_var: str, default: str = "") -> str:
+        """Get an audio setting from env override, config, or default."""
+        env_value = os.getenv(env_var)
+        if env_value:
+            return env_value
+        return self.voip_config.get('audio', {}).get(key, default)
+
+    def get_playback_device_id(self) -> str:
+        """Get the ALSA playback device id for Linphone."""
+        return self._get_audio_setting(
+            'playback_device_id',
+            'YOYOPOD_PLAYBACK_DEVICE',
+            'ALSA: plughw:1',
+        )
+
+    def get_ringer_device_id(self) -> str:
+        """Get the ALSA ringer device id for Linphone."""
+        return self._get_audio_setting(
+            'ringer_device_id',
+            'YOYOPOD_RINGER_DEVICE',
+            self.get_playback_device_id(),
+        )
+
+    def get_capture_device_id(self) -> str:
+        """Get the ALSA capture device id for Linphone."""
+        return self._get_audio_setting(
+            'capture_device_id',
+            'YOYOPOD_CAPTURE_DEVICE',
+            'ALSA: plughw:1',
+        )
+
+    def get_media_device_id(self) -> str:
+        """Get the ALSA media device id for Linphone."""
+        return self._get_audio_setting(
+            'media_device_id',
+            'YOYOPOD_MEDIA_DEVICE',
+            self.get_playback_device_id(),
+        )
+
+    def get_ring_output_device(self) -> str:
+        """Get the output device for the speaker-test ring tone helper."""
+        ring_output = self._get_audio_setting(
+            'ring_output_device',
+            'YOYOPOD_RING_OUTPUT_DEVICE',
+            '',
+        )
+        if ring_output:
+            return ring_output
+
+        playback_device = self.get_playback_device_id()
+        if playback_device.startswith("ALSA:"):
+            return playback_device.split(":", 1)[1].strip()
+        return playback_device or "default"
 
     # Contact Management
 

@@ -52,6 +52,10 @@ class VoIPConfig:
     transport: str = "tcp"  # tcp, udp, tls
     stun_server: str = ""
     linphonec_path: str = "/usr/bin/linphonec"
+    playback_dev_id: str = "ALSA: plughw:1"
+    ringer_dev_id: str = "ALSA: plughw:1"
+    capture_dev_id: str = "ALSA: plughw:1"
+    media_dev_id: str = "ALSA: plughw:1"
 
     @staticmethod
     def from_config_manager(config_manager) -> 'VoIPConfig':
@@ -72,7 +76,11 @@ class VoIPConfig:
             sip_identity=config_manager.get_sip_identity(),
             transport=config_manager.get_transport(),
             stun_server=config_manager.get_stun_server(),
-            linphonec_path=config_manager.get_linphonec_path()
+            linphonec_path=config_manager.get_linphonec_path(),
+            playback_dev_id=config_manager.get_playback_device_id(),
+            ringer_dev_id=config_manager.get_ringer_device_id(),
+            capture_dev_id=config_manager.get_capture_device_id(),
+            media_dev_id=config_manager.get_media_device_id(),
         )
 
 
@@ -195,10 +203,10 @@ adaptive_rate_control=1
 mtu=1300
 
 [sound]
-playback_dev_id=ALSA: plughw:1
-ringer_dev_id=ALSA: plughw:1
-capture_dev_id=ALSA: plughw:1
-media_dev_id=ALSA: plughw:1
+playback_dev_id={self.config.playback_dev_id}
+ringer_dev_id={self.config.ringer_dev_id}
+capture_dev_id={self.config.capture_dev_id}
+media_dev_id={self.config.media_dev_id}
 echocancellation=1
 mic_gain_db=10.0
 """

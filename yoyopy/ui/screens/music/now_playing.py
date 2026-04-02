@@ -214,44 +214,56 @@ class NowPlayingScreen(Screen):
         # Update display
         self.display.update()
 
-    # Button handlers
-    def on_button_a(self) -> None:
-        """Button A: Toggle play/pause."""
+    def _toggle_playback(self) -> None:
+        """Toggle playback via Mopidy or the local app context."""
         if self.mopidy_client:
-            # Use Mopidy for playback control
             state = self.mopidy_client.get_playback_state()
             if state == "playing":
                 self.mopidy_client.pause()
             else:
                 self.mopidy_client.play()
         elif self.context:
-            # Fallback to context for local playback
             self.context.toggle_playback()
-        self.render()
 
-    def on_button_b(self) -> None:
-        """Button B: Go back to menu."""
+    def _previous_track(self) -> None:
+        """Go to the previous track."""
+        if self.mopidy_client:
+            self.mopidy_client.previous_track()
+        elif self.context:
+            self.context.previous_track()
+
+    def _next_track(self) -> None:
+        """Go to the next track."""
+        if self.mopidy_client:
+            self.mopidy_client.next_track()
+        elif self.context:
+            self.context.next_track()
+
+    def on_select(self, data=None) -> None:
+        """Toggle play/pause."""
+        self._toggle_playback()
+
+    def on_play_pause(self, data=None) -> None:
+        """Toggle play/pause from a dedicated media action."""
+        self._toggle_playback()
+
+    def on_back(self, data=None) -> None:
+        """Go back to the previous screen."""
         if self.screen_manager:
             self.screen_manager.pop_screen()
 
-    def on_button_x(self) -> None:
-        """Button X: Previous track."""
-        if self.mopidy_client:
-            # Use Mopidy for track navigation
-            self.mopidy_client.previous_track()
-            self.render()
-        elif self.context:
-            # Fallback to context for local tracks
-            self.context.previous_track()
-            self.render()
+    def on_up(self, data=None) -> None:
+        """Go to the previous track."""
+        self._previous_track()
 
-    def on_button_y(self) -> None:
-        """Button Y: Next track."""
-        if self.mopidy_client:
-            # Use Mopidy for track navigation
-            self.mopidy_client.next_track()
-            self.render()
-        elif self.context:
-            # Fallback to context for local tracks
-            self.context.next_track()
-            self.render()
+    def on_prev_track(self, data=None) -> None:
+        """Go to the previous track from a dedicated media action."""
+        self._previous_track()
+
+    def on_down(self, data=None) -> None:
+        """Go to the next track."""
+        self._next_track()
+
+    def on_next_track(self, data=None) -> None:
+        """Go to the next track from a dedicated media action."""
+        self._next_track()

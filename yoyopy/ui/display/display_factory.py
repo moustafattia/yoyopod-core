@@ -18,6 +18,7 @@ from yoyopy.ui.display.display_hal import DisplayHAL
 from yoyopy.ui.display.adapters.pimoroni import PimoroniDisplayAdapter
 from yoyopy.ui.display.adapters.whisplay import WhisplayDisplayAdapter
 from yoyopy.ui.display.adapters.simulation import SimulationDisplayAdapter
+from yoyopy.ui.display.whisplay_paths import find_whisplay_driver
 from loguru import logger
 import os
 
@@ -28,7 +29,7 @@ def detect_hardware() -> str:
 
     Detection logic (in order of priority):
     1. Check environment variable YOYOPOD_DISPLAY
-    2. Check for Whisplay driver at /home/tifo/Whisplay/Driver/WhisPlay.py
+    2. Check for Whisplay driver in configured/common locations
     3. Check for DisplayHATMini library availability
     4. Default to simulation mode
 
@@ -51,8 +52,8 @@ def detect_hardware() -> str:
         return hardware
 
     # Priority 2: Check for Whisplay driver file
-    whisplay_driver_path = "/home/tifo/Whisplay/Driver/WhisPlay.py"
-    if os.path.exists(whisplay_driver_path):
+    whisplay_driver_path = find_whisplay_driver()
+    if whisplay_driver_path:
         logger.info(f"Detected Whisplay HAT (driver found at {whisplay_driver_path})")
         return "whisplay"
 

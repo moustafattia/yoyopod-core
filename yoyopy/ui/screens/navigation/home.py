@@ -97,9 +97,8 @@ class HomeScreen(Screen):
         # Update display
         self.display.update()
 
-    # Button handlers
-    def on_button_a(self) -> None:
-        """Button A: Open main menu."""
+    def on_select(self, data=None) -> None:
+        """Open the main menu."""
         if self.screen_manager:
             self.screen_manager.push_screen("menu")
 

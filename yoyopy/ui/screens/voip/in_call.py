@@ -4,6 +4,7 @@ from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.display import Display
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime
+import threading
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -217,27 +218,35 @@ class InCallScreen(Screen):
         # Update display
         self.display.update()
 
-    # Button handlers
-    def on_button_b(self) -> None:
-        """Button B: End call."""
+    def _hangup_call(self) -> None:
+        """End the current call."""
         logger.info("Ending call")
         if self.voip_manager:
             if self.voip_manager.hangup():
                 logger.info("Call ended, going back")
-                # Go back to previous screen
                 if self.screen_manager:
                     self.screen_manager.pop_screen()
             else:
                 logger.error("Failed to end call")
 
-    def on_button_x(self) -> None:
-        """Button X: Toggle mute."""
+    def _toggle_mute(self) -> None:
+        """Toggle microphone mute."""
         logger.info("Toggling mute")
         if self.voip_manager:
             is_muted = self.voip_manager.toggle_mute()
             logger.info(f"Mute toggled: {'muted' if is_muted else 'unmuted'}")
-            # Re-render to show mute status
-            self.render()
+
+    def on_back(self, data=None) -> None:
+        """End the current call."""
+        self._hangup_call()
+
+    def on_call_hangup(self, data=None) -> None:
+        """End the current call from a dedicated VoIP action."""
+        self._hangup_call()
+
+    def on_up(self, data=None) -> None:
+        """Toggle microphone mute."""
+        self._toggle_mute()
 
     def enter(self) -> None:
         """Called when screen becomes active - start auto-refresh thread."""

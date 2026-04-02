@@ -6,15 +6,13 @@ for different application states.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Any, TYPE_CHECKING
-from datetime import datetime
-import threading
+from typing import Optional, Any, TYPE_CHECKING
 from loguru import logger
 
 from yoyopy.ui.display import Display
 
 if TYPE_CHECKING:
-    from yoyopy.ui.screen_manager import ScreenManager
+    from yoyopy.ui.screens.manager import ScreenManager
     from yoyopy.app_context import AppContext
 
 

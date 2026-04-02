@@ -191,23 +191,22 @@ class CallScreen(Screen):
         # Update display
         self.display.update()
 
-    # Button handlers
-    def on_button_a(self) -> None:
-        """Button A: Reserved for answer/hangup."""
+    def on_select(self, data=None) -> None:
+        """Reserved for answer/hangup."""
         # TODO: Implement call answer/hangup
         pass
 
-    def on_button_b(self) -> None:
-        """Button B: Go back to menu."""
+    def on_back(self, data=None) -> None:
+        """Go back to the previous screen."""
         if self.screen_manager:
             self.screen_manager.pop_screen()
 
-    def on_button_x(self) -> None:
-        """Button X: Reserved for dial pad."""
+    def on_up(self, data=None) -> None:
+        """Reserved for dial pad."""
         # TODO: Implement dial pad
         pass
 
-    def on_button_y(self) -> None:
-        """Button Y: Reserved for dial pad."""
+    def on_down(self, data=None) -> None:
+        """Reserved for dial pad."""
         # TODO: Implement dial pad
         pass

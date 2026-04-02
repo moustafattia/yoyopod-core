@@ -17,21 +17,25 @@ Date: 2025-11-30
 """
 
 from yoyopy.ui.display.display_hal import DisplayHAL
+from yoyopy.ui.display.whisplay_paths import ensure_whisplay_driver_on_path
 from typing import Optional, Tuple
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from loguru import logger
-import sys
 
-# Add Whisplay driver to Python path
-sys.path.append("/home/tifo/Whisplay/Driver")
+DRIVER_PATH = ensure_whisplay_driver_on_path()
 
 try:
     from WhisPlay import WhisPlayBoard
     HAS_HARDWARE = True
 except ImportError:
     HAS_HARDWARE = False
-    logger.warning("WhisPlay library not available - adapter will run in simulation mode")
+    if DRIVER_PATH:
+        logger.warning(
+            f"WhisPlay library not importable from {DRIVER_PATH.parent} - adapter will run in simulation mode"
+        )
+    else:
+        logger.warning("WhisPlay library not available - adapter will run in simulation mode")
 
 
 class WhisplayDisplayAdapter(DisplayHAL):

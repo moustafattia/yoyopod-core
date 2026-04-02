@@ -212,15 +212,21 @@ class OutgoingCallScreen(Screen):
         # Update display
         self.display.update()
 
-    # Button handlers
-    def on_button_b(self) -> None:
-        """Button B: Cancel call."""
+    def _cancel_call(self) -> None:
+        """Cancel the outgoing call."""
         logger.info("Canceling outgoing call")
         if self.voip_manager:
             if self.voip_manager.hangup():
                 logger.info("Call canceled, going back")
-                # Go back to previous screen
                 if self.screen_manager:
                     self.screen_manager.pop_screen()
             else:
                 logger.error("Failed to cancel call")
+
+    def on_back(self, data=None) -> None:
+        """Cancel the outgoing call."""
+        self._cancel_call()
+
+    def on_call_hangup(self, data=None) -> None:
+        """Cancel the outgoing call from a dedicated VoIP action."""
+        self._cancel_call()

@@ -165,10 +165,10 @@ class ScreenManager:
         def wrap_with_refresh(handler):
             """Wrap action handler to automatically refresh display after execution."""
             def wrapper(data=None):
-                # Call the original handler
+                previous_screen = self.current_screen
                 handler(data)
-                # Refresh the display to show changes
-                self.refresh_current_screen()
+                if self.current_screen is previous_screen:
+                    self.refresh_current_screen()
             return wrapper
 
         # Register semantic action callbacks with input manager
