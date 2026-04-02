@@ -22,6 +22,7 @@ The current codebase supports three display/input modes:
 - `yoyopod.py`: top-level launcher for local development
 - `yoyopy/main.py`: package entry point for installed console scripts
 - `yoyopy/app.py`: `YoyoPodApp` coordinator
+- `scripts/pi_smoke.py`: Raspberry Pi smoke validator for hardware and optional service checks
 - `yoyopy/state_machine.py`: application state machine for music and call flows
 - `yoyopy/audio/mopidy_client.py`: Mopidy JSON-RPC client
 - `yoyopy/connectivity/voip_manager.py`: `linphonec` subprocess integration
@@ -77,8 +78,17 @@ Important settings:
 
 ### Verification
 
+CI-safe:
+
 ```bash
 uv run pytest -q
+```
+
+Raspberry Pi smoke:
+
+```bash
+uv run python scripts/pi_smoke.py
+uv run python scripts/pi_smoke.py --with-mopidy --with-voip
 ```
 
 ## Running
@@ -153,10 +163,11 @@ yoyopy/
 - `docs/INTEGRATION_PLAN.md`: integration completion record and remaining cleanup
 - `docs/DISPLAY_HAL_ARCHITECTURE.md`: current display HAL design
 - `docs/INPUT_HAL_ARCHITECTURE.md`: current input HAL design and compatibility notes
+- `docs/RPI_SMOKE_VALIDATION.md`: Raspberry Pi smoke checklist and manual follow-up drills
 - `docs/UI_RESTRUCTURE_PROPOSAL.md`: refactor status and remaining cleanup
 - `docs/PHASE2_SUMMARY.md`: historical screen-integration summary, updated to current file paths
 
 ## Current Gaps
 
-- Full end-to-end validation still requires Raspberry Pi hardware, Mopidy, and a reachable SIP service
+- Full end-to-end validation still requires Raspberry Pi hardware, Mopidy, and a reachable SIP service; see `docs/RPI_SMOKE_VALIDATION.md`
 - CI currently covers the Python test suite, not hardware-in-the-loop scenarios
