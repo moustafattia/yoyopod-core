@@ -19,7 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from yoyopy.audio.mopidy_client import MopidyClient
 from yoyopy.config import ConfigManager, YoyoPodConfig, config_to_dict, load_config_model_from_yaml
-from yoyopy.connectivity import VoIPConfig, VoIPManager
+from yoyopy.voip import VoIPConfig, VoIPManager
 from yoyopy.ui.display import Display, detect_hardware
 from yoyopy.ui.input import get_input_manager
 

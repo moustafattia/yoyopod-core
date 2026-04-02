@@ -8,8 +8,8 @@ from typing import Callable, Optional
 
 from loguru import logger
 
-from yoyopy.connectivity.voip_backend import LinphonecBackend, VoIPBackend
-from yoyopy.connectivity.voip_types import (
+from yoyopy.voip.backend import LinphonecBackend, VoIPBackend
+from yoyopy.voip.types import (
     BackendStopped,
     CallState,
     CallStateChanged,

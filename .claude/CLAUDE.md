@@ -39,7 +39,7 @@ yoyopod.py / yoyopy/main.py  (entry points)
     |- CoordinatorRuntime (coordinators/runtime.py) -- derived app state
     |- AppContext (app_context.py) -- shared state
     |- MopidyClient (audio/mopidy_client.py) -- Mopidy JSON-RPC
-    |- VoIPManager (connectivity/voip_manager.py) -- linphonec subprocess
+    |- VoIPManager (voip/manager.py) -- linphonec subprocess
     |- Display HAL (ui/display/) -- factory pattern, 3 adapters
     |- Input HAL (ui/input/) -- semantic actions, 3 adapters
     `- ScreenManager (ui/screens/manager.py) -- stack-based navigation

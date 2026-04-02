@@ -1,15 +1,17 @@
 """
-Connectivity module for YoyoPod.
-Manages 4G/LTE connection, WiFi fallback, network status, and VoIP calling.
+VoIP module for YoyoPod.
+
+Exports the app-facing VoIP manager, backend protocol/implementations,
+and the shared SIP event and configuration types.
 """
 
-from yoyopy.connectivity.voip_backend import (
+from yoyopy.voip.backend import (
     LinphonecBackend,
     MockVoIPBackend,
     VoIPBackend,
 )
-from yoyopy.connectivity.voip_manager import VoIPManager
-from yoyopy.connectivity.voip_types import (
+from yoyopy.voip.manager import VoIPManager
+from yoyopy.voip.types import (
     BackendStopped,
     CallState,
     CallStateChanged,

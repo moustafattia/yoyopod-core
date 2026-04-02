@@ -16,7 +16,7 @@ from loguru import logger
 
 from yoyopy.app_context import AppContext
 from yoyopy.config import ConfigManager
-from yoyopy.connectivity import RegistrationState, VoIPConfig, VoIPManager
+from yoyopy.voip import RegistrationState, VoIPConfig, VoIPManager
 from yoyopy.ui.display import Display
 from yoyopy.ui.input import InputAction, get_input_manager
 from yoyopy.ui.screens import (

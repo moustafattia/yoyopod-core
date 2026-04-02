@@ -14,7 +14,7 @@ from yoyopy.ui.screens.base import Screen
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
     from yoyopy.config import ConfigManager, Contact
-    from yoyopy.connectivity import VoIPManager
+    from yoyopy.voip import VoIPManager
 
 
 @dataclass(slots=True)
