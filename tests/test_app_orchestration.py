@@ -125,10 +125,9 @@ def _build_app(playback_state: str = "stopped", auto_resume: bool = True) -> tup
     app.screen_manager.push_screen("menu")
     app.state_machine.set_ui_state(AppState.MENU, trigger="test_setup")
 
-    app._start_ringing = lambda: None
-    app._stop_ringing = lambda: None
-
     app._setup_event_subscriptions()
+    app.call_coordinator.start_ringing = lambda: None
+    app.call_coordinator.stop_ringing = lambda: None
     return app, mopidy, screen_manager
 
 

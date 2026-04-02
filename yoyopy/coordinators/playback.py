@@ -1,0 +1,91 @@
+"""
+Playback-event coordination for YoyoPod.
+"""
+
+from __future__ import annotations
+
+from loguru import logger
+
+from yoyopy.audio.mopidy_client import MopidyTrack
+from yoyopy.coordinators.runtime import CoordinatorRuntime
+from yoyopy.coordinators.screen import ScreenCoordinator
+from yoyopy.event_bus import EventBus
+from yoyopy.events import PlaybackStateChangedEvent, TrackChangedEvent
+
+
+class PlaybackCoordinator:
+    """Own playback event publishing, state sync, and screen refresh behavior."""
+
+    def __init__(self, runtime: CoordinatorRuntime, screen_coordinator: ScreenCoordinator) -> None:
+        self.runtime = runtime
+        self.screen_coordinator = screen_coordinator
+        self._event_bus: EventBus | None = None
+        self._bound = False
+
+    def bind(self, event_bus: EventBus) -> None:
+        """Bind typed event subscriptions once."""
+        if self._bound:
+            return
+
+        self._event_bus = event_bus
+        event_bus.subscribe(TrackChangedEvent, self._on_track_changed_event)
+        event_bus.subscribe(PlaybackStateChangedEvent, self._on_playback_state_changed_event)
+        self._bound = True
+
+    def publish_track_change(self, track: MopidyTrack | None) -> None:
+        """Publish a Mopidy track change from the poller thread."""
+        if self._event_bus is None:
+            raise RuntimeError("PlaybackCoordinator is not bound to an EventBus")
+
+        self._event_bus.publish(TrackChangedEvent(track=track))
+
+    def publish_playback_state_change(self, playback_state: str) -> None:
+        """Publish a Mopidy playback-state change from the poller thread."""
+        if self._event_bus is None:
+            raise RuntimeError("PlaybackCoordinator is not bound to an EventBus")
+
+        self._event_bus.publish(PlaybackStateChangedEvent(state=playback_state))
+
+    def update_now_playing_if_needed(self) -> None:
+        """Refresh the now-playing screen for periodic progress updates."""
+        self.screen_coordinator.update_now_playing_if_needed()
+
+    def on_enter_playing_with_voip(self) -> None:
+        """Log entry into the playing-with-VoIP-ready state."""
+        logger.info("🎵 → Music playing with VoIP ready")
+
+    def _on_track_changed_event(self, event: TrackChangedEvent) -> None:
+        self.handle_track_change(event.track)
+
+    def _on_playback_state_changed_event(self, event: PlaybackStateChangedEvent) -> None:
+        self.handle_playback_state_change(event.state)
+
+    def handle_track_change(self, track: MopidyTrack | None) -> None:
+        """Handle track changes and refresh the active screen when needed."""
+        if track:
+            logger.info(f"🎵 Track changed: {track.name} - {track.get_artist_string()}")
+        else:
+            logger.info("🎵 Playback stopped")
+            if not self.runtime.call_fsm.is_active:
+                self.runtime.music_fsm.transition("stop")
+                self.runtime.state_machine.sync_from_models("track_stopped")
+
+        self.screen_coordinator.refresh_now_playing_screen()
+
+    def handle_playback_state_change(self, playback_state: str) -> None:
+        """Sync the playback FSM with Mopidy state when not in a call."""
+        logger.info(f"🎵 Playback state changed: {playback_state}")
+
+        if self.runtime.call_fsm.is_active:
+            logger.debug("  → In call, state machine managed by call logic")
+            return
+
+        if playback_state == "playing":
+            self.runtime.music_fsm.transition("play")
+        elif playback_state == "paused":
+            self.runtime.music_fsm.transition("pause")
+        elif playback_state == "stopped":
+            self.runtime.music_fsm.transition("stop")
+
+        self.runtime.state_machine.sync_from_models(f"playback_{playback_state}")
+        self.screen_coordinator.refresh_now_playing_screen()
