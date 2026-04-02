@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from loguru import logger
 
@@ -25,6 +25,7 @@ from yoyopy.coordinators import (
     ScreenCoordinator,
 )
 from yoyopy.event_bus import EventBus
+from yoyopy.events import ScreenChangedEvent
 from yoyopy.fsm import CallFSM, CallInterruptionPolicy, MusicFSM
 from yoyopy.ui.display import Display
 from yoyopy.ui.input import InputManager, get_input_manager
@@ -40,14 +41,6 @@ from yoyopy.ui.screens import (
     PlaylistScreen,
     ScreenManager,
 )
-
-
-@dataclass(slots=True)
-class _MainThreadCallbackEvent:
-    """Compatibility event used by existing app queue helpers."""
-
-    description: str
-    callback: Callable[[], None]
 
 
 @dataclass(slots=True)
@@ -116,7 +109,7 @@ class YoyoPodApp:
         # Main-thread event bus
         self._main_thread_id = threading.get_ident()
         self.event_bus = EventBus(main_thread_id=self._main_thread_id)
-        self.event_bus.subscribe(_MainThreadCallbackEvent, self._handle_main_thread_callback_event)
+        self.event_bus.subscribe(ScreenChangedEvent, self._handle_screen_changed_event)
 
         # Extracted coordinators
         self.coordinator_runtime: Optional[CoordinatorRuntime] = None
@@ -415,18 +408,13 @@ class YoyoPodApp:
         self.playback_coordinator.bind(self.event_bus)
         logger.info("  ✓ Event subscriptions registered")
 
-    def _run_on_main_thread(self, description: str, callback: Callable[[], None]) -> None:
-        """Queue work onto the coordinator thread."""
-        self.event_bus.publish(_MainThreadCallbackEvent(description=description, callback=callback))
-
     def _process_pending_main_thread_actions(self, limit: Optional[int] = None) -> int:
-        """Drain queued callbacks and typed events scheduled by worker threads."""
+        """Drain queued typed events scheduled by worker threads."""
         return self.event_bus.drain(limit)
 
-    def _handle_main_thread_callback_event(self, event: _MainThreadCallbackEvent) -> None:
-        """Execute a compatibility callback event on the coordinator thread."""
-        logger.debug(f"Processing main-thread action: {event.description}")
-        event.callback()
+    def _handle_screen_changed_event(self, event: ScreenChangedEvent) -> None:
+        """Apply queued screen-change state sync on the coordinator thread."""
+        self._sync_screen_changed(event.screen_name)
 
     def _ensure_coordinators(self) -> None:
         """Build coordinator helpers around the initialized runtime."""
@@ -493,10 +481,7 @@ class YoyoPodApp:
 
     def _handle_screen_changed(self, screen_name: str | None) -> None:
         """Marshal screen-state sync work onto the coordinator thread."""
-        self._run_on_main_thread(
-            f"sync screen state: {screen_name or 'none'}",
-            lambda: self._sync_screen_changed(screen_name),
-        )
+        self.event_bus.publish(ScreenChangedEvent(screen_name=screen_name))
 
     def _sync_screen_changed(self, screen_name: str | None) -> None:
         """Keep the derived base UI state aligned with the active screen."""

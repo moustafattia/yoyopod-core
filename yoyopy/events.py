@@ -41,6 +41,13 @@ class RegistrationChangedEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class ScreenChangedEvent:
+    """Published when the active screen route changes."""
+
+    screen_name: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class VoIPAvailabilityChangedEvent:
     """Published when VoIP backend availability changes."""
 
