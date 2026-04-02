@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from loguru import logger
 
@@ -25,6 +25,7 @@ from yoyopy.coordinators import (
     ScreenCoordinator,
 )
 from yoyopy.event_bus import EventBus
+from yoyopy.events import RecoveryAttemptCompletedEvent, ScreenChangedEvent
 from yoyopy.fsm import CallFSM, CallInterruptionPolicy, MusicFSM
 from yoyopy.ui.display import Display
 from yoyopy.ui.input import InputManager, get_input_manager
@@ -43,24 +44,18 @@ from yoyopy.ui.screens import (
 
 
 @dataclass(slots=True)
-class _MainThreadCallbackEvent:
-    """Compatibility event used by existing app queue helpers."""
-
-    description: str
-    callback: Callable[[], None]
-
-
-@dataclass(slots=True)
 class _RecoveryState:
     """Track reconnect backoff for a recoverable subsystem."""
 
     next_attempt_at: float = 0.0
     delay_seconds: float = 1.0
+    in_flight: bool = False
 
     def reset(self) -> None:
         """Reset backoff after a successful recovery."""
         self.next_attempt_at = 0.0
         self.delay_seconds = 1.0
+        self.in_flight = False
 
 
 class YoyoPodApp:
@@ -116,7 +111,11 @@ class YoyoPodApp:
         # Main-thread event bus
         self._main_thread_id = threading.get_ident()
         self.event_bus = EventBus(main_thread_id=self._main_thread_id)
-        self.event_bus.subscribe(_MainThreadCallbackEvent, self._handle_main_thread_callback_event)
+        self.event_bus.subscribe(ScreenChangedEvent, self._handle_screen_changed_event)
+        self.event_bus.subscribe(
+            RecoveryAttemptCompletedEvent,
+            self._handle_recovery_attempt_completed_event,
+        )
 
         # Extracted coordinators
         self.coordinator_runtime: Optional[CoordinatorRuntime] = None
@@ -127,6 +126,7 @@ class YoyoPodApp:
         # Recovery backoff state
         self._voip_recovery = _RecoveryState()
         self._mopidy_recovery = _RecoveryState()
+        self._stopping = False
 
         logger.info("=" * 60)
         logger.info("YoyoPod Application Initializing")
@@ -415,18 +415,35 @@ class YoyoPodApp:
         self.playback_coordinator.bind(self.event_bus)
         logger.info("  ✓ Event subscriptions registered")
 
-    def _run_on_main_thread(self, description: str, callback: Callable[[], None]) -> None:
-        """Queue work onto the coordinator thread."""
-        self.event_bus.publish(_MainThreadCallbackEvent(description=description, callback=callback))
-
     def _process_pending_main_thread_actions(self, limit: Optional[int] = None) -> int:
-        """Drain queued callbacks and typed events scheduled by worker threads."""
+        """Drain queued typed events scheduled by worker threads."""
         return self.event_bus.drain(limit)
 
-    def _handle_main_thread_callback_event(self, event: _MainThreadCallbackEvent) -> None:
-        """Execute a compatibility callback event on the coordinator thread."""
-        logger.debug(f"Processing main-thread action: {event.description}")
-        event.callback()
+    def _handle_screen_changed_event(self, event: ScreenChangedEvent) -> None:
+        """Apply queued screen-change state sync on the coordinator thread."""
+        self._sync_screen_changed(event.screen_name)
+
+    def _handle_recovery_attempt_completed_event(
+        self,
+        event: RecoveryAttemptCompletedEvent,
+    ) -> None:
+        """Finalize background recovery attempts on the coordinator thread."""
+        if event.manager != "mopidy":
+            return
+
+        self._mopidy_recovery.in_flight = False
+        if self._stopping:
+            return
+
+        if event.recovered and self.mopidy_client and not self.mopidy_client.polling:
+            self.mopidy_client.start_polling()
+
+        self._finalize_recovery_attempt(
+            "Mopidy",
+            self._mopidy_recovery,
+            event.recovered,
+            event.recovery_now,
+        )
 
     def _ensure_coordinators(self) -> None:
         """Build coordinator helpers around the initialized runtime."""
@@ -493,10 +510,7 @@ class YoyoPodApp:
 
     def _handle_screen_changed(self, screen_name: str | None) -> None:
         """Marshal screen-state sync work onto the coordinator thread."""
-        self._run_on_main_thread(
-            f"sync screen state: {screen_name or 'none'}",
-            lambda: self._sync_screen_changed(screen_name),
-        )
+        self.event_bus.publish(ScreenChangedEvent(screen_name=screen_name))
 
     def _sync_screen_changed(self, screen_name: str | None) -> None:
         """Keep the derived base UI state aligned with the active screen."""
@@ -505,6 +519,9 @@ class YoyoPodApp:
 
     def _attempt_manager_recovery(self, now: float | None = None) -> None:
         """Try to recover VoIP and Mopidy when they become unavailable."""
+        if self._stopping:
+            return
+
         recovery_now = time.monotonic() if now is None else now
         self._attempt_voip_recovery(recovery_now)
         self._attempt_mopidy_recovery(recovery_now)
@@ -538,19 +555,38 @@ class YoyoPodApp:
             self._mopidy_recovery.reset()
             return
 
+        if self._mopidy_recovery.in_flight:
+            return
+
         if recovery_now < self._mopidy_recovery.next_attempt_at:
             return
 
         logger.info("Attempting Mopidy recovery")
-        recovered = self.mopidy_client.connect()
-        if recovered and not self.mopidy_client.polling:
-            self.mopidy_client.start_polling()
+        self._mopidy_recovery.in_flight = True
+        self._start_mopidy_recovery_worker(recovery_now)
 
-        self._finalize_recovery_attempt(
-            "Mopidy",
-            self._mopidy_recovery,
-            recovered,
-            recovery_now,
+    def _start_mopidy_recovery_worker(self, recovery_now: float) -> None:
+        """Run blocking Mopidy reconnect attempts off the coordinator thread."""
+        worker = threading.Thread(
+            target=self._run_mopidy_recovery_attempt,
+            args=(recovery_now,),
+            daemon=True,
+            name="mopidy-recovery",
+        )
+        worker.start()
+
+    def _run_mopidy_recovery_attempt(self, recovery_now: float) -> None:
+        """Execute one Mopidy reconnect attempt and publish the typed result."""
+        recovered = False
+        if not self._stopping and self.mopidy_client is not None:
+            recovered = self.mopidy_client.connect()
+
+        self.event_bus.publish(
+            RecoveryAttemptCompletedEvent(
+                manager="mopidy",
+                recovered=recovered,
+                recovery_now=recovery_now,
+            )
         )
 
     def _finalize_recovery_attempt(
@@ -641,13 +677,14 @@ class YoyoPodApp:
     def stop(self) -> None:
         """Clean up and stop the application."""
         logger.info("Stopping YoyoPod...")
+        self._stopping = True
 
         self._ensure_coordinators()
         self.call_coordinator.cleanup()
 
         if self.voip_manager:
             logger.info("  - Stopping VoIP manager")
-            self.voip_manager.stop()
+            self.voip_manager.stop(notify_events=False)
 
         if self.mopidy_client:
             logger.info("  - Stopping music polling")

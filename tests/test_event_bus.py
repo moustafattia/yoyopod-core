@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 
+import pytest
+
 from yoyopy.event_bus import EventBus
 
 
@@ -42,3 +44,16 @@ def test_background_publish_is_queued_until_drain() -> None:
     assert seen_thread_ids == []
     assert bus.drain() == 1
     assert seen_thread_ids == [bus.main_thread_id]
+
+
+def test_strict_event_bus_reraises_handler_errors() -> None:
+    """Strict mode should surface handler exceptions instead of only logging them."""
+    bus = EventBus(strict=True)
+
+    def boom(event: DemoEvent) -> None:
+        raise RuntimeError(f"bad event: {event.value}")
+
+    bus.subscribe(DemoEvent, boom)
+
+    with pytest.raises(RuntimeError, match="bad event: strict"):
+        bus.publish(DemoEvent(value="strict"))

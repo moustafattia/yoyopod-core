@@ -9,9 +9,12 @@ from yoyopy.events import (
     CallEndedEvent,
     CallStateChangedEvent,
     IncomingCallEvent,
+    MusicAvailabilityChangedEvent,
     PlaybackStateChangedEvent,
     RegistrationChangedEvent,
+    ScreenChangedEvent,
     TrackChangedEvent,
+    VoIPAvailabilityChangedEvent,
 )
 from yoyopy.fsm import CallFSM, CallInterruptionPolicy, CallSessionState, MusicFSM, MusicState
 
@@ -24,8 +27,11 @@ __all__ = [
     "CallStateChangedEvent",
     "CallEndedEvent",
     "RegistrationChangedEvent",
+    "ScreenChangedEvent",
+    "VoIPAvailabilityChangedEvent",
     "TrackChangedEvent",
     "PlaybackStateChangedEvent",
+    "MusicAvailabilityChangedEvent",
     "MusicFSM",
     "MusicState",
     "CallFSM",

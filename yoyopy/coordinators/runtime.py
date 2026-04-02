@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -17,6 +17,18 @@ from yoyopy.fsm import (
     MusicFSM,
     MusicState,
 )
+
+if TYPE_CHECKING:
+    from yoyopy.audio.mopidy_client import MopidyClient
+    from yoyopy.config import ConfigManager
+    from yoyopy.ui.screens import (
+        CallScreen,
+        InCallScreen,
+        IncomingCallScreen,
+        NowPlayingScreen,
+        OutgoingCallScreen,
+        ScreenManager,
+    )
 
 
 class AppRuntimeState(Enum):
@@ -65,15 +77,15 @@ class CoordinatorRuntime:
     music_fsm: MusicFSM
     call_fsm: CallFSM
     call_interruption_policy: CallInterruptionPolicy
-    screen_manager: Any
-    mopidy_client: Any
-    now_playing_screen: Any
-    call_screen: Any
-    incoming_call_screen: Any
-    outgoing_call_screen: Any
-    in_call_screen: Any
+    screen_manager: ScreenManager | None
+    mopidy_client: MopidyClient | None
+    now_playing_screen: NowPlayingScreen | None
+    call_screen: CallScreen | None
+    incoming_call_screen: IncomingCallScreen | None
+    outgoing_call_screen: OutgoingCallScreen | None
+    in_call_screen: InCallScreen | None
     config: dict[str, Any]
-    config_manager: Any
+    config_manager: ConfigManager | None
     ui_state: AppRuntimeState = AppRuntimeState.IDLE
     voip_ready: bool = False
     current_app_state: AppRuntimeState = field(init=False)

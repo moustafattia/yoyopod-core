@@ -23,8 +23,9 @@ class EventBus:
     them to subscribed handlers in publish order.
     """
 
-    def __init__(self, main_thread_id: int | None = None) -> None:
+    def __init__(self, main_thread_id: int | None = None, strict: bool = False) -> None:
         self.main_thread_id = main_thread_id or threading.get_ident()
+        self._strict = strict
         self._subscribers: DefaultDict[type[Any], list[EventHandler]] = defaultdict(list)
         self._queue: Queue[Any] = Queue()
 
@@ -76,4 +77,6 @@ class EventBus:
             try:
                 handler(event)
             except Exception as exc:
+                if self._strict:
+                    raise
                 logger.error(f"Error handling {event.__class__.__name__}: {exc}")
