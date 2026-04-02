@@ -9,12 +9,22 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from queue import Empty, Queue
 from typing import Any, Callable, Dict, Optional
 
 from loguru import logger
 
+from yoyopy.event_bus import EventBus
+from yoyopy.events import (
+    CallEndedEvent,
+    CallStateChangedEvent,
+    IncomingCallEvent,
+    PlaybackStateChangedEvent,
+    RegistrationChangedEvent,
+    TrackChangedEvent,
+)
+from yoyopy.fsm import CallSessionState, MusicState
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens import ScreenManager
 from yoyopy.ui.input import get_input_manager, InputManager
@@ -34,6 +44,14 @@ from yoyopy.state_machine import StateMachine, AppState
 from yoyopy.connectivity import VoIPManager, VoIPConfig, RegistrationState, CallState
 from yoyopy.config import ConfigManager
 from yoyopy.audio.mopidy_client import MopidyClient, MopidyTrack
+
+
+@dataclass(slots=True)
+class _MainThreadCallbackEvent:
+    """Compatibility event used by existing app queue helpers."""
+
+    description: str
+    callback: Callable[[], None]
 
 
 class YoyoPodApp:
@@ -84,7 +102,6 @@ class YoyoPodApp:
         self.in_call_screen: Optional[InCallScreen] = None
 
         # Integration state tracking
-        self.music_was_playing_before_call = False
         self.auto_resume_after_call = True  # Will be loaded from config
         self.voip_registered = False
         self.handling_incoming_call = False  # Prevent callback spam
@@ -96,7 +113,8 @@ class YoyoPodApp:
         # Coordinate callback work through the main app loop so UI and state
         # changes do not run from background manager threads.
         self._main_thread_id = threading.get_ident()
-        self._main_thread_actions: Queue[tuple[str, Callable[[], None]]] = Queue()
+        self.event_bus = EventBus(main_thread_id=self._main_thread_id)
+        self.event_bus.subscribe(_MainThreadCallbackEvent, self._handle_main_thread_callback_event)
 
         logger.info("=" * 60)
         logger.info("YoyoPod Application Initializing")
@@ -129,6 +147,9 @@ class YoyoPodApp:
             if not self._setup_screens():
                 logger.error("Failed to setup screens")
                 return False
+
+            # Setup event bus subscriptions
+            self._setup_event_subscriptions()
 
             # Setup callbacks
             self._setup_voip_callbacks()
@@ -252,6 +273,9 @@ class YoyoPodApp:
             # Initialize state machine
             logger.info("  - StateMachine")
             self.state_machine = StateMachine(self.context)
+            self.music_fsm = self.state_machine.music_fsm
+            self.call_fsm = self.state_machine.call_fsm
+            self.call_interruption_policy = self.state_machine.call_interruption_policy
 
             # Initialize input manager with hardware auto-detection
             logger.info("  - InputManager")
@@ -432,6 +456,7 @@ class YoyoPodApp:
 
             # Set initial screen to menu
             self.screen_manager.push_screen("menu")
+            self.state_machine.set_ui_state(AppState.MENU, trigger="initial_screen")
             logger.info("  ✓ Initial screen set to menu")
 
             return True
@@ -449,22 +474,18 @@ class YoyoPodApp:
             return
 
         self.voip_manager.on_incoming_call(
-            lambda caller_address, caller_name: self._run_on_main_thread(
-                f"incoming call from {caller_name or caller_address}",
-                lambda: self._handle_incoming_call(caller_address, caller_name),
+            lambda caller_address, caller_name: self.event_bus.publish(
+                IncomingCallEvent(
+                    caller_address=caller_address,
+                    caller_name=caller_name,
+                )
             )
         )
         self.voip_manager.on_call_state_change(
-            lambda state: self._run_on_main_thread(
-                f"call state change to {state.value}",
-                lambda: self._handle_call_state_change(state),
-            )
+            self._publish_call_state_events
         )
         self.voip_manager.on_registration_change(
-            lambda state: self._run_on_main_thread(
-                f"registration state change to {state.value}",
-                lambda: self._handle_registration_change(state),
-            )
+            lambda state: self.event_bus.publish(RegistrationChangedEvent(state=state))
         )
 
         logger.info("  ✓ VoIP callbacks registered")
@@ -478,19 +499,46 @@ class YoyoPodApp:
             return
 
         self.mopidy_client.on_track_change(
-            lambda track: self._run_on_main_thread(
-                "track change",
-                lambda: self._handle_track_change(track),
-            )
+            lambda track: self.event_bus.publish(TrackChangedEvent(track=track))
         )
         self.mopidy_client.on_playback_state_change(
-            lambda playback_state: self._run_on_main_thread(
-                f"playback state change to {playback_state}",
-                lambda: self._handle_playback_state_change(playback_state),
+            lambda playback_state: self.event_bus.publish(
+                PlaybackStateChangedEvent(state=playback_state)
             )
         )
 
         logger.info("  ✓ Music callbacks registered")
+
+    def _setup_event_subscriptions(self) -> None:
+        """Subscribe coordinator handlers to typed app events."""
+        logger.info("Setting up event subscriptions...")
+
+        self.event_bus.subscribe(
+            IncomingCallEvent,
+            lambda event: self._handle_incoming_call(event.caller_address, event.caller_name),
+        )
+        self.event_bus.subscribe(
+            CallStateChangedEvent,
+            lambda event: self._handle_call_state_change(event.state),
+        )
+        self.event_bus.subscribe(
+            CallEndedEvent,
+            lambda event: self._handle_call_ended(),
+        )
+        self.event_bus.subscribe(
+            RegistrationChangedEvent,
+            lambda event: self._handle_registration_change(event.state),
+        )
+        self.event_bus.subscribe(
+            TrackChangedEvent,
+            lambda event: self._handle_track_change(event.track),
+        )
+        self.event_bus.subscribe(
+            PlaybackStateChangedEvent,
+            lambda event: self._handle_playback_state_change(event.state),
+        )
+
+        logger.info("  ✓ Event subscriptions registered")
 
     def _setup_state_callbacks(self) -> None:
         """Register state machine callbacks."""
@@ -523,12 +571,9 @@ class YoyoPodApp:
         Background manager threads enqueue callbacks here so UI mutations and
         state transitions happen from the main application loop.
         """
-        if threading.get_ident() == self._main_thread_id:
-            callback()
-            return
-
-        self._main_thread_actions.put((description, callback))
-        logger.debug(f"Queued main-thread action: {description}")
+        self.event_bus.publish(
+            _MainThreadCallbackEvent(description=description, callback=callback)
+        )
 
     def _process_pending_main_thread_actions(self, limit: Optional[int] = None) -> int:
         """
@@ -540,23 +585,18 @@ class YoyoPodApp:
         Returns:
             Number of processed actions.
         """
-        processed = 0
+        return self.event_bus.drain(limit)
 
-        while limit is None or processed < limit:
-            try:
-                description, callback = self._main_thread_actions.get_nowait()
-            except Empty:
-                break
+    def _handle_main_thread_callback_event(self, event: _MainThreadCallbackEvent) -> None:
+        """Execute a compatibility callback event on the coordinator thread."""
+        logger.debug(f"Processing main-thread action: {event.description}")
+        event.callback()
 
-            try:
-                logger.debug(f"Processing main-thread action: {description}")
-                callback()
-            except Exception as e:
-                logger.error(f"Error processing main-thread action '{description}': {e}")
-
-            processed += 1
-
-        return processed
+    def _publish_call_state_events(self, state: CallState) -> None:
+        """Publish call state events onto the bus."""
+        self.event_bus.publish(CallStateChangedEvent(state=state))
+        if state == CallState.RELEASED:
+            self.event_bus.publish(CallEndedEvent())
 
     def _pop_call_screens(self) -> None:
         """
@@ -662,32 +702,15 @@ class YoyoPodApp:
         playback_state = self.mopidy_client.get_playback_state() if self.mopidy_client else "stopped"
 
         if playback_state == "playing":
-            self.music_was_playing_before_call = True
             logger.info("  🎵 Auto-pausing music for incoming call")
+
+            self.call_interruption_policy.pause_for_call(self.music_fsm)
 
             # Pause music
             if self.mopidy_client:
                 self.mopidy_client.pause()
-
-            # Transition to paused-by-call state (if we're in a music state)
-            if self.state_machine.is_music_playing():
-                self.state_machine.transition_to(
-                    AppState.PAUSED_BY_CALL,
-                    "auto_pause_for_call"
-                )
-
-        # Transition to incoming call state using the correct trigger for the
-        # current music/call context.
-        if self.state_machine.current_state == AppState.PAUSED_BY_CALL:
-            self.state_machine.transition_to(
-                AppState.CALL_INCOMING,
-                "incoming_call_ringing"
-            )
-        else:
-            self.state_machine.transition_to(
-                AppState.CALL_INCOMING,
-                "incoming_call"
-            )
+        self.call_fsm.transition("incoming")
+        self.state_machine.sync_from_models("incoming_call")
 
         # Update and push incoming call screen
         self.incoming_call_screen.caller_address = caller_address
@@ -711,29 +734,24 @@ class YoyoPodApp:
         """
         logger.info(f"📞 Call state changed: {state.value}")
 
-        if state == CallState.CONNECTED or state == CallState.STREAMS_RUNNING:
-            current_state = self.state_machine.current_state
+        if state in (
+            CallState.OUTGOING,
+            CallState.OUTGOING_PROGRESS,
+            CallState.OUTGOING_RINGING,
+            CallState.OUTGOING_EARLY_MEDIA,
+        ):
+            self.call_fsm.transition("dial")
+            self.state_machine.sync_from_models("call_outgoing")
+            return
 
-            if current_state == AppState.PAUSED_BY_CALL:
-                self.state_machine.transition_to(
-                    AppState.CALL_ACTIVE_MUSIC_PAUSED,
-                    "call_answered"
-                )
-            elif current_state == AppState.CALL_INCOMING and self.music_was_playing_before_call:
-                self.state_machine.transition_to(
-                    AppState.CALL_ACTIVE_MUSIC_PAUSED,
-                    "answer_call_resume_after"
-                )
-            elif current_state == AppState.CALL_OUTGOING and self.music_was_playing_before_call:
-                self.state_machine.transition_to(
-                    AppState.CALL_ACTIVE_MUSIC_PAUSED,
-                    "call_connected_music_paused"
-                )
-            else:
-                self.state_machine.transition_to(
-                    AppState.CALL_ACTIVE,
-                    "call_connected"
-                )
+        if state == CallState.INCOMING:
+            self.call_fsm.transition("incoming")
+            self.state_machine.sync_from_models("call_incoming_state")
+            return
+
+        if state == CallState.CONNECTED or state == CallState.STREAMS_RUNNING:
+            self.call_fsm.transition("connect")
+            self.state_machine.sync_from_models("call_connected")
 
             # Push in-call screen
             if self.screen_manager.current_screen != self.in_call_screen:
@@ -742,10 +760,6 @@ class YoyoPodApp:
 
             # Stop ring tone when call is answered
             self._stop_ringing()
-
-        elif state == CallState.RELEASED:
-            # Call ended
-            self._handle_call_ended()
 
     def _handle_call_ended(self) -> None:
         """Handle call end - restore music if needed."""
@@ -760,56 +774,34 @@ class YoyoPodApp:
         # Pop all call screens
         self._pop_call_screens()
 
-        current_state = self.state_machine.current_state
+        should_resume = self.call_interruption_policy.should_auto_resume(
+            self.auto_resume_after_call
+        )
+
+        self.call_fsm.transition("end")
 
         # Check if we should resume music
-        if self.music_was_playing_before_call and self.auto_resume_after_call:
+        if should_resume:
             logger.info("  🎵 Auto-resuming music after call")
 
             # Resume music playback
             if self.mopidy_client:
                 self.mopidy_client.play()
-
-            if current_state in (AppState.CALL_ACTIVE_MUSIC_PAUSED, AppState.CALL_INCOMING):
-                self.state_machine.transition_to(
-                    AppState.PLAYING_WITH_VOIP,
-                    "call_ended_auto_resume"
-                )
-            elif current_state == AppState.PAUSED_BY_CALL:
-                self.state_machine.transition_to(
-                    AppState.PLAYING_WITH_VOIP,
-                    "call_rejected_resume"
-                )
+            self.music_fsm.transition("play")
 
             # Refresh NowPlayingScreen if visible to show play icon
             if self.screen_manager.current_screen == self.now_playing_screen:
                 self.now_playing_screen.render()
                 logger.debug("  → Now playing screen refreshed (showing play icon)")
 
-        elif self.music_was_playing_before_call:
+        elif self.call_interruption_policy.music_interrupted_by_call:
             logger.info("  🎵 Music stays paused (auto-resume disabled)")
-            if current_state == AppState.CALL_ACTIVE_MUSIC_PAUSED:
-                self.state_machine.transition_to(
-                    AppState.PAUSED,
-                    "call_ended_stay_paused"
-                )
-            elif current_state in (AppState.CALL_INCOMING, AppState.PAUSED_BY_CALL):
-                self.state_machine.transition_to(
-                    AppState.PAUSED,
-                    "reject_call_stay_paused"
-                )
-
+            self.music_fsm.transition("pause")
         else:
-            # No music was playing, return to idle or menu
             logger.info("  No music to resume")
-            if self.state_machine.current_state == AppState.CALL_ACTIVE:
-                self.state_machine.transition_to(
-                    AppState.CALL_IDLE,
-                    "call_ended"
-                )
 
-        # Reset flag
-        self.music_was_playing_before_call = False
+        self.call_interruption_policy.clear()
+        self.state_machine.sync_from_models("call_ended")
 
     def _handle_registration_change(self, state: RegistrationState) -> None:
         """
@@ -821,15 +813,10 @@ class YoyoPodApp:
         logger.info(f"📞 VoIP registration: {state.value}")
 
         self.voip_registered = (state == RegistrationState.OK)
+        self.state_machine.set_voip_ready(self.voip_registered)
 
         if state == RegistrationState.OK:
             logger.info("  ✓ VoIP ready to receive calls")
-            # If music is playing, upgrade to PLAYING_WITH_VOIP
-            if self.state_machine.current_state == AppState.PLAYING:
-                self.state_machine.transition_to(
-                    AppState.PLAYING_WITH_VOIP,
-                    "voip_ready"
-                )
         elif state == RegistrationState.FAILED:
             logger.warning("  ⚠ VoIP registration failed")
 
@@ -853,15 +840,9 @@ class YoyoPodApp:
             logger.info(f"🎵 Track changed: {track.name} - {track.get_artist_string()}")
         else:
             logger.info("🎵 Playback stopped")
-
-            # If we're in PLAYING_WITH_VOIP and track is None, music may have stopped
-            if self.state_machine.is_music_playing():
-                logger.warning("  Track is None but state is playing - music may have stopped")
-                # Transition to paused to reflect reality
-                self.state_machine.transition_to(
-                    AppState.PAUSED,
-                    "pause"
-                )
+            if not self.call_fsm.is_active:
+                self.music_fsm.transition("stop")
+                self.state_machine.sync_from_models("track_stopped")
 
         # Update now playing screen if visible
         if self.screen_manager.current_screen == self.now_playing_screen:
@@ -881,48 +862,18 @@ class YoyoPodApp:
 
         # Only sync state machine if we're not in a call
         # (during calls, call logic handles music states)
-        if self.state_machine.is_call_active():
+        if self.call_fsm.is_active:
             logger.debug("  → In call, state machine managed by call logic")
             return
 
-        # Sync state machine with actual playback state
-        current_state = self.state_machine.current_state
-
         if playback_state == "playing":
-            if self.voip_registered:
-                if current_state == AppState.PAUSED:
-                    self.state_machine.transition_to(
-                        AppState.PLAYING_WITH_VOIP,
-                        "resume"
-                    )
-                elif current_state == AppState.PLAYING:
-                    self.state_machine.transition_to(
-                        AppState.PLAYING_WITH_VOIP,
-                        "voip_ready"
-                    )
-                elif current_state == AppState.MENU:
-                    self.state_machine.transition_to(
-                        AppState.PLAYING_WITH_VOIP,
-                        "select_media_with_voip"
-                    )
-            else:
-                if current_state == AppState.PAUSED:
-                    self.state_machine.transition_to(
-                        AppState.PLAYING,
-                        "resume"
-                    )
-                elif current_state == AppState.MENU:
-                    self.state_machine.transition_to(
-                        AppState.PLAYING,
-                        "select_media"
-                    )
+            self.music_fsm.transition("play")
+        elif playback_state == "paused":
+            self.music_fsm.transition("pause")
+        elif playback_state == "stopped":
+            self.music_fsm.transition("stop")
 
-        elif playback_state in ("paused", "stopped"):
-            if self.state_machine.is_music_playing() and current_state != AppState.PAUSED:
-                self.state_machine.transition_to(
-                    AppState.PAUSED,
-                    "pause"
-                )
+        self.state_machine.sync_from_models(f"playback_{playback_state}")
 
         # Refresh NowPlayingScreen if visible to reflect new state
         if self.screen_manager.current_screen == self.now_playing_screen:
@@ -1076,7 +1027,7 @@ class YoyoPodApp:
         return {
             'state': self.state_machine.get_state_name(),
             'voip_registered': self.voip_registered,
-            'music_was_playing': self.music_was_playing_before_call,
+            'music_was_playing': self.call_interruption_policy.music_interrupted_by_call,
             'auto_resume': self.auto_resume_after_call,
             'voip_available': self.voip_manager is not None,
             'music_available': self.mopidy_client is not None and self.mopidy_client.is_connected
