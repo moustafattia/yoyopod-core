@@ -38,3 +38,20 @@ def test_whisplay_factory_applies_one_button_profile_and_custom_timings() -> Non
     assert adapter.debounce_time == 0.08
     assert adapter.double_click_time == 0.24
     assert adapter.long_press_time == 0.95
+
+
+def test_whisplay_factory_keeps_standard_profile_when_navigation_disabled() -> None:
+    """Raw PTT mode should not advertise the Whisplay one-button navigation profile."""
+    manager = get_input_manager(
+        WhisplayDisplayAdapter(),
+        config={"input": {"ptt_navigation": False}},
+        simulate=True,
+    )
+
+    assert manager is not None
+    assert manager.interaction_profile == InteractionProfile.STANDARD
+    assert len(manager.adapters) == 1
+
+    adapter = manager.adapters[0]
+    assert isinstance(adapter, PTTInputAdapter)
+    assert adapter.enable_navigation is False

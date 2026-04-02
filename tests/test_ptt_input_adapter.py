@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from yoyopy.ui.input import InputAction
+from yoyopy.ui.input.adapters import ptt_button
 from yoyopy.ui.input.adapters.ptt_button import PTTInputAdapter
 
 
@@ -41,6 +44,20 @@ def test_double_tap_emits_select_and_cancels_pending_advance() -> None:
     assert actions == [InputAction.SELECT]
 
 
+def test_double_tap_uses_second_press_time_not_second_release_time() -> None:
+    """A confirm tap that begins in time should still select even if released later."""
+    adapter = PTTInputAdapter(simulate=True, enable_navigation=True)
+    actions = _record_actions(adapter)
+
+    adapter._handle_button_press(0.0)
+    adapter._handle_button_release(0.1)
+    adapter._handle_button_press(0.39)
+    adapter._handle_button_release(0.5)
+    adapter._emit_pending_navigation(0.9)
+
+    assert actions == [InputAction.SELECT]
+
+
 def test_long_hold_emits_back() -> None:
     """Long holds should map to BACK in one-button navigation mode."""
     adapter = PTTInputAdapter(simulate=True, enable_navigation=True)
@@ -64,3 +81,36 @@ def test_long_hold_suppresses_pending_single_tap() -> None:
     adapter._emit_pending_navigation(1.5)
 
     assert actions == [InputAction.BACK]
+
+
+def test_poll_loop_preserves_double_tap_window_across_debounce(monkeypatch) -> None:
+    """A second tap near the timeout should still resolve to SELECT, not ADVANCE."""
+    adapter = PTTInputAdapter(
+        simulate=False,
+        enable_navigation=True,
+        debounce_time=0.05,
+        double_click_time=0.3,
+    )
+    actions = _record_actions(adapter)
+
+    clock = SimpleNamespace(current=0.0)
+
+    def fake_time() -> float:
+        return clock.current
+
+    def fake_sleep(duration: float) -> None:
+        clock.current = round(clock.current + duration, 4)
+
+    def fake_button_state() -> bool:
+        current = clock.current
+        return (0.0 <= current < 0.10) or (0.39 <= current < 0.49)
+
+    monkeypatch.setattr(ptt_button.time, "time", fake_time)
+    monkeypatch.setattr(ptt_button.time, "sleep", fake_sleep)
+    adapter._get_button_state = fake_button_state
+    adapter.poll_rate = 0.01
+    adapter.stop_event = SimpleNamespace(is_set=lambda: clock.current >= 0.8)
+
+    adapter._poll_button()
+
+    assert actions == [InputAction.SELECT]

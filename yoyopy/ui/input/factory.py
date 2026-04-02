@@ -59,9 +59,14 @@ def get_input_manager(
 
     elif adapter_name == "WhisplayDisplayAdapter":
         logger.info("  Detected Whisplay HAT")
-        manager.set_interaction_profile(InteractionProfile.ONE_BUTTON)
         whisplay_device = getattr(display_adapter, "device", None)
         enable_navigation = input_config.get("ptt_navigation", True)
+        if enable_navigation:
+            manager.set_interaction_profile(InteractionProfile.ONE_BUTTON)
+        else:
+            logger.warning(
+                "  -> Whisplay PTT navigation disabled; keeping standard interaction profile",
+            )
         debounce_time = float(input_config.get("whisplay_debounce_ms", 50)) / 1000.0
         double_click_time = float(input_config.get("whisplay_double_tap_ms", 300)) / 1000.0
         long_press_time = float(input_config.get("whisplay_long_hold_ms", 800)) / 1000.0

@@ -61,6 +61,7 @@ class PTTInputAdapter(InputHAL):
         self.button_pressed = False
         self.press_start_time: Optional[float] = None
         self.pending_single_tap_time: Optional[float] = None
+        self.double_tap_candidate = False
 
         logger.debug(f"PTTInputAdapter initialized (navigation: {enable_navigation})")
 
@@ -151,7 +152,13 @@ class PTTInputAdapter(InputHAL):
 
     def _handle_button_press(self, current_time: float) -> None:
         """Record a physical button press."""
-        self._emit_pending_navigation(current_time)
+        self.double_tap_candidate = (
+            self.enable_navigation
+            and self.pending_single_tap_time is not None
+            and (current_time - self.pending_single_tap_time) < self.double_click_time
+        )
+        if not self.double_tap_candidate:
+            self._emit_pending_navigation(current_time)
         self.button_pressed = True
         self.press_start_time = current_time
 
@@ -175,10 +182,12 @@ class PTTInputAdapter(InputHAL):
                 },
             )
             self.press_start_time = None
+            self.double_tap_candidate = False
             return
 
         if press_duration >= self.long_press_time:
             self.pending_single_tap_time = None
+            self.double_tap_candidate = False
             self._fire_action(
                 InputAction.BACK,
                 {
@@ -189,11 +198,9 @@ class PTTInputAdapter(InputHAL):
             self.press_start_time = None
             return
 
-        if (
-            self.pending_single_tap_time is not None
-            and (current_time - self.pending_single_tap_time) < self.double_click_time
-        ):
+        if self.double_tap_candidate:
             self.pending_single_tap_time = None
+            self.double_tap_candidate = False
             self._fire_action(
                 InputAction.SELECT,
                 {
@@ -204,6 +211,7 @@ class PTTInputAdapter(InputHAL):
             self.press_start_time = None
             return
 
+        self.double_tap_candidate = False
         self.pending_single_tap_time = current_time
         self.press_start_time = None
 
@@ -239,10 +247,11 @@ class PTTInputAdapter(InputHAL):
             previous_state = self.button_pressed
 
             if current_state and not previous_state:
+                press_detected_at = current_time
                 time.sleep(self.debounce_time)
                 current_state = self._get_button_state()
                 if current_state:
-                    self._handle_button_press(time.time())
+                    self._handle_button_press(press_detected_at)
 
             elif not current_state and previous_state:
                 self._handle_button_release(time.time())
