@@ -1,156 +1,203 @@
 #!/usr/bin/env python3
 """
-Audio System Demo for YoyoPod
+Audio system smoke demo for the current YoyoPod stack.
 
-Demonstrates audio playback and volume control with the AudioManager
-and AudioScreen.
-
-Press Ctrl+C to exit.
+This demo no longer relies on the removed `AudioScreen`. Instead it renders
+audio state directly while exercising `AudioManager` and semantic input.
 """
 
-import time
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
+
 from loguru import logger
 
-from yoyopy.ui.display import Display
-from yoyopy.ui.audio_screen import AudioScreen
-from yoyopy.ui.screen_manager import ScreenManager
-from yoyopy.ui.input_handler import InputHandler, Button, ButtonEvent
-from yoyopy.app_context import AppContext
 from yoyopy.audio.audio_manager import AudioManager
+from yoyopy.ui.display import Display
+from yoyopy.ui.input import InputAction, get_input_manager
 
-# Configure logger
-logger.remove()  # Remove default handler
+ACTION_MAP = {
+    "a": InputAction.SELECT,
+    "b": InputAction.BACK,
+    "x": InputAction.UP,
+    "y": InputAction.DOWN,
+}
+
+logger.remove()
 logger.add(
     sys.stderr,
     format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-    level="INFO"
+    level="INFO",
 )
 
 
-def main():
+def render_audio_status(
+    display: Display,
+    audio_manager: AudioManager,
+    sound_name: str,
+    status_message: str,
+) -> None:
+    """Render a compact audio status screen."""
+    device_info = audio_manager.get_device_info()
+    if audio_manager.is_playing:
+        playback_state = "Playing"
+        state_color = display.COLOR_GREEN
+    elif audio_manager.is_paused:
+        playback_state = "Paused"
+        state_color = display.COLOR_YELLOW
+    else:
+        playback_state = "Stopped"
+        state_color = display.COLOR_GRAY
+
+    display.clear(display.COLOR_BLACK)
+    display.status_bar(
+        time_str=datetime.now().strftime("%H:%M"),
+        battery_percent=85,
+        signal_strength=3,
+    )
+    display.text("Audio Demo", 20, display.STATUS_BAR_HEIGHT + 18, color=display.COLOR_CYAN, font_size=20)
+    display.text(f"File: {sound_name}", 20, 75, color=display.COLOR_WHITE, font_size=14)
+    display.text(f"State: {playback_state}", 20, 105, color=state_color, font_size=16)
+    display.text(
+        f"Volume: {audio_manager.volume}% / {audio_manager.max_volume}%",
+        20,
+        135,
+        color=display.COLOR_WHITE,
+        font_size=14,
+    )
+    display.text(
+        f"Device: {device_info.name if device_info else 'Unknown'}",
+        20,
+        165,
+        color=display.COLOR_GRAY,
+        font_size=12,
+    )
+    display.text(status_message[:28], 20, 195, color=display.COLOR_WHITE, font_size=12)
+    display.text("A play/pause  X/Y volume  B exit", 20, display.HEIGHT - 18, color=display.COLOR_GRAY, font_size=10)
+    display.update()
+
+
+def main() -> int:
     """Run the audio demo."""
-    logger.info("Starting YoyoPod Audio Demo")
+    logger.info("Starting YoyoPod audio demo")
     logger.info("=" * 50)
 
-    # Check if hardware is available
-    try:
-        from displayhatmini import DisplayHATMini
-        has_hardware = True
-        logger.info("DisplayHATMini detected - using hardware")
-    except ImportError:
-        has_hardware = False
-        logger.warning("DisplayHATMini not available - simulation mode")
+    display = Display(simulate="--simulate" in sys.argv)
+    input_manager = get_input_manager(display.get_adapter(), simulate=display.simulate)
+    if input_manager is None:
+        logger.error("No input manager available for the detected display adapter")
+        return 1
 
-    # Initialize application context
-    context = AppContext()
-    context.update_system_status(battery=85, signal=3, connected=True)
-
-    # Initialize audio manager with parental volume limit (80%)
-    audio_manager = AudioManager(max_volume=80, simulate=not has_hardware)
-
-    # Set initial volume
+    audio_manager = AudioManager(max_volume=80, simulate=display.simulate)
     audio_manager.volume = 50
 
-    # Initialize display
-    display = Display(simulate=not has_hardware)
-
-    # Initialize input handler
-    if has_hardware:
-        device = display.device if hasattr(display, 'device') else None
-        input_handler = InputHandler(display_device=device, simulate=False)
-    else:
-        input_handler = InputHandler(simulate=True)
-
-    # Create screen manager
-    screen_manager = ScreenManager(display, input_handler)
-
-    # Create audio screen
-    audio_screen = AudioScreen(display, audio_manager, context)
-
-    # Register screen
-    screen_manager.register_screen("audio", audio_screen)
-
-    # Show audio screen
-    screen_manager.replace_screen("audio")
-
-    # Start input handler
-    input_handler.start()
-
-    # Log available test sounds
     sounds_dir = Path("assets/sounds")
-    if sounds_dir.exists():
-        sound_files = list(sounds_dir.glob("*.wav"))
-        logger.info(f"Found {len(sound_files)} test sounds:")
-        for sound in sound_files:
-            logger.info(f"  - {sound.name}")
+    sound_files = sorted(sounds_dir.glob("*.wav")) if sounds_dir.exists() else []
+    current_sound = sound_files[0] if sound_files else None
+
+    if current_sound and audio_manager.load(current_sound):
+        status_message = f"Loaded {current_sound.name}"
+    elif current_sound:
+        status_message = f"Failed to load {current_sound.name}"
     else:
-        logger.warning("No test sounds found. Run scripts/generate_test_sounds.py first")
+        status_message = "No WAV files found in assets/sounds"
+
+    running = True
+
+    def refresh() -> None:
+        render_audio_status(
+            display,
+            audio_manager,
+            current_sound.name if current_sound else "None",
+            status_message,
+        )
+
+    def on_select(_data=None) -> None:
+        nonlocal status_message
+        if not current_sound:
+            status_message = "Add a WAV file to assets/sounds"
+            refresh()
+            return
+
+        if audio_manager.is_playing:
+            audio_manager.pause()
+            status_message = f"Paused {current_sound.name}"
+        elif audio_manager.is_paused:
+            audio_manager.resume()
+            status_message = f"Resumed {current_sound.name}"
+        else:
+            if audio_manager.current_file != current_sound:
+                audio_manager.load(current_sound)
+            if audio_manager.play():
+                status_message = f"Playing {current_sound.name}"
+            else:
+                status_message = f"Playback failed for {current_sound.name}"
+        refresh()
+
+    def on_back(_data=None) -> None:
+        nonlocal running, status_message
+        running = False
+        audio_manager.stop()
+        status_message = "Exiting audio demo"
+        refresh()
+
+    def on_up(_data=None) -> None:
+        nonlocal status_message
+        audio_manager.volume_up()
+        status_message = f"Volume increased to {audio_manager.volume}%"
+        refresh()
+
+    def on_down(_data=None) -> None:
+        nonlocal status_message
+        audio_manager.volume_down()
+        status_message = f"Volume decreased to {audio_manager.volume}%"
+        refresh()
+
+    input_manager.on_action(InputAction.SELECT, on_select)
+    input_manager.on_action(InputAction.BACK, on_back)
+    input_manager.on_action(InputAction.UP, on_up)
+    input_manager.on_action(InputAction.DOWN, on_down)
+    input_manager.start()
+    refresh()
 
     try:
-        if has_hardware:
-            # Hardware mode - just wait for button presses
-            logger.info("Audio demo running - press buttons to test")
-            logger.info("  A: Play test sound")
-            logger.info("  X: Volume up")
-            logger.info("  Y: Volume down")
-            logger.info("  B: Exit")
-            logger.info("Press Ctrl+C to exit")
-
-            # Register back button to exit
-            def exit_demo():
-                raise KeyboardInterrupt
-
-            input_handler.on_button(Button.B, ButtonEvent.PRESS, exit_demo)
-
-            while True:
-                time.sleep(0.1)
-
-        else:
-            # Simulation mode - keyboard input
-            logger.info("Simulation mode - type button commands")
-            logger.info("Commands: a (play), x (vol up), y (vol down), quit")
-
-            while True:
+        if display.simulate:
+            logger.info("Simulation mode commands: a, b, x, y, quit")
+            while running:
                 try:
-                    logger.info(f"Current volume: {audio_manager.volume}%")
                     cmd = input("> ").strip().lower()
-
-                    if cmd == 'quit' or cmd == 'b':
-                        break
-                    elif cmd == 'a':
-                        input_handler.simulate_button_press(Button.A, ButtonEvent.PRESS)
-                    elif cmd == 'x':
-                        input_handler.simulate_button_press(Button.X, ButtonEvent.PRESS)
-                    elif cmd == 'y':
-                        input_handler.simulate_button_press(Button.Y, ButtonEvent.PRESS)
-                    elif cmd == 'vol':
-                        logger.info(f"Volume: {audio_manager.volume}% (max: {audio_manager.max_volume}%)")
-                    elif cmd == 'device':
-                        device_info = audio_manager.get_device_info()
-                        if device_info:
-                            logger.info(f"Device: {device_info.name} ({device_info.device_type.value})")
-                        else:
-                            logger.info("No audio device detected")
-                    elif cmd == 'help':
-                        logger.info("Commands: a, x, y, vol, device, quit")
-                    else:
-                        logger.warning(f"Unknown command: {cmd}")
-
                 except EOFError:
                     break
 
-    except KeyboardInterrupt:
-        logger.info("\nDemo interrupted by user")
+                if cmd in {"quit", "q", "exit"}:
+                    break
+                if cmd == "help":
+                    logger.info("Commands: a, b, x, y, quit")
+                    continue
 
+                action = ACTION_MAP.get(cmd)
+                if action is None:
+                    logger.warning(f"Unknown command: {cmd}")
+                    continue
+
+                input_manager.simulate_action(action)
+        else:
+            logger.info("Audio demo running on hardware. Press Ctrl+C to exit.")
+            while running:
+                time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        logger.info("Demo interrupted by user")
     finally:
-        # Cleanup
-        input_handler.stop()
+        input_manager.stop()
         audio_manager.cleanup()
+        display.cleanup()
         logger.info(f"Final volume: {audio_manager.volume}%")
         logger.info("Demo stopped")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

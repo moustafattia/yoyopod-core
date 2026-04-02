@@ -1,317 +1,169 @@
 #!/usr/bin/env python3
 """
-Demo application for VoIP calling with YoyoPod.
+Demo application for VoIP calling with the current YoyoPod UI stack.
 
-This demo initializes VoIPManager and displays the CallScreen
-showing registration status and VoIP readiness.
-
-Requirements:
-- linphonec installed at /usr/bin/linphonec
-- SIP account configured (sip.linphone.org or other provider)
-- DisplayHATMini hardware (or simulation mode)
-
-Button controls:
-- Button A: Answer/Hangup call (future)
-- Button B: Back to menu
-- Button X/Y: Reserved for dial pad (future)
+Controls:
+- `a`: Select, answer, or confirm
+- `b`: Back, reject, or hang up
+- `x`: Up or mute
+- `y`: Down
 """
 
 import sys
 import time
-from pathlib import Path
+
 from loguru import logger
 
-# Configure logger
+from yoyopy.app_context import AppContext
+from yoyopy.config import ConfigManager
+from yoyopy.connectivity import RegistrationState, VoIPConfig, VoIPManager
+from yoyopy.ui.display import Display
+from yoyopy.ui.input import InputAction, get_input_manager
+from yoyopy.ui.screens import (
+    CallScreen,
+    ContactListScreen,
+    InCallScreen,
+    IncomingCallScreen,
+    MenuScreen,
+    OutgoingCallScreen,
+    ScreenManager,
+)
+
+ACTION_MAP = {
+    "a": InputAction.SELECT,
+    "b": InputAction.BACK,
+    "x": InputAction.UP,
+    "y": InputAction.DOWN,
+}
+
 logger.remove()
 logger.add(
     sys.stderr,
     format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-    level="INFO"
+    level="INFO",
 )
 
-from yoyopy.ui.display import Display
-from yoyopy.ui.screens import (
-    CallScreen,
-    MenuScreen,
-    ContactListScreen,
-    IncomingCallScreen,
-    OutgoingCallScreen,
-    InCallScreen
-)
-from yoyopy.ui.screen_manager import ScreenManager
-from yoyopy.ui.input_handler import InputHandler
-from yoyopy.app_context import AppContext
-from yoyopy.connectivity import VoIPManager, VoIPConfig, RegistrationState
-from yoyopy.config import ConfigManager
 
-
-def main():
+def main() -> int:
     """Run VoIP demo."""
     logger.info("=" * 60)
     logger.info("YoyoPod VoIP Demo")
     logger.info("=" * 60)
 
-    # Check for simulation mode
-    simulate = "--simulate" in sys.argv
-    if simulate:
-        logger.warning("Running in SIMULATION mode (no hardware required)")
+    display = Display(simulate="--simulate" in sys.argv)
+    input_manager = get_input_manager(display.get_adapter(), simulate=display.simulate)
+    if input_manager is None:
+        logger.error("No input manager available for the detected display adapter")
+        return 1
 
-    # Initialize display
     logger.info("Initializing display...")
-    display = Display(simulate=simulate)
     display.clear(display.COLOR_BLACK)
-    display.text(
-        "Initializing VoIP...",
-        10, 100,
-        color=display.COLOR_WHITE,
-        font_size=16
-    )
+    display.text("Initializing VoIP...", 10, 100, color=display.COLOR_WHITE, font_size=16)
     display.update()
 
-    # Initialize app context
     context = AppContext()
-
-    # Load configuration
-    logger.info("Loading configuration...")
     config_manager = ConfigManager(config_dir="config")
-
-    # Create VoIP config from ConfigManager
-    logger.info("Configuring VoIP...")
     voip_config = VoIPConfig.from_config_manager(config_manager)
-
-    # Initialize VoIP manager with config_manager for contact lookup
-    logger.info("Starting VoIP manager...")
     voip_manager = VoIPManager(voip_config, config_manager=config_manager)
 
-    # Log loaded contacts
     contacts = config_manager.get_contacts()
-    logger.info(f"Loaded {len(contacts)} contacts:")
-    for contact in contacts[:5]:  # Show first 5
-        logger.info(f"  - {contact.name}: {contact.sip_address}")
+    logger.info(f"Loaded {len(contacts)} contacts")
 
     try:
         if not voip_manager.start():
-            logger.error("Failed to start VoIP manager!")
-            display.clear(display.COLOR_BLACK)
-            display.text(
-                "VoIP Start Failed",
-                10, 60,
-                color=display.COLOR_RED,
-                font_size=18
-            )
-            display.text(
-                "Check linphonec",
-                10, 85,
-                color=display.COLOR_RED,
-                font_size=18
-            )
-            display.text(
-                "installation",
-                10, 110,
-                color=display.COLOR_WHITE,
-                font_size=14
-            )
-            display.update()
-            time.sleep(3)
-            return
-    except Exception as e:
-        logger.error(f"Error starting VoIP: {e}")
-        display.clear(display.COLOR_BLACK)
-        display.text(
-            "VoIP Error",
-            10, 80,
-            color=display.COLOR_RED,
-            font_size=16
-        )
-        display.text(
-            str(e)[:30],
-            10, 110,
-            color=display.COLOR_WHITE,
-            font_size=12
-        )
-        display.update()
-        time.sleep(3)
-        return
+            logger.error("Failed to start VoIP manager")
+            return 1
+    except Exception as exc:
+        logger.error(f"Error starting VoIP: {exc}")
+        return 1
 
-    logger.info("VoIP manager started successfully!")
-
-    # Initialize input handler (if not simulating)
-    input_handler = None
-    if not simulate:
-        logger.info("Initializing input handler...")
-        input_handler = InputHandler(display_device=display.device, simulate=False)
-        input_handler.start()  # Start polling for button presses
-        logger.info("Input handler started")
-
-    # Initialize screen manager
-    logger.info("Setting up screens...")
-    screen_manager = ScreenManager(display, input_handler)
-
-    # Create menu screen
-    menu_items = ["VoIP Status", "Call Contact"]
-    menu_screen = MenuScreen(display, context, items=menu_items)
-
-    # Create call screen with VoIP manager and config manager
-    call_screen = CallScreen(
-        display,
-        context,
-        voip_manager=voip_manager,
-        config_manager=config_manager
-    )
-
-    # Create contact list screen
+    screen_manager = ScreenManager(display, input_manager)
+    screen_manager.register_screen("menu", MenuScreen(display, context, items=["VoIP Status", "Call Contact"]))
+    call_screen = CallScreen(display, context, voip_manager=voip_manager, config_manager=config_manager)
     contact_list_screen = ContactListScreen(
         display,
         context,
         voip_manager=voip_manager,
-        config_manager=config_manager
+        config_manager=config_manager,
     )
+    outgoing_call_screen = OutgoingCallScreen(display, context, voip_manager=voip_manager)
+    incoming_call_screen = IncomingCallScreen(display, context, voip_manager=voip_manager)
+    in_call_screen = InCallScreen(display, context, voip_manager=voip_manager)
 
-    # Create outgoing call screen
-    outgoing_call_screen = OutgoingCallScreen(
-        display,
-        context,
-        voip_manager=voip_manager
-    )
-
-    # Create incoming call screen
-    incoming_call_screen = IncomingCallScreen(
-        display,
-        context,
-        voip_manager=voip_manager
-    )
-
-    # Create in-call screen
-    in_call_screen = InCallScreen(
-        display,
-        context,
-        voip_manager=voip_manager
-    )
-
-    # Register screens
-    screen_manager.register_screen("menu", menu_screen)
     screen_manager.register_screen("call", call_screen)
     screen_manager.register_screen("contacts", contact_list_screen)
     screen_manager.register_screen("outgoing_call", outgoing_call_screen)
     screen_manager.register_screen("incoming_call", incoming_call_screen)
     screen_manager.register_screen("in_call", in_call_screen)
-
-    # Register VoIP callbacks (after screens are created)
-    def on_registration_change(state: RegistrationState):
-        logger.info(f"Registration state changed: {state.value}")
-        # Re-render call screen when registration state changes
-        if screen_manager.current_screen == call_screen:
-            call_screen.render()
-
-    voip_manager.on_registration_change(on_registration_change)
-
-    def on_incoming_call(caller_address: str, caller_name: str):
-        logger.info(f"Incoming call from: {caller_name} ({caller_address})")
-        # Update incoming call screen with caller information
-        incoming_call_screen.caller_address = caller_address
-        incoming_call_screen.caller_name = caller_name
-        incoming_call_screen.ring_animation_frame = 0  # Reset animation
-        # Only push the screen if we're not already showing it
-        # This prevents stacking multiple incoming_call screens
-        if screen_manager.current_screen != incoming_call_screen:
-            screen_manager.push_screen("incoming_call")
-
-    voip_manager.on_incoming_call(on_incoming_call)
-
-    def on_call_state_change(state):
-        logger.info(f"Call state changed: {state.value}")
-        # Handle transitions based on call state
-        if state.value == "connected" or state.value == "streams_running":
-            # Call is active, switch to in-call screen
-            if screen_manager.current_screen != in_call_screen:
-                screen_manager.push_screen("in_call")
-        elif state.value == "released":
-            # Call ended, clear the screen stack to return to menu
-            # Pop all call-related screens until we're back at menu/contacts
-            while screen_manager.current_screen in [in_call_screen, incoming_call_screen, outgoing_call_screen]:
-                screen_manager.pop_screen()
-                # Safety check to prevent infinite loop
-                if not screen_manager.screen_stack:
-                    break
-
-    voip_manager.on_call_state_change(on_call_state_change)
-
-    # Set initial screen (start with menu)
     screen_manager.push_screen("menu")
 
-    # Show instructions
-    logger.info("")
-    logger.info("VoIP Demo Running!")
-    logger.info("-" * 60)
-    logger.info("Navigation:")
-    logger.info("  Menu Screen:")
-    logger.info("    A - Select item")
-    logger.info("    X/Y - Navigate menu")
-    logger.info("  Contact List:")
-    logger.info("    A - Call selected contact")
-    logger.info("    B - Back to menu")
-    logger.info("    X/Y - Navigate contacts")
-    logger.info("  During Call:")
-    logger.info("    X - Toggle mute")
-    logger.info("    B - End call")
-    logger.info("")
-    logger.info("VoIP Status:")
-    status = voip_manager.get_status()
-    logger.info(f"  Running: {status['running']}")
-    logger.info(f"  Registered: {status['registered']}")
-    logger.info(f"  Registration State: {status['registration_state']}")
-    logger.info(f"  SIP Identity: {status['sip_identity']}")
-    logger.info("")
+    def on_registration_change(state: RegistrationState) -> None:
+        logger.info(f"Registration state changed: {state.value}")
+        if screen_manager.current_screen is call_screen:
+            call_screen.render()
 
-    if simulate:
-        logger.info("Simulation mode - no buttons available")
-        logger.info("Display will auto-refresh every 2 seconds")
+    def on_incoming_call(caller_address: str, caller_name: str) -> None:
+        logger.info(f"Incoming call from: {caller_name} ({caller_address})")
+        incoming_call_screen.caller_address = caller_address
+        incoming_call_screen.caller_name = caller_name
+        incoming_call_screen.ring_animation_frame = 0
+        if screen_manager.current_screen is not incoming_call_screen:
+            screen_manager.push_screen("incoming_call")
 
-    logger.info("")
-    logger.info("Press Ctrl+C to exit")
-    logger.info("-" * 60)
+    def on_call_state_change(state) -> None:
+        logger.info(f"Call state changed: {state.value}")
+        if state.value in {"connected", "streams_running"}:
+            if screen_manager.current_screen is not in_call_screen:
+                screen_manager.push_screen("in_call")
+        elif state.value == "released":
+            while screen_manager.current_screen in [in_call_screen, incoming_call_screen, outgoing_call_screen]:
+                if not screen_manager.pop_screen():
+                    break
+
+    voip_manager.on_registration_change(on_registration_change)
+    voip_manager.on_incoming_call(on_incoming_call)
+    voip_manager.on_call_state_change(on_call_state_change)
+
+    input_manager.start()
+
+    logger.info("VoIP demo running")
+    if display.simulate:
+        logger.info("Simulation mode commands: a, b, x, y, quit")
 
     try:
-        # Main loop
-        if simulate:
-            # Simulation: auto-refresh display
+        if display.simulate:
             while True:
-                if screen_manager.current_screen:
-                    screen_manager.current_screen.render()
-                time.sleep(2)
+                try:
+                    cmd = input("> ").strip().lower()
+                except EOFError:
+                    break
+
+                if cmd in {"quit", "q", "exit"}:
+                    break
+                if cmd == "help":
+                    logger.info("Commands: a, b, x, y, quit")
+                    continue
+
+                action = ACTION_MAP.get(cmd)
+                if action is None:
+                    logger.warning(f"Unknown command: {cmd}")
+                    continue
+
+                input_manager.simulate_action(action)
         else:
-            # Hardware: input handler handles updates
             while True:
                 time.sleep(0.1)
 
     except KeyboardInterrupt:
-        logger.info("\nShutting down...")
-
+        logger.info("Shutting down")
     finally:
-        # Cleanup
-        logger.info("Stopping VoIP manager...")
         voip_manager.stop()
-
-        if input_handler:
-            logger.info("Stopping input handler...")
-            input_handler.stop()
-            logger.info("Cleaning up input handler...")
-            input_handler.cleanup()
-
-        logger.info("Clearing display...")
-        display.clear(display.COLOR_BLACK)
-        display.text(
-            "Goodbye!",
-            70, 120,
-            color=display.COLOR_CYAN,
-            font_size=20
-        )
-        display.update()
-        time.sleep(1)
+        input_manager.stop()
         display.cleanup()
+        logger.info("Demo ended")
 
-        logger.info("Demo ended.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

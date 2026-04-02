@@ -1,13 +1,13 @@
 [project]
 name = "yoyopy"
 version = "0.1.0"
-description = "YoyoPod Connect - Screen-minimal streaming device for kids aged 6-12"
+description = "YoyoPod integrated VoIP and Mopidy player for Raspberry Pi"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
     { name = "YoyoPod Team" }
 ]
-keywords = ["yoyopod", "yoyopy", "raspberry-pi", "iot", "audio-streaming", "kids-device"]
+keywords = ["yoyopod", "yoyopy", "raspberry-pi", "voip", "mopidy", "audio-player"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -18,13 +18,16 @@ classifiers = [
 
 dependencies = [
     "pillow>=10.0.0",
-    "pygame-ce>=2.4.0",
-    "evdev>=1.6.1",
+    "pygame>=2.5.0",
     "requests>=2.31.0",
-    "paho-mqtt>=2.0.0",
     "loguru>=0.7.0",
-    "displayhatmini>=0.0.1",
+    "displayhatmini>=0.0.1; platform_system == 'Linux'",
     "pyyaml>=6.0.3",
+    "flask>=3.0.0",
+    "flask-socketio>=5.3.0",
+    "flask-cors>=4.0.0",
+    "python-socketio>=5.11.0",
+    "pynput>=1.7.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +41,7 @@ dev = [
 
 [project.scripts]
 yoyopy = "yoyopy.main:main"
+yoyopod = "yoyopy.main:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,93 +1,58 @@
 #!/usr/bin/env python3
-"""
-Test script for YoyoPod display and screens.
+"""Smoke tests for current display and screen rendering paths."""
 
-Cycles through all screen types every 3 seconds to demonstrate
-the display functionality.
-"""
+import pytest
 
-import time
-import sys
-from pathlib import Path
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from loguru import logger
+from yoyopy.app_context import AppContext
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens import HomeScreen, MenuScreen, NowPlayingScreen
-from yoyopy.utils.logger import init_logger
 
 
-def main() -> int:
-    """Main test function."""
-    # Initialize logger
-    init_logger(level="INFO")
-
-    logger.info("=" * 60)
-    logger.info("YoyoPod Display Test")
-    logger.info("=" * 60)
-
+@pytest.fixture
+def display():
+    """Create a simulation display and clean it up after the test."""
+    test_display = Display(simulate=True)
     try:
-        # Initialize display (will auto-detect if hardware is available)
-        display = Display(simulate=False)
-
-        # Create screens
-        home_screen = HomeScreen(display)
-        menu_screen = MenuScreen(display, items=["Music", "Podcasts", "Stories", "Settings"])
-        now_playing_screen = NowPlayingScreen(
-            display,
-            track_title="Adventure Time",
-            artist="Kids Podcast Network"
-        )
-
-        screens = [
-            ("Home", home_screen),
-            ("Menu", menu_screen),
-            ("Now Playing", now_playing_screen)
-        ]
-
-        logger.info(f"Created {len(screens)} test screens")
-        logger.info("Cycling through screens every 3 seconds...")
-        logger.info("Press Ctrl+C to stop")
-
-        # Cycle through screens
-        cycle_count = 0
-        while True:
-            for screen_name, screen in screens:
-                logger.info(f"Displaying: {screen_name}")
-                screen.enter()
-                screen.render()
-
-                # For menu, show cycling through items
-                if isinstance(screen, MenuScreen):
-                    for _ in range(3):
-                        time.sleep(1)
-                        screen.select_next()
-                        screen.render()
-                # For now playing, animate progress
-                elif isinstance(screen, NowPlayingScreen):
-                    for i in range(10):
-                        time.sleep(0.3)
-                        screen.set_progress(i / 10.0)
-                        screen.render()
-                else:
-                    time.sleep(3)
-
-                screen.exit()
-
-            cycle_count += 1
-            logger.info(f"Completed cycle {cycle_count}")
-
-    except KeyboardInterrupt:
-        logger.info("\nTest interrupted by user")
-        return 0
-    except Exception as e:
-        logger.exception(f"Test failed: {e}")
-        return 1
-
-    return 0
+        yield test_display
+    finally:
+        test_display.cleanup()
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+@pytest.fixture
+def context() -> AppContext:
+    """Create an app context with a demo playlist loaded."""
+    app_context = AppContext()
+    playlist = app_context.create_demo_playlist()
+    app_context.set_playlist(playlist)
+    app_context.update_system_status(battery=85, signal=3, connected=True)
+    app_context.play()
+    app_context.playback.position = 45.0
+    return app_context
+
+
+def test_core_screens_render_without_hardware(display: Display, context: AppContext) -> None:
+    """Core screens should render cleanly in simulation mode."""
+    screens = [
+        HomeScreen(display, context),
+        MenuScreen(display, context, items=["Music", "Podcasts", "Stories", "Settings"]),
+        NowPlayingScreen(display, context),
+    ]
+
+    for screen in screens:
+        screen.enter()
+        screen.render()
+        screen.exit()
+
+
+def test_rendering_still_works_after_state_changes(display: Display, context: AppContext) -> None:
+    """Menu and now playing screens should still render after local state changes."""
+    menu_screen = MenuScreen(display, context, items=["Music", "Podcasts", "Stories", "Settings"])
+    now_playing_screen = NowPlayingScreen(display, context)
+
+    menu_screen.select_next()
+    menu_screen.select_next()
+    menu_screen.render()
+
+    context.next_track()
+    context.pause()
+    now_playing_screen.render()

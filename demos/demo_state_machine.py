@@ -1,127 +1,98 @@
 #!/usr/bin/env python3
 """
-State Machine Demo for YoyoPod
+State machine demo for YoyoPod.
 
-Demonstrates the full state machine integration with screens and app context.
-Button presses trigger state transitions which manage screen changes.
-
-Press Ctrl+C to exit.
+This demo drives the `StateMachine` with semantic input actions and keeps
+screen changes coordinated through the current screen stack.
 """
 
-import time
 import sys
+import time
+
 from loguru import logger
 
-from yoyopy.ui.display import Display
-from yoyopy.ui.screens import HomeScreen, MenuScreen, NowPlayingScreen
-from yoyopy.ui.screen_manager import ScreenManager
-from yoyopy.ui.input_handler import InputHandler, Button, ButtonEvent
 from yoyopy.app_context import AppContext
-from yoyopy.state_machine import StateMachine, AppState
+from yoyopy.state_machine import AppState, StateMachine
+from yoyopy.ui.display import Display
+from yoyopy.ui.input import InputAction, get_input_manager
+from yoyopy.ui.screens import HomeScreen, MenuScreen, NowPlayingScreen, ScreenManager
 
-# Configure logger
-logger.remove()  # Remove default handler
+ACTION_MAP = {
+    "a": InputAction.SELECT,
+    "b": InputAction.BACK,
+    "x": InputAction.UP,
+    "y": InputAction.DOWN,
+}
+
+logger.remove()
 logger.add(
     sys.stderr,
     format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-    level="INFO"
+    level="INFO",
 )
 
 
-def main():
+def main() -> int:
     """Run the state machine demo."""
-    logger.info("Starting YoyoPod State Machine Demo")
+    logger.info("Starting YoyoPod state machine demo")
     logger.info("=" * 50)
 
-    # Check if hardware is available
-    try:
-        from displayhatmini import DisplayHATMini
-        has_hardware = True
-        logger.info("DisplayHATMini detected - using hardware")
-    except ImportError:
-        has_hardware = False
-        logger.warning("DisplayHATMini not available - simulation mode")
-
-    # Initialize application context
     context = AppContext()
-
-    # Create demo playlist and set it as current
     demo_playlist = context.create_demo_playlist()
     context.set_playlist(demo_playlist)
     context.update_system_status(battery=85, signal=3, connected=True)
-
     logger.info(f"Demo playlist loaded: {len(demo_playlist.tracks)} tracks")
 
-    # Initialize display
-    display = Display(simulate=not has_hardware)
+    display = Display(simulate="--simulate" in sys.argv)
+    input_manager = get_input_manager(display.get_adapter(), simulate=display.simulate)
+    if input_manager is None:
+        logger.error("No input manager available for the detected display adapter")
+        return 1
 
-    # Initialize input handler
-    if has_hardware:
-        device = display.device if hasattr(display, 'device') else None
-        input_handler = InputHandler(display_device=device, simulate=False)
-    else:
-        input_handler = InputHandler(simulate=True)
-
-    # Initialize state machine
     state_machine = StateMachine(context)
+    screen_manager = ScreenManager(display)
 
-    # Create screen manager
-    screen_manager = ScreenManager(display, input_handler)
-
-    # Create screens with context
     home_screen = HomeScreen(display, context)
     menu_screen = MenuScreen(display, context)
     now_playing_screen = NowPlayingScreen(display, context)
 
-    # Register screens
     screen_manager.register_screen("home", home_screen)
     screen_manager.register_screen("menu", menu_screen)
     screen_manager.register_screen("now_playing", now_playing_screen)
 
-    # Wire up state machine to screen manager
-    def on_enter_idle():
-        """When entering IDLE state, show home screen."""
+    def on_enter_idle() -> None:
         screen_manager.replace_screen("home")
 
-    def on_enter_menu():
-        """When entering MENU state, show menu screen."""
+    def on_enter_menu() -> None:
         screen_manager.replace_screen("menu")
 
-    def on_enter_playing():
-        """When entering PLAYING state, show now playing screen."""
+    def on_enter_playing() -> None:
         screen_manager.replace_screen("now_playing")
 
-    def on_enter_paused():
-        """When entering PAUSED state, update now playing screen."""
+    def on_enter_paused() -> None:
         screen_manager.refresh_current_screen()
 
-    # Register state callbacks
     state_machine.on_enter(AppState.IDLE, on_enter_idle)
     state_machine.on_enter(AppState.MENU, on_enter_menu)
     state_machine.on_enter(AppState.PLAYING, on_enter_playing)
     state_machine.on_enter(AppState.PAUSED, on_enter_paused)
 
-    # Custom button handlers that use state machine
-    def handle_button_a():
-        """Handle Button A based on current state."""
+    def handle_select(_data=None) -> None:
         current_state = state_machine.current_state
 
         if current_state == AppState.IDLE:
             state_machine.open_menu()
         elif current_state == AppState.MENU:
-            # Let menu screen handler deal with selection
-            screen_manager.current_screen.on_button_a()
-            # If music/podcast selected, transition to PLAYING
             selected = menu_screen.get_selected()
             if selected in ["Music", "Podcasts", "Audiobooks"]:
                 state_machine.start_playback()
+            else:
+                logger.info(f"Selected menu item without state transition: {selected}")
         elif current_state in [AppState.PLAYING, AppState.PAUSED]:
-            # Toggle playback
             state_machine.toggle_playback()
             screen_manager.refresh_current_screen()
 
-    def handle_button_b():
-        """Handle Button B (back) based on current state."""
+    def handle_back(_data=None) -> None:
         current_state = state_machine.current_state
 
         if current_state == AppState.MENU:
@@ -129,93 +100,77 @@ def main():
         elif current_state in [AppState.PLAYING, AppState.PAUSED]:
             state_machine.transition_to(AppState.MENU, "back")
 
-    def handle_button_x():
-        """Handle Button X based on current state."""
+    def handle_up(_data=None) -> None:
         current_state = state_machine.current_state
 
         if current_state == AppState.MENU:
             menu_screen.select_previous()
             screen_manager.refresh_current_screen()
         elif current_state in [AppState.PLAYING, AppState.PAUSED]:
-            context.volume_up()
-            logger.info(f"Volume: {context.playback.volume}")
+            previous_track = context.previous_track()
+            logger.info(f"Previous track: {previous_track.title if previous_track else 'None'}")
+            screen_manager.refresh_current_screen()
 
-    def handle_button_y():
-        """Handle Button Y based on current state."""
+    def handle_down(_data=None) -> None:
         current_state = state_machine.current_state
 
         if current_state == AppState.MENU:
             menu_screen.select_next()
             screen_manager.refresh_current_screen()
         elif current_state in [AppState.PLAYING, AppState.PAUSED]:
-            context.volume_down()
-            logger.info(f"Volume: {context.playback.volume}")
+            next_track = context.next_track()
+            logger.info(f"Next track: {next_track.title if next_track else 'None'}")
+            screen_manager.refresh_current_screen()
 
-    # Register button handlers with input handler
-    input_handler.on_button(Button.A, ButtonEvent.PRESS, handle_button_a)
-    input_handler.on_button(Button.B, ButtonEvent.PRESS, handle_button_b)
-    input_handler.on_button(Button.X, ButtonEvent.PRESS, handle_button_x)
-    input_handler.on_button(Button.Y, ButtonEvent.PRESS, handle_button_y)
+    input_manager.on_action(InputAction.SELECT, handle_select)
+    input_manager.on_action(InputAction.BACK, handle_back)
+    input_manager.on_action(InputAction.UP, handle_up)
+    input_manager.on_action(InputAction.DOWN, handle_down)
 
-    # Start with IDLE state
-    state_machine.transition_to(AppState.IDLE, "init")
-
-    # Start input handler
-    input_handler.start()
+    screen_manager.replace_screen("home")
+    input_manager.start()
 
     try:
-        if has_hardware:
-            # Hardware mode - just wait for button presses
-            logger.info("Demo running - press buttons to navigate")
-            logger.info("State: " + state_machine.get_state_name())
-            logger.info("Press Ctrl+C to exit")
-
-            while True:
-                time.sleep(0.1)
-
-        else:
-            # Simulation mode - keyboard input
-            logger.info("Simulation mode - type button commands")
-            logger.info("Commands: a, b, x, y (+ Enter)")
-            logger.info("Type 'quit' to exit")
-
+        if display.simulate:
+            logger.info("Simulation mode commands: a, b, x, y, state, quit")
             while True:
                 try:
-                    logger.info(f"Current state: {state_machine.get_state_name()}")
                     cmd = input("> ").strip().lower()
-
-                    if cmd == 'quit':
-                        break
-                    elif cmd == 'a':
-                        input_handler.simulate_button_press(Button.A, ButtonEvent.PRESS)
-                    elif cmd == 'b':
-                        input_handler.simulate_button_press(Button.B, ButtonEvent.PRESS)
-                    elif cmd == 'x':
-                        input_handler.simulate_button_press(Button.X, ButtonEvent.PRESS)
-                    elif cmd == 'y':
-                        input_handler.simulate_button_press(Button.Y, ButtonEvent.PRESS)
-                    elif cmd == 'state':
-                        logger.info(f"State: {state_machine.get_state_name()}")
-                        logger.info(f"Track: {context.get_current_track().title if context.get_current_track() else 'None'}")
-                        logger.info(f"Playing: {context.playback.is_playing}")
-                        logger.info(f"Volume: {context.playback.volume}")
-                    elif cmd == 'help':
-                        logger.info("Commands: a, b, x, y, state, quit")
-                    else:
-                        logger.warning(f"Unknown command: {cmd}")
-
                 except EOFError:
                     break
 
-    except KeyboardInterrupt:
-        logger.info("\nDemo interrupted by user")
+                if cmd in {"quit", "q", "exit"}:
+                    break
+                if cmd == "state":
+                    logger.info(f"State: {state_machine.get_state_name()}")
+                    logger.info(f"Track: {context.get_current_track().title if context.get_current_track() else 'None'}")
+                    logger.info(f"Playing: {context.playback.is_playing}")
+                    continue
+                if cmd == "help":
+                    logger.info("Commands: a, b, x, y, state, quit")
+                    continue
 
+                action = ACTION_MAP.get(cmd)
+                if action is None:
+                    logger.warning(f"Unknown command: {cmd}")
+                    continue
+
+                input_manager.simulate_action(action)
+        else:
+            logger.info("Demo running on hardware. Press Ctrl+C to exit.")
+            while True:
+                time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        logger.info("Demo interrupted by user")
     finally:
-        # Cleanup
-        input_handler.stop()
+        input_manager.stop()
+        display.cleanup()
         logger.info(f"Final state: {state_machine.get_state_name()}")
         logger.info("Demo stopped")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

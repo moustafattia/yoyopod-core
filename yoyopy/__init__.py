@@ -1,8 +1,7 @@
 """
-YoyoPod - Screen-minimal streaming device for kids aged 6-12
-Based on Raspberry Pi Zero 2 W with Pimoroni Display HAT Mini
+YoyoPod package.
 
-This is the main package for the YoyoPod Connect variant.
+Integrated Raspberry Pi application for button-driven music playback and SIP calling.
 """
 
 __version__ = "0.1.0"
