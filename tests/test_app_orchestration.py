@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from datetime import datetime
 from types import SimpleNamespace
@@ -163,10 +164,34 @@ class FakeStoppingVoIPManager:
 class FakePowerManager:
     """Minimal power manager double for app-level polling tests."""
 
-    def __init__(self, snapshots: list[PowerSnapshot], poll_interval_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        snapshots: list[PowerSnapshot],
+        poll_interval_seconds: float = 30.0,
+        *,
+        low_battery_warning_percent: float = 20.0,
+        low_battery_warning_cooldown_seconds: float = 300.0,
+        auto_shutdown_enabled: bool = True,
+        critical_shutdown_percent: float = 10.0,
+        shutdown_delay_seconds: float = 15.0,
+        shutdown_state_file: str = "data/test_shutdown_state.json",
+    ) -> None:
         self._snapshots = snapshots
         self.refresh_calls = 0
-        self.config = SimpleNamespace(enabled=True, poll_interval_seconds=poll_interval_seconds)
+        self.config = SimpleNamespace(
+            enabled=True,
+            poll_interval_seconds=poll_interval_seconds,
+            low_battery_warning_percent=low_battery_warning_percent,
+            low_battery_warning_cooldown_seconds=low_battery_warning_cooldown_seconds,
+            auto_shutdown_enabled=auto_shutdown_enabled,
+            critical_shutdown_percent=critical_shutdown_percent,
+            shutdown_delay_seconds=shutdown_delay_seconds,
+            shutdown_command="sudo -n shutdown -h now",
+            shutdown_state_file=shutdown_state_file,
+        )
+        self.registered_shutdown_hooks: list[tuple[str, object]] = []
+        self.run_shutdown_hooks_calls = 0
+        self.shutdown_requested = False
 
     def refresh(self) -> PowerSnapshot:
         index = min(self.refresh_calls, len(self._snapshots) - 1)
@@ -176,6 +201,23 @@ class FakePowerManager:
     def get_snapshot(self) -> PowerSnapshot:
         index = max(0, min(self.refresh_calls - 1, len(self._snapshots) - 1))
         return self._snapshots[index]
+
+    def register_shutdown_hook(self, name: str, hook) -> None:
+        self.registered_shutdown_hooks.append((name, hook))
+
+    def run_shutdown_hooks(self) -> list[str]:
+        self.run_shutdown_hooks_calls += 1
+        failed_hooks: list[str] = []
+        for name, hook in self.registered_shutdown_hooks:
+            try:
+                hook()
+            except Exception:
+                failed_hooks.append(name)
+        return failed_hooks
+
+    def request_system_shutdown(self) -> bool:
+        self.shutdown_requested = True
+        return True
 
 
 def _publish_from_worker(app: YoyoPodApp, event: object) -> None:
@@ -222,6 +264,54 @@ def _build_app(playback_state: str = "stopped", auto_resume: bool = True) -> tup
     app.call_interruption_policy = CallInterruptionPolicy()
     app.auto_resume_after_call = auto_resume
     app.voip_registered = False
+    app.power_manager = None
+
+    mopidy = FakeMopidyClient(playback_state=playback_state)
+    app.mopidy_client = mopidy
+
+    app.menu_screen = FakeScreen()
+    app.now_playing_screen = FakeScreen()
+    app.playlist_screen = FakeScreen()
+    app.call_screen = FakeScreen()
+    app.contact_list_screen = FakeScreen()
+    app.incoming_call_screen = FakeIncomingCallScreen()
+    app.outgoing_call_screen = FakeScreen()
+    app.in_call_screen = FakeScreen()
+
+    screen_manager = FakeScreenManager(
+        {
+            "menu": app.menu_screen,
+            "playlists": app.playlist_screen,
+            "contacts": app.contact_list_screen,
+            "incoming_call": app.incoming_call_screen,
+            "outgoing_call": app.outgoing_call_screen,
+            "in_call": app.in_call_screen,
+        }
+    )
+    app.screen_manager = screen_manager
+    app.screen_manager.push_screen("menu")
+    app._ui_state = AppRuntimeState.MENU
+
+    app._setup_event_subscriptions()
+    app.call_coordinator.start_ringing = lambda: None
+    app.call_coordinator.stop_ringing = lambda: None
+    return app, mopidy, screen_manager
+
+
+def _build_app_with_power(
+    power_manager: FakePowerManager,
+    *,
+    playback_state: str = "stopped",
+    auto_resume: bool = True,
+) -> tuple[YoyoPodApp, FakeMopidyClient, FakeScreenManager]:
+    app = YoyoPodApp(simulate=True)
+    app.context = AppContext()
+    app.music_fsm = MusicFSM()
+    app.call_fsm = CallFSM()
+    app.call_interruption_policy = CallInterruptionPolicy()
+    app.auto_resume_after_call = auto_resume
+    app.voip_registered = False
+    app.power_manager = power_manager
 
     mopidy = FakeMopidyClient(playback_state=playback_state)
     app.mopidy_client = mopidy
@@ -607,3 +697,133 @@ def test_power_poll_honors_interval_and_tracks_unavailable_backend() -> None:
     assert app.context.power_error == "I2C not connected"
     assert app.coordinator_runtime.power_available is False
     assert app.menu_screen.render_calls == 2
+
+
+def test_low_battery_snapshot_sets_temporary_alert() -> None:
+    """A low battery snapshot should surface a temporary warning overlay."""
+
+    app, _, _ = _build_app_with_power(
+        FakePowerManager(
+            [
+                _power_snapshot(
+                    available=True,
+                    battery_percent=15.0,
+                    charging=False,
+                    power_plugged=False,
+                )
+            ],
+            low_battery_warning_percent=20.0,
+            critical_shutdown_percent=10.0,
+        )
+    )
+
+    app._poll_power_status(now=0.0, force=True)
+
+    assert app._pending_shutdown is None
+    assert app._power_alert is not None
+    assert app._power_alert.title == "Low Battery"
+    assert app._power_alert.subtitle == "15% remaining"
+
+
+def test_critical_battery_snapshot_creates_pending_shutdown() -> None:
+    """Crossing the critical threshold should schedule a delayed shutdown."""
+
+    app, _, _ = _build_app_with_power(
+        FakePowerManager(
+            [
+                _power_snapshot(
+                    available=True,
+                    battery_percent=8.0,
+                    charging=False,
+                    power_plugged=False,
+                )
+            ],
+            critical_shutdown_percent=10.0,
+            shutdown_delay_seconds=12.0,
+        )
+    )
+
+    app._poll_power_status(now=0.0, force=True)
+
+    assert app._pending_shutdown is not None
+    assert app._pending_shutdown.reason == "critical_battery"
+    assert app._pending_shutdown.battery_percent == 8.0
+    assert app.get_status()["shutdown_pending"] is True
+
+
+def test_power_restore_cancels_pending_shutdown() -> None:
+    """Restoring external power should cancel a pending graceful shutdown."""
+
+    app, _, _ = _build_app_with_power(
+        FakePowerManager(
+            [
+                _power_snapshot(
+                    available=True,
+                    battery_percent=8.0,
+                    charging=False,
+                    power_plugged=False,
+                ),
+                _power_snapshot(
+                    available=True,
+                    battery_percent=8.5,
+                    charging=True,
+                    power_plugged=True,
+                ),
+            ],
+            critical_shutdown_percent=10.0,
+        )
+    )
+
+    app._poll_power_status(now=0.0, force=True)
+    assert app._pending_shutdown is not None
+
+    app._poll_power_status(now=30.0, force=True)
+
+    assert app._pending_shutdown is None
+    assert app._power_alert is not None
+    assert app._power_alert.title == "Power Restored"
+
+
+def test_pending_shutdown_runs_hooks_and_requests_system_poweroff(tmp_path) -> None:
+    """The delayed shutdown path should save state, stop the app, and request poweroff."""
+
+    shutdown_state_file = tmp_path / "last_shutdown_state.json"
+    power_manager = FakePowerManager(
+        [
+            _power_snapshot(
+                available=True,
+                battery_percent=8.0,
+                charging=False,
+                power_plugged=False,
+            )
+        ],
+        critical_shutdown_percent=10.0,
+        shutdown_delay_seconds=0.0,
+        shutdown_state_file=str(shutdown_state_file),
+    )
+    app, _, _ = _build_app_with_power(power_manager)
+    stop_calls: list[str] = []
+
+    def fake_stop() -> None:
+        stop_calls.append("stop")
+        app._stopping = True
+
+    app.stop = fake_stop
+    app._register_power_shutdown_hooks()
+    app._poll_power_status(now=0.0, force=True)
+
+    assert [name for name, _ in power_manager.registered_shutdown_hooks] == ["save_shutdown_state"]
+    assert app._pending_shutdown is not None
+
+    app._process_pending_shutdown(app._pending_shutdown.execute_at)
+
+    assert stop_calls == ["stop"]
+    assert power_manager.run_shutdown_hooks_calls == 1
+    assert power_manager.shutdown_requested is True
+    assert app._shutdown_completed is True
+
+    payload = json.loads(shutdown_state_file.read_text(encoding="utf-8"))
+    assert payload["state"] == "menu"
+    assert payload["current_screen"] == "menu"
+    assert payload["battery_percent"] == 8
+    assert payload["external_power"] is False

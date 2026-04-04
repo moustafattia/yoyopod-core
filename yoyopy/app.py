@@ -6,8 +6,10 @@ Main application bootstrap and lifecycle coordinator.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -27,7 +29,12 @@ from yoyopy.coordinators import (
 from yoyopy.event_bus import EventBus
 from yoyopy.events import RecoveryAttemptCompletedEvent, ScreenChangedEvent
 from yoyopy.fsm import CallFSM, CallInterruptionPolicy, MusicFSM
-from yoyopy.power import PowerManager
+from yoyopy.power import (
+    GracefulShutdownCancelled,
+    GracefulShutdownRequested,
+    LowBatteryWarningRaised,
+    PowerManager,
+)
 from yoyopy.ui.display import Display
 from yoyopy.ui.input import InputManager, InteractionProfile, get_input_manager
 from yoyopy.ui.screens import (
@@ -59,6 +66,26 @@ class _RecoveryState:
         self.next_attempt_at = 0.0
         self.delay_seconds = 1.0
         self.in_flight = False
+
+
+@dataclass(slots=True)
+class _PowerAlert:
+    """Short-lived full-screen power alert overlay."""
+
+    title: str
+    subtitle: str
+    color: tuple[int, int, int]
+    expires_at: float
+
+
+@dataclass(slots=True)
+class _PendingShutdown:
+    """Track a delayed low-battery shutdown countdown."""
+
+    reason: str
+    requested_at: float
+    execute_at: float
+    battery_percent: float | None
 
 
 class YoyoPodApp:
@@ -121,6 +148,18 @@ class YoyoPodApp:
             RecoveryAttemptCompletedEvent,
             self._handle_recovery_attempt_completed_event,
         )
+        self.event_bus.subscribe(
+            LowBatteryWarningRaised,
+            self._handle_low_battery_warning_event,
+        )
+        self.event_bus.subscribe(
+            GracefulShutdownRequested,
+            self._handle_graceful_shutdown_requested_event,
+        )
+        self.event_bus.subscribe(
+            GracefulShutdownCancelled,
+            self._handle_graceful_shutdown_cancelled_event,
+        )
 
         # Extracted coordinators
         self.coordinator_runtime: Optional[CoordinatorRuntime] = None
@@ -134,6 +173,10 @@ class YoyoPodApp:
         self._mopidy_recovery = _RecoveryState()
         self._next_power_poll_at = 0.0
         self._power_available: bool | None = None
+        self._power_alert: _PowerAlert | None = None
+        self._pending_shutdown: _PendingShutdown | None = None
+        self._power_hooks_registered = False
+        self._shutdown_completed = False
         self._stopping = False
 
         logger.info("=" * 60)
@@ -183,6 +226,7 @@ class YoyoPodApp:
             self._setup_event_subscriptions()
             self._setup_voip_callbacks()
             self._setup_music_callbacks()
+            self._register_power_shutdown_hooks()
             self._poll_power_status(force=True, now=time.monotonic())
 
             logger.info("YoyoPod setup complete")
@@ -192,7 +236,6 @@ class YoyoPodApp:
             return False
 
     def _load_configuration(self) -> bool:
-
         """Load YoyoPod configuration."""
         logger.info("Loading configuration...")
 
@@ -305,7 +348,7 @@ class YoyoPodApp:
             self.power_manager = PowerManager.from_config_manager(self.config_manager)
             if self.power_manager.config.enabled:
                 logger.info(
-                    "    Poll interval: %.1fs",
+                    "    Poll interval: {:.1f}s",
                     self.power_manager.config.poll_interval_seconds,
                 )
             else:
@@ -498,6 +541,113 @@ class YoyoPodApp:
             event.recovery_now,
         )
 
+    def _handle_low_battery_warning_event(self, event: LowBatteryWarningRaised) -> None:
+        """Show a temporary low-battery alert when the warning threshold is crossed."""
+        logger.warning(
+            "Low battery warning: {:.1f}% remaining (threshold {:.1f}%)",
+            event.battery_percent,
+            event.threshold_percent,
+        )
+        self._set_power_alert(
+            title="Low Battery",
+            subtitle=f"{event.battery_percent:.0f}% remaining",
+            color=self.display.COLOR_YELLOW if self.display is not None else (255, 255, 0),
+            duration_seconds=4.0,
+        )
+
+    def _handle_graceful_shutdown_requested_event(
+        self,
+        event: GracefulShutdownRequested,
+    ) -> None:
+        """Start a delayed graceful shutdown countdown for critical battery."""
+        if self._pending_shutdown is not None:
+            return
+
+        requested_at = time.monotonic()
+        self._pending_shutdown = _PendingShutdown(
+            reason=event.reason,
+            requested_at=requested_at,
+            execute_at=requested_at + max(0.0, event.delay_seconds),
+            battery_percent=event.snapshot.battery.level_percent,
+        )
+        logger.warning(
+            "Critical battery detected; shutdown in {:.1f}s",
+            event.delay_seconds,
+        )
+
+    def _handle_graceful_shutdown_cancelled_event(
+        self,
+        event: GracefulShutdownCancelled,
+    ) -> None:
+        """Cancel a pending battery-triggered shutdown when power returns."""
+        if self._pending_shutdown is None:
+            return
+
+        logger.info(f"Graceful shutdown cancelled ({event.reason})")
+        self._pending_shutdown = None
+        self._set_power_alert(
+            title="Power Restored",
+            subtitle="Shutdown cancelled",
+            color=self.display.COLOR_GREEN if self.display is not None else (0, 255, 0),
+            duration_seconds=3.0,
+        )
+
+    def _register_power_shutdown_hooks(self) -> None:
+        """Register built-in shutdown hooks once the power manager is available."""
+        if self.power_manager is None or self._power_hooks_registered:
+            return
+
+        self.power_manager.register_shutdown_hook(
+            "save_shutdown_state",
+            self._save_shutdown_state,
+        )
+        self._power_hooks_registered = True
+
+    def _save_shutdown_state(self) -> None:
+        """Persist a small runtime snapshot before graceful poweroff."""
+        if self.power_manager is None:
+            return
+
+        snapshot_path = Path(self.power_manager.config.shutdown_state_file)
+        if not snapshot_path.is_absolute():
+            snapshot_path = Path.cwd() / snapshot_path
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+
+        current_screen = None
+        if self.screen_manager is not None and self.screen_manager.get_current_screen() is not None:
+            current_screen = self.screen_manager.get_current_screen().route_name
+
+        current_track = None
+        if self.context is not None and self.context.get_current_track() is not None:
+            track = self.context.get_current_track()
+            current_track = {
+                "title": track.title,
+                "artist": track.artist,
+            }
+
+        payload = {
+            "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "state": self.coordinator_runtime.get_state_name() if self.coordinator_runtime else None,
+            "current_screen": current_screen,
+            "battery_percent": self.context.battery_percent if self.context else None,
+            "battery_charging": self.context.battery_charging if self.context else None,
+            "external_power": self.context.external_power if self.context else None,
+            "voip_registered": self.voip_registered,
+            "music_available": self.mopidy_client.is_connected if self.mopidy_client else False,
+            "playback": {
+                "is_playing": self.context.playback.is_playing if self.context else False,
+                "is_paused": self.context.playback.is_paused if self.context else False,
+                "volume": self.context.playback.volume if self.context else None,
+            },
+            "track": current_track,
+        }
+
+        snapshot_path.write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
+        )
+        logger.info(f"Saved shutdown state to {snapshot_path}")
+
     def _ensure_coordinators(self) -> None:
         """Build coordinator helpers around the initialized runtime."""
         if self.coordinator_runtime is not None:
@@ -605,6 +755,107 @@ class YoyoPodApp:
 
         interval = max(1.0, self.power_manager.config.poll_interval_seconds)
         self._next_power_poll_at = poll_now + interval
+
+    def _set_power_alert(
+        self,
+        *,
+        title: str,
+        subtitle: str,
+        color: tuple[int, int, int],
+        duration_seconds: float,
+    ) -> None:
+        """Queue a short-lived fullscreen power alert overlay."""
+        self._power_alert = _PowerAlert(
+            title=title,
+            subtitle=subtitle,
+            color=color,
+            expires_at=time.monotonic() + max(0.0, duration_seconds),
+        )
+
+    def _render_power_overlay(self, title: str, subtitle: str, color: tuple[int, int, int]) -> None:
+        """Render a simple fullscreen power-status overlay."""
+        if self.display is None:
+            return
+
+        self.display.clear(self.display.COLOR_BLACK)
+        title_size = 24
+        subtitle_size = 14
+        title_width, title_height = self.display.get_text_size(title, title_size)
+        subtitle_width, _ = self.display.get_text_size(subtitle, subtitle_size)
+        title_x = (self.display.WIDTH - title_width) // 2
+        subtitle_x = (self.display.WIDTH - subtitle_width) // 2
+        title_y = max(self.display.STATUS_BAR_HEIGHT + 30, (self.display.HEIGHT // 2) - 30)
+        subtitle_y = title_y + title_height + 18
+
+        self.display.text(title, title_x, title_y, color=color, font_size=title_size)
+        self.display.text(
+            subtitle,
+            subtitle_x,
+            subtitle_y,
+            color=self.display.COLOR_WHITE,
+            font_size=subtitle_size,
+        )
+        self.display.update()
+
+    def _update_power_overlays(self, now: float) -> bool:
+        """Render pending power overlays and return True when one is active."""
+        if self._pending_shutdown is not None:
+            seconds_remaining = max(0, int(self._pending_shutdown.execute_at - now + 0.999))
+            subtitle = "Saving state and powering off"
+            if seconds_remaining > 0:
+                subtitle = f"Shutdown in {seconds_remaining}s"
+            self._render_power_overlay(
+                "Critical Battery",
+                subtitle,
+                self.display.COLOR_RED if self.display is not None else (255, 0, 0),
+            )
+            return True
+
+        if self._power_alert is None:
+            return False
+
+        if now >= self._power_alert.expires_at:
+            self._power_alert = None
+            if self.screen_manager is not None and self.screen_manager.get_current_screen() is not None:
+                self.screen_manager.get_current_screen().render()
+            return False
+
+        self._render_power_overlay(
+            self._power_alert.title,
+            self._power_alert.subtitle,
+            self._power_alert.color,
+        )
+        return True
+
+    def _process_pending_shutdown(self, now: float) -> None:
+        """Execute a delayed shutdown when its grace period expires."""
+        if self._pending_shutdown is None or now < self._pending_shutdown.execute_at:
+            return
+
+        self._execute_pending_shutdown()
+
+    def _execute_pending_shutdown(self) -> None:
+        """Run graceful-shutdown hooks, stop the app, and request system poweroff."""
+        if self._shutdown_completed:
+            return
+
+        self._render_power_overlay(
+            "Powering Off",
+            "Saving state...",
+            self.display.COLOR_RED if self.display is not None else (255, 0, 0),
+        )
+
+        if self.power_manager is not None:
+            failed_hooks = self.power_manager.run_shutdown_hooks()
+            if failed_hooks:
+                logger.warning(f"Shutdown hooks failed: {', '.join(failed_hooks)}")
+
+        self.stop()
+
+        if self.power_manager is not None:
+            self.power_manager.request_system_shutdown()
+
+        self._shutdown_completed = True
 
     def _attempt_voip_recovery(self, recovery_now: float) -> None:
         """Restart the VoIP backend when it is not running."""
@@ -754,13 +1005,22 @@ class YoyoPodApp:
                 logger.info("  (Incoming calls and track changes will trigger callbacks)")
                 logger.info("")
 
-            while True:
+            while not self._stopping:
                 time.sleep(0.1)
                 self._process_pending_main_thread_actions()
                 self._attempt_manager_recovery()
                 self._poll_power_status()
+                monotonic_now = time.monotonic()
+                self._process_pending_shutdown(monotonic_now)
+                if self._shutdown_completed:
+                    break
 
                 current_time = time.time()
+                overlay_active = self._update_power_overlays(monotonic_now)
+                if overlay_active:
+                    last_screen_update = current_time
+                    continue
+
                 if current_time - last_screen_update >= screen_update_interval:
                     self._update_now_playing_if_needed()
                     self._update_in_call_if_needed()
@@ -769,6 +1029,9 @@ class YoyoPodApp:
             logger.info("\n" + "=" * 60)
             logger.info("Shutting down...")
             logger.info("=" * 60)
+        finally:
+            if not self._shutdown_completed and not self._stopping:
+                self.stop()
 
     def stop(self) -> None:
         """Clean up and stop the application."""
@@ -807,6 +1070,13 @@ class YoyoPodApp:
 
     def get_status(self) -> Dict[str, Any]:
         """Return the current application status."""
+        pending_shutdown_in_seconds = None
+        if self._pending_shutdown is not None:
+            pending_shutdown_in_seconds = max(
+                0.0,
+                self._pending_shutdown.execute_at - time.monotonic(),
+            )
+
         return {
             "state": self.coordinator_runtime.get_state_name(),
             "voip_registered": self.voip_registered,
@@ -818,4 +1088,8 @@ class YoyoPodApp:
             "battery_percent": self.context.battery_percent if self.context else None,
             "battery_charging": self.context.battery_charging if self.context else None,
             "external_power": self.context.external_power if self.context else None,
+            "shutdown_pending": self._pending_shutdown is not None,
+            "shutdown_reason": self._pending_shutdown.reason if self._pending_shutdown else None,
+            "shutdown_in_seconds": pending_shutdown_in_seconds,
+            "shutdown_completed": self._shutdown_completed,
         }

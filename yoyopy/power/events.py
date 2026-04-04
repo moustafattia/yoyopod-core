@@ -21,3 +21,28 @@ class PowerAvailabilityChanged:
     available: bool
     reason: str = ""
 
+
+@dataclass(frozen=True, slots=True)
+class LowBatteryWarningRaised:
+    """Published when battery reaches the warning threshold."""
+
+    threshold_percent: float
+    battery_percent: float
+    snapshot: PowerSnapshot
+
+
+@dataclass(frozen=True, slots=True)
+class GracefulShutdownRequested:
+    """Published when battery reaches the critical shutdown threshold."""
+
+    reason: str
+    delay_seconds: float
+    snapshot: PowerSnapshot
+
+
+@dataclass(frozen=True, slots=True)
+class GracefulShutdownCancelled:
+    """Published when a pending battery shutdown is cancelled."""
+
+    reason: str
+

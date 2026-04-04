@@ -46,6 +46,13 @@ power:
   tcp_port: 8423
   timeout_seconds: 2.0
   poll_interval_seconds: 30.0
+  low_battery_warning_percent: 20.0
+  low_battery_warning_cooldown_seconds: 300.0
+  auto_shutdown_enabled: true
+  critical_shutdown_percent: 10.0
+  shutdown_delay_seconds: 15.0    # Grace period before poweroff to save state
+  shutdown_command: "sudo -n shutdown -h now"
+  shutdown_state_file: "data/last_shutdown_state.json"
 
 # Display Settings
 display:

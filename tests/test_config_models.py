@@ -34,6 +34,13 @@ def test_app_config_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> Non
     assert settings.power.transport == "auto"
     assert settings.power.socket_path == "/tmp/pisugar-server.sock"
     assert settings.power.tcp_port == 8423
+    assert settings.power.low_battery_warning_percent == 20.0
+    assert settings.power.low_battery_warning_cooldown_seconds == 300.0
+    assert settings.power.auto_shutdown_enabled is True
+    assert settings.power.critical_shutdown_percent == 10.0
+    assert settings.power.shutdown_delay_seconds == 15.0
+    assert settings.power.shutdown_command == "sudo -n shutdown -h now"
+    assert settings.power.shutdown_state_file == "data/last_shutdown_state.json"
     assert settings.display.hardware == "auto"
 
 
@@ -67,6 +74,10 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     monkeypatch.setenv("YOYOPOD_WHISPLAY_LONG_HOLD_MS", "900")
     monkeypatch.setenv("YOYOPOD_POWER_TRANSPORT", "tcp")
     monkeypatch.setenv("YOYOPOD_PISUGAR_PORT", "9001")
+    monkeypatch.setenv("YOYOPOD_LOW_BATTERY_WARNING_PERCENT", "17.5")
+    monkeypatch.setenv("YOYOPOD_CRITICAL_BATTERY_SHUTDOWN_PERCENT", "8.5")
+    monkeypatch.setenv("YOYOPOD_POWER_SHUTDOWN_DELAY_SECONDS", "22.0")
+    monkeypatch.setenv("YOYOPOD_POWER_SHUTDOWN_COMMAND", "sudo -n poweroff")
     monkeypatch.setenv("YOYOPOD_DISPLAY", "whisplay")
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
@@ -81,6 +92,10 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     assert settings.input.whisplay_long_hold_ms == 900
     assert settings.power.transport == "tcp"
     assert settings.power.tcp_port == 9001
+    assert settings.power.low_battery_warning_percent == 17.5
+    assert settings.power.critical_shutdown_percent == 8.5
+    assert settings.power.shutdown_delay_seconds == 22.0
+    assert settings.power.shutdown_command == "sudo -n poweroff"
     assert settings.display.hardware == "whisplay"
     assert settings.logging.level == "DEBUG"
     assert config_dict["audio"]["mopidy_port"] == 7788

@@ -77,6 +77,10 @@ power:
   tcp_host: "192.168.1.10"
   tcp_port: 9000
   timeout_seconds: 5.0
+  low_battery_warning_percent: 18.0
+  critical_shutdown_percent: 7.5
+  shutdown_delay_seconds: 20.0
+  shutdown_command: "sudo -n poweroff"
 """.strip(),
         encoding="utf-8",
     )
@@ -89,4 +93,51 @@ power:
     assert manager.config.tcp_host == "192.168.1.10"
     assert manager.config.tcp_port == 9000
     assert manager.config.timeout_seconds == 5.0
+    assert manager.config.low_battery_warning_percent == 18.0
+    assert manager.config.critical_shutdown_percent == 7.5
+    assert manager.config.shutdown_delay_seconds == 20.0
+    assert manager.config.shutdown_command == "sudo -n poweroff"
+
+
+def test_power_manager_runs_shutdown_hooks_and_reports_failures() -> None:
+    """Shutdown hooks should all run while reporting the ones that fail."""
+
+    snapshot = PowerSnapshot(
+        available=True,
+        checked_at=datetime(2026, 4, 4, 12, 0, 0),
+    )
+    manager = PowerManager(PowerConfig(), backend=FakeBackend(snapshot))
+    calls: list[str] = []
+
+    manager.register_shutdown_hook("save", lambda: calls.append("save"))
+
+    def failing_hook() -> None:
+        calls.append("failing")
+        raise RuntimeError("hook boom")
+
+    manager.register_shutdown_hook("failing", failing_hook)
+
+    failed_hooks = manager.run_shutdown_hooks()
+
+    assert calls == ["save", "failing"]
+    assert failed_hooks == ["failing"]
+
+
+def test_power_manager_request_system_shutdown_uses_configured_command() -> None:
+    """The configured shutdown command should be split and passed to the runner."""
+
+    snapshot = PowerSnapshot(
+        available=True,
+        checked_at=datetime(2026, 4, 4, 12, 0, 0),
+    )
+    commands: list[list[str]] = []
+
+    manager = PowerManager(
+        PowerConfig(shutdown_command="sudo -n shutdown -h now"),
+        backend=FakeBackend(snapshot),
+        shutdown_runner=lambda command: commands.append(command) or 0,
+    )
+
+    assert manager.request_system_shutdown() is True
+    assert commands == [["sudo", "-n", "shutdown", "-h", "now"]]
 
