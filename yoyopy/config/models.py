@@ -215,6 +215,34 @@ class AppPowerConfig:
         default=30.0,
         env="YOYOPOD_POWER_POLL_INTERVAL_SECONDS",
     )
+    low_battery_warning_percent: float = config_value(
+        default=20.0,
+        env="YOYOPOD_LOW_BATTERY_WARNING_PERCENT",
+    )
+    low_battery_warning_cooldown_seconds: float = config_value(
+        default=300.0,
+        env="YOYOPOD_LOW_BATTERY_WARNING_COOLDOWN_SECONDS",
+    )
+    auto_shutdown_enabled: bool = config_value(
+        default=True,
+        env="YOYOPOD_AUTO_SHUTDOWN_ENABLED",
+    )
+    critical_shutdown_percent: float = config_value(
+        default=10.0,
+        env="YOYOPOD_CRITICAL_BATTERY_SHUTDOWN_PERCENT",
+    )
+    shutdown_delay_seconds: float = config_value(
+        default=15.0,
+        env="YOYOPOD_POWER_SHUTDOWN_DELAY_SECONDS",
+    )
+    shutdown_command: str = config_value(
+        default="sudo -n shutdown -h now",
+        env="YOYOPOD_POWER_SHUTDOWN_COMMAND",
+    )
+    shutdown_state_file: str = config_value(
+        default="data/last_shutdown_state.json",
+        env="YOYOPOD_POWER_SHUTDOWN_STATE_FILE",
+    )
 
 
 @dataclass(slots=True)

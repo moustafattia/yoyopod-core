@@ -9,7 +9,13 @@ from yoyopy.power.backend import (
     PowerTransportError,
     build_pisugar_transport,
 )
-from yoyopy.power.events import PowerAvailabilityChanged, PowerSnapshotUpdated
+from yoyopy.power.events import (
+    GracefulShutdownCancelled,
+    GracefulShutdownRequested,
+    LowBatteryWarningRaised,
+    PowerAvailabilityChanged,
+    PowerSnapshotUpdated,
+)
 from yoyopy.power.manager import PowerManager
 from yoyopy.power.models import (
     BatteryState,
@@ -19,6 +25,7 @@ from yoyopy.power.models import (
     RTCState,
     ShutdownState,
 )
+from yoyopy.power.policies import PowerSafetyPolicy
 
 __all__ = [
     "PowerBackend",
@@ -37,5 +44,9 @@ __all__ = [
     "PowerSnapshot",
     "PowerSnapshotUpdated",
     "PowerAvailabilityChanged",
+    "LowBatteryWarningRaised",
+    "GracefulShutdownRequested",
+    "GracefulShutdownCancelled",
+    "PowerSafetyPolicy",
 ]
 

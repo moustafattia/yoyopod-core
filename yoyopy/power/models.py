@@ -22,6 +22,13 @@ class PowerConfig:
     tcp_port: int = 8423
     timeout_seconds: float = 2.0
     poll_interval_seconds: float = 30.0
+    low_battery_warning_percent: float = 20.0
+    low_battery_warning_cooldown_seconds: float = 300.0
+    auto_shutdown_enabled: bool = True
+    critical_shutdown_percent: float = 10.0
+    shutdown_delay_seconds: float = 15.0
+    shutdown_command: str = "sudo -n shutdown -h now"
+    shutdown_state_file: str = "data/last_shutdown_state.json"
 
     @staticmethod
     def from_config_manager(config_manager: "ConfigManager") -> "PowerConfig":
@@ -37,6 +44,13 @@ class PowerConfig:
             tcp_port=settings.tcp_port,
             timeout_seconds=settings.timeout_seconds,
             poll_interval_seconds=settings.poll_interval_seconds,
+            low_battery_warning_percent=settings.low_battery_warning_percent,
+            low_battery_warning_cooldown_seconds=settings.low_battery_warning_cooldown_seconds,
+            auto_shutdown_enabled=settings.auto_shutdown_enabled,
+            critical_shutdown_percent=settings.critical_shutdown_percent,
+            shutdown_delay_seconds=settings.shutdown_delay_seconds,
+            shutdown_command=settings.shutdown_command,
+            shutdown_state_file=settings.shutdown_state_file,
         )
 
 
