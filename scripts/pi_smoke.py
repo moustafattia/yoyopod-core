@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from yoyopy.audio.mopidy_client import MopidyClient
 from yoyopy.config import ConfigManager, YoyoPodConfig, config_to_dict, load_config_model_from_yaml
+from yoyopy.power import PowerManager
 from yoyopy.voip import VoIPConfig, VoIPManager
 from yoyopy.ui.display import Display, detect_hardware
 from yoyopy.ui.input import get_input_manager
@@ -179,6 +180,34 @@ def input_check(display: Display, app_config: dict[str, Any]) -> CheckResult:
                 pass
 
 
+def power_check(config_dir: Path) -> CheckResult:
+    """Validate PiSugar reachability and report a live battery snapshot."""
+    config_manager = ConfigManager(config_dir=str(config_dir))
+    manager = PowerManager.from_config_manager(config_manager)
+
+    if not manager.config.enabled:
+        return CheckResult(
+            name="power",
+            status="warn",
+            details="power backend disabled in yoyopod_config.yaml",
+        )
+
+    snapshot = manager.refresh()
+    if not snapshot.available:
+        details = snapshot.error or "power backend unavailable"
+        return CheckResult(name="power", status="fail", details=details)
+
+    details = ", ".join(
+        [
+            f"model={snapshot.device.model or 'unknown'}",
+            f"battery={snapshot.battery.level_percent:.1f}%" if snapshot.battery.level_percent is not None else "battery=unknown",
+            f"charging={snapshot.battery.charging}",
+            f"plugged={snapshot.battery.power_plugged}",
+        ]
+    )
+    return CheckResult(name="power", status="pass", details=details)
+
+
 def mopidy_check(app_config: dict[str, Any], timeout_seconds: int) -> CheckResult:
     """Validate Mopidy reachability and basic state queries."""
     audio_config = app_config.get("audio", {})
@@ -293,6 +322,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also validate Mopidy connectivity from yoyopod_config.yaml",
     )
     parser.add_argument(
+        "--with-power",
+        action="store_true",
+        help="Also validate PiSugar power telemetry from yoyopod_config.yaml",
+    )
+    parser.add_argument(
         "--with-voip",
         action="store_true",
         help="Also validate linphone startup and SIP registration",
@@ -355,6 +389,9 @@ def main() -> int:
 
         if display_result.status == "pass" and display is not None:
             results.append(input_check(display, app_config))
+
+        if args.with_power:
+            results.append(power_check(config_dir))
 
         if args.with_mopidy:
             results.append(mopidy_check(app_config, args.mopidy_timeout))

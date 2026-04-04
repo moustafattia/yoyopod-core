@@ -21,6 +21,7 @@ from yoyopy.fsm import (
 if TYPE_CHECKING:
     from yoyopy.audio.mopidy_client import MopidyClient
     from yoyopy.config import ConfigManager
+    from yoyopy.power import PowerManager, PowerSnapshot
     from yoyopy.ui.screens import (
         CallScreen,
         InCallScreen,
@@ -80,6 +81,7 @@ class CoordinatorRuntime:
     call_interruption_policy: CallInterruptionPolicy
     screen_manager: ScreenManager | None
     mopidy_client: MopidyClient | None
+    power_manager: PowerManager | None
     now_playing_screen: NowPlayingScreen | None
     call_screen: CallScreen | None
     incoming_call_screen: IncomingCallScreen | None
@@ -89,6 +91,8 @@ class CoordinatorRuntime:
     config_manager: ConfigManager | None
     ui_state: AppRuntimeState = AppRuntimeState.IDLE
     voip_ready: bool = False
+    power_available: bool = False
+    power_snapshot: PowerSnapshot | None = None
     current_app_state: AppRuntimeState = field(init=False)
     previous_app_state: AppRuntimeState | None = field(init=False, default=None)
     state_history: list[AppRuntimeState] = field(init=False, default_factory=list)
@@ -180,6 +184,15 @@ class CoordinatorRuntime:
         self.voip_ready = ready
         actual_trigger = trigger if ready else "voip_unavailable"
         return self.sync_app_state(actual_trigger)
+
+    def set_power_snapshot(self, snapshot: PowerSnapshot) -> None:
+        """Retain the latest power snapshot for coordinator consumers."""
+        self.power_snapshot = snapshot
+        self.power_available = snapshot.available
+
+    def set_power_available(self, available: bool) -> None:
+        """Retain current power backend availability."""
+        self.power_available = available
 
     def sync_ui_state_for_screen(self, screen_name: str | None) -> AppStateChange | None:
         """Update the base UI state for non-call overlay screens."""

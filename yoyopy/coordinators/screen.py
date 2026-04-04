@@ -45,6 +45,18 @@ class ScreenCoordinator:
         if self.runtime.screen_manager.current_screen == self.runtime.in_call_screen:
             self.runtime.in_call_screen.render()
 
+    def refresh_current_screen(self) -> None:
+        """Refresh whichever screen is currently visible."""
+        if self.runtime.screen_manager is None:
+            return
+
+        current_screen = self.runtime.screen_manager.get_current_screen()
+        if current_screen is None:
+            return
+
+        current_screen.render()
+        logger.debug("  -> Current screen refreshed")
+
     def refresh_now_playing_screen(self) -> None:
         """Refresh the now playing screen if it is currently visible."""
         if self.runtime.screen_manager.current_screen == self.runtime.now_playing_screen:

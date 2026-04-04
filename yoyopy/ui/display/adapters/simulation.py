@@ -370,7 +370,10 @@ class SimulationDisplayAdapter(DisplayHAL):
         self,
         time_str: str,
         battery_percent: int,
-        signal_strength: int
+        signal_strength: int,
+        charging: bool = False,
+        external_power: bool = False,
+        power_available: bool = True,
     ) -> None:
         """
         Draw the status bar at the top of the display.
@@ -416,6 +419,23 @@ class SimulationDisplayAdapter(DisplayHAL):
                 battery_x + 1, battery_y + 1,
                 battery_x + 1 + fill_width, battery_y + 11,
                 fill=fill_color
+            )
+
+        indicator = ""
+        if not power_available:
+            indicator = "?"
+        elif charging:
+            indicator = "C"
+        elif external_power:
+            indicator = "P"
+
+        if indicator:
+            self.text(
+                indicator,
+                battery_x - 14,
+                battery_y - 1,
+                color=self.COLOR_YELLOW if indicator == "?" else self.COLOR_WHITE,
+                font_size=12,
             )
 
         # Draw signal strength (signal bars)

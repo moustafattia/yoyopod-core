@@ -37,6 +37,7 @@ def test_build_sync_command_includes_uv_sync_by_default() -> None:
 def test_build_smoke_command_adds_optional_checks() -> None:
     """Smoke command should include optional service-check flags when requested."""
     args = Namespace(
+        with_power=True,
         with_mopidy=True,
         with_voip=True,
         verbose=True,
@@ -47,6 +48,7 @@ def test_build_smoke_command_adds_optional_checks() -> None:
     command = build_smoke_command(args)
 
     assert command.startswith("uv run python scripts/pi_smoke.py")
+    assert "--with-power" in command
     assert "--with-mopidy" in command
     assert "--with-voip" in command
     assert "--verbose" in command

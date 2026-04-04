@@ -5,6 +5,8 @@ Maintains shared state across the application including
 current playlist, playback status, volume, and user settings.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from pathlib import Path
@@ -14,6 +16,7 @@ from yoyopy.ui.input.hal import InteractionProfile
 
 if TYPE_CHECKING:
     from yoyopy.audio.audio_manager import AudioManager
+    from yoyopy.power import PowerSnapshot
 
 
 @dataclass
@@ -117,6 +120,10 @@ class AppContext:
 
         # System status
         self.battery_percent: int = 100
+        self.battery_charging: bool = False
+        self.external_power: bool = False
+        self.power_available: bool = False
+        self.power_error: str = ""
         self.signal_strength: int = 4  # 0-4 bars
         self.is_connected: bool = False
         self.connection_type: str = "none"  # wifi, 4g, none
@@ -328,3 +335,18 @@ class AppContext:
             self.signal_strength = max(0, min(4, signal))
         if connected is not None:
             self.is_connected = connected
+
+    def update_power_status(self, snapshot: "PowerSnapshot") -> None:
+        """Update cached power telemetry from the latest backend snapshot."""
+        self.power_available = snapshot.available
+        self.power_error = snapshot.error
+
+        if snapshot.battery.level_percent is not None:
+            level = round(snapshot.battery.level_percent)
+            self.battery_percent = max(0, min(100, level))
+
+        if snapshot.battery.charging is not None:
+            self.battery_charging = snapshot.battery.charging
+
+        if snapshot.battery.power_plugged is not None:
+            self.external_power = snapshot.battery.power_plugged

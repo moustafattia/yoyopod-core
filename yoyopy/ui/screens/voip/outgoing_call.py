@@ -52,12 +52,18 @@ class OutgoingCallScreen(Screen):
         # Draw status bar
         current_time = datetime.now().strftime("%H:%M")
         battery = self.context.battery_percent if self.context else 100
+        charging = self.context.battery_charging if self.context else False
+        external_power = self.context.external_power if self.context else False
+        power_available = self.context.power_available if self.context else True
         signal = self.context.signal_strength if self.context else 4
 
         self.display.status_bar(
             time_str=current_time,
             battery_percent=battery,
-            signal_strength=signal
+            signal_strength=signal,
+            charging=charging,
+            external_power=external_power,
+            power_available=power_available,
         )
 
         # Draw "Calling..." title

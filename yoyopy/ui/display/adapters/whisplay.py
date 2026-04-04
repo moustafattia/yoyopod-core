@@ -231,7 +231,10 @@ class WhisplayDisplayAdapter(DisplayHAL):
         self,
         time_str: str = "--:--",
         battery_percent: int = 100,
-        signal_strength: int = 4
+        signal_strength: int = 4,
+        charging: bool = False,
+        external_power: bool = False,
+        power_available: bool = True,
     ) -> None:
         """
         Draw status bar at top of screen.
@@ -279,6 +282,23 @@ class WhisplayDisplayAdapter(DisplayHAL):
                 battery_x + 2, battery_y + 2,
                 battery_x + 2 + fill_width, battery_y + battery_height - 2,
                 fill=battery_color
+            )
+
+        indicator = ""
+        if not power_available:
+            indicator = "?"
+        elif charging:
+            indicator = "C"
+        elif external_power:
+            indicator = "P"
+
+        if indicator:
+            self.text(
+                indicator,
+                battery_x - 14,
+                battery_y - 1,
+                color=self.COLOR_YELLOW if indicator == "?" else self.COLOR_WHITE,
+                font_size=12,
             )
 
         # Draw signal strength (left side)

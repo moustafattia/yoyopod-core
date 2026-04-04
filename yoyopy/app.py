@@ -16,17 +16,18 @@ from loguru import logger
 from yoyopy.app_context import AppContext
 from yoyopy.audio.mopidy_client import MopidyClient
 from yoyopy.config import ConfigManager, YoyoPodConfig
-from yoyopy.voip import VoIPConfig, VoIPManager
 from yoyopy.coordinators import (
     AppRuntimeState,
     CallCoordinator,
     CoordinatorRuntime,
     PlaybackCoordinator,
+    PowerCoordinator,
     ScreenCoordinator,
 )
 from yoyopy.event_bus import EventBus
 from yoyopy.events import RecoveryAttemptCompletedEvent, ScreenChangedEvent
 from yoyopy.fsm import CallFSM, CallInterruptionPolicy, MusicFSM
+from yoyopy.power import PowerManager
 from yoyopy.ui.display import Display
 from yoyopy.ui.input import InputManager, InteractionProfile, get_input_manager
 from yoyopy.ui.screens import (
@@ -42,6 +43,7 @@ from yoyopy.ui.screens import (
     PlaylistScreen,
     ScreenManager,
 )
+from yoyopy.voip import VoIPConfig, VoIPManager
 
 
 @dataclass(slots=True)
@@ -84,6 +86,7 @@ class YoyoPodApp:
         # Manager components
         self.voip_manager: Optional[VoIPManager] = None
         self.mopidy_client: Optional[MopidyClient] = None
+        self.power_manager: Optional[PowerManager] = None
 
         # Screen instances
         self.hub_screen: Optional[HubScreen] = None
@@ -124,10 +127,13 @@ class YoyoPodApp:
         self.screen_coordinator: Optional[ScreenCoordinator] = None
         self.call_coordinator: Optional[CallCoordinator] = None
         self.playback_coordinator: Optional[PlaybackCoordinator] = None
+        self.power_coordinator: Optional[PowerCoordinator] = None
 
         # Recovery backoff state
         self._voip_recovery = _RecoveryState()
         self._mopidy_recovery = _RecoveryState()
+        self._next_power_poll_at = 0.0
+        self._power_available: bool | None = None
         self._stopping = False
 
         logger.info("=" * 60)
@@ -177,14 +183,16 @@ class YoyoPodApp:
             self._setup_event_subscriptions()
             self._setup_voip_callbacks()
             self._setup_music_callbacks()
+            self._poll_power_status(force=True, now=time.monotonic())
 
-            logger.info("✓ YoyoPod setup complete")
+            logger.info("YoyoPod setup complete")
             return True
         except Exception as exc:
             logger.error(f"Setup failed: {exc}")
             return False
 
     def _load_configuration(self) -> bool:
+
         """Load YoyoPod configuration."""
         logger.info("Loading configuration...")
 
@@ -292,6 +300,16 @@ class YoyoPodApp:
                 self.mopidy_client.start_polling()
             else:
                 logger.warning("    ⚠ Mopidy connection failed (VoIP-only mode)")
+
+            logger.info("  - PowerManager")
+            self.power_manager = PowerManager.from_config_manager(self.config_manager)
+            if self.power_manager.config.enabled:
+                logger.info(
+                    "    Poll interval: %.1fs",
+                    self.power_manager.config.poll_interval_seconds,
+                )
+            else:
+                logger.info("    Power backend disabled in config")
 
             return True
         except Exception as exc:
@@ -447,6 +465,7 @@ class YoyoPodApp:
         self._ensure_coordinators()
         self.call_coordinator.bind(self.event_bus)
         self.playback_coordinator.bind(self.event_bus)
+        self.power_coordinator.bind(self.event_bus)
         logger.info("  ✓ Event subscriptions registered")
 
     def _process_pending_main_thread_actions(self, limit: Optional[int] = None) -> int:
@@ -490,6 +509,7 @@ class YoyoPodApp:
             call_interruption_policy=self.call_interruption_policy,
             screen_manager=self.screen_manager,
             mopidy_client=self.mopidy_client,
+            power_manager=self.power_manager,
             now_playing_screen=self.now_playing_screen,
             call_screen=self.call_screen,
             incoming_call_screen=self.incoming_call_screen,
@@ -510,6 +530,11 @@ class YoyoPodApp:
         self.playback_coordinator = PlaybackCoordinator(
             runtime=self.coordinator_runtime,
             screen_coordinator=self.screen_coordinator,
+        )
+        self.power_coordinator = PowerCoordinator(
+            runtime=self.coordinator_runtime,
+            screen_coordinator=self.screen_coordinator,
+            context=self.context,
         )
         if self.screen_manager is not None:
             self.screen_manager.on_screen_changed = self._handle_screen_changed
@@ -559,6 +584,27 @@ class YoyoPodApp:
         recovery_now = time.monotonic() if now is None else now
         self._attempt_voip_recovery(recovery_now)
         self._attempt_mopidy_recovery(recovery_now)
+
+    def _poll_power_status(self, now: float | None = None, force: bool = False) -> None:
+        """Refresh PiSugar power telemetry on the coordinator thread."""
+        if self.power_manager is None:
+            return
+
+        poll_now = time.monotonic() if now is None else now
+        if not force and poll_now < self._next_power_poll_at:
+            return
+
+        self._ensure_coordinators()
+        snapshot = self.power_manager.refresh()
+        self.power_coordinator.publish_snapshot(snapshot)
+
+        if self._power_available is None or self._power_available != snapshot.available:
+            reason = snapshot.error or ("ready" if snapshot.available else "unavailable")
+            self._power_available = snapshot.available
+            self.power_coordinator.publish_availability_change(snapshot.available, reason)
+
+        interval = max(1.0, self.power_manager.config.poll_interval_seconds)
+        self._next_power_poll_at = poll_now + interval
 
     def _attempt_voip_recovery(self, recovery_now: float) -> None:
         """Restart the VoIP backend when it is not running."""
@@ -670,6 +716,21 @@ class YoyoPodApp:
         else:
             logger.info("  Mopidy not connected")
         logger.info("")
+        logger.info("Power Status:")
+        if self.power_manager:
+            power_snapshot = self.power_manager.get_snapshot()
+            logger.info(f"  Available: {power_snapshot.available}")
+            if power_snapshot.device.model:
+                logger.info(f"  Model: {power_snapshot.device.model}")
+            if power_snapshot.battery.level_percent is not None:
+                logger.info(f"  Battery: {power_snapshot.battery.level_percent:.1f}%")
+            if power_snapshot.battery.charging is not None:
+                logger.info(f"  Charging: {power_snapshot.battery.charging}")
+            if power_snapshot.battery.power_plugged is not None:
+                logger.info(f"  External power: {power_snapshot.battery.power_plugged}")
+        else:
+            logger.info("  Power backend not configured")
+        logger.info("")
         logger.info("Integration Settings:")
         logger.info(f"  Auto-resume after call: {self.auto_resume_after_call}")
         logger.info("")
@@ -697,6 +758,7 @@ class YoyoPodApp:
                 time.sleep(0.1)
                 self._process_pending_main_thread_actions()
                 self._attempt_manager_recovery()
+                self._poll_power_status()
 
                 current_time = time.time()
                 if current_time - last_screen_update >= screen_update_interval:
@@ -752,4 +814,8 @@ class YoyoPodApp:
             "auto_resume": self.auto_resume_after_call,
             "voip_available": self.voip_manager is not None and self.voip_manager.running,
             "music_available": self.mopidy_client is not None and self.mopidy_client.is_connected,
+            "power_available": self.power_manager is not None and self.power_manager.get_snapshot().available,
+            "battery_percent": self.context.battery_percent if self.context else None,
+            "battery_charging": self.context.battery_charging if self.context else None,
+            "external_power": self.context.external_power if self.context else None,
         }

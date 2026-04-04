@@ -3,6 +3,7 @@ Coordinator modules for YoyoPod orchestration.
 """
 
 from yoyopy.coordinators.call import CallCoordinator
+from yoyopy.coordinators.power import PowerCoordinator
 from yoyopy.coordinators.playback import PlaybackCoordinator
 from yoyopy.coordinators.runtime import AppRuntimeState, CoordinatorRuntime
 from yoyopy.coordinators.screen import ScreenCoordinator
@@ -10,6 +11,7 @@ from yoyopy.coordinators.screen import ScreenCoordinator
 __all__ = [
     "AppRuntimeState",
     "CallCoordinator",
+    "PowerCoordinator",
     "PlaybackCoordinator",
     "CoordinatorRuntime",
     "ScreenCoordinator",

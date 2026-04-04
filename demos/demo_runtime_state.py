@@ -66,6 +66,7 @@ def main() -> int:
         call_interruption_policy=CallInterruptionPolicy(),
         screen_manager=screen_manager,
         mopidy_client=None,
+        power_manager=None,
         now_playing_screen=now_playing_screen,
         call_screen=None,
         incoming_call_screen=None,

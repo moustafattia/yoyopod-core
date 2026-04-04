@@ -68,6 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the Raspberry Pi smoke validator remotely",
     )
     smoke_parser.add_argument(
+        "--with-power",
+        action="store_true",
+        help="Include PiSugar power checks",
+    )
+    smoke_parser.add_argument(
         "--with-mopidy",
         action="store_true",
         help="Include Mopidy connectivity checks",
@@ -149,6 +154,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-uv-sync",
         action="store_true",
         help="Skip `uv sync --extra dev` during the remote sync step",
+    )
+    preflight_parser.add_argument(
+        "--with-power",
+        action="store_true",
+        help="Include PiSugar power checks in the remote smoke pass",
     )
     preflight_parser.add_argument(
         "--with-mopidy",
@@ -281,6 +291,8 @@ def build_sync_command(config: RemoteConfig, skip_uv_sync: bool) -> str:
 def build_smoke_command(args: argparse.Namespace) -> str:
     """Create the remote smoke-validation command."""
     parts = ["uv run python scripts/pi_smoke.py"]
+    if args.with_power:
+        parts.append("--with-power")
     if args.with_mopidy:
         parts.append("--with-mopidy")
     if args.with_voip:

@@ -18,6 +18,7 @@ def _build_runtime() -> CoordinatorRuntime:
         call_interruption_policy=CallInterruptionPolicy(),
         screen_manager=None,
         mopidy_client=None,
+        power_manager=None,
         now_playing_screen=None,
         call_screen=None,
         incoming_call_screen=None,

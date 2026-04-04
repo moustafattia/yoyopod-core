@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -28,6 +30,7 @@ from yoyopy.fsm import (
     MusicFSM,
     MusicState,
 )
+from yoyopy.power import BatteryState, PowerSnapshot
 from yoyopy.ui.input import InputManager, InteractionProfile
 
 
@@ -157,6 +160,24 @@ class FakeStoppingVoIPManager:
         self.stop_notify_events.append(notify_events)
 
 
+class FakePowerManager:
+    """Minimal power manager double for app-level polling tests."""
+
+    def __init__(self, snapshots: list[PowerSnapshot], poll_interval_seconds: float = 30.0) -> None:
+        self._snapshots = snapshots
+        self.refresh_calls = 0
+        self.config = SimpleNamespace(enabled=True, poll_interval_seconds=poll_interval_seconds)
+
+    def refresh(self) -> PowerSnapshot:
+        index = min(self.refresh_calls, len(self._snapshots) - 1)
+        self.refresh_calls += 1
+        return self._snapshots[index]
+
+    def get_snapshot(self) -> PowerSnapshot:
+        index = max(0, min(self.refresh_calls - 1, len(self._snapshots) - 1))
+        return self._snapshots[index]
+
+
 def _publish_from_worker(app: YoyoPodApp, event: object) -> None:
     worker = threading.Thread(target=lambda: app.event_bus.publish(event))
     worker.start()
@@ -167,6 +188,26 @@ def _navigate_from_worker(screen_manager: FakeScreenManager, screen_name: str) -
     worker = threading.Thread(target=lambda: screen_manager.push_screen(screen_name))
     worker.start()
     worker.join()
+
+
+def _power_snapshot(
+    *,
+    available: bool,
+    battery_percent: float | None = None,
+    charging: bool | None = None,
+    power_plugged: bool | None = None,
+    error: str = "",
+) -> PowerSnapshot:
+    return PowerSnapshot(
+        available=available,
+        checked_at=datetime(2026, 4, 4, 12, 0, 0),
+        battery=BatteryState(
+            level_percent=battery_percent,
+            charging=charging,
+            power_plugged=power_plugged,
+        ),
+        error=error,
+    )
 
 
 def _build_app(playback_state: str = "stopped", auto_resume: bool = True) -> tuple[
@@ -516,3 +557,53 @@ def test_one_button_profile_starts_on_hub() -> None:
 
     assert app._get_initial_screen_name() == "hub"
     assert app._get_initial_ui_state() == AppRuntimeState.HUB
+
+
+def test_power_poll_updates_context_runtime_and_visible_screen() -> None:
+    """A fresh power snapshot should update runtime/context and refresh the active screen."""
+    app, _, _ = _build_app(playback_state="stopped")
+    app.power_manager = FakePowerManager(
+        [
+            _power_snapshot(
+                available=True,
+                battery_percent=55.4,
+                charging=True,
+                power_plugged=True,
+            )
+        ]
+    )
+
+    app._poll_power_status(now=0.0, force=True)
+
+    assert app.power_manager.refresh_calls == 1
+    assert app.context.battery_percent == 55
+    assert app.context.battery_charging is True
+    assert app.context.external_power is True
+    assert app.context.power_available is True
+    assert app.coordinator_runtime.power_available is True
+    assert app.coordinator_runtime.power_snapshot is not None
+    assert app.coordinator_runtime.power_snapshot.battery.level_percent == 55.4
+    assert app.menu_screen.render_calls == 1
+
+
+def test_power_poll_honors_interval_and_tracks_unavailable_backend() -> None:
+    """Power polling should respect the configured interval and retain availability state."""
+    app, _, _ = _build_app(playback_state="stopped")
+    app.power_manager = FakePowerManager(
+        [
+            _power_snapshot(available=True, battery_percent=61.0, charging=False, power_plugged=False),
+            _power_snapshot(available=False, error="I2C not connected"),
+        ],
+        poll_interval_seconds=30.0,
+    )
+
+    app._poll_power_status(now=0.0, force=True)
+    app._poll_power_status(now=10.0)
+    app._poll_power_status(now=30.0)
+
+    assert app.power_manager.refresh_calls == 2
+    assert app.context.battery_percent == 61
+    assert app.context.power_available is False
+    assert app.context.power_error == "I2C not connected"
+    assert app.coordinator_runtime.power_available is False
+    assert app.menu_screen.render_calls == 2

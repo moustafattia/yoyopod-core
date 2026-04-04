@@ -185,7 +185,10 @@ class DisplayHAL(ABC):
         self,
         time_str: str = "--:--",
         battery_percent: int = 100,
-        signal_strength: int = 4
+        signal_strength: int = 4,
+        charging: bool = False,
+        external_power: bool = False,
+        power_available: bool = True,
     ) -> None:
         """
         Draw a status bar at the top of the screen.
@@ -199,6 +202,9 @@ class DisplayHAL(ABC):
             time_str: Time string to display (e.g., "14:30")
             battery_percent: Battery level 0-100
             signal_strength: Signal bars 0-4 (0=no signal, 4=full)
+            charging: Whether the device is actively charging
+            external_power: Whether external power is currently attached
+            power_available: Whether live power telemetry is currently available
         """
         pass
 

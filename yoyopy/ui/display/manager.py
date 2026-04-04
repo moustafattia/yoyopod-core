@@ -165,10 +165,20 @@ class Display:
         self,
         time_str: str = "--:--",
         battery_percent: int = 100,
-        signal_strength: int = 4
+        signal_strength: int = 4,
+        charging: bool = False,
+        external_power: bool = False,
+        power_available: bool = True,
     ) -> None:
         """Draw status bar at top of screen."""
-        self._adapter.status_bar(time_str, battery_percent, signal_strength)
+        self._adapter.status_bar(
+            time_str,
+            battery_percent,
+            signal_strength,
+            charging,
+            external_power,
+            power_available,
+        )
 
     def update(self) -> None:
         """Flush buffer to physical display."""

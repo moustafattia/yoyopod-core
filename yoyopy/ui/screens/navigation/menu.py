@@ -54,10 +54,18 @@ class MenuScreen(Screen):
 
         # Draw status bar
         current_time = datetime.now().strftime("%H:%M")
+        battery = self.context.battery_percent if self.context else 85
+        charging = self.context.battery_charging if self.context else False
+        external_power = self.context.external_power if self.context else False
+        power_available = self.context.power_available if self.context else True
+        signal = self.context.signal_strength if self.context else 3
         self.display.status_bar(
             time_str=current_time,
-            battery_percent=85,
-            signal_strength=3
+            battery_percent=battery,
+            signal_strength=signal,
+            charging=charging,
+            external_power=external_power,
+            power_available=power_available,
         )
 
         # Draw menu title
