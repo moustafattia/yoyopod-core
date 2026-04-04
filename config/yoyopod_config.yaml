@@ -36,6 +36,17 @@ input:
   whisplay_double_tap_ms: 300     # Max gap between taps for confirm
   whisplay_long_hold_ms: 800      # Hold time for back/cancel
 
+# Power Settings
+power:
+  enabled: true
+  backend: "pisugar"              # Current power backend implementation
+  transport: "auto"               # auto, socket, tcp
+  socket_path: "/tmp/pisugar-server.sock"
+  tcp_host: "127.0.0.1"
+  tcp_port: 8423
+  timeout_seconds: 2.0
+  poll_interval_seconds: 30.0
+
 # Display Settings
 display:
   hardware: "auto"                # auto, whisplay, pimoroni, simulation

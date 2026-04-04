@@ -198,6 +198,26 @@ class AppInputConfig:
 
 
 @dataclass(slots=True)
+class AppPowerConfig:
+    """Power-management backend settings."""
+
+    enabled: bool = config_value(default=True, env="YOYOPOD_POWER_ENABLED")
+    backend: str = config_value(default="pisugar", env="YOYOPOD_POWER_BACKEND")
+    transport: str = config_value(default="auto", env="YOYOPOD_POWER_TRANSPORT")
+    socket_path: str = config_value(
+        default="/tmp/pisugar-server.sock",
+        env="YOYOPOD_PISUGAR_SOCKET_PATH",
+    )
+    tcp_host: str = config_value(default="127.0.0.1", env="YOYOPOD_PISUGAR_HOST")
+    tcp_port: int = config_value(default=8423, env="YOYOPOD_PISUGAR_PORT")
+    timeout_seconds: float = config_value(default=2.0, env="YOYOPOD_POWER_TIMEOUT_SECONDS")
+    poll_interval_seconds: float = config_value(
+        default=30.0,
+        env="YOYOPOD_POWER_POLL_INTERVAL_SECONDS",
+    )
+
+
+@dataclass(slots=True)
 class AppDisplayConfig:
     """Display hardware configuration."""
 
@@ -226,6 +246,7 @@ class YoyoPodConfig:
     voip: AppVoIPConfig = config_value(default_factory=AppVoIPConfig)
     ui: AppUiConfig = config_value(default_factory=AppUiConfig)
     input: AppInputConfig = config_value(default_factory=AppInputConfig)
+    power: AppPowerConfig = config_value(default_factory=AppPowerConfig)
     display: AppDisplayConfig = config_value(default_factory=AppDisplayConfig)
     logging: AppLoggingConfig = config_value(default_factory=AppLoggingConfig)
 

@@ -29,6 +29,11 @@ def test_app_config_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> Non
     assert settings.input.ptt_navigation is True
     assert settings.input.whisplay_double_tap_ms == 300
     assert settings.input.whisplay_long_hold_ms == 800
+    assert settings.power.enabled is True
+    assert settings.power.backend == "pisugar"
+    assert settings.power.transport == "auto"
+    assert settings.power.socket_path == "/tmp/pisugar-server.sock"
+    assert settings.power.tcp_port == 8423
     assert settings.display.hardware == "auto"
 
 
@@ -60,6 +65,8 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     monkeypatch.setenv("YOYOPOD_AUTO_RESUME_AFTER_CALL", "false")
     monkeypatch.setenv("YOYOPOD_WHISPLAY_DOUBLE_TAP_MS", "260")
     monkeypatch.setenv("YOYOPOD_WHISPLAY_LONG_HOLD_MS", "900")
+    monkeypatch.setenv("YOYOPOD_POWER_TRANSPORT", "tcp")
+    monkeypatch.setenv("YOYOPOD_PISUGAR_PORT", "9001")
     monkeypatch.setenv("YOYOPOD_DISPLAY", "whisplay")
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
@@ -72,6 +79,8 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     assert settings.audio.auto_resume_after_call is False
     assert settings.input.whisplay_double_tap_ms == 260
     assert settings.input.whisplay_long_hold_ms == 900
+    assert settings.power.transport == "tcp"
+    assert settings.power.tcp_port == 9001
     assert settings.display.hardware == "whisplay"
     assert settings.logging.level == "DEBUG"
     assert config_dict["audio"]["mopidy_port"] == 7788

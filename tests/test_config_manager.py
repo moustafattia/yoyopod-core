@@ -15,11 +15,11 @@ def test_audio_device_defaults(tmp_path, monkeypatch) -> None:
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
 
-    assert config_manager.get_playback_device_id() == "ALSA: plughw:1"
-    assert config_manager.get_ringer_device_id() == "ALSA: plughw:1"
-    assert config_manager.get_capture_device_id() == "ALSA: plughw:1"
-    assert config_manager.get_media_device_id() == "ALSA: plughw:1"
-    assert config_manager.get_ring_output_device() == "plughw:1"
+    assert config_manager.get_playback_device_id() == "ALSA: wm8960-soundcard"
+    assert config_manager.get_ringer_device_id() == "ALSA: wm8960-soundcard"
+    assert config_manager.get_capture_device_id() == "ALSA: wm8960-soundcard"
+    assert config_manager.get_media_device_id() == "ALSA: wm8960-soundcard"
+    assert config_manager.get_ring_output_device() == "wm8960-soundcard"
 
 
 def test_audio_env_overrides(tmp_path, monkeypatch) -> None:

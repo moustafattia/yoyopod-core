@@ -5,6 +5,7 @@ Handles VoIP settings and contacts.
 
 from yoyopy.config.config_manager import ConfigManager, Contact
 from yoyopy.config.models import (
+    AppPowerConfig,
     VoIPFileConfig,
     YoyoPodConfig,
     config_to_dict,
@@ -14,6 +15,7 @@ from yoyopy.config.models import (
 __all__ = [
     "ConfigManager",
     "Contact",
+    "AppPowerConfig",
     "YoyoPodConfig",
     "VoIPFileConfig",
     "load_config_model_from_yaml",
