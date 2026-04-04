@@ -309,6 +309,16 @@ class ConfigManager:
 
         return self.voip_settings.audio.media_device_id or self.get_playback_device_id()
 
+    def get_mic_gain(self) -> int:
+        """Get the configured microphone gain (0-100)."""
+
+        return self.voip_settings.audio.mic_gain
+
+    def get_speaker_volume(self) -> int:
+        """Get the configured speaker volume (0-100)."""
+
+        return self.voip_settings.audio.speaker_volume
+
     def get_ring_output_device(self) -> str:
         """Get the output device for the speaker-test ring tone helper."""
 

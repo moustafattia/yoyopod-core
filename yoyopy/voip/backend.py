@@ -81,6 +81,8 @@ class LinphonecBackend:
                     "Failed to generate .linphonerc, attempting to use existing Linphone config"
                 )
 
+            self._configure_alsa_mixer()
+
             logger.info("Starting linphonec backend...")
             self.process = subprocess.Popen(
                 [self.config.linphonec_path, "-d", "6"],
@@ -297,6 +299,35 @@ class LinphonecBackend:
                 end_pos = min(end_pos, pos)
         return candidate[:end_pos]
 
+    def _configure_alsa_mixer(self) -> None:
+        """Set ALSA mixer levels on the WM8960 sound card for VoIP audio."""
+
+        card = "1"
+        speaker_pct = min(100, max(0, self.config.speaker_volume))
+        # Map 0-100 to 80-127 range (avoids inaudibly quiet levels)
+        speaker_raw = int(80 + speaker_pct * 0.47)
+        capture_pct = min(100, max(0, self.config.mic_gain))
+        # Map 0-100 to 30-63 range for capture volume
+        capture_raw = int(30 + capture_pct * 0.33)
+
+        commands = [
+            f"amixer -c {card} sset 'Speaker Playback' {speaker_raw}",
+            f"amixer -c {card} sset 'Capture' {capture_raw}",
+            f"amixer -c {card} sset 'ADC PCM Capture' 235",
+            f"amixer -c {card} sset 'Left Input Boost Mixer LINPUT1' 3",
+            f"amixer -c {card} sset 'Right Input Boost Mixer RINPUT1' 3",
+        ]
+
+        for cmd in commands:
+            try:
+                subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
+            except Exception as exc:
+                logger.warning(f"ALSA mixer command failed: {cmd}: {exc}")
+
+        logger.info(
+            f"ALSA mixer configured (speaker: {speaker_raw}/127, capture: {capture_raw}/63)"
+        )
+
     def _generate_linphonerc(self) -> bool:
         """Generate the runtime linphonerc from the configured SIP settings."""
 
@@ -370,7 +401,8 @@ ringer_dev_id={self.config.ringer_dev_id}
 capture_dev_id={self.config.capture_dev_id}
 media_dev_id={self.config.media_dev_id}
 echocancellation=1
-mic_gain_db=10.0
+mic_gain_db={self.config.mic_gain * 0.3:.1f}
+playback_gain_db={self.config.speaker_volume * 0.12 - 6:.1f}
 """
 
             with open(linphonerc_path, "w", encoding="utf-8") as handle:
