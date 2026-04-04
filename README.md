@@ -221,6 +221,7 @@ yoyopy/
 - `docs/INTEGRATION_PLAN.md`: integration completion record and remaining cleanup
 - `docs/DISPLAY_HAL_ARCHITECTURE.md`: current display HAL design
 - `docs/INPUT_HAL_ARCHITECTURE.md`: current input HAL design and compatibility notes
+- `docs/POWER_MODULE.md`: PiSugar power architecture, config, safety, RTC, watchdog, and diagnostics
 - `docs/RPI_SMOKE_VALIDATION.md`: Raspberry Pi smoke checklist and manual follow-up drills
 - `docs/PI_DEV_WORKFLOW.md`: SSH-based Raspberry Pi sync/run workflow and release checklist
 - `docs/UI_RESTRUCTURE_PROPOSAL.md`: refactor status and remaining cleanup

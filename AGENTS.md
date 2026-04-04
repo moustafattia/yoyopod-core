@@ -47,6 +47,7 @@ When in doubt, trust these files first:
 - `yoyopy/ui/screens/`
 - `README.md`
 - `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/POWER_MODULE.md`
 
 ---
 
