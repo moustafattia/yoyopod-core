@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from yoyopy.config import ConfigManager
 from yoyopy.power.manager import PowerManager
-from yoyopy.power.models import BatteryState, PowerConfig, PowerSnapshot
+from yoyopy.power.models import BatteryState, PowerConfig, PowerSnapshot, RTCState
 
 
 class FakeBackend:
@@ -16,6 +16,10 @@ class FakeBackend:
         self.snapshot = snapshot
         self.probe_result = probe_result
         self.refresh_calls = 0
+        self.sync_to_rtc_calls = 0
+        self.sync_from_rtc_calls = 0
+        self.set_alarm_calls: list[tuple[datetime, int]] = []
+        self.disable_alarm_calls = 0
 
     def probe(self) -> bool:
         return self.probe_result
@@ -23,6 +27,18 @@ class FakeBackend:
     def get_snapshot(self) -> PowerSnapshot:
         self.refresh_calls += 1
         return self.snapshot
+
+    def sync_time_to_rtc(self) -> None:
+        self.sync_to_rtc_calls += 1
+
+    def sync_time_from_rtc(self) -> None:
+        self.sync_from_rtc_calls += 1
+
+    def set_rtc_alarm(self, when: datetime, repeat_mask: int = 127) -> None:
+        self.set_alarm_calls.append((when, repeat_mask))
+
+    def disable_rtc_alarm(self) -> None:
+        self.disable_alarm_calls += 1
 
 
 class ExplodingBackend:
@@ -140,4 +156,29 @@ def test_power_manager_request_system_shutdown_uses_configured_command() -> None
 
     assert manager.request_system_shutdown() is True
     assert commands == [["sudo", "-n", "shutdown", "-h", "now"]]
+
+
+def test_power_manager_exposes_rtc_sync_and_alarm_helpers() -> None:
+    """RTC sync and alarm operations should delegate to the backend and return fresh state."""
+
+    snapshot = PowerSnapshot(
+        available=True,
+        checked_at=datetime(2026, 4, 4, 12, 0, 0),
+        rtc=RTCState(time=datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)),
+    )
+    backend = FakeBackend(snapshot)
+    manager = PowerManager(PowerConfig(), backend=backend)
+    alarm_time = datetime(2026, 4, 6, 7, 30, tzinfo=timezone.utc)
+
+    rtc_state = manager.sync_time_to_rtc()
+    rtc_state = manager.sync_time_from_rtc()
+    rtc_state = manager.set_rtc_alarm(alarm_time, repeat_mask=31)
+    rtc_state = manager.disable_rtc_alarm()
+
+    assert backend.sync_to_rtc_calls == 1
+    assert backend.sync_from_rtc_calls == 1
+    assert backend.set_alarm_calls == [(alarm_time, 31)]
+    assert backend.disable_alarm_calls == 1
+    assert backend.refresh_calls == 4
+    assert rtc_state.time == datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
 

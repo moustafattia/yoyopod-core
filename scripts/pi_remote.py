@@ -73,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include PiSugar power checks",
     )
     smoke_parser.add_argument(
+        "--with-rtc",
+        action="store_true",
+        help="Include PiSugar RTC checks",
+    )
+    smoke_parser.add_argument(
         "--with-mopidy",
         action="store_true",
         help="Include Mopidy connectivity checks",
@@ -136,6 +141,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Log events only without drawing tuner hints on the display",
     )
 
+    rtc_parser = subparsers.add_parser(
+        "rtc",
+        help="Inspect or control PiSugar RTC state remotely",
+    )
+    rtc_parser.add_argument(
+        "rtc_action",
+        nargs="?",
+        default="status",
+        choices=["status", "sync-to-rtc", "sync-from-rtc", "set-alarm", "disable-alarm"],
+        help="RTC action to run remotely (default: status)",
+    )
+    rtc_parser.add_argument(
+        "--time",
+        help="ISO8601 timestamp for set-alarm, e.g. 2026-04-06T07:30:00+02:00",
+    )
+    rtc_parser.add_argument(
+        "--repeat-mask",
+        type=int,
+        default=127,
+        help="Weekday repeat bitmask for set-alarm (default: 127)",
+    )
+    rtc_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose RTC helper logging",
+    )
+
     preflight_parser = subparsers.add_parser(
         "preflight",
         help="Run local checks, sync the Pi, and execute the Pi smoke pass",
@@ -159,6 +191,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--with-power",
         action="store_true",
         help="Include PiSugar power checks in the remote smoke pass",
+    )
+    preflight_parser.add_argument(
+        "--with-rtc",
+        action="store_true",
+        help="Include PiSugar RTC checks in the remote smoke pass",
     )
     preflight_parser.add_argument(
         "--with-mopidy",
@@ -293,6 +330,8 @@ def build_smoke_command(args: argparse.Namespace) -> str:
     parts = ["uv run python scripts/pi_smoke.py"]
     if args.with_power:
         parts.append("--with-power")
+    if args.with_rtc:
+        parts.append("--with-rtc")
     if args.with_mopidy:
         parts.append("--with-mopidy")
     if args.with_voip:
@@ -324,6 +363,21 @@ def build_whisplay_command(args: argparse.Namespace) -> str:
     return " ".join(parts)
 
 
+def build_rtc_command(args: argparse.Namespace) -> str:
+    """Create the remote PiSugar RTC command."""
+    parts = ["uv run python scripts/pisugar_rtc.py"]
+    if args.verbose:
+        parts.append("--verbose")
+    parts.append(args.rtc_action)
+    if args.rtc_action == "set-alarm":
+        if not args.time:
+            raise SystemExit("--time is required for `pi_remote.py rtc set-alarm`")
+        parts.extend(["--time", shlex.quote(args.time)])
+        if args.repeat_mask != 127:
+            parts.extend(["--repeat-mask", str(args.repeat_mask)])
+    return " ".join(parts)
+
+
 def build_run_command(args: argparse.Namespace) -> str:
     """Create the remote production-app command."""
     parts = ["uv run python yoyopod.py"]
@@ -347,6 +401,7 @@ def build_local_preflight_commands() -> list[tuple[str, list[str]]]:
                 "tests",
                 "scripts/pi_smoke.py",
                 "scripts/pi_remote.py",
+                "scripts/pisugar_rtc.py",
                 "scripts/whisplay_tune.py",
             ],
         ),
@@ -399,6 +454,9 @@ def main() -> int:
 
     if args.command == "whisplay":
         return run_remote(config, build_whisplay_command(args), tty=True)
+
+    if args.command == "rtc":
+        return run_remote(config, build_rtc_command(args))
 
     if args.command == "preflight":
         return run_preflight(config, args)

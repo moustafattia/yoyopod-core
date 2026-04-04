@@ -28,6 +28,18 @@ class PowerBackend(Protocol):
     def get_snapshot(self) -> PowerSnapshot:
         """Return a best-effort point-in-time power snapshot."""
 
+    def sync_time_to_rtc(self) -> None:
+        """Sync Raspberry Pi system time to the PiSugar RTC."""
+
+    def sync_time_from_rtc(self) -> None:
+        """Sync PiSugar RTC time back to the Raspberry Pi system clock."""
+
+    def set_rtc_alarm(self, when: datetime, repeat_mask: int = 127) -> None:
+        """Configure the PiSugar RTC wake alarm."""
+
+    def disable_rtc_alarm(self) -> None:
+        """Disable the configured PiSugar RTC wake alarm."""
+
 
 class PowerTransportError(RuntimeError):
     """Raised when the PiSugar transport cannot complete a command."""
@@ -196,10 +208,36 @@ class PiSugarBackend:
             error="; ".join(errors),
         )
 
+    def sync_time_to_rtc(self) -> None:
+        """Sync Raspberry Pi system time to the PiSugar RTC."""
+        self._execute_control("rtc_pi2rtc")
+
+    def sync_time_from_rtc(self) -> None:
+        """Sync PiSugar RTC time back to the Raspberry Pi system clock."""
+        self._execute_control("rtc_rtc2pi")
+
+    def set_rtc_alarm(self, when: datetime, repeat_mask: int = 127) -> None:
+        """Configure the PiSugar RTC wake alarm."""
+        iso_time = when.isoformat()
+        self._execute_control(f"rtc_alarm_set {iso_time} {int(repeat_mask)}")
+
+    def disable_rtc_alarm(self) -> None:
+        """Disable the PiSugar RTC wake alarm."""
+        self._execute_control("rtc_alarm_disable")
+
     def _query(self, command: str) -> str:
         """Execute one PiSugar command and normalize its payload."""
         response = self.transport.send_command(command)
         return _extract_response_value(command, response)
+
+    def _execute_control(self, command: str) -> str:
+        """Execute one PiSugar control command and validate that it responded."""
+        response = self.transport.send_command(command).strip()
+        if not response:
+            raise PowerTransportError(f"Empty response for {command!r}")
+        if response.lower().startswith("error"):
+            raise PowerTransportError(f"PiSugar command failed for {command!r}: {response}")
+        return response
 
     def _read_str(self, command: str) -> str:
         return self._query(command)

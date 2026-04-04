@@ -79,7 +79,8 @@ uv run python scripts/pi_remote.py sync --branch main --skip-uv-sync
 
 ```bash
 uv run python scripts/pi_remote.py smoke
-uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip
+uv run python scripts/pi_remote.py smoke --with-power --with-rtc
+uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip --with-rtc
 ```
 
 Useful variations:
@@ -94,6 +95,13 @@ uv run python scripts/pi_remote.py smoke --with-voip --voip-timeout 15 --verbose
 ```bash
 uv run python scripts/pi_remote.py whisplay
 uv run python scripts/pi_remote.py whisplay --duration-seconds 45 --double-tap-ms 240 --long-hold-ms 900
+```
+
+### PiSugar RTC helpers
+
+```bash
+uv run python scripts/pi_remote.py rtc status
+uv run python scripts/pi_remote.py rtc sync-to-rtc
 ```
 
 Use this during on-device tuning when the Whisplay button feels too eager or too sluggish. The helper runs interactively over SSH, prints every semantic gesture event, and accepts temporary timing overrides without modifying the tracked config file.

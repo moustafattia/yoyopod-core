@@ -24,6 +24,7 @@ The current codebase supports three display/input modes:
 - `yoyopy/app.py`: `YoyoPodApp` coordinator
 - `scripts/pi_smoke.py`: Raspberry Pi smoke validator for hardware and optional service checks
 - `scripts/pi_remote.py`: SSH helper for Raspberry Pi sync, smoke, status, and run loops
+- `scripts/pisugar_rtc.py`: PiSugar RTC status, sync, and alarm helper
 - `yoyopy/fsm.py`: split `MusicFSM`, `CallFSM`, and call interruption policy
 - `yoyopy/coordinators/runtime.py`: derived `AppRuntimeState` over music, call, and UI state
 - `yoyopy/audio/mopidy_client.py`: Mopidy JSON-RPC client
@@ -92,7 +93,8 @@ Raspberry Pi smoke:
 
 ```bash
 uv run python scripts/pi_smoke.py
-uv run python scripts/pi_smoke.py --with-mopidy --with-voip
+uv run python scripts/pi_smoke.py --with-power --with-rtc
+uv run python scripts/pi_smoke.py --with-mopidy --with-voip --with-rtc
 ```
 
 Remote Pi workflow:
@@ -102,6 +104,8 @@ uv run python scripts/pi_remote.py status
 uv run python scripts/pi_remote.py preflight --branch main --with-mopidy --with-voip
 uv run python scripts/pi_remote.py sync --branch main
 uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip
+uv run python scripts/pi_remote.py rtc status
+uv run python scripts/pi_remote.py rtc sync-to-rtc
 uv run python scripts/pi_remote.py whisplay --duration-seconds 45
 ```
 

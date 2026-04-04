@@ -21,6 +21,7 @@ Run this on the target Raspberry Pi after pulling the latest branch:
 
 ```bash
 uv run python scripts/pi_smoke.py
+uv run python scripts/pi_smoke.py --with-power --with-rtc
 ```
 
 What it checks:
@@ -40,10 +41,12 @@ Add Mopidy and SIP checks when the services are expected to be available:
 
 ```bash
 uv run python scripts/pi_smoke.py --with-mopidy --with-voip
+uv run python scripts/pi_smoke.py --with-power --with-rtc --with-mopidy --with-voip
 ```
 
 What it checks:
 
+- PiSugar battery telemetry and RTC state when requested
 - Mopidy JSON-RPC connectivity using `config/yoyopod_config.yaml`
 - `linphonec` startup and SIP registration using `config/voip_config.yaml`
 
@@ -107,6 +110,15 @@ Useful flags:
 - `--double-tap-ms 240`
 - `--long-hold-ms 900`
 - `--verbose`
+
+### PiSugar RTC drill
+
+```bash
+uv run python scripts/pisugar_rtc.py status
+uv run python scripts/pisugar_rtc.py sync-to-rtc
+```
+
+Use this when you want a focused RTC read/sync pass without running the full app.
 
 ## Suggested Order On Hardware
 

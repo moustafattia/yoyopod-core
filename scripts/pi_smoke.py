@@ -208,6 +208,41 @@ def power_check(config_dir: Path) -> CheckResult:
     return CheckResult(name="power", status="pass", details=details)
 
 
+def rtc_check(config_dir: Path) -> CheckResult:
+    """Validate PiSugar RTC reachability and report the current RTC state."""
+    config_manager = ConfigManager(config_dir=str(config_dir))
+    manager = PowerManager.from_config_manager(config_manager)
+
+    if not manager.config.enabled:
+        return CheckResult(
+            name="rtc",
+            status="warn",
+            details="power backend disabled in yoyopod_config.yaml",
+        )
+
+    snapshot = manager.refresh()
+    if not snapshot.available:
+        details = snapshot.error or "power backend unavailable"
+        return CheckResult(name="rtc", status="fail", details=details)
+
+    if snapshot.rtc.time is None:
+        return CheckResult(
+            name="rtc",
+            status="fail",
+            details="PiSugar backend responded but rtc_time is unavailable",
+        )
+
+    details = ", ".join(
+        [
+            f"time={snapshot.rtc.time.isoformat()}",
+            f"alarm_enabled={snapshot.rtc.alarm_enabled}",
+            f"alarm_time={snapshot.rtc.alarm_time.isoformat() if snapshot.rtc.alarm_time is not None else 'none'}",
+            f"repeat_mask={snapshot.rtc.alarm_repeat_mask if snapshot.rtc.alarm_repeat_mask is not None else 'unknown'}",
+        ]
+    )
+    return CheckResult(name="rtc", status="pass", details=details)
+
+
 def mopidy_check(app_config: dict[str, Any], timeout_seconds: int) -> CheckResult:
     """Validate Mopidy reachability and basic state queries."""
     audio_config = app_config.get("audio", {})
@@ -327,6 +362,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also validate PiSugar power telemetry from yoyopod_config.yaml",
     )
     parser.add_argument(
+        "--with-rtc",
+        action="store_true",
+        help="Also validate PiSugar RTC state and alarm visibility",
+    )
+    parser.add_argument(
         "--with-voip",
         action="store_true",
         help="Also validate linphone startup and SIP registration",
@@ -392,6 +432,9 @@ def main() -> int:
 
         if args.with_power:
             results.append(power_check(config_dir))
+
+        if args.with_rtc:
+            results.append(rtc_check(config_dir))
 
         if args.with_mopidy:
             results.append(mopidy_check(app_config, args.mopidy_timeout))

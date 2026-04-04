@@ -16,8 +16,10 @@ class FakeTransport:
     def __init__(self, responses: dict[str, str], failures: set[str] | None = None) -> None:
         self.responses = responses
         self.failures = failures or set()
+        self.commands: list[str] = []
 
     def send_command(self, command: str) -> str:
+        self.commands.append(command)
         if command in self.failures:
             raise PowerTransportError(f"simulated failure for {command}")
         if command not in self.responses:
@@ -128,4 +130,30 @@ def test_pisugar_probe_returns_false_when_backend_is_disabled() -> None:
     )
 
     assert backend.probe() is False
+
+
+def test_pisugar_backend_issues_documented_rtc_control_commands() -> None:
+    """RTC sync and alarm helpers should use the official PiSugar command names."""
+
+    transport = FakeTransport(
+        {
+            "rtc_pi2rtc": "done: rtc_pi2rtc",
+            "rtc_rtc2pi": "done: rtc_rtc2pi",
+            "rtc_alarm_set 2026-04-06T07:30:00+00:00 31": "done: rtc_alarm_set",
+            "rtc_alarm_disable": "done: rtc_alarm_disable",
+        }
+    )
+    backend = PiSugarBackend(PowerConfig(), transport=transport)
+
+    backend.sync_time_to_rtc()
+    backend.sync_time_from_rtc()
+    backend.set_rtc_alarm(datetime(2026, 4, 6, 7, 30, tzinfo=timezone.utc), repeat_mask=31)
+    backend.disable_rtc_alarm()
+
+    assert transport.commands == [
+        "rtc_pi2rtc",
+        "rtc_rtc2pi",
+        "rtc_alarm_set 2026-04-06T07:30:00+00:00 31",
+        "rtc_alarm_disable",
+    ]
 

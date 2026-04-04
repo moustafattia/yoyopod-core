@@ -3,6 +3,7 @@
 from scripts.pi_remote import (
     RemoteConfig,
     build_local_preflight_commands,
+    build_rtc_command,
     build_smoke_command,
     build_sync_command,
     build_whisplay_command,
@@ -38,6 +39,7 @@ def test_build_smoke_command_adds_optional_checks() -> None:
     """Smoke command should include optional service-check flags when requested."""
     args = Namespace(
         with_power=True,
+        with_rtc=True,
         with_mopidy=True,
         with_voip=True,
         verbose=True,
@@ -49,6 +51,7 @@ def test_build_smoke_command_adds_optional_checks() -> None:
 
     assert command.startswith("uv run python scripts/pi_smoke.py")
     assert "--with-power" in command
+    assert "--with-rtc" in command
     assert "--with-mopidy" in command
     assert "--with-voip" in command
     assert "--verbose" in command
@@ -62,6 +65,7 @@ def test_build_local_preflight_commands_cover_compile_and_pytest() -> None:
 
     assert commands[0][0] == "compileall"
     assert commands[0][1][1:3] == ["-m", "compileall"]
+    assert "scripts/pisugar_rtc.py" in commands[0][1]
     assert "scripts/whisplay_tune.py" in commands[0][1]
     assert commands[1] == ("pytest", ["uv", "run", "pytest", "-q"])
 
@@ -86,3 +90,28 @@ def test_build_whisplay_command_adds_timing_overrides() -> None:
     assert "--debounce-ms 75" in command
     assert "--double-tap-ms 240" in command
     assert "--long-hold-ms 900" in command
+
+
+def test_build_rtc_command_supports_status_and_set_alarm() -> None:
+    """RTC helper command should support both read-only status and alarm updates."""
+
+    status_args = Namespace(
+        verbose=False,
+        rtc_action="status",
+        time=None,
+        repeat_mask=127,
+    )
+    set_alarm_args = Namespace(
+        verbose=True,
+        rtc_action="set-alarm",
+        time="2026-04-06T07:30:00+02:00",
+        repeat_mask=31,
+    )
+
+    status_command = build_rtc_command(status_args)
+    set_alarm_command = build_rtc_command(set_alarm_args)
+
+    assert status_command == "uv run python scripts/pisugar_rtc.py status"
+    assert set_alarm_command.startswith("uv run python scripts/pisugar_rtc.py --verbose set-alarm")
+    assert "--time 2026-04-06T07:30:00+02:00" in set_alarm_command
+    assert "--repeat-mask 31" in set_alarm_command

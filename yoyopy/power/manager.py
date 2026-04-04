@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from yoyopy.power.backend import PiSugarBackend, PowerBackend
-from yoyopy.power.models import PowerConfig, PowerSnapshot
+from yoyopy.power.models import PowerConfig, PowerSnapshot, RTCState
 
 if TYPE_CHECKING:
     from yoyopy.config import ConfigManager
@@ -74,6 +74,31 @@ class PowerManager:
         """Return the current battery percentage when available."""
         snapshot = self.get_snapshot(refresh=refresh)
         return snapshot.battery.level_percent
+
+    def get_rtc_state(self, refresh: bool = False) -> RTCState:
+        """Return the latest RTC state, optionally refreshing first."""
+        snapshot = self.get_snapshot(refresh=refresh)
+        return snapshot.rtc
+
+    def sync_time_to_rtc(self) -> RTCState:
+        """Sync Raspberry Pi system time to the PiSugar RTC and return fresh RTC state."""
+        self.backend.sync_time_to_rtc()
+        return self.get_rtc_state(refresh=True)
+
+    def sync_time_from_rtc(self) -> RTCState:
+        """Sync PiSugar RTC time to the Raspberry Pi system clock and return fresh RTC state."""
+        self.backend.sync_time_from_rtc()
+        return self.get_rtc_state(refresh=True)
+
+    def set_rtc_alarm(self, when: datetime, repeat_mask: int = 127) -> RTCState:
+        """Set the PiSugar RTC wake alarm and return fresh RTC state."""
+        self.backend.set_rtc_alarm(when, repeat_mask)
+        return self.get_rtc_state(refresh=True)
+
+    def disable_rtc_alarm(self) -> RTCState:
+        """Disable the PiSugar RTC wake alarm and return fresh RTC state."""
+        self.backend.disable_rtc_alarm()
+        return self.get_rtc_state(refresh=True)
 
     def register_shutdown_hook(self, name: str, hook: ShutdownHook) -> None:
         """Register one callable to run before a graceful poweroff."""
