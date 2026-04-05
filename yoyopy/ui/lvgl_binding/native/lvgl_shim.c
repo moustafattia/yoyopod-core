@@ -50,6 +50,27 @@ typedef struct {
     lv_obj_t * footer_label;
 } yoyopy_listen_scene_t;
 
+typedef struct {
+    int built;
+    lv_obj_t * screen;
+    lv_obj_t * voip_dot;
+    lv_obj_t * battery_outline;
+    lv_obj_t * battery_fill;
+    lv_obj_t * battery_tip;
+    lv_obj_t * title_label;
+    lv_obj_t * title_underline;
+    lv_obj_t * page_label;
+    lv_obj_t * panel;
+    lv_obj_t * item_panels[4];
+    lv_obj_t * item_titles[4];
+    lv_obj_t * item_badges[4];
+    lv_obj_t * empty_panel;
+    lv_obj_t * empty_icon;
+    lv_obj_t * empty_title;
+    lv_obj_t * empty_subtitle;
+    lv_obj_t * footer_label;
+} yoyopy_playlist_scene_t;
+
 static int g_initialized = 0;
 static lv_display_t * g_display = NULL;
 static lv_indev_t * g_indev = NULL;
@@ -65,6 +86,7 @@ static int g_key_tail = 0;
 static int g_key_count = 0;
 static yoyopy_hub_scene_t g_hub_scene = {0};
 static yoyopy_listen_scene_t g_listen_scene = {0};
+static yoyopy_playlist_scene_t g_playlist_scene = {0};
 
 static lv_color_t yoyopy_color_rgb(uint8_t red, uint8_t green, uint8_t blue) {
     uint32_t raw = ((uint32_t)red << 16) | ((uint32_t)green << 8) | (uint32_t)blue;
@@ -95,9 +117,14 @@ static void yoyopy_reset_listen_scene_refs(void) {
     memset(&g_listen_scene, 0, sizeof(g_listen_scene));
 }
 
+static void yoyopy_reset_playlist_scene_refs(void) {
+    memset(&g_playlist_scene, 0, sizeof(g_playlist_scene));
+}
+
 static void yoyopy_reset_scene_refs(void) {
     yoyopy_reset_hub_scene_refs();
     yoyopy_reset_listen_scene_refs();
+    yoyopy_reset_playlist_scene_refs();
 }
 
 static void yoyopy_set_error(const char * message) {
@@ -322,6 +349,30 @@ static void yoyopy_apply_battery(
     } else {
         lv_obj_clear_flag(fill, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+static const char * yoyopy_symbol_for_empty_icon(const char * icon_key) {
+    if(icon_key == NULL) {
+        return LV_SYMBOL_LIST;
+    }
+
+    if(strcmp(icon_key, "playlist") == 0) {
+        return LV_SYMBOL_LIST;
+    }
+    if(strcmp(icon_key, "listen") == 0) {
+        return LV_SYMBOL_AUDIO;
+    }
+    if(strcmp(icon_key, "talk") == 0) {
+        return LV_SYMBOL_CALL;
+    }
+    if(strcmp(icon_key, "ask") == 0) {
+        return LV_SYMBOL_EDIT;
+    }
+    if(strcmp(icon_key, "setup") == 0 || strcmp(icon_key, "power") == 0) {
+        return LV_SYMBOL_SETTINGS;
+    }
+
+    return LV_SYMBOL_LIST;
 }
 
 static const char * yoyopy_hub_symbol_for_icon(const char * icon_key) {
@@ -827,6 +878,274 @@ void yoyopy_lvgl_listen_destroy(void) {
     }
     yoyopy_clear_group();
     yoyopy_reset_listen_scene_refs();
+}
+
+int yoyopy_lvgl_playlist_build(void) {
+    if(!g_initialized || g_display == NULL) {
+        yoyopy_set_error("display must be registered before building the playlist scene");
+        return -1;
+    }
+
+    if(g_playlist_scene.built) {
+        return 0;
+    }
+
+    yoyopy_prepare_active_screen();
+
+    g_playlist_scene.screen = lv_screen_active();
+    lv_obj_set_style_bg_color(g_playlist_scene.screen, yoyopy_color_rgb(18, 21, 28), 0);
+    lv_obj_set_style_bg_opa(g_playlist_scene.screen, LV_OPA_COVER, 0);
+
+    g_playlist_scene.voip_dot = lv_obj_create(g_playlist_scene.screen);
+    lv_obj_remove_style_all(g_playlist_scene.voip_dot);
+    lv_obj_set_size(g_playlist_scene.voip_dot, 8, 8);
+    lv_obj_set_style_radius(g_playlist_scene.voip_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_pos(g_playlist_scene.voip_dot, 16, 10);
+
+    g_playlist_scene.battery_outline = lv_obj_create(g_playlist_scene.screen);
+    lv_obj_remove_style_all(g_playlist_scene.battery_outline);
+    lv_obj_set_size(g_playlist_scene.battery_outline, 20, 10);
+    lv_obj_set_pos(g_playlist_scene.battery_outline, 202, 6);
+    lv_obj_set_style_border_width(g_playlist_scene.battery_outline, 1, 0);
+    lv_obj_set_style_border_color(g_playlist_scene.battery_outline, yoyopy_color_rgb(153, 160, 173), 0);
+    lv_obj_set_style_radius(g_playlist_scene.battery_outline, 2, 0);
+    lv_obj_set_style_bg_opa(g_playlist_scene.battery_outline, LV_OPA_TRANSP, 0);
+
+    g_playlist_scene.battery_fill = lv_obj_create(g_playlist_scene.battery_outline);
+    lv_obj_remove_style_all(g_playlist_scene.battery_fill);
+    lv_obj_set_pos(g_playlist_scene.battery_fill, 1, 1);
+    lv_obj_set_size(g_playlist_scene.battery_fill, 18, 8);
+    lv_obj_set_style_radius(g_playlist_scene.battery_fill, 1, 0);
+    lv_obj_set_style_bg_opa(g_playlist_scene.battery_fill, LV_OPA_COVER, 0);
+
+    g_playlist_scene.battery_tip = lv_obj_create(g_playlist_scene.screen);
+    lv_obj_remove_style_all(g_playlist_scene.battery_tip);
+    lv_obj_set_size(g_playlist_scene.battery_tip, 2, 4);
+    lv_obj_set_pos(g_playlist_scene.battery_tip, 222, 9);
+    lv_obj_set_style_bg_color(g_playlist_scene.battery_tip, yoyopy_color_rgb(153, 160, 173), 0);
+    lv_obj_set_style_bg_opa(g_playlist_scene.battery_tip, LV_OPA_COVER, 0);
+
+    g_playlist_scene.title_label = lv_label_create(g_playlist_scene.screen);
+    lv_obj_set_pos(g_playlist_scene.title_label, 18, 36);
+    lv_obj_set_style_text_font(g_playlist_scene.title_label, &lv_font_montserrat_24, 0);
+
+    g_playlist_scene.title_underline = lv_obj_create(g_playlist_scene.screen);
+    lv_obj_remove_style_all(g_playlist_scene.title_underline);
+    lv_obj_set_pos(g_playlist_scene.title_underline, 18, 66);
+    lv_obj_set_size(g_playlist_scene.title_underline, 96, 3);
+    lv_obj_set_style_radius(g_playlist_scene.title_underline, 2, 0);
+    lv_obj_set_style_bg_opa(g_playlist_scene.title_underline, LV_OPA_COVER, 0);
+
+    g_playlist_scene.page_label = lv_label_create(g_playlist_scene.screen);
+    lv_obj_set_pos(g_playlist_scene.page_label, 184, 39);
+    lv_obj_set_style_text_font(g_playlist_scene.page_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(g_playlist_scene.page_label, yoyopy_color_rgb(153, 160, 173), 0);
+
+    g_playlist_scene.panel = lv_obj_create(g_playlist_scene.screen);
+    lv_obj_set_size(g_playlist_scene.panel, 216, 166);
+    lv_obj_set_pos(g_playlist_scene.panel, 12, 86);
+    lv_obj_set_style_radius(g_playlist_scene.panel, 24, 0);
+    lv_obj_set_style_border_width(g_playlist_scene.panel, 0, 0);
+    lv_obj_set_style_bg_color(g_playlist_scene.panel, yoyopy_color_rgb(28, 33, 42), 0);
+    lv_obj_set_style_bg_opa(g_playlist_scene.panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(g_playlist_scene.panel, 0, 0);
+    lv_obj_set_style_shadow_width(g_playlist_scene.panel, 0, 0);
+    lv_obj_set_style_outline_width(g_playlist_scene.panel, 0, 0);
+    lv_obj_set_scrollbar_mode(g_playlist_scene.panel, LV_SCROLLBAR_MODE_OFF);
+
+    for(int index = 0; index < 4; ++index) {
+        g_playlist_scene.item_panels[index] = lv_obj_create(g_playlist_scene.panel);
+        lv_obj_set_size(g_playlist_scene.item_panels[index], 184, 42);
+        lv_obj_set_pos(g_playlist_scene.item_panels[index], 16, 10 + (index * 50));
+        lv_obj_set_style_radius(g_playlist_scene.item_panels[index], 16, 0);
+        lv_obj_set_style_border_width(g_playlist_scene.item_panels[index], 2, 0);
+        lv_obj_set_style_pad_all(g_playlist_scene.item_panels[index], 0, 0);
+        lv_obj_set_style_shadow_width(g_playlist_scene.item_panels[index], 0, 0);
+        lv_obj_set_style_outline_width(g_playlist_scene.item_panels[index], 0, 0);
+        lv_obj_set_scrollbar_mode(g_playlist_scene.item_panels[index], LV_SCROLLBAR_MODE_OFF);
+
+        g_playlist_scene.item_titles[index] = lv_label_create(g_playlist_scene.item_panels[index]);
+        lv_obj_set_width(g_playlist_scene.item_titles[index], 118);
+        lv_obj_set_pos(g_playlist_scene.item_titles[index], 14, 11);
+        lv_label_set_long_mode(g_playlist_scene.item_titles[index], LV_LABEL_LONG_MODE_CLIP);
+        lv_obj_set_style_text_font(g_playlist_scene.item_titles[index], &lv_font_montserrat_16, 0);
+
+        g_playlist_scene.item_badges[index] = lv_label_create(g_playlist_scene.item_panels[index]);
+        lv_obj_set_pos(g_playlist_scene.item_badges[index], 146, 12);
+        lv_obj_set_style_text_font(g_playlist_scene.item_badges[index], &lv_font_montserrat_12, 0);
+    }
+
+    g_playlist_scene.empty_panel = lv_obj_create(g_playlist_scene.screen);
+    lv_obj_set_size(g_playlist_scene.empty_panel, 204, 136);
+    lv_obj_set_pos(g_playlist_scene.empty_panel, 18, 96);
+    lv_obj_set_style_radius(g_playlist_scene.empty_panel, 22, 0);
+    lv_obj_set_style_border_width(g_playlist_scene.empty_panel, 2, 0);
+    lv_obj_set_style_pad_all(g_playlist_scene.empty_panel, 0, 0);
+    lv_obj_set_style_shadow_width(g_playlist_scene.empty_panel, 0, 0);
+    lv_obj_set_style_outline_width(g_playlist_scene.empty_panel, 0, 0);
+    lv_obj_set_scrollbar_mode(g_playlist_scene.empty_panel, LV_SCROLLBAR_MODE_OFF);
+
+    g_playlist_scene.empty_icon = lv_label_create(g_playlist_scene.empty_panel);
+    lv_obj_set_style_text_font(g_playlist_scene.empty_icon, &lv_font_montserrat_24, 0);
+    lv_obj_align(g_playlist_scene.empty_icon, LV_ALIGN_TOP_MID, 0, 16);
+
+    g_playlist_scene.empty_title = lv_label_create(g_playlist_scene.empty_panel);
+    lv_obj_set_width(g_playlist_scene.empty_title, 168);
+    lv_obj_set_pos(g_playlist_scene.empty_title, 18, 60);
+    lv_obj_set_style_text_font(g_playlist_scene.empty_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(g_playlist_scene.empty_title, LV_TEXT_ALIGN_CENTER, 0);
+
+    g_playlist_scene.empty_subtitle = lv_label_create(g_playlist_scene.empty_panel);
+    lv_obj_set_width(g_playlist_scene.empty_subtitle, 168);
+    lv_obj_set_pos(g_playlist_scene.empty_subtitle, 18, 86);
+    lv_label_set_long_mode(g_playlist_scene.empty_subtitle, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_font(g_playlist_scene.empty_subtitle, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_align(g_playlist_scene.empty_subtitle, LV_TEXT_ALIGN_CENTER, 0);
+
+    g_playlist_scene.footer_label = lv_label_create(g_playlist_scene.screen);
+    lv_obj_set_style_text_font(g_playlist_scene.footer_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_align(g_playlist_scene.footer_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(g_playlist_scene.footer_label, LV_ALIGN_BOTTOM_MID, 0, -5);
+
+    g_playlist_scene.built = 1;
+    return 0;
+}
+
+int yoyopy_lvgl_playlist_sync(
+    const char * title_text,
+    const char * page_text,
+    const char * footer,
+    const char * item_0,
+    const char * item_1,
+    const char * item_2,
+    const char * item_3,
+    const char * badge_0,
+    const char * badge_1,
+    const char * badge_2,
+    const char * badge_3,
+    int32_t item_count,
+    int32_t selected_visible_index,
+    int32_t voip_state,
+    int32_t battery_percent,
+    int32_t charging,
+    int32_t power_available,
+    uint8_t accent_r,
+    uint8_t accent_g,
+    uint8_t accent_b,
+    const char * empty_title,
+    const char * empty_subtitle,
+    const char * empty_icon_key
+) {
+    if(!g_playlist_scene.built) {
+        yoyopy_set_error("playlist scene must be built before sync");
+        return -1;
+    }
+
+    const lv_color_t background = yoyopy_color_rgb(18, 21, 28);
+    const lv_color_t surface = yoyopy_color_rgb(28, 33, 42);
+    const lv_color_t ink = yoyopy_color_rgb(243, 247, 250);
+    const lv_color_t muted = yoyopy_color_rgb(153, 160, 173);
+    const lv_color_t accent = yoyopy_color_rgb(accent_r, accent_g, accent_b);
+    const lv_color_t accent_soft = yoyopy_mix_rgb(accent_r, accent_g, accent_b, 28, 33, 42, 55);
+    const lv_color_t accent_dim = yoyopy_mix_rgb(accent_r, accent_g, accent_b, 18, 21, 28, 65);
+    const lv_color_t selected_fill = yoyopy_mix_rgb(accent_r, accent_g, accent_b, 28, 33, 42, 88);
+    const lv_color_t border = yoyopy_color_rgb(74, 79, 92);
+
+    const char * items[4] = {item_0, item_1, item_2, item_3};
+    const char * badges[4] = {badge_0, badge_1, badge_2, badge_3};
+
+    lv_obj_set_style_bg_color(g_playlist_scene.screen, background, 0);
+    lv_obj_set_style_bg_opa(g_playlist_scene.screen, LV_OPA_COVER, 0);
+    yoyopy_apply_voip_dot(g_playlist_scene.voip_dot, voip_state);
+    yoyopy_apply_battery(
+        g_playlist_scene.battery_outline,
+        g_playlist_scene.battery_fill,
+        g_playlist_scene.battery_tip,
+        battery_percent,
+        charging,
+        power_available
+    );
+
+    lv_label_set_text(g_playlist_scene.title_label, title_text != NULL ? title_text : "");
+    lv_obj_set_style_text_color(g_playlist_scene.title_label, ink, 0);
+    lv_obj_set_style_bg_color(g_playlist_scene.title_underline, accent, 0);
+    lv_label_set_text(g_playlist_scene.page_label, page_text != NULL ? page_text : "");
+
+    if(item_count < 0) {
+        item_count = 0;
+    }
+    if(item_count > 4) {
+        item_count = 4;
+    }
+
+    if(item_count == 0) {
+        lv_obj_add_flag(g_playlist_scene.panel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_playlist_scene.empty_panel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_bg_color(g_playlist_scene.empty_panel, surface, 0);
+        lv_obj_set_style_bg_opa(g_playlist_scene.empty_panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(g_playlist_scene.empty_panel, accent_dim, 0);
+        lv_label_set_text(g_playlist_scene.empty_icon, yoyopy_symbol_for_empty_icon(empty_icon_key));
+        lv_obj_set_style_text_color(g_playlist_scene.empty_icon, accent, 0);
+        lv_label_set_text(g_playlist_scene.empty_title, empty_title != NULL ? empty_title : "");
+        lv_obj_set_style_text_color(g_playlist_scene.empty_title, ink, 0);
+        lv_label_set_text(g_playlist_scene.empty_subtitle, empty_subtitle != NULL ? empty_subtitle : "");
+        lv_obj_set_style_text_color(g_playlist_scene.empty_subtitle, muted, 0);
+    } else {
+        lv_obj_clear_flag(g_playlist_scene.panel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_playlist_scene.empty_panel, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if(item_count > 0) {
+        selected_visible_index = selected_visible_index % item_count;
+        if(selected_visible_index < 0) {
+            selected_visible_index += item_count;
+        }
+    } else {
+        selected_visible_index = 0;
+    }
+
+    for(int index = 0; index < 4; ++index) {
+        if(index >= item_count) {
+            lv_obj_add_flag(g_playlist_scene.item_panels[index], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+
+        int selected = index == selected_visible_index;
+        const char * badge_text = badges[index] != NULL ? badges[index] : "";
+        lv_obj_clear_flag(g_playlist_scene.item_panels[index], LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(g_playlist_scene.item_titles[index], items[index] != NULL ? items[index] : "");
+        lv_obj_set_style_bg_color(g_playlist_scene.item_panels[index], selected ? selected_fill : surface, 0);
+        lv_obj_set_style_bg_opa(g_playlist_scene.item_panels[index], LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(g_playlist_scene.item_panels[index], selected ? accent_soft : border, 0);
+        lv_obj_set_style_text_color(g_playlist_scene.item_titles[index], selected ? ink : yoyopy_mix_rgb(243, 247, 250, 153, 160, 173, 12), 0);
+
+        if(badge_text[0] == '\0') {
+            lv_obj_add_flag(g_playlist_scene.item_badges[index], LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(g_playlist_scene.item_badges[index], LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(g_playlist_scene.item_badges[index], badge_text);
+            lv_obj_set_style_text_color(g_playlist_scene.item_badges[index], selected ? accent : muted, 0);
+            lv_obj_set_x(g_playlist_scene.item_badges[index], 184 - (int)lv_obj_get_width(g_playlist_scene.item_badges[index]) - 16);
+        }
+    }
+
+    lv_label_set_text(g_playlist_scene.footer_label, footer != NULL ? footer : "");
+    lv_obj_set_style_text_color(g_playlist_scene.footer_label, accent_dim, 0);
+    lv_obj_align(g_playlist_scene.footer_label, LV_ALIGN_BOTTOM_MID, 0, -5);
+
+    return 0;
+}
+
+void yoyopy_lvgl_playlist_destroy(void) {
+    if(!g_playlist_scene.built) {
+        return;
+    }
+
+    if(g_playlist_scene.screen != NULL) {
+        lv_obj_clean(g_playlist_scene.screen);
+    }
+    yoyopy_clear_group();
+    yoyopy_reset_playlist_scene_refs();
 }
 
 int yoyopy_lvgl_init(void) {

@@ -84,6 +84,33 @@ int yoyopy_lvgl_listen_sync(
     const char * empty_subtitle
 );
 void yoyopy_lvgl_listen_destroy(void);
+int yoyopy_lvgl_playlist_build(void);
+int yoyopy_lvgl_playlist_sync(
+    const char * title_text,
+    const char * page_text,
+    const char * footer,
+    const char * item_0,
+    const char * item_1,
+    const char * item_2,
+    const char * item_3,
+    const char * badge_0,
+    const char * badge_1,
+    const char * badge_2,
+    const char * badge_3,
+    int32_t item_count,
+    int32_t selected_visible_index,
+    int32_t voip_state,
+    int32_t battery_percent,
+    int32_t charging,
+    int32_t power_available,
+    uint8_t accent_r,
+    uint8_t accent_g,
+    uint8_t accent_b,
+    const char * empty_title,
+    const char * empty_subtitle,
+    const char * empty_icon_key
+);
+void yoyopy_lvgl_playlist_destroy(void);
 void yoyopy_lvgl_clear_screen(void);
 const char * yoyopy_lvgl_last_error(void);
 const char * yoyopy_lvgl_version(void);

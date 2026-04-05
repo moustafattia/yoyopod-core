@@ -72,6 +72,33 @@ int yoyopy_lvgl_listen_sync(
     const char * empty_subtitle
 );
 void yoyopy_lvgl_listen_destroy(void);
+int yoyopy_lvgl_playlist_build(void);
+int yoyopy_lvgl_playlist_sync(
+    const char * title_text,
+    const char * page_text,
+    const char * footer,
+    const char * item_0,
+    const char * item_1,
+    const char * item_2,
+    const char * item_3,
+    const char * badge_0,
+    const char * badge_1,
+    const char * badge_2,
+    const char * badge_3,
+    int32_t item_count,
+    int32_t selected_visible_index,
+    int32_t voip_state,
+    int32_t battery_percent,
+    int32_t charging,
+    int32_t power_available,
+    uint8_t accent_r,
+    uint8_t accent_g,
+    uint8_t accent_b,
+    const char * empty_title,
+    const char * empty_subtitle,
+    const char * empty_icon_key
+);
+void yoyopy_lvgl_playlist_destroy(void);
 void yoyopy_lvgl_clear_screen(void);
 const char * yoyopy_lvgl_last_error(void);
 const char * yoyopy_lvgl_version(void);
@@ -291,6 +318,86 @@ class LvglBinding:
 
     def listen_destroy(self) -> None:
         self.lib.yoyopy_lvgl_listen_destroy()
+
+    def playlist_build(self) -> None:
+        if self.lib.yoyopy_lvgl_playlist_build() != 0:
+            raise LvglBindingError(self.last_error())
+
+    def playlist_sync(
+        self,
+        *,
+        title_text: str,
+        page_text: str | None,
+        footer: str,
+        items: list[str],
+        badges: list[str],
+        selected_visible_index: int,
+        voip_state: int,
+        battery_percent: int,
+        charging: bool,
+        power_available: bool,
+        accent: tuple[int, int, int],
+        empty_title: str,
+        empty_subtitle: str,
+        empty_icon_key: str,
+    ) -> None:
+        normalized_items = list(items[:4])
+        while len(normalized_items) < 4:
+            normalized_items.append("")
+
+        normalized_badges = list(badges[:4])
+        while len(normalized_badges) < 4:
+            normalized_badges.append("")
+
+        title_raw = self.ffi.new("char[]", title_text.encode("utf-8"))
+        page_text_raw = (
+            self.ffi.new("char[]", page_text.encode("utf-8"))
+            if page_text
+            else self.ffi.NULL
+        )
+        footer_raw = self.ffi.new("char[]", footer.encode("utf-8"))
+        item_0_raw = self.ffi.new("char[]", normalized_items[0].encode("utf-8"))
+        item_1_raw = self.ffi.new("char[]", normalized_items[1].encode("utf-8"))
+        item_2_raw = self.ffi.new("char[]", normalized_items[2].encode("utf-8"))
+        item_3_raw = self.ffi.new("char[]", normalized_items[3].encode("utf-8"))
+        badge_0_raw = self.ffi.new("char[]", normalized_badges[0].encode("utf-8"))
+        badge_1_raw = self.ffi.new("char[]", normalized_badges[1].encode("utf-8"))
+        badge_2_raw = self.ffi.new("char[]", normalized_badges[2].encode("utf-8"))
+        badge_3_raw = self.ffi.new("char[]", normalized_badges[3].encode("utf-8"))
+        empty_title_raw = self.ffi.new("char[]", empty_title.encode("utf-8"))
+        empty_subtitle_raw = self.ffi.new("char[]", empty_subtitle.encode("utf-8"))
+        empty_icon_raw = self.ffi.new("char[]", empty_icon_key.encode("utf-8"))
+
+        result = self.lib.yoyopy_lvgl_playlist_sync(
+            title_raw,
+            page_text_raw,
+            footer_raw,
+            item_0_raw,
+            item_1_raw,
+            item_2_raw,
+            item_3_raw,
+            badge_0_raw,
+            badge_1_raw,
+            badge_2_raw,
+            badge_3_raw,
+            len(items),
+            selected_visible_index,
+            voip_state,
+            battery_percent,
+            1 if charging else 0,
+            1 if power_available else 0,
+            accent[0],
+            accent[1],
+            accent[2],
+            empty_title_raw,
+            empty_subtitle_raw,
+            empty_icon_raw,
+        )
+        if result != 0:
+            raise LvglBindingError(self.last_error())
+
+    def playlist_destroy(self) -> None:
+        self.lib.yoyopy_lvgl_playlist_destroy()
 
     def clear_screen(self) -> None:
         self.lib.yoyopy_lvgl_clear_screen()

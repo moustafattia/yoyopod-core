@@ -8,10 +8,12 @@ from loguru import logger
 
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
+from yoyopy.ui.screens.music.lvgl import LvglPlaylistView
 from yoyopy.ui.screens.theme import LISTEN, MUTED, SURFACE, audio_source_label, draw_empty_state, draw_list_item, render_footer, render_header, rounded_panel, text_fit
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
+    from yoyopy.ui.screens import ScreenView
 
 
 class PlaylistScreen(Screen):
@@ -31,11 +33,74 @@ class PlaylistScreen(Screen):
         self.max_visible_items = 3 if display.is_portrait() else 4
         self.loading = False
         self.error_message: str | None = None
+        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Refresh playlists when the screen becomes active."""
         super().enter()
+        self._ensure_lvgl_view()
         self.fetch_playlists()
+
+    def exit(self) -> None:
+        """Tear down any active LVGL view when leaving playlists."""
+        if self._lvgl_view is not None:
+            self._lvgl_view.destroy()
+            self._lvgl_view = None
+        super().exit()
+
+    def _ensure_lvgl_view(self) -> "ScreenView | None":
+        """Create an LVGL view when the Whisplay renderer is active."""
+        if self._lvgl_view is not None:
+            return self._lvgl_view
+
+        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+            return None
+
+        ui_backend = self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        if ui_backend is None or not getattr(ui_backend, "initialized", False):
+            return None
+
+        self._lvgl_view = LvglPlaylistView(self, ui_backend)
+        self._lvgl_view.build()
+        return self._lvgl_view
+
+    def _update_scroll_window(self) -> None:
+        """Keep the selected item visible within the current scroll window."""
+        if self.selected_index < self.scroll_offset:
+            self.scroll_offset = self.selected_index
+        elif self.selected_index >= self.scroll_offset + self.max_visible_items:
+            self.scroll_offset = self.selected_index - self.max_visible_items + 1
+
+    def get_page_text(self) -> str | None:
+        """Return the compact page indicator for the current playlist selection."""
+        if not self.playlists:
+            return None
+        return f"{self.selected_index + 1}/{len(self.playlists)}"
+
+    def get_visible_window(self) -> tuple[list[str], list[str], int]:
+        """Return the visible playlist titles, badges, and selected row index."""
+        if not self.playlists:
+            return [], [], 0
+
+        self._update_scroll_window()
+
+        visible_titles: list[str] = []
+        visible_badges: list[str] = []
+        selected_visible_index = 0
+
+        for row in range(self.max_visible_items):
+            playlist_index = self.scroll_offset + row
+            if playlist_index >= len(self.playlists):
+                break
+
+            playlist = self.playlists[playlist_index]
+            badge = f"{playlist.track_count}" if getattr(playlist, "track_count", 0) else ""
+            visible_titles.append(playlist.name)
+            visible_badges.append(badge)
+            if playlist_index == self.selected_index:
+                selected_visible_index = row
+
+        return visible_titles, visible_badges, selected_visible_index
 
     def fetch_playlists(self) -> None:
         """Fetch playlists from Mopidy."""
@@ -65,10 +130,13 @@ class PlaylistScreen(Screen):
 
     def render(self) -> None:
         """Render the source-themed playlist browser."""
+        lvgl_view = self._ensure_lvgl_view()
+        if lvgl_view is not None:
+            lvgl_view.sync()
+            return
+
         source_label = audio_source_label(getattr(self.context, "current_audio_source", "local"))
-        page_text = None
-        if self.playlists:
-            page_text = f"{self.selected_index + 1}/{len(self.playlists)}"
+        page_text = self.get_page_text()
 
         content_top = render_header(
             self.display,
@@ -119,10 +187,7 @@ class PlaylistScreen(Screen):
             self.display.update()
             return
 
-        if self.selected_index < self.scroll_offset:
-            self.scroll_offset = self.selected_index
-        elif self.selected_index >= self.scroll_offset + self.max_visible_items:
-            self.scroll_offset = self.selected_index - self.max_visible_items + 1
+        self._update_scroll_window()
 
         panel_top = content_top + 6
         panel_bottom = self.display.HEIGHT - 28
