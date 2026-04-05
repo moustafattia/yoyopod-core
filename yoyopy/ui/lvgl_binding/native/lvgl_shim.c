@@ -288,7 +288,8 @@ static int yoyopy_translate_key(int32_t key) {
 static void yoyopy_flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map) {
     int32_t width = lv_area_get_width(area);
     int32_t height = lv_area_get_height(area);
-    uint32_t byte_length = (uint32_t)(width * height * sizeof(lv_color_t));
+    uint32_t bytes_per_pixel = lv_color_format_get_size(lv_display_get_color_format(disp));
+    uint32_t byte_length = (uint32_t)(width * height * bytes_per_pixel);
 
     if(g_flush_cb != NULL) {
         g_flush_cb(
@@ -2454,7 +2455,10 @@ int yoyopy_lvgl_register_display(
         return -1;
     }
 
-    g_draw_buf_bytes = buffer_pixel_count * sizeof(lv_color_t);
+    /* Whisplay expects RGB565 bytes in swapped/big-endian wire order. */
+    lv_display_set_color_format(g_display, LV_COLOR_FORMAT_RGB565_SWAPPED);
+
+    g_draw_buf_bytes = buffer_pixel_count * lv_color_format_get_size(lv_display_get_color_format(g_display));
     g_draw_buf = lv_malloc(g_draw_buf_bytes);
     if(g_draw_buf == NULL) {
         yoyopy_set_error("draw buffer allocation failed");
