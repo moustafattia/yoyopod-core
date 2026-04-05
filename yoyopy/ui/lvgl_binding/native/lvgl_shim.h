@@ -161,6 +161,7 @@ int yoyopy_lvgl_in_call_sync(
 void yoyopy_lvgl_in_call_destroy(void);
 int yoyopy_lvgl_ask_build(void);
 int yoyopy_lvgl_ask_sync(
+    const char * icon_key,
     const char * title_text,
     const char * subtitle_text,
     const char * footer,

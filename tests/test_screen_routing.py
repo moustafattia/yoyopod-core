@@ -72,6 +72,8 @@ def test_screen_router_covers_call_hub_routes() -> None:
     router = ScreenRouter()
 
     assert router.resolve("call", "browse_contacts") == NavigationRequest.push("contacts")
+    assert router.resolve("call", "browse_history") == NavigationRequest.push("call_history")
+    assert router.resolve("call", "voice_notes") == NavigationRequest.push("voice_note_contacts")
     assert router.resolve("call", "call_started") == NavigationRequest.push("outgoing_call")
 
 

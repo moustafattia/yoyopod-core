@@ -22,6 +22,7 @@ Run this on the target Raspberry Pi after pulling the latest branch:
 ```bash
 uv run python scripts/pi_smoke.py
 uv run python scripts/pi_smoke.py --with-power --with-rtc
+uv run python scripts/pi_smoke.py --with-lvgl-soak
 ```
 
 What it checks:
@@ -29,6 +30,7 @@ What it checks:
 - target environment information
 - display initialization on real hardware
 - matching input adapter construction and start/stop
+- optional LVGL transition and sleep/wake soak when requested
 
 Expected result:
 
@@ -111,6 +113,19 @@ Useful flags:
 - `--long-hold-ms 900`
 - `--verbose`
 
+### LVGL Whisplay soak
+
+```bash
+uv run python scripts/lvgl_soak.py
+uv run python scripts/lvgl_soak.py --cycles 3 --hold-seconds 0.3
+```
+
+Use this when Whisplay rendering feels fast but you still want a hardware pass for:
+
+- repeated routed screen transitions
+- sleep/wake recovery
+- LVGL-only corruption or stuck redraw issues
+
 ### PiSugar RTC drill
 
 ```bash
@@ -134,7 +149,8 @@ Use this when you want a focused battery, charging, RTC, shutdown-threshold, and
 2. `uv run pytest -q`
 3. `uv run python scripts/pi_smoke.py`
 4. `uv run python scripts/pi_smoke.py --with-mopidy --with-voip`
-5. `uv run python yoyopod.py`
+5. `uv run python scripts/pi_smoke.py --with-lvgl-soak`
+6. `uv run python yoyopod.py`
 
 ## Failure Triage
 

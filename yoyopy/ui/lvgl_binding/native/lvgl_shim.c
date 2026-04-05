@@ -537,6 +537,9 @@ static const char * yoyopy_symbol_for_empty_icon(const char * icon_key) {
     if(strcmp(icon_key, "ask") == 0) {
         return "AI";
     }
+    if(strcmp(icon_key, "voice_note") == 0) {
+        return LV_SYMBOL_AUDIO;
+    }
     if(strcmp(icon_key, "setup") == 0 || strcmp(icon_key, "power") == 0) {
         return LV_SYMBOL_SETTINGS;
     }
@@ -2039,6 +2042,7 @@ int yoyopy_lvgl_ask_build(void) {
 }
 
 int yoyopy_lvgl_ask_sync(
+    const char * icon_key,
     const char * title_text,
     const char * subtitle_text,
     const char * footer,
@@ -2080,6 +2084,7 @@ int yoyopy_lvgl_ask_sync(
     lv_obj_set_style_bg_color(g_ask_scene.icon_halo, halo_fill, 0);
     lv_obj_set_style_bg_opa(g_ask_scene.icon_halo, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(g_ask_scene.icon_halo, halo_border, 0);
+    lv_label_set_text(g_ask_scene.icon_label, yoyopy_symbol_for_empty_icon(icon_key));
     lv_obj_set_style_text_color(g_ask_scene.icon_label, accent, 0);
     lv_obj_center(g_ask_scene.icon_label);
 

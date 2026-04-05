@@ -89,7 +89,7 @@ class HubScreen(Screen):
         return [
             HubCard("Listen", self._listen_subtitle(), "listen", "listen"),
             HubCard("Talk", self._talk_subtitle(), "talk", "talk"),
-            HubCard("Ask", "Coming soon", "ask", "ask"),
+            HubCard("Ask", "Safe questions", "ask", "ask"),
             HubCard("Setup", self._setup_subtitle(), "setup", "setup"),
         ]
 
@@ -126,6 +126,11 @@ class HubScreen(Screen):
 
     def _talk_subtitle(self) -> str:
         """Return the compact Talk card subtitle."""
+        if self.context is not None and getattr(self.context, "missed_calls", 0) > 0:
+            missed_calls = int(self.context.missed_calls)
+            label = "call" if missed_calls == 1 else "calls"
+            return f"{missed_calls} missed {label}"
+
         if self.voip_manager is None:
             return "Unavailable"
 

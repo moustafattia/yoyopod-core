@@ -3,6 +3,7 @@
 from scripts.pi_remote import (
     RemoteConfig,
     build_local_preflight_commands,
+    build_lvgl_soak_command,
     build_power_command,
     build_rtc_command,
     build_service_command,
@@ -45,6 +46,7 @@ def test_build_smoke_command_adds_optional_checks() -> None:
         with_rtc=True,
         with_mopidy=True,
         with_voip=True,
+        with_lvgl_soak=True,
         verbose=True,
         mopidy_timeout=10,
         voip_timeout=15.0,
@@ -57,6 +59,7 @@ def test_build_smoke_command_adds_optional_checks() -> None:
     assert "--with-rtc" in command
     assert "--with-mopidy" in command
     assert "--with-voip" in command
+    assert "--with-lvgl-soak" in command
     assert "--verbose" in command
     assert "--mopidy-timeout 10" in command
     assert "--voip-timeout 15.0" in command
@@ -71,6 +74,7 @@ def test_build_local_preflight_commands_cover_compile_and_pytest() -> None:
     assert "scripts/pisugar_rtc.py" in commands[0][1]
     assert "scripts/pisugar_power.py" in commands[0][1]
     assert "scripts/whisplay_tune.py" in commands[0][1]
+    assert "scripts/lvgl_soak.py" in commands[0][1]
     assert commands[1] == ("pytest", ["uv", "run", "pytest", "-q"])
 
 
@@ -126,6 +130,25 @@ def test_build_power_command_supports_verbose_status() -> None:
     command = build_power_command(Namespace(verbose=True))
 
     assert command == "uv run python scripts/pisugar_power.py --verbose"
+
+
+def test_build_lvgl_soak_command_supports_cycles_and_sleep_toggle() -> None:
+    """LVGL soak helper should forward the relevant duration flags."""
+
+    command = build_lvgl_soak_command(
+        Namespace(
+            verbose=True,
+            cycles=3,
+            hold_seconds=0.35,
+            skip_sleep=True,
+        )
+    )
+
+    assert command.startswith("uv run python scripts/lvgl_soak.py")
+    assert "--verbose" in command
+    assert "--cycles 3" in command
+    assert "--hold-seconds 0.35" in command
+    assert "--skip-sleep" in command
 
 
 def test_build_status_command_reports_yoyopod_service_and_pisugar_server() -> None:

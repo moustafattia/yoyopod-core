@@ -96,6 +96,7 @@ PHOSPHOR_ICON_FILES = {
     "listen": "headphones.png",
     "talk": "phone-call.png",
     "ask": "microphone.png",
+    "voice_note": "microphone.png",
     "setup": "gear-six.png",
     "power": "gear-six.png",
 }

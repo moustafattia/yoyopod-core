@@ -9,10 +9,10 @@ The current codebase supports three display/input modes:
 - Simulation mode: browser display plus keyboard and web-button input
 
 On Whisplay, the one-button root hub currently exposes four cards:
-- `Now Playing`
-- `Playlists`
-- `Calls`
-- `Power`
+- `Listen`
+- `Talk`
+- `Ask`
+- `Setup`
 
 ## Current Status
 
@@ -26,6 +26,9 @@ On Whisplay, the one-button root hub currently exposes four cards:
   - `Talk`
   - `Ask`
   - `Setup`
+- `Talk` now includes quick-call favorites, recents/missed calls, and a voice-note recipient entry point
+- `Ask` is now a staged shell with idle, listening, thinking, and response states
+- Whisplay production rendering now runs on the LVGL backend by default
 - GitHub Actions CI validates `uv sync --extra dev` and `uv run pytest -q`
 
 ## Main Runtime Components
@@ -35,6 +38,7 @@ On Whisplay, the one-button root hub currently exposes four cards:
 - `yoyopy/app.py`: `YoyoPodApp` coordinator
 - `scripts/pi_smoke.py`: Raspberry Pi smoke validator for hardware and optional service checks
 - `scripts/pi_remote.py`: SSH helper for Raspberry Pi sync, smoke, status, and run loops
+- `scripts/lvgl_soak.py`: LVGL transition and sleep/wake soak helper for Whisplay
 - `scripts/pisugar_power.py`: PiSugar battery, shutdown, and watchdog helper
 - `scripts/pisugar_rtc.py`: PiSugar RTC status, sync, and alarm helper
 - `deploy/systemd/yoyopod@.service`: production systemd unit for boot-time app supervision
@@ -113,6 +117,7 @@ Raspberry Pi smoke:
 uv run python scripts/pi_smoke.py
 uv run python scripts/pi_smoke.py --with-power --with-rtc
 uv run python scripts/pi_smoke.py --with-mopidy --with-voip --with-rtc
+uv run python scripts/pi_smoke.py --with-lvgl-soak
 ```
 
 Remote Pi workflow:
@@ -125,6 +130,7 @@ uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip
 uv run python scripts/pi_remote.py power
 uv run python scripts/pi_remote.py rtc status
 uv run python scripts/pi_remote.py rtc sync-to-rtc
+uv run python scripts/pi_remote.py lvgl-soak --cycles 2
 uv run python scripts/pi_remote.py service status
 uv run python scripts/pi_remote.py service install
 uv run python scripts/pi_remote.py whisplay --duration-seconds 45
@@ -198,6 +204,7 @@ yoyopy/
     manager.py
   voip/
     backend.py
+    history.py
     manager.py
     models.py
   ui/
@@ -234,6 +241,7 @@ yoyopy/
 - `docs/DISPLAY_HAL_ARCHITECTURE.md`: current display HAL design
 - `docs/INPUT_HAL_ARCHITECTURE.md`: current input HAL design and compatibility notes
 - `docs/POWER_MODULE.md`: PiSugar power architecture, config, safety, RTC, watchdog, and diagnostics
+- `docs/LVGL_MIGRATION_PLAN.md`: Whisplay LVGL migration record and backend boundaries
 - `docs/RPI_SMOKE_VALIDATION.md`: Raspberry Pi smoke checklist and manual follow-up drills
 - `docs/PI_DEV_WORKFLOW.md`: SSH-based Raspberry Pi sync/run workflow and release checklist
 - `docs/UI_RESTRUCTURE_PROPOSAL.md`: refactor status and remaining cleanup

@@ -82,6 +82,7 @@ uv run python scripts/pi_remote.py sync --branch main --skip-uv-sync
 uv run python scripts/pi_remote.py smoke
 uv run python scripts/pi_remote.py smoke --with-power --with-rtc
 uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip --with-rtc
+uv run python scripts/pi_remote.py smoke --with-lvgl-soak
 ```
 
 Useful variations:
@@ -97,6 +98,19 @@ uv run python scripts/pi_remote.py smoke --with-voip --voip-timeout 15 --verbose
 uv run python scripts/pi_remote.py whisplay
 uv run python scripts/pi_remote.py whisplay --duration-seconds 45 --double-tap-ms 240 --long-hold-ms 900
 ```
+
+### Run the LVGL Whisplay soak remotely
+
+```bash
+uv run python scripts/pi_remote.py lvgl-soak
+uv run python scripts/pi_remote.py lvgl-soak --cycles 3 --hold-seconds 0.3
+```
+
+Use this when you want a focused hardware-in-the-loop pass for:
+
+- repeated LVGL screen transitions
+- sleep/wake recovery
+- Whisplay-only rendering regressions
 
 ### PiSugar RTC helpers
 
@@ -131,7 +145,7 @@ Use this during on-device tuning when the Whisplay button feels too eager or too
 ### Run the full preflight in one command
 
 ```bash
-uv run python scripts/pi_remote.py preflight --branch main --with-mopidy --with-voip
+uv run python scripts/pi_remote.py preflight --branch main --with-mopidy --with-voip --with-lvgl-soak
 ```
 
 What it does:
@@ -167,7 +181,7 @@ uv run python scripts/pi_remote.py run --app-arg=--your-extra-flag
 1. Run local checks: `uv run pytest -q`
 2. Push your branch
 3. Run the combined preflight:
-   `uv run python scripts/pi_remote.py preflight --branch <branch> --with-mopidy --with-voip`
+   `uv run python scripts/pi_remote.py preflight --branch <branch> --with-mopidy --with-voip --with-lvgl-soak`
 4. Launch the app:
    `uv run python scripts/pi_remote.py run`
 
@@ -181,7 +195,7 @@ run, use:
 
 - Local branch is green with `uv run pytest -q`
 - Branch is pushed and reviewed
-- `uv run python scripts/pi_remote.py preflight --branch <branch> --with-mopidy --with-voip` passes
+- `uv run python scripts/pi_remote.py preflight --branch <branch> --with-mopidy --with-voip --with-lvgl-soak` passes
 - `uv run python scripts/pi_remote.py run` starts cleanly
 - Manual sanity:
   - display renders correctly

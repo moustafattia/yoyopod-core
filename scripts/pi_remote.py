@@ -88,6 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include SIP registration checks",
     )
     smoke_parser.add_argument(
+        "--with-lvgl-soak",
+        action="store_true",
+        help="Include a short LVGL transition and sleep/wake soak",
+    )
+    smoke_parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable verbose smoke-script logging",
@@ -139,6 +144,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-display",
         action="store_true",
         help="Log events only without drawing tuner hints on the display",
+    )
+
+    lvgl_soak_parser = subparsers.add_parser(
+        "lvgl-soak",
+        help="Run the LVGL Whisplay soak helper remotely",
+    )
+    lvgl_soak_parser.add_argument(
+        "--cycles",
+        type=int,
+        default=2,
+        help="How many full transition cycles to run (default: 2)",
+    )
+    lvgl_soak_parser.add_argument(
+        "--hold-seconds",
+        type=float,
+        default=0.2,
+        help="How long to keep each screen active (default: 0.2)",
+    )
+    lvgl_soak_parser.add_argument(
+        "--skip-sleep",
+        action="store_true",
+        help="Skip the sleep/wake exercise",
+    )
+    lvgl_soak_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose soak logging",
     )
 
     rtc_parser = subparsers.add_parser(
@@ -234,6 +266,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--with-voip",
         action="store_true",
         help="Include SIP registration checks in the remote smoke pass",
+    )
+    preflight_parser.add_argument(
+        "--with-lvgl-soak",
+        action="store_true",
+        help="Include the LVGL soak helper in the remote smoke pass",
     )
     preflight_parser.add_argument(
         "--verbose",
@@ -362,20 +399,37 @@ def build_sync_command(config: RemoteConfig, skip_uv_sync: bool) -> str:
 def build_smoke_command(args: argparse.Namespace) -> str:
     """Create the remote smoke-validation command."""
     parts = ["uv run python scripts/pi_smoke.py"]
-    if args.with_power:
+    if getattr(args, "with_power", False):
         parts.append("--with-power")
-    if args.with_rtc:
+    if getattr(args, "with_rtc", False):
         parts.append("--with-rtc")
-    if args.with_mopidy:
+    if getattr(args, "with_mopidy", False):
         parts.append("--with-mopidy")
-    if args.with_voip:
+    if getattr(args, "with_voip", False):
         parts.append("--with-voip")
+    if getattr(args, "with_lvgl_soak", False):
+        parts.append("--with-lvgl-soak")
+    if getattr(args, "verbose", False):
+        parts.append("--verbose")
+    if getattr(args, "mopidy_timeout", 5) != 5:
+        parts.extend(["--mopidy-timeout", str(args.mopidy_timeout)])
+    if getattr(args, "voip_timeout", 10.0) != 10.0:
+        parts.extend(["--voip-timeout", str(args.voip_timeout)])
+    return " ".join(parts)
+
+
+def build_lvgl_soak_command(args: argparse.Namespace) -> str:
+    """Create the remote LVGL soak command."""
+
+    parts = ["uv run python scripts/lvgl_soak.py"]
     if args.verbose:
         parts.append("--verbose")
-    if args.mopidy_timeout != 5:
-        parts.extend(["--mopidy-timeout", str(args.mopidy_timeout)])
-    if args.voip_timeout != 10.0:
-        parts.extend(["--voip-timeout", str(args.voip_timeout)])
+    if args.cycles != 2:
+        parts.extend(["--cycles", str(args.cycles)])
+    if args.hold_seconds != 0.2:
+        parts.extend(["--hold-seconds", str(args.hold_seconds)])
+    if args.skip_sleep:
+        parts.append("--skip-sleep")
     return " ".join(parts)
 
 
@@ -479,6 +533,7 @@ def build_local_preflight_commands() -> list[tuple[str, list[str]]]:
                 "scripts/pisugar_rtc.py",
                 "scripts/pisugar_power.py",
                 "scripts/whisplay_tune.py",
+                "scripts/lvgl_soak.py",
             ],
         ),
         (
@@ -530,6 +585,9 @@ def main() -> int:
 
     if args.command == "whisplay":
         return run_remote(config, build_whisplay_command(args), tty=True)
+
+    if args.command == "lvgl-soak":
+        return run_remote(config, build_lvgl_soak_command(args), tty=True)
 
     if args.command == "rtc":
         return run_remote(config, build_rtc_command(args))

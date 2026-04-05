@@ -45,6 +45,7 @@ from yoyopy.ui.lvgl_binding import LvglDisplayBackend, LvglInputBridge
 from yoyopy.ui.screens import (
     AskScreen,
     CallScreen,
+    CallHistoryScreen,
     ContactListScreen,
     HubScreen,
     HomeScreen,
@@ -57,8 +58,9 @@ from yoyopy.ui.screens import (
     PlaylistScreen,
     PowerScreen,
     ScreenManager,
+    VoiceNoteScreen,
 )
-from yoyopy.voip import VoIPConfig, VoIPManager
+from yoyopy.voip import CallHistoryStore, VoIPConfig, VoIPManager
 
 
 @dataclass(slots=True)
@@ -122,6 +124,7 @@ class YoyoPodApp:
         self.voip_manager: Optional[VoIPManager] = None
         self.mopidy_client: Optional[MopidyClient] = None
         self.power_manager: Optional[PowerManager] = None
+        self.call_history_store: Optional[CallHistoryStore] = None
 
         # Screen instances
         self.hub_screen: Optional[HubScreen] = None
@@ -133,7 +136,10 @@ class YoyoPodApp:
         self.now_playing_screen: Optional[NowPlayingScreen] = None
         self.playlist_screen: Optional[PlaylistScreen] = None
         self.call_screen: Optional[CallScreen] = None
+        self.call_history_screen: Optional[CallHistoryScreen] = None
         self.contact_list_screen: Optional[ContactListScreen] = None
+        self.voice_note_contacts_screen: Optional[ContactListScreen] = None
+        self.voice_note_screen: Optional[VoiceNoteScreen] = None
         self.incoming_call_screen: Optional[IncomingCallScreen] = None
         self.outgoing_call_screen: Optional[OutgoingCallScreen] = None
         self.in_call_screen: Optional[InCallScreen] = None
@@ -269,6 +275,9 @@ class YoyoPodApp:
             self.config_manager = ConfigManager(config_dir=self.config_dir)
             self.app_settings = self.config_manager.get_app_settings()
             self.config = self.config_manager.get_app_config_dict()
+            self.call_history_store = CallHistoryStore(
+                self.config_manager.config_dir / "call_history.json"
+            )
 
             if self.config_manager.app_config_loaded:
                 logger.info(f"Loaded configuration from {self.config_manager.app_config_file}")
@@ -318,6 +327,17 @@ class YoyoPodApp:
             self.display.set_backlight(self._active_brightness)
 
         self._update_screen_runtime_metrics(now)
+
+    def _refresh_talk_summary(self) -> None:
+        """Refresh Talk summary data exposed through the shared app context."""
+
+        if self.context is None or self.call_history_store is None:
+            return
+
+        self.context.update_call_summary(
+            missed_calls=self.call_history_store.missed_count(),
+            recent_calls=self.call_history_store.recent_preview(),
+        )
 
     def _init_core_components(self) -> bool:
         """Initialize display, context, orchestration models, input, and screen manager."""
@@ -376,6 +396,7 @@ class YoyoPodApp:
                     ),
                     ready=False,
                 )
+                self._refresh_talk_summary()
             self._update_screen_runtime_metrics(time.monotonic())
 
             logger.info("  - Orchestration Models")
@@ -512,12 +533,30 @@ class YoyoPodApp:
                 self.context,
                 voip_manager=self.voip_manager,
                 config_manager=self.config_manager,
+                call_history_store=self.call_history_store,
+            )
+            self.call_history_screen = CallHistoryScreen(
+                self.display,
+                self.context,
+                voip_manager=self.voip_manager,
+                call_history_store=self.call_history_store,
             )
             self.contact_list_screen = ContactListScreen(
                 self.display,
                 self.context,
                 voip_manager=self.voip_manager,
                 config_manager=self.config_manager,
+            )
+            self.voice_note_contacts_screen = ContactListScreen(
+                self.display,
+                self.context,
+                voip_manager=self.voip_manager,
+                config_manager=self.config_manager,
+                action_mode="voice_note",
+            )
+            self.voice_note_screen = VoiceNoteScreen(
+                self.display,
+                self.context,
             )
             self.incoming_call_screen = IncomingCallScreen(
                 self.display,
@@ -548,7 +587,10 @@ class YoyoPodApp:
             self.screen_manager.register_screen("now_playing", self.now_playing_screen)
             self.screen_manager.register_screen("playlists", self.playlist_screen)
             self.screen_manager.register_screen("call", self.call_screen)
+            self.screen_manager.register_screen("call_history", self.call_history_screen)
             self.screen_manager.register_screen("contacts", self.contact_list_screen)
+            self.screen_manager.register_screen("voice_note_contacts", self.voice_note_contacts_screen)
+            self.screen_manager.register_screen("voice_note", self.voice_note_screen)
             self.screen_manager.register_screen("incoming_call", self.incoming_call_screen)
             self.screen_manager.register_screen("outgoing_call", self.outgoing_call_screen)
             self.screen_manager.register_screen("in_call", self.in_call_screen)
@@ -558,7 +600,7 @@ class YoyoPodApp:
             logger.info("    - Listen flow: listen, playlists, now_playing")
             logger.info("    - Ask flow: ask")
             logger.info("    - Power screen: power")
-            logger.info("    - VoIP screens: call, contacts, incoming_call, outgoing_call, in_call")
+            logger.info("    - VoIP screens: call, call_history, contacts, voice_note_contacts, voice_note, incoming_call, outgoing_call, in_call")
             logger.info("    - Navigation: home, menu")
 
             initial_screen = self._get_initial_screen_name()
@@ -840,6 +882,7 @@ class YoyoPodApp:
             runtime=self.coordinator_runtime,
             screen_coordinator=self.screen_coordinator,
             auto_resume_after_call=self.auto_resume_after_call,
+            call_history_store=self.call_history_store,
             initial_voip_registered=self._voip_registered,
         )
         self.playback_coordinator = PlaybackCoordinator(
@@ -1440,6 +1483,8 @@ class YoyoPodApp:
             "battery_percent": self.context.battery_percent if self.context else None,
             "battery_charging": self.context.battery_charging if self.context else None,
             "external_power": self.context.external_power if self.context else None,
+            "missed_calls": self.context.missed_calls if self.context else 0,
+            "recent_calls": self.context.recent_calls if self.context else [],
             "screen_awake": self.context.screen_awake if self.context else self._screen_awake,
             "screen_idle_seconds": self.context.screen_idle_seconds if self.context else None,
             "screen_on_seconds": self.context.screen_on_seconds if self.context else None,

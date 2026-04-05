@@ -189,8 +189,8 @@ def test_call_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     assert payload["page_text"] is None
     assert payload["status_chip_text"] == "Ready"
     assert payload["status_chip_kind"] == 1
-    assert payload["items"] == ["Hagar", "Mama"]
-    assert payload["badges"] == ["", ""]
+    assert payload["items"] == ["Hagar", "Mama", "Voice Note"]
+    assert payload["badges"] == ["", "", ""]
     assert payload["selected_visible_index"] == 0
 
     screen.on_advance()
@@ -260,7 +260,7 @@ def test_contact_list_screen_syncs_sorted_contacts_through_lvgl() -> None:
     assert payload["title_text"] == "Contacts"
     assert payload["page_text"] is None
     assert payload["items"] == ["Amy", "Mona", "Zed"]
-    assert payload["badges"] == ["FAV", "", ""]
+    assert payload["badges"] == ["", "", ""]
 
     screen.exit()
     assert binding.playlist_destroy_calls == 1
@@ -323,8 +323,8 @@ def test_in_call_screen_syncs_duration_and_mute_state_through_lvgl() -> None:
     assert binding.in_call_destroy_calls == 1
 
 
-def test_ask_screen_syncs_minimal_placeholder_through_lvgl() -> None:
-    """AskScreen should keep its LVGL payload intentionally minimal."""
+def test_ask_screen_syncs_staged_shell_through_lvgl() -> None:
+    """AskScreen should expose the staged Ask shell through LVGL."""
 
     binding = FakeLvglBinding()
     screen = AskScreen(FakeLvglDisplay(binding), make_one_button_context())
@@ -334,12 +334,35 @@ def test_ask_screen_syncs_minimal_placeholder_through_lvgl() -> None:
 
     assert binding.ask_build_calls == 1
     payload = binding.ask_sync_payloads[-1]
-    assert payload["title_text"] == "Coming soon"
-    assert payload["subtitle_text"] == "Safe AI later."
-    assert payload["footer"] == "Hold back"
+    assert payload["icon_key"] == "ask"
+    assert payload["title_text"] == "Ask AI"
+    assert payload["subtitle_text"] == "Tell me a fun fact"
+    assert payload["footer"] == "Tap idea / Double start / Hold back"
 
     screen.exit()
     assert binding.ask_destroy_calls == 1
+
+
+def test_voice_note_screen_reuses_lvgl_card_scene_with_talk_copy() -> None:
+    """VoiceNoteScreen should reuse the compact LVGL card scene with Talk copy."""
+
+    from yoyopy.ui.screens.voip.voice_note import VoiceNoteScreen
+
+    binding = FakeLvglBinding()
+    context = make_one_button_context()
+    context.set_voice_note_recipient(name="Hagar", sip_address="sip:hagar@example.com")
+    screen = VoiceNoteScreen(FakeLvglDisplay(binding), context)
+
+    screen.enter()
+    screen.render()
+
+    payload = binding.ask_sync_payloads[-1]
+    assert payload["icon_key"] == "voice_note"
+    assert payload["title_text"] == "Voice note"
+    assert payload["subtitle_text"] == "Ready for Hagar."
+    assert payload["footer"] == "Double record / Hold back"
+
+    screen.exit()
 
 
 def test_power_screen_cycles_three_lvgl_pages() -> None:

@@ -149,6 +149,7 @@ int yoyopy_lvgl_in_call_sync(
 void yoyopy_lvgl_in_call_destroy(void);
 int yoyopy_lvgl_ask_build(void);
 int yoyopy_lvgl_ask_sync(
+    const char * icon_key,
     const char * title_text,
     const char * subtitle_text,
     const char * footer,
@@ -644,6 +645,7 @@ class LvglBinding:
     def ask_sync(
         self,
         *,
+        icon_key: str,
         title_text: str,
         subtitle_text: str,
         footer: str,
@@ -653,10 +655,12 @@ class LvglBinding:
         power_available: bool,
         accent: tuple[int, int, int],
     ) -> None:
+        icon_raw = self.ffi.new("char[]", icon_key.encode("utf-8"))
         title_raw = self.ffi.new("char[]", title_text.encode("utf-8"))
         subtitle_raw = self.ffi.new("char[]", subtitle_text.encode("utf-8"))
         footer_raw = self.ffi.new("char[]", footer.encode("utf-8"))
         result = self.lib.yoyopy_lvgl_ask_sync(
+            icon_raw,
             title_raw,
             subtitle_raw,
             footer_raw,

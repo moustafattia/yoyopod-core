@@ -9,31 +9,40 @@ from loguru import logger
 
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
+from yoyopy.ui.screens.theme import (
+    INK,
+    MUTED,
+    SURFACE,
+    TALK,
+    draw_empty_state,
+    draw_list_item,
+    render_footer,
+    render_header,
+    rounded_panel,
+)
 from yoyopy.ui.screens.voip.lvgl import LvglCallView
-from yoyopy.ui.screens.theme import INK, MUTED, SURFACE, TALK, draw_empty_state, draw_list_item, render_footer, render_header, rounded_panel, text_fit
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
     from yoyopy.config import ConfigManager, Contact
     from yoyopy.ui.screens import ScreenView
-    from yoyopy.voip import VoIPManager
+    from yoyopy.voip import CallHistoryStore, VoIPManager
 
 
 @dataclass(slots=True)
 class QuickCallTarget:
     """Represents one selectable quick action on the Talk screen."""
 
-    kind: Literal["contact", "browse_contacts"]
+    kind: Literal["contact", "browse_contacts", "history", "voice_notes"]
     title: str
     subtitle: str
     sip_address: str = ""
-    favorite: bool = False
 
 
 class CallScreen(Screen):
-    """Talk screen showing call readiness and favorite contacts."""
+    """Talk screen showing readiness, favorites, recents, and voice notes."""
 
-    _MAX_QUICK_CONTACTS = 6
+    _MAX_QUICK_CONTACTS = 4
 
     def __init__(
         self,
@@ -41,10 +50,12 @@ class CallScreen(Screen):
         context: Optional["AppContext"] = None,
         voip_manager: Optional["VoIPManager"] = None,
         config_manager: Optional["ConfigManager"] = None,
+        call_history_store: Optional["CallHistoryStore"] = None,
     ) -> None:
         super().__init__(display, context, "Call")
         self.voip_manager = voip_manager
         self.config_manager = config_manager
+        self.call_history_store = call_history_store
         self.quick_targets: list[QuickCallTarget] = []
         self.selected_index = 0
         self.scroll_offset = 0
@@ -81,7 +92,7 @@ class CallScreen(Screen):
         return self._lvgl_view
 
     def _load_quick_targets(self) -> None:
-        """Load favorite or regular contacts for quick calling."""
+        """Load quick-call contacts plus product actions like recents and voice notes."""
         contacts: list["Contact"] = []
         if self.config_manager is not None:
             contacts = sorted(
@@ -93,30 +104,48 @@ class CallScreen(Screen):
         quick_contacts = favorites or contacts
         visible_contacts = quick_contacts[: self._MAX_QUICK_CONTACTS]
 
-        self.quick_targets = [
+        targets = [
             QuickCallTarget(
                 kind="contact",
                 title=contact.name,
                 subtitle=contact.sip_address,
                 sip_address=contact.sip_address,
-                favorite=contact.favorite,
             )
             for contact in visible_contacts
         ]
+
+        if self.call_history_store is not None:
+            targets.append(
+                QuickCallTarget(
+                    kind="history",
+                    title="Recents",
+                    subtitle=self._history_subtitle(),
+                )
+            )
+
+        if contacts:
+            targets.append(
+                QuickCallTarget(
+                    kind="voice_notes",
+                    title="Voice Note",
+                    subtitle="Pick who gets your note",
+                )
+            )
 
         has_more_contacts = bool(contacts) and (
             len(contacts) > len(visible_contacts)
             or (bool(favorites) and len(favorites) < len(contacts))
         )
-        if has_more_contacts:
-            self.quick_targets.append(
+        if has_more_contacts or contacts:
+            targets.append(
                 QuickCallTarget(
                     kind="browse_contacts",
                     title="All Contacts",
-                    subtitle="See the full list",
+                    subtitle="See everyone",
                 )
             )
 
+        self.quick_targets = targets
         if not self.quick_targets:
             self.selected_index = 0
             self.scroll_offset = 0
@@ -124,6 +153,21 @@ class CallScreen(Screen):
 
         self.selected_index = min(self.selected_index, len(self.quick_targets) - 1)
         self._ensure_selection_visible()
+
+    def _history_subtitle(self) -> str:
+        """Return the compact subtitle for the Recents quick target."""
+        if self.call_history_store is None:
+            return "Recent calls"
+
+        missed_count = self.call_history_store.missed_count()
+        if missed_count > 0:
+            label = "call" if missed_count == 1 else "calls"
+            return f"{missed_count} missed {label}"
+
+        recent_entries = self.call_history_store.list_recent(limit=1)
+        if recent_entries:
+            return f"Last: {recent_entries[0].title}"
+        return "Recent calls"
 
     def render(self) -> None:
         """Render the Talk hub with status and quick-call cards."""
@@ -135,16 +179,13 @@ class CallScreen(Screen):
         status = self._get_status_snapshot()
         status_text, _status_color, _detail_text = self._status_lines(status)
         call_state_text, caller_text = self._call_context_lines(status)
-        position_text = None
-        if self.quick_targets:
-            position_text = f"{self.selected_index + 1}/{len(self.quick_targets)}"
 
         content_top = render_header(
             self.display,
             self.context,
             mode="talk",
             title="Talk",
-            page_text=position_text,
+            page_text=None,
             show_time=False,
             show_mode_chip=False,
         )
@@ -162,20 +203,20 @@ class CallScreen(Screen):
             radius=24,
         )
 
-        header_text = call_state_text or status_text or "Quick calls"
+        header_text = call_state_text or "Calls"
         self.display.text(header_text, 22, panel_top + 10, color=TALK.accent, font_size=13)
-        if caller_text:
-            caller_text = text_fit(self.display, caller_text, self.display.WIDTH - 120, 10)
+
+        if call_state_text and caller_text:
             self.display.text(caller_text, 22, panel_top + 28, color=INK, font_size=10)
         else:
-            self.display.text("Favorites", 22, panel_top + 28, color=MUTED, font_size=10)
+            self.display.text(status_text, 22, panel_top + 28, color=MUTED, font_size=10)
 
         if not self.quick_targets:
             draw_empty_state(
                 self.display,
                 mode="talk",
                 title="No contacts",
-                subtitle="Add favorite people to make Talk feel instant.",
+                subtitle="Add people to make Talk feel instant.",
                 icon="talk",
                 top=content_top + 12,
             )
@@ -196,7 +237,6 @@ class CallScreen(Screen):
             target = self.quick_targets[target_index]
             y1 = list_top + (row * item_height)
             y2 = y1 + 42
-            badge = "ALL" if target.kind == "browse_contacts" else None
             draw_list_item(
                 self.display,
                 x1=20,
@@ -207,17 +247,15 @@ class CallScreen(Screen):
                 subtitle="",
                 mode="talk",
                 selected=target_index == self.selected_index,
-                badge=badge,
+                badge=None,
             )
 
         render_footer(self.display, self._instruction_text(), mode="talk")
         self.display.update()
 
     def get_page_text(self) -> str | None:
-        """Return the compact page indicator for the current quick target."""
-        if not self.quick_targets:
-            return None
-        return f"{self.selected_index + 1}/{len(self.quick_targets)}"
+        """Talk now intentionally omits page counts to keep the chrome calmer."""
+        return None
 
     def get_visible_window(self) -> tuple[list[str], list[str], int]:
         """Return the visible quick-target titles, badges, and selected row index."""
@@ -238,7 +276,7 @@ class CallScreen(Screen):
 
             target = self.quick_targets[target_index]
             visible_titles.append(target.title)
-            visible_badges.append("ALL" if target.kind == "browse_contacts" else "")
+            visible_badges.append("")
             if target_index == self.selected_index:
                 selected_visible_index = row
 
@@ -281,13 +319,13 @@ class CallScreen(Screen):
             return ("", "")
 
         state_labels = {
-            "incoming": "Incoming call",
-            "outgoing": "Calling...",
-            "outgoing_progress": "Calling...",
-            "outgoing_ringing": "Ringing...",
-            "outgoing_early_media": "Connecting audio",
-            "connected": "Call connected",
-            "streams_running": "Call connected",
+            "incoming": "Incoming",
+            "outgoing": "Calling",
+            "outgoing_progress": "Calling",
+            "outgoing_ringing": "Ringing",
+            "outgoing_early_media": "Connecting",
+            "connected": "In call",
+            "streams_running": "In call",
         }
         caller_info = self.voip_manager.get_caller_info()
         caller_text = caller_info.get("display_name") or caller_info.get("address") or ""
@@ -306,27 +344,21 @@ class CallScreen(Screen):
 
     def _instruction_text(self) -> str:
         """Return footer hints for the current selection and state."""
-        if self.is_one_button_mode():
-            if not self.quick_targets:
-                return "Hold back"
-
-            selected_target = self._selected_target()
-            if selected_target is None:
-                return "Hold back"
-
-            if selected_target.kind == "browse_contacts" or not self._is_ready_to_call():
-                return "Tap next / Double open"
-            return "Tap next / Double call"
-
         if not self.quick_targets:
-            return "B back"
+            return "Hold back" if self.is_one_button_mode() else "B back"
 
         selected_target = self._selected_target()
         if selected_target is None:
-            return "B back"
+            return "Hold back" if self.is_one_button_mode() else "B back"
 
-        primary_text = "A open" if selected_target.kind == "browse_contacts" or not self._is_ready_to_call() else "A call"
-        return f"{primary_text} | B back | X/Y move"
+        if self.is_one_button_mode():
+            if selected_target.kind == "contact" and self._is_ready_to_call():
+                return "Tap next / Double call"
+            return "Tap next / Double open"
+
+        if selected_target.kind == "contact" and self._is_ready_to_call():
+            return "A call | B back | X/Y move"
+        return "A open | B back | X/Y move"
 
     def _ensure_selection_visible(self, visible_items: Optional[int] = None) -> None:
         """Adjust scroll offset to keep the selected target on screen."""
@@ -345,14 +377,36 @@ class CallScreen(Screen):
         logger.info("Opening full contact list from Talk")
         self.request_route("browse_contacts")
 
+    def _open_history(self) -> None:
+        """Open the recent-calls history screen."""
+        logger.info("Opening Talk recents")
+        self.request_route("browse_history")
+
+    def _open_voice_notes(self) -> None:
+        """Open the voice-note recipient picker."""
+        logger.info("Opening Talk voice-note recipients")
+        self.request_route("voice_notes")
+
     def _call_selected_target(self) -> None:
-        """Place a call to the currently selected contact."""
+        """Place a call to the currently selected contact or open the chosen action."""
         selected_target = self._selected_target()
         if selected_target is None:
             logger.debug("No Talk target selected")
             return
 
-        if selected_target.kind == "browse_contacts" or not self._is_ready_to_call():
+        if selected_target.kind == "browse_contacts":
+            self._browse_contacts()
+            return
+
+        if selected_target.kind == "history":
+            self._open_history()
+            return
+
+        if selected_target.kind == "voice_notes":
+            self._open_voice_notes()
+            return
+
+        if not self._is_ready_to_call():
             self._browse_contacts()
             return
 
@@ -368,7 +422,7 @@ class CallScreen(Screen):
         logger.error(f"Failed to initiate quick call to {selected_target.title}")
 
     def on_select(self, data=None) -> None:
-        """Call the selected person or open contacts."""
+        """Call the selected person or open the selected Talk action."""
         self._call_selected_target()
 
     def on_back(self, data=None) -> None:
