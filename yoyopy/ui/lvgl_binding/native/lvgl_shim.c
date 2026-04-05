@@ -1929,13 +1929,13 @@ int yoyopy_lvgl_in_call_build(void) {
     lv_obj_set_width(g_in_call_scene.caller_name_label, 176);
     lv_obj_set_pos(g_in_call_scene.caller_name_label, 16, 92);
     lv_label_set_long_mode(g_in_call_scene.caller_name_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_style_text_font(g_in_call_scene.caller_name_label, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_font(g_in_call_scene.caller_name_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_align(g_in_call_scene.caller_name_label, LV_TEXT_ALIGN_CENTER, 0);
 
     g_in_call_scene.duration_label = lv_label_create(g_in_call_scene.panel);
     lv_obj_set_width(g_in_call_scene.duration_label, 176);
     lv_obj_set_pos(g_in_call_scene.duration_label, 16, 126);
-    lv_obj_set_style_text_font(g_in_call_scene.duration_label, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(g_in_call_scene.duration_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_align(g_in_call_scene.duration_label, LV_TEXT_ALIGN_CENTER, 0);
 
     g_in_call_scene.mute_chip = lv_obj_create(g_in_call_scene.panel);
