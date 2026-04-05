@@ -315,8 +315,8 @@ class CallScreen(Screen):
                 return "Hold back"
 
             if selected_target.kind == "browse_contacts" or not self._is_ready_to_call():
-                return "Tap next / Open"
-            return "Tap next / Call"
+                return "Tap next / Double open"
+            return "Tap next / Double call"
 
         if not self.quick_targets:
             return "B back"
