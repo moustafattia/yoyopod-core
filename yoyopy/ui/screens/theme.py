@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Iterable
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from PIL import Image
 
 from yoyopy.ui.display import Display
 
@@ -22,6 +25,12 @@ MUTED: Color = (153, 160, 173)
 MUTED_DIM: Color = (111, 118, 132)
 SUCCESS: Color = (61, 221, 83)
 ERROR: Color = (255, 103, 93)
+FOOTER_SAFE_HEIGHT_PORTRAIT = 20
+FOOTER_SAFE_HEIGHT_LANDSCAPE = 18
+STATUS_SIDE_INSET_PORTRAIT = 16
+STATUS_SIDE_INSET_LANDSCAPE = 10
+HEADER_SIDE_INSET_PORTRAIT = 18
+HEADER_SIDE_INSET_LANDSCAPE = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +90,16 @@ THEMES = {
     "menu": SETUP,
     "home": SETUP,
 }
+
+ICON_ASSET_DIR = Path(__file__).resolve().parent / "assets" / "phosphor"
+PHOSPHOR_ICON_FILES = {
+    "listen": "headphones.png",
+    "talk": "phone-call.png",
+    "ask": "microphone.png",
+    "setup": "gear-six.png",
+    "power": "gear-six.png",
+}
+_ICON_CACHE: dict[str, Image.Image] = {}
 
 
 def theme_for(mode: str) -> ModeTheme:
@@ -154,6 +173,13 @@ def _get_draw(display: Display):
 
     adapter = display.get_adapter() if hasattr(display, "get_adapter") else None
     return getattr(adapter, "draw", None)
+
+
+def _get_buffer(display: Display):
+    """Return the underlying PIL image buffer when available."""
+
+    adapter = display.get_adapter() if hasattr(display, "get_adapter") else None
+    return getattr(adapter, "buffer", None)
 
 
 def rounded_panel(
@@ -241,13 +267,6 @@ def render_backdrop(display: Display, mode: str) -> ModeTheme:
 
     theme = theme_for(mode)
     display.clear(BACKGROUND)
-
-    accent_wash = mix(theme.accent, BACKGROUND, 0.82)
-    display.line(18, 42, 78, 18, color=accent_wash, width=3)
-    display.line(display.WIDTH - 92, 30, display.WIDTH - 22, 56, color=accent_wash, width=3)
-    display.circle(display.WIDTH - 32, 44, 10, outline=theme.accent_dim, width=2)
-    display.circle(24, display.HEIGHT - 34, 8, outline=theme.accent_dim, width=2)
-    display.line(46, display.HEIGHT - 20, 92, display.HEIGHT - 34, color=theme.accent_dim, width=2)
     return theme
 
 
@@ -261,9 +280,10 @@ def render_status_bar(
 
     bar_height = display.STATUS_BAR_HEIGHT
     display.rectangle(0, 0, display.WIDTH, bar_height, fill=BACKGROUND)
+    side_inset = STATUS_SIDE_INSET_PORTRAIT if display.is_portrait() else STATUS_SIDE_INSET_LANDSCAPE
 
     voip_state = _voip_state(context)
-    dot_x = 10
+    dot_x = side_inset
     dot_y = (bar_height // 2) + 1
     if voip_state == "ready":
         display.circle(dot_x, dot_y, 4, fill=SUCCESS)
@@ -272,14 +292,14 @@ def render_status_bar(
 
     if show_time:
         time_text = datetime.now().strftime("%H:%M")
-        time_x = 20 if voip_state != "none" else 8
+        time_x = side_inset + (10 if voip_state != "none" else 0)
         display.text(time_text, time_x, 4, color=INK, font_size=13)
 
     battery_level = 100 if context is None else context.battery_percent
     charging = False if context is None else context.battery_charging
     power_available = True if context is None else context.power_available
 
-    battery_x = display.WIDTH - 31
+    battery_x = display.WIDTH - side_inset - 22
     battery_y = 6
     display.rectangle(
         battery_x,
@@ -327,46 +347,56 @@ def render_header(
     icon: str | None = None,
     page_text: str | None = None,
     show_time: bool = False,
+    show_mode_chip: bool = True,
 ) -> int:
     """Render the shared status bar plus title block and return content start."""
 
     theme = render_backdrop(display, mode)
     render_status_bar(display, context, show_time=show_time)
+    side_inset = HEADER_SIDE_INSET_PORTRAIT if display.is_portrait() else HEADER_SIDE_INSET_LANDSCAPE
 
     chip_y = display.STATUS_BAR_HEIGHT + 10
-    _pill(
-        display,
-        16,
-        chip_y,
-        theme.label.upper(),
-        fill=theme.accent_dim,
-        text_color=theme.accent,
-    )
-
-    if page_text:
-        width, _ = display.get_text_size(page_text, 10)
-        display.text(page_text, display.WIDTH - width - 16, chip_y + 4, color=MUTED, font_size=10)
-
+    title_font_size = 28 if display.is_portrait() else 24
     title_y = chip_y + 26
-    max_title_width = display.WIDTH - 96
-    display_title = text_fit(display, title, max_title_width, 28 if display.is_portrait() else 24)
-    display.text(display_title, 18, title_y, color=INK, font_size=28 if display.is_portrait() else 24)
 
-    title_width, title_height = display.get_text_size(display_title, 28 if display.is_portrait() else 24)
-    display.line(18, title_y + title_height + 6, 18 + min(title_width + 10, 126), title_y + title_height + 6, color=theme.accent, width=3)
+    if show_mode_chip:
+        _pill(
+            display,
+            side_inset,
+            chip_y,
+            theme.label.upper(),
+            fill=theme.accent_dim,
+            text_color=theme.accent,
+        )
+        if page_text:
+            width, _ = display.get_text_size(page_text, 10)
+            display.text(page_text, display.WIDTH - width - side_inset, chip_y + 4, color=MUTED, font_size=10)
+    else:
+        title_font_size = 24 if display.is_portrait() else 22
+        title_y = chip_y + 6
+        if page_text:
+            width, _ = display.get_text_size(page_text, 10)
+            display.text(page_text, display.WIDTH - width - side_inset, chip_y + 2, color=MUTED, font_size=10)
+
+    max_title_width = display.WIDTH - (side_inset * 2) - 60
+    display_title = text_fit(display, title, max_title_width, title_font_size)
+    display.text(display_title, side_inset, title_y, color=INK, font_size=title_font_size)
+
+    title_width, title_height = display.get_text_size(display_title, title_font_size)
+    display.line(side_inset, title_y + title_height + 6, side_inset + min(title_width + 10, 126), title_y + title_height + 6, color=theme.accent, width=3)
 
     if subtitle:
         subtitle_y = title_y + title_height + 14
-        subtitle_width = display.WIDTH - 34 - (62 if icon else 0)
+        subtitle_width = display.WIDTH - (side_inset * 2) - (62 if icon else 0)
         lines = wrap_text(display, subtitle, subtitle_width, 12, max_lines=2)
         for line_index, line in enumerate(lines):
-            display.text(line, 18, subtitle_y + (line_index * 14), color=MUTED, font_size=12)
+            display.text(line, side_inset, subtitle_y + (line_index * 14), color=MUTED, font_size=12)
         bottom_y = subtitle_y + (len(lines) * 14)
     else:
         bottom_y = title_y + title_height + 10
 
     if icon:
-        draw_icon(display, icon, display.WIDTH - 72, display.STATUS_BAR_HEIGHT + 18, 44, theme.accent)
+        draw_icon(display, icon, display.WIDTH - side_inset - 44, display.STATUS_BAR_HEIGHT + 18, 44, theme.accent)
 
     return bottom_y + 10
 
@@ -387,13 +417,22 @@ def draw_list_item(
     """Render one rounded list card."""
 
     theme = theme_for(mode)
-    fill = mix(theme.accent, SURFACE, 0.84) if selected else SURFACE
-    outline = theme.accent if selected else SURFACE_BORDER
-    rounded_panel(display, x1, y1, x2, y2, fill=fill, outline=outline, radius=16, shadow=selected)
+    fill = mix(theme.accent, SURFACE, 0.9) if selected else SURFACE
+    outline = theme.accent_soft if selected else SURFACE_BORDER
+    rounded_panel(display, x1, y1, x2, y2, fill=fill, outline=outline, radius=16, shadow=False)
 
     title_color = INK if selected else mix(INK, MUTED, 0.12)
     subtitle_color = mix(theme.accent, MUTED, 0.72) if selected else MUTED
-    display.text(text_fit(display, title, x2 - x1 - 26, 15), x1 + 14, y1 + 9, color=title_color, font_size=15)
+    badge_width = 0
+    if badge:
+        badge_width = display.get_text_size(badge, 9)[0] + 18
+
+    title_text = text_fit(display, title, x2 - x1 - 26 - badge_width, 15)
+    title_height = display.get_text_size(title_text, 15)[1]
+    title_y = y1 + 9
+    if not subtitle:
+        title_y = y1 + max(6, ((y2 - y1) - title_height) // 2)
+    display.text(title_text, x1 + 14, title_y, color=title_color, font_size=15)
     if subtitle:
         display.text(text_fit(display, subtitle, x2 - x1 - 26, 10), x1 + 14, y1 + 26, color=subtitle_color, font_size=10)
 
@@ -403,7 +442,7 @@ def draw_list_item(
     if badge:
         _pill(
             display,
-            x2 - 56,
+            x2 - badge_width - 10,
             y1 + 8,
             badge,
             fill=theme.accent_dim,
@@ -446,9 +485,21 @@ def draw_empty_state(
 def render_footer(display: Display, text: str, *, mode: str) -> None:
     """Draw the bottom helper hint."""
 
+    if not text:
+        return
+
     theme = theme_for(mode)
-    footer_width, _ = display.get_text_size(text, 10)
-    display.text(text, (display.WIDTH - footer_width) // 2, display.HEIGHT - 16, color=mix(theme.accent, MUTED, 0.7), font_size=10)
+    font_size = 9 if display.is_portrait() else 10
+    footer_width, footer_height = display.get_text_size(text, font_size)
+    footer_safe_height = FOOTER_SAFE_HEIGHT_PORTRAIT if display.is_portrait() else FOOTER_SAFE_HEIGHT_LANDSCAPE
+    footer_top = display.HEIGHT - footer_safe_height
+
+    # Reserve a clean bottom strip so helper text never collides with panels or list rows.
+    display.rectangle(0, footer_top, display.WIDTH, display.HEIGHT, fill=BACKGROUND)
+
+    footer_x = (display.WIDTH - footer_width) // 2
+    footer_y = footer_top + max(0, (footer_safe_height - footer_height) // 2) - 1
+    display.text(text, footer_x, footer_y, color=mix(theme.accent, MUTED, 0.72), font_size=font_size)
 
 
 def _pill(
@@ -481,6 +532,9 @@ def _pill(
 def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Color) -> None:
     """Draw a lightweight doodle icon."""
 
+    if _paste_phosphor_icon(display, icon, x, y, size, color):
+        return
+
     draw = _get_draw(display)
     if icon == "listen":
         _draw_listen_icon(display, draw, x, y, size, color)
@@ -507,8 +561,50 @@ def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Col
         display.circle(x + (size // 2), y + (size // 2), size // 3, outline=color, width=3)
 
 
+def _paste_phosphor_icon(display: Display, icon: str, x: int, y: int, size: int, color: Color) -> bool:
+    """Paste a tinted Phosphor PNG icon when a PIL buffer is available."""
+
+    filename = PHOSPHOR_ICON_FILES.get(icon)
+    if filename is None:
+        return False
+
+    buffer = _get_buffer(display)
+    if buffer is None:
+        return False
+
+    source = _load_icon_asset(filename)
+    if source is None:
+        return False
+
+    rendered = source.resize((size, size), Image.Resampling.LANCZOS)
+    alpha = rendered.getchannel("A")
+    tinted = Image.new("RGBA", rendered.size, color + (0,))
+    tinted.putalpha(alpha)
+    buffer.paste(tinted, (x, y), tinted)
+    return True
+
+
+def _load_icon_asset(filename: str) -> Image.Image | None:
+    """Load and cache one PNG icon asset from disk."""
+
+    cached = _ICON_CACHE.get(filename)
+    if cached is not None:
+        return cached
+
+    path = ICON_ASSET_DIR / filename
+    if not path.exists():
+        return None
+
+    with Image.open(path) as icon:
+        rgba_icon = icon.convert("RGBA")
+    _ICON_CACHE[filename] = rgba_icon
+    return rgba_icon
+
+
 def _draw_listen_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 14)
     pad = max(4, size // 6)
+    ear_width = max(5, size // 7)
     ear_top = y + max(6, size // 3)
     ear_bottom = y + size - pad
     left = x + pad
@@ -516,54 +612,73 @@ def _draw_listen_icon(display: Display, draw, x: int, y: int, size: int, color: 
     right = x + size - pad
     bottom = y + size - pad
     if draw is not None:
-        draw.arc([(left, top), (right, bottom)], start=195, end=345, fill=color, width=4)
-    display.rectangle(x + pad, ear_top, x + pad + max(6, size // 5), ear_bottom, outline=color, width=3)
-    display.rectangle(x + size - pad - max(6, size // 5), ear_top, x + size - pad, ear_bottom, outline=color, width=3)
-    note_x = x + size - pad - 2
+        draw.arc([(left, top), (right, bottom)], start=200, end=340, fill=color, width=stroke)
+    display.rectangle(x + pad, ear_top, x + pad + ear_width, ear_bottom, outline=color, width=stroke)
+    display.rectangle(x + size - pad - ear_width, ear_top, x + size - pad, ear_bottom, outline=color, width=stroke)
+    note_x = x + size - pad - 4
     note_y = y + pad + 2
-    display.circle(note_x - 4, note_y + 2, max(2, size // 12), fill=color)
-    display.line(note_x, note_y - 2, note_x + 2, note_y + max(10, size // 3), color=color, width=3)
+    display.circle(note_x - 4, note_y + 4, max(2, size // 14), fill=color)
+    display.line(note_x, note_y, note_x, note_y + max(10, size // 3), color=color, width=stroke)
+    display.line(note_x, note_y + 2, note_x + max(4, size // 10), note_y + 4, color=color, width=stroke)
 
 
 def _draw_talk_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
-    rounded_panel(display, x + 2, y + 8, x + 24, y + 28, fill=None, outline=color, radius=8, width=3)
-    display.line(x + 10, y + 28, x + 7, y + 35, color=color, width=3)
-    rounded_panel(display, x + 18, y + 2, x + size - 4, y + 24, fill=None, outline=color, radius=8, width=3)
-    display.line(x + size - 16, y + 24, x + size - 12, y + 31, color=color, width=3)
-    display.circle(x + 31, y + 13, 2, fill=color)
-    display.circle(x + 39, y + 13, 2, fill=color)
+    stroke = max(2, size // 14)
+    small_left = x + max(2, size // 20)
+    small_top = y + max(9, size // 5)
+    small_right = x + max(22, size // 2)
+    small_bottom = y + max(30, size // 2 + 6)
+    large_left = x + max(16, size // 3)
+    large_top = y + max(3, size // 14)
+    large_right = x + size - max(4, size // 18)
+    large_bottom = y + max(24, size // 2 - 2)
+    rounded_panel(display, small_left, small_top, small_right, small_bottom, fill=None, outline=color, radius=max(7, size // 7), width=stroke)
+    display.line(small_left + 8, small_bottom, small_left + 5, small_bottom + max(5, size // 10), color=color, width=stroke)
+    rounded_panel(display, large_left, large_top, large_right, large_bottom, fill=None, outline=color, radius=max(7, size // 7), width=stroke)
+    display.line(large_right - 10, large_bottom, large_right - 6, large_bottom + max(6, size // 9), color=color, width=stroke)
+    display.circle(large_left + max(10, size // 7), large_top + max(10, size // 6), max(1, size // 18), fill=color)
+    display.circle(large_left + max(18, size // 3), large_top + max(10, size // 6), max(1, size // 18), fill=color)
 
 
 def _draw_ask_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 14)
+    bubble_left = x + max(4, size // 12)
+    bubble_top = y + max(4, size // 12)
+    bubble_right = x + size - max(4, size // 12)
+    bubble_bottom = y + size - max(10, size // 6)
+    rounded_panel(display, bubble_left, bubble_top, bubble_right, bubble_bottom, fill=None, outline=color, radius=max(9, size // 6), width=stroke)
+    display.line(bubble_left + max(10, size // 5), bubble_bottom, bubble_left + max(6, size // 7), bubble_bottom + max(8, size // 7), color=color, width=stroke)
+
     center_x = x + (size // 2)
-    center_y = y + (size // 2) - 2
-    display.line(center_x, y + 4, center_x, y + 16, color=color, width=3)
-    display.line(center_x, y + size - 4, center_x, y + size - 16, color=color, width=3)
-    display.line(x + 4, center_y, x + 16, center_y, color=color, width=3)
-    display.line(x + size - 4, center_y, x + size - 16, center_y, color=color, width=3)
-    display.line(x + 10, y + 10, x + 18, y + 18, color=color, width=3)
-    display.line(x + size - 10, y + 10, x + size - 18, y + 18, color=color, width=3)
-    display.line(x + 10, y + size - 10, x + 18, y + size - 18, color=color, width=3)
-    display.line(x + size - 10, y + size - 10, x + size - 18, y + size - 18, color=color, width=3)
-    display.circle(center_x, center_y, 5, outline=color, width=3)
+    top_y = y + max(10, size // 5)
+    mid_y = y + max(18, size // 2 - 4)
+    display.line(center_x - max(4, size // 10), top_y + max(2, size // 10), center_x, top_y - max(2, size // 14), color=color, width=stroke)
+    display.line(center_x, top_y - max(2, size // 14), center_x + max(5, size // 9), top_y + max(2, size // 10), color=color, width=stroke)
+    display.line(center_x + max(5, size // 9), top_y + max(2, size // 10), center_x + max(2, size // 14), mid_y - max(2, size // 12), color=color, width=stroke)
+    display.line(center_x + max(2, size // 14), mid_y - max(2, size // 12), center_x - max(2, size // 14), mid_y + max(2, size // 12), color=color, width=stroke)
+    display.circle(center_x, mid_y + max(9, size // 6), max(2, size // 18), fill=color)
 
 
 def _draw_setup_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 14)
     center_x = x + (size // 2)
     center_y = y + (size // 2)
+    outer_r = max(10, size // 4)
+    inner_r = max(4, size // 10)
+    tooth_r = max(2, size // 16)
+    offset = outer_r + tooth_r + 1
+
+    display.circle(center_x, center_y, outer_r, outline=color, width=stroke)
     for offset_x, offset_y in (
-        (0, -15),
-        (12, -9),
-        (15, 0),
-        (12, 9),
-        (0, 15),
-        (-12, 9),
-        (-15, 0),
-        (-12, -9),
+        (0, -offset),
+        (offset, 0),
+        (0, offset),
+        (-offset, 0),
+        (offset - 3, -(offset - 3)),
+        (-(offset - 3), offset - 3),
     ):
-        display.line(center_x, center_y, center_x + offset_x, center_y + offset_y, color=color, width=3)
-    display.circle(center_x, center_y, 10, outline=color, width=3)
-    display.circle(center_x, center_y, 3, fill=color)
+        display.circle(center_x + offset_x, center_y + offset_y, tooth_r, fill=color)
+    display.circle(center_x, center_y, inner_r, outline=color, width=stroke)
 
 
 def _draw_playlist_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
