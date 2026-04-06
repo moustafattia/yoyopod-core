@@ -165,17 +165,15 @@ The skills depend on YoyoPod's loguru-based logging implementation providing:
 
 **Trigger phrases:** "take a screenshot", "show me the screen", `/screenshot`
 
-**Two capture modes:**
+**Default capture mode:**
 
-- **Shadow buffer (default):** Captures the PIL shadow buffer that mirrors what the app sent to the display via LVGL flush callbacks. This shows what the app *intended* to render.
-- **LVGL readback (`--readback`):** Captures directly from LVGL's internal object tree via `lv_snapshot_take()`. This shows what LVGL *actually has rendered*, which may differ from the shadow buffer if there are partial flush issues or stale content.
+- **LVGL readback first:** Captures directly from LVGL's internal object tree via `lv_snapshot_take()`. This shows what LVGL *actually rendered*.
+- **Fallback:** If readback is unavailable, the app falls back to the adapter's screenshot method.
 
 **Behavior:**
 
 1. Read `pi-deploy.yaml` for `host`, `user`, `pid_file`, and `screenshot_path`.
-2. Send the appropriate signal to the app process:
-   - Default (shadow buffer): `SIGUSR1`
-   - With `--readback` flag: `SIGUSR2`
+2. Send `SIGUSR1` to the app process.
 3. Wait 1 second for the screenshot to be written.
 4. SCP the screenshot PNG from the Pi to a local temp file.
 5. Read the local PNG file using the Read tool (Claude is multimodal — it can see images).
@@ -183,9 +181,8 @@ The skills depend on YoyoPod's loguru-based logging implementation providing:
 
 **App-side requirements (in YoyoPod):**
 
-- `SIGUSR1` handler: saves the PIL shadow buffer to `screenshot_path` as PNG.
-- `SIGUSR2` handler: triggers LVGL `lv_snapshot_take()` on the active screen, converts RGB565 to RGB888, saves to `screenshot_path` as PNG.
-- The Whisplay adapter's `draw_rgb565_region()` must dual-write: send to hardware AND update the PIL shadow buffer (removing the early `return` on hardware path).
+- `SIGUSR1` handler: uses LVGL readback first and falls back to the adapter screenshot method.
+- `SIGUSR2` handler: remains available as a legacy shadow-first debug path.
 - `lv_conf.h` must enable `LV_USE_SNAPSHOT 1`.
 - C shim must expose a `yoyopy_lvgl_snapshot()` function.
 

@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
+LINPHONE_HOSTED_SIP_SERVER = "sip.linphone.org"
+LINPHONE_HOSTED_CONFERENCE_FACTORY_URI = "sip:conference-factory@sip.linphone.org"
+LINPHONE_HOSTED_FILE_TRANSFER_SERVER_URL = "https://files.linphone.org/lft.php"
+LINPHONE_HOSTED_LIME_SERVER_URL = "https://lime.linphone.org/lime-server/lime-server.php"
+
 
 class RegistrationState(Enum):
     """SIP registration states."""
@@ -72,7 +77,9 @@ class VoIPConfig:
     factory_config_path: str = "config/liblinphone_factory.conf"
     transport: str = "tcp"
     stun_server: str = ""
+    conference_factory_uri: str = ""
     file_transfer_server_url: str = ""
+    lime_server_url: str = ""
     iterate_interval_ms: int = 20
     message_store_dir: str = "data/messages"
     voice_note_store_dir: str = "data/voice_notes"
@@ -98,7 +105,9 @@ class VoIPConfig:
             factory_config_path=config_manager.get_voip_factory_config_path(),
             transport=config_manager.get_transport(),
             stun_server=config_manager.get_stun_server(),
+            conference_factory_uri=config_manager.get_conference_factory_uri(),
             file_transfer_server_url=config_manager.get_file_transfer_server_url(),
+            lime_server_url=config_manager.get_lime_server_url(),
             iterate_interval_ms=config_manager.get_voip_iterate_interval_ms(),
             message_store_dir=config_manager.get_message_store_dir(),
             voice_note_store_dir=config_manager.get_voice_note_store_dir(),
@@ -113,6 +122,41 @@ class VoIPConfig:
             mic_gain=config_manager.get_mic_gain(),
             speaker_volume=config_manager.get_speaker_volume(),
         )
+
+    def is_linphone_hosted(self) -> bool:
+        """Return whether this config targets the default Linphone hosted SIP service."""
+
+        return self.sip_server.strip().lower() == LINPHONE_HOSTED_SIP_SERVER
+
+    def effective_file_transfer_server_url(self) -> str:
+        """Return the configured or inferred file-transfer endpoint."""
+
+        configured = self.file_transfer_server_url.strip()
+        if configured:
+            return configured
+        if self.is_linphone_hosted():
+            return LINPHONE_HOSTED_FILE_TRANSFER_SERVER_URL
+        return ""
+
+    def effective_conference_factory_uri(self) -> str:
+        """Return the configured or inferred conference-factory URI."""
+
+        configured = self.conference_factory_uri.strip()
+        if configured:
+            return configured
+        if self.is_linphone_hosted():
+            return LINPHONE_HOSTED_CONFERENCE_FACTORY_URI
+        return ""
+
+    def effective_lime_server_url(self) -> str:
+        """Return the configured or inferred LIME/X3DH endpoint."""
+
+        configured = self.lime_server_url.strip()
+        if configured:
+            return configured
+        if self.is_linphone_hosted():
+            return LINPHONE_HOSTED_LIME_SERVER_URL
+        return ""
 
 
 @dataclass(frozen=True, slots=True)

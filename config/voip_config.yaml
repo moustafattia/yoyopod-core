@@ -24,7 +24,9 @@ audio:
   ring_output_device: ""
 
 messaging:
-  file_transfer_server_url: ""
+  conference_factory_uri: ""
+  file_transfer_server_url: "https://files.linphone.org/lft.php"
+  lime_server_url: "https://lime.linphone.org/lime-server/lime-server.php"
   iterate_interval_ms: 20
   message_store_dir: data/messages
   voice_note_store_dir: data/voice_notes

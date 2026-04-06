@@ -1,7 +1,6 @@
 ---
 description: Capture a screenshot of the app's display from Raspberry Pi
 allowed-tools: Read, Bash(ssh:*), Bash(scp:*)
-argument-hint: "[--readback]"
 ---
 
 ## Config
@@ -16,12 +15,6 @@ Extract these values from the YAML:
 
 Construct the SSH target as: `user@host` if user is set, otherwise just `host`.
 
-## Argument Parsing
-
-Parse the arguments string provided after `/screenshot`:
-
-- **--readback flag:** If `--readback` is present, use SIGUSR2 (LVGL readback — captures what is actually rendered on screen). Otherwise use SIGUSR1 (shadow buffer — captures what the app intended to send to the display).
-
 ## Steps
 
 1. **Check the app is running.** Run:
@@ -30,16 +23,9 @@ Parse the arguments string provided after `/screenshot`:
    ```
    If DEAD, tell the user the app is not running and suggest `/restart`.
 
-2. **Trigger the screenshot.** Send the appropriate signal to the app process:
-
-   For shadow buffer (default, SIGUSR1):
+2. **Trigger the screenshot.** Send the default screenshot signal to the app process:
    ```
    ssh <target> "kill -USR1 \$(cat <pid_file>)"
-   ```
-
-   For LVGL readback (--readback, SIGUSR2):
-   ```
-   ssh <target> "kill -USR2 \$(cat <pid_file>)"
    ```
 
 3. **Wait for the screenshot to be written.** Sleep 1 second to allow the app to process the signal and write the PNG file.
@@ -59,8 +45,8 @@ Parse the arguments string provided after `/screenshot`:
 6. **Display the screenshot.** Use the Read tool to read the local PNG file. Claude is multimodal and can see images directly. Present the screenshot in the conversation.
 
 7. **Explain what was captured.** After showing the image:
-   - If default mode: "This is the **shadow buffer** — what the app sent to the display via LVGL flush callbacks."
-   - If `--readback`: "This is the **LVGL readback** — what LVGL actually rendered on screen."
+   - "This is the default screenshot capture. On LVGL/Whisplay it uses **readback first**, so it reflects what LVGL actually rendered on screen."
+   - "If readback is unavailable, the app falls back to the adapter screenshot method."
 
    Remind the user they can ask follow-up questions about what they see, such as "why is the status bar missing?" or "what screen is this?"
 

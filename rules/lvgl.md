@@ -51,6 +51,6 @@ Must rebuild on Pi after changing `lv_conf.h` or `lvgl_shim.c`.
 
 ## Screenshot Support
 
-Two modes for capturing display output:
-- **Shadow buffer** (SIGUSR1): PIL buffer kept in sync via dual-write in `draw_rgb565_region()`
-- **LVGL readback** (SIGUSR2): `lv_snapshot_take()` captures the LVGL object tree directly
+Default screenshot capture should use LVGL readback first via `SIGUSR1`.
+If readback is unavailable, it may fall back to the adapter screenshot path.
+`SIGUSR2` is reserved as a legacy shadow-first debug path only.

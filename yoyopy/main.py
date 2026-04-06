@@ -27,6 +27,43 @@ from yoyopy.utils.logger import (
 )
 
 
+def _capture_screenshot(
+    *,
+    adapter: object | None,
+    screenshot_path: str,
+    app_log,
+    prefer_readback: bool,
+) -> bool:
+    """Capture a screenshot using readback-first or shadow-first fallback order."""
+
+    if adapter is None:
+        app_log.warning("Screenshot not available — no active display adapter")
+        return False
+
+    ordered_methods = (
+        ("save_screenshot_readback", "LVGL readback"),
+        ("save_screenshot", "shadow buffer"),
+    ) if prefer_readback else (
+        ("save_screenshot", "shadow buffer"),
+        ("save_screenshot_readback", "LVGL readback"),
+    )
+
+    for method_name, label in ordered_methods:
+        save_fn = getattr(adapter, method_name, None)
+        if not callable(save_fn):
+            continue
+        try:
+            if save_fn(screenshot_path):
+                app_log.info("Saved screenshot via {} -> {}", label, screenshot_path)
+                return True
+        except Exception:
+            logger.exception("Screenshot capture failed via {}", label)
+            return False
+
+    app_log.warning("Screenshot not available — adapter does not expose a usable capture method")
+    return False
+
+
 def load_app_settings(config_dir: str = "config") -> YoyoPodConfig:
     """Load app settings early enough to configure logging before app setup."""
 
@@ -126,30 +163,32 @@ def main() -> int:
         screenshot_path = "/tmp/yoyopod_screenshot.png"
         if hasattr(signal, "SIGUSR1"):
 
-            def handle_screenshot_shadow(_signum: int, _frame: object) -> None:
-                """SIGUSR1: save shadow buffer screenshot."""
+            def handle_screenshot_default(_signum: int, _frame: object) -> None:
+                """SIGUSR1: save a screenshot using readback-first capture."""
                 display = getattr(app, "display", None)
                 adapter = getattr(display, "_adapter", None) if display else None
-                save_fn = getattr(adapter, "save_screenshot", None)
-                if save_fn:
-                    save_fn(screenshot_path)
-                else:
-                    app_log.warning("Screenshot not available — no save_screenshot method")
+                _capture_screenshot(
+                    adapter=adapter,
+                    screenshot_path=screenshot_path,
+                    app_log=app_log,
+                    prefer_readback=True,
+                )
 
-            def handle_screenshot_readback(_signum: int, _frame: object) -> None:
-                """SIGUSR2: save LVGL readback screenshot."""
+            def handle_screenshot_legacy_shadow(_signum: int, _frame: object) -> None:
+                """SIGUSR2: save a screenshot using shadow-first capture for debugging."""
                 display = getattr(app, "display", None)
                 adapter = getattr(display, "_adapter", None) if display else None
-                save_fn = getattr(adapter, "save_screenshot_readback", None)
-                if save_fn:
-                    save_fn(screenshot_path)
-                else:
-                    app_log.warning("LVGL readback not available — no save_screenshot_readback method")
+                _capture_screenshot(
+                    adapter=adapter,
+                    screenshot_path=screenshot_path,
+                    app_log=app_log,
+                    prefer_readback=False,
+                )
 
-            signal.signal(signal.SIGUSR1, handle_screenshot_shadow)
-            signal.signal(signal.SIGUSR2, handle_screenshot_readback)
+            signal.signal(signal.SIGUSR1, handle_screenshot_default)
+            signal.signal(signal.SIGUSR2, handle_screenshot_legacy_shadow)
             app_log.info(
-                "Screenshot handlers installed (SIGUSR1=shadow, SIGUSR2=readback) -> {}",
+                "Screenshot handlers installed (SIGUSR1=default/readback-first, SIGUSR2=legacy shadow-first) -> {}",
                 screenshot_path,
             )
 

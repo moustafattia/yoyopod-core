@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import re
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -46,6 +47,11 @@ class VoiceNoteDraft:
     message_id: str = ""
     send_state: str = "idle"
     status_text: str = ""
+    send_started_at: float = 0.0
+
+
+VOICE_NOTE_SEND_TIMEOUT_SECONDS = 15.0
+VOICE_NOTE_CONTAINER_GAIN_DB = 12.0
 
 
 class VoIPManager:
@@ -124,6 +130,7 @@ class VoIPManager:
     def iterate(self) -> None:
         if self.running:
             self.backend.iterate()
+        self._check_active_voice_note_timeout()
 
     def make_call(self, sip_address: str, contact_name: str | None = None) -> bool:
         if not self.registered:
@@ -209,7 +216,7 @@ class VoIPManager:
             recipient_name=recipient_name or self._lookup_contact_name(recipient_address),
             file_path=file_path,
             send_state="recording",
-            status_text="Recording…",
+            status_text="Recording...",
         )
         return True
 
@@ -241,8 +248,13 @@ class VoIPManager:
             return False
 
         draft = self._active_voice_note
+        if not self.config.effective_file_transfer_server_url():
+            draft.send_state = "failed"
+            draft.status_text = "Voice notes unavailable"
+            return False
         draft.send_state = "sending"
-        draft.status_text = "Sending…"
+        draft.status_text = "Sending..."
+        draft.send_started_at = time.monotonic()
         message_id = self.backend.send_voice_note(
             draft.recipient_address,
             file_path=draft.file_path,
@@ -252,6 +264,7 @@ class VoIPManager:
         if not message_id:
             draft.send_state = "failed"
             draft.status_text = "Couldn't send"
+            draft.send_started_at = 0.0
             return False
 
         draft.message_id = message_id
@@ -315,8 +328,9 @@ class VoIPManager:
     def play_voice_note(self, file_path: str) -> bool:
         self._stop_voice_note_playback()
         try:
+            command = self._build_voice_note_playback_command(file_path)
             self._playback_process = subprocess.Popen(
-                ["aplay", "-q", file_path],
+                command,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -417,7 +431,15 @@ class VoIPManager:
             self._handle_message_failed(event)
 
     def _handle_message_received(self, message: VoIPMessageRecord) -> None:
-        record = self._decorate_message(message)
+        record = self._decorate_message(self._normalize_message_record(message))
+        logger.info(
+            "VoIPManager received message: id={} kind={} direction={} peer={} file={}",
+            record.id,
+            record.kind.value,
+            record.direction.value,
+            record.peer_sip_address,
+            record.local_file_path,
+        )
         self._message_store.upsert(record)
         for callback in self.message_received_callbacks:
             try:
@@ -439,10 +461,14 @@ class VoIPManager:
         if self._active_voice_note is not None and self._active_voice_note.message_id == event.message_id:
             if event.delivery_state in (MessageDeliveryState.SENT, MessageDeliveryState.DELIVERED):
                 self._active_voice_note.send_state = "sent"
-                self._active_voice_note.status_text = "Sent"
+                self._active_voice_note.status_text = (
+                    "Delivered" if event.delivery_state == MessageDeliveryState.DELIVERED else "Sent"
+                )
+                self._active_voice_note.send_started_at = 0.0
             elif event.delivery_state == MessageDeliveryState.FAILED:
                 self._active_voice_note.send_state = "failed"
-                self._active_voice_note.status_text = "Couldn't send"
+                self._active_voice_note.status_text = event.error or "Couldn't send"
+                self._active_voice_note.send_started_at = 0.0
 
         for callback in self.message_delivery_callbacks:
             try:
@@ -454,7 +480,18 @@ class VoIPManager:
     def _handle_message_download_completed(self, event: MessageDownloadCompleted) -> None:
         record = self._message_store.get(event.message_id)
         if record is None:
+            logger.warning(
+                "Voice-note download completed for unknown message id={} file={}",
+                event.message_id,
+                event.local_file_path,
+            )
             return
+        logger.info(
+            "VoIPManager download completed: id={} file={} mime={}",
+            event.message_id,
+            event.local_file_path,
+            event.mime_type,
+        )
         updated = replace(
             record,
             local_file_path=event.local_file_path,
@@ -473,7 +510,8 @@ class VoIPManager:
         self._message_store.update_delivery(event.message_id, MessageDeliveryState.FAILED)
         if self._active_voice_note is not None and self._active_voice_note.message_id == event.message_id:
             self._active_voice_note.send_state = "failed"
-            self._active_voice_note.status_text = "Couldn't send"
+            self._active_voice_note.status_text = event.reason or "Couldn't send"
+            self._active_voice_note.send_started_at = 0.0
         for callback in self.message_failure_callbacks:
             try:
                 callback(event.message_id, event.reason)
@@ -481,9 +519,48 @@ class VoIPManager:
                 logger.error("Error in message failure callback: {}", exc)
         self._notify_message_summary_change()
 
+    def _normalize_message_record(self, message: VoIPMessageRecord) -> VoIPMessageRecord:
+        if message.kind == MessageKind.VOICE_NOTE:
+            if message.mime_type == "application/vnd.gsma.rcs-ft-http+xml" and message.text:
+                return replace(
+                    message,
+                    mime_type=self._extract_voice_note_payload_mime(message.text) or "audio/wav",
+                    duration_ms=message.duration_ms or self._extract_voice_note_duration_ms(message.text),
+                    text="",
+                )
+            return message
+
+        if (
+            message.kind == MessageKind.TEXT
+            and message.mime_type == "application/vnd.gsma.rcs-ft-http+xml"
+            and "voice-recording=yes" in message.text
+        ):
+            return replace(
+                message,
+                kind=MessageKind.VOICE_NOTE,
+                mime_type=self._extract_voice_note_payload_mime(message.text) or "audio/wav",
+                duration_ms=message.duration_ms or self._extract_voice_note_duration_ms(message.text),
+                text="",
+            )
+        return message
+
     def _decorate_message(self, message: VoIPMessageRecord) -> VoIPMessageRecord:
         display_name = message.display_name or self._lookup_contact_name(message.peer_sip_address)
         return replace(message, display_name=display_name)
+
+    @staticmethod
+    def _extract_voice_note_payload_mime(xml_text: str) -> str:
+        match = re.search(r"<content-type>([^<]+)</content-type>", xml_text)
+        if not match:
+            return ""
+        return match.group(1).split(";", 1)[0].strip()
+
+    @staticmethod
+    def _extract_voice_note_duration_ms(xml_text: str) -> int:
+        match = re.search(r"<am:playing-length>(\d+)</am:playing-length>", xml_text)
+        if not match:
+            return 0
+        return max(0, int(match.group(1)))
 
     def _notify_message_summary_change(self) -> None:
         unread = self.unread_voice_note_count()
@@ -613,6 +690,36 @@ class VoIPManager:
                 pass
         finally:
             self._playback_process = None
+
+    @staticmethod
+    def _build_voice_note_playback_command(file_path: str) -> list[str]:
+        suffix = Path(file_path).suffix.lower()
+        if suffix in {".mka", ".mkv", ".ogg", ".opus", ".mp3", ".m4a"}:
+            return [
+                "ffplay",
+                "-nodisp",
+                "-autoexit",
+                "-loglevel",
+                "error",
+                "-af",
+                f"volume={VOICE_NOTE_CONTAINER_GAIN_DB}dB",
+                file_path,
+            ]
+        return ["aplay", "-q", file_path]
+
+    def _check_active_voice_note_timeout(self) -> None:
+        draft = self._active_voice_note
+        if draft is None or draft.send_state != "sending" or draft.send_started_at <= 0.0:
+            return
+        if (time.monotonic() - draft.send_started_at) < VOICE_NOTE_SEND_TIMEOUT_SECONDS:
+            return
+
+        draft.send_state = "failed"
+        draft.status_text = "Send timed out"
+        draft.send_started_at = 0.0
+        if draft.message_id:
+            self._message_store.update_delivery(draft.message_id, MessageDeliveryState.FAILED)
+        self._notify_message_summary_change()
 
     @staticmethod
     def _iso_now() -> str:

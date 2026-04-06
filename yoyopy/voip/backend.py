@@ -122,8 +122,29 @@ class LiblinphoneBackend:
 
         try:
             factory_config_path = self._resolve_factory_config_path()
+            conference_factory_uri = self.config.effective_conference_factory_uri()
+            file_transfer_server_url = self.config.effective_file_transfer_server_url()
+            lime_server_url = self.config.effective_lime_server_url()
             self.binding.init()
             self._configure_alsa_mixer()
+            if not self.config.conference_factory_uri and conference_factory_uri:
+                logger.info(
+                    "Using inferred conference factory {} for hosted account {}",
+                    conference_factory_uri,
+                    self.config.sip_server,
+                )
+            if not self.config.file_transfer_server_url and file_transfer_server_url:
+                logger.info(
+                    "Using inferred file-transfer server {} for hosted account {}",
+                    file_transfer_server_url,
+                    self.config.sip_server,
+                )
+            if not self.config.lime_server_url and lime_server_url:
+                logger.info(
+                    "Using inferred LIME server {} for hosted account {}",
+                    lime_server_url,
+                    self.config.sip_server,
+                )
             self.binding.start(
                 sip_server=self.config.sip_server,
                 sip_username=self.config.sip_username,
@@ -133,7 +154,9 @@ class LiblinphoneBackend:
                 factory_config_path=factory_config_path,
                 transport=self.config.transport,
                 stun_server=self.config.stun_server,
-                file_transfer_server_url=self.config.file_transfer_server_url,
+                conference_factory_uri=conference_factory_uri,
+                file_transfer_server_url=file_transfer_server_url,
+                lime_server_url=lime_server_url,
                 auto_download_incoming_voice_recordings=(
                     self.config.auto_download_incoming_voice_recordings
                 ),
@@ -297,10 +320,24 @@ class LiblinphoneBackend:
             return
 
         if event.type == 5:
+            logger.info(
+                "Liblinphone incoming message: id={} kind={} peer={} file={}",
+                event.message_id,
+                self._message_kind(event.message_kind).value,
+                event.peer_sip_address,
+                event.local_file_path,
+            )
             self._emit(MessageReceived(message=self._message_record(event)))
             return
 
         if event.type == 6:
+            logger.info(
+                "Liblinphone message delivery: id={} state={} peer={} reason={}",
+                event.message_id,
+                self._delivery_state(event.message_delivery_state).value,
+                event.peer_sip_address,
+                event.reason,
+            )
             self._emit(
                 MessageDeliveryChanged(
                     message_id=event.message_id,
@@ -312,6 +349,12 @@ class LiblinphoneBackend:
             return
 
         if event.type == 7:
+            logger.info(
+                "Liblinphone message download complete: id={} file={} mime={}",
+                event.message_id,
+                event.local_file_path,
+                event.mime_type,
+            )
             self._emit(
                 MessageDownloadCompleted(
                     message_id=event.message_id,
@@ -322,6 +365,11 @@ class LiblinphoneBackend:
             return
 
         if event.type == 8:
+            logger.warning(
+                "Liblinphone message failed: id={} reason={}",
+                event.message_id,
+                event.reason,
+            )
             self._emit(MessageFailed(message_id=event.message_id, reason=event.reason))
 
     def _message_record(self, event: LiblinphoneNativeEvent) -> VoIPMessageRecord:
