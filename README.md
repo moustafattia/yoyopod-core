@@ -1,6 +1,6 @@
 # YoyoPod
 
-YoyoPod is an iPod-inspired Raspberry Pi application that combines SIP calling and Mopidy-based music playback behind a small-screen, button-driven UI.
+YoyoPod is an iPod-inspired Raspberry Pi application that combines SIP calling and local-first Mopidy-based music playback behind a small-screen, button-driven UI.
 
 The current codebase supports three display/input modes:
 
@@ -26,6 +26,7 @@ On Whisplay, the one-button root hub currently exposes four cards:
   - `Talk`
   - `Ask`
   - `Setup`
+- `Listen` is now local-first and local-only with `Playlists`, `Recent`, and `Shuffle`
 - `Talk` now opens as a people-first contact deck: pick a person, then choose `Call` or `Voice Note`
 - `Ask` is now a staged shell with idle, listening, thinking, and response states
 - Whisplay production rendering now runs on the LVGL backend by default
@@ -100,7 +101,7 @@ Edit these in place for your environment:
 Important settings:
 
 - `config/yoyopod_config.yaml`: display hardware selection, Mopidy host/port, auto-resume behavior
-- `config/yoyopod_config.yaml`: `audio.listen_sources` controls which source cards appear under `Listen`
+- `docs/LOCAL_FIRST_MUSIC_PLAN.md`: local-only music direction and implementation notes
 - `config/yoyopod_config.yaml`: Whisplay gesture tuning under `input.whisplay_*_ms`
 - `config/yoyopod_config.yaml`: `input.ptt_navigation=false` is reserved for future voice/PTT work and is currently experimental
 - `config/yoyopod_config.yaml`: `power.watchdog_*` controls the PiSugar app heartbeat watchdog
