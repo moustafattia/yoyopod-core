@@ -124,7 +124,11 @@ class LinphonecBackend:
                 self.process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.process.terminate()
-                self.process.wait(timeout=1)
+                try:
+                    self.process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait(timeout=1)
             except Exception as exc:
                 logger.error(f"Error stopping linphone backend: {exc}")
             finally:

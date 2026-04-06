@@ -37,6 +37,7 @@ class ScreenManager:
         input_manager: Optional['InputManager'] = None,
         router: Optional[ScreenRouter] = None,
         on_screen_changed: Optional[Callable[[Optional[str]], None]] = None,
+        action_scheduler: Optional[Callable[[Callable[[], None]], None]] = None,
     ) -> None:
         """
         Initialize the screen manager.
@@ -52,6 +53,7 @@ class ScreenManager:
         self.screens: Dict[str, Screen] = {}
         self.router = router or ScreenRouter()
         self.on_screen_changed = on_screen_changed
+        self.action_scheduler = action_scheduler
 
         logger.info("ScreenManager initialized")
 
@@ -213,19 +215,25 @@ class ScreenManager:
             return
 
         # Helper function to dispatch an action and then refresh or route
+        def dispatch_action(action: "InputAction", data=None) -> None:
+            previous_screen = self.current_screen
+            if previous_screen is None:
+                return
+
+            previous_screen.handle_action(action, data)
+            navigation_request = previous_screen.consume_navigation_request()
+            if navigation_request is not None:
+                self.apply_navigation_request(navigation_request, source_screen=previous_screen)
+            if self.current_screen is previous_screen:
+                self.refresh_current_screen()
+
         def wrap_with_refresh(action: "InputAction"):
             """Wrap action handler to automatically refresh display after execution."""
             def wrapper(data=None):
-                previous_screen = self.current_screen
-                if previous_screen is None:
+                if self.action_scheduler is not None:
+                    self.action_scheduler(lambda: dispatch_action(action, data))
                     return
-
-                previous_screen.handle_action(action, data)
-                navigation_request = previous_screen.consume_navigation_request()
-                if navigation_request is not None:
-                    self.apply_navigation_request(navigation_request, source_screen=previous_screen)
-                if self.current_screen is previous_screen:
-                    self.refresh_current_screen()
+                dispatch_action(action, data)
             return wrapper
 
         for action in InputAction:

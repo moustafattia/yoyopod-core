@@ -1,4 +1,4 @@
-"""LVGL-backed view for the Ask placeholder screen."""
+"""LVGL-backed view for the recent-calls screen."""
 
 from __future__ import annotations
 
@@ -6,49 +6,55 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
-from yoyopy.ui.screens.theme import ASK
+from yoyopy.ui.screens.theme import TALK
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
-    from yoyopy.ui.screens.navigation.ask import AskScreen
+    from yoyopy.ui.screens.voip.call_history import CallHistoryScreen
 
 
 @dataclass(slots=True)
-class LvglAskView:
-    """Own the LVGL object lifecycle for AskScreen."""
+class LvglCallHistoryView:
+    """Own the LVGL object lifecycle for CallHistoryScreen."""
 
-    screen: "AskScreen"
+    screen: "CallHistoryScreen"
     backend: LvglDisplayBackend
     _built: bool = False
 
     def build(self) -> None:
         if self._built or self.backend.binding is None:
             return
-        self.backend.binding.ask_build()
+        self.backend.binding.playlist_build()
         self._built = True
 
     def sync(self) -> None:
         if not self._built or self.backend.binding is None:
             return
 
+        visible_items, visible_badges, selected_visible_index = self.screen.get_visible_window()
         context = self.screen.context
-        title_text, subtitle_text, footer_text, icon_key = self.screen.current_view_model()
-        self.backend.binding.ask_sync(
-            icon_key=icon_key,
-            title_text=title_text,
-            subtitle_text=subtitle_text,
-            footer=footer_text,
+
+        self.backend.binding.playlist_sync(
+            title_text="Recents",
+            page_text=None,
+            footer=self.screen._instruction_text(),
+            items=visible_items,
+            badges=visible_badges,
+            selected_visible_index=selected_visible_index,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),
             charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
             power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
-            accent=ASK.accent,
+            accent=TALK.accent,
+            empty_title="No recent calls",
+            empty_subtitle="Calls will appear here.",
+            empty_icon_key="talk",
         )
 
     def destroy(self) -> None:
         if not self._built or self.backend.binding is None:
             return
-        self.backend.binding.ask_destroy()
+        self.backend.binding.playlist_destroy()
         self._built = False
 
     @staticmethod
@@ -62,3 +68,4 @@ class LvglAskView:
         if context is None or not getattr(context, "voip_configured", False):
             return 0
         return 1 if getattr(context, "voip_ready", False) else 2
+

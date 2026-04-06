@@ -89,6 +89,7 @@ def test_call_screen_prefers_favorites_and_adds_contacts_shortcut(display: Displ
     assert [target.title for target in screen.quick_targets] == [
         "Alice",
         "Carol",
+        "Voice Note",
         "All Contacts",
     ]
 
@@ -108,7 +109,12 @@ def test_call_screen_falls_back_to_all_contacts_when_no_favorites(display: Displ
 
     screen.enter()
 
-    assert [target.title for target in screen.quick_targets] == ["Alice", "Bob"]
+    assert [target.title for target in screen.quick_targets] == [
+        "Alice",
+        "Bob",
+        "Voice Note",
+        "All Contacts",
+    ]
 
 
 def test_call_screen_select_calls_selected_quick_contact(display: Display) -> None:
@@ -172,6 +178,27 @@ def test_call_screen_browse_target_routes_to_full_contacts(display: Display) -> 
     assert screen.consume_navigation_request() == NavigationRequest.route("browse_contacts")
 
 
+def test_call_screen_voice_note_target_routes_to_voice_note_contacts(display: Display) -> None:
+    """Selecting the Voice Note action should open the recipient picker."""
+
+    contacts = [
+        Contact(name="Alice", sip_address="sip:alice@example.com", favorite=True),
+    ]
+    screen = CallScreen(
+        display,
+        AppContext(),
+        voip_manager=FakeVoIPManager(),
+        config_manager=FakeConfigManager(contacts),
+    )
+
+    screen.enter()
+    screen.selected_index = 1
+    screen.on_select()
+
+    assert screen.quick_targets[1].title == "Voice Note"
+    assert screen.consume_navigation_request() == NavigationRequest.route("voice_notes")
+
+
 def test_call_screen_render_smoke_includes_active_call_context(display: Display) -> None:
     """Rendering should stay stable when the VoIP hub reflects an active call state."""
     contacts = [
@@ -194,10 +221,7 @@ def test_call_screen_render_smoke_includes_active_call_context(display: Display)
     screen.enter()
     screen.render()
 
-    assert screen._call_context_lines(voip_manager.get_status()) == (
-        "Call connected",
-        "Alice",
-    )
+    assert screen._call_context_lines(voip_manager.get_status()) == ("In call", "Alice")
 
 
 def test_call_screen_hides_released_call_context(display: Display) -> None:

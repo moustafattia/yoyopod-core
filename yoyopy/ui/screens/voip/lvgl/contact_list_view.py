@@ -35,9 +35,9 @@ class LvglContactListView:
         context = self.screen.context
 
         self.backend.binding.playlist_sync(
-            title_text="Contacts",
+            title_text=self.screen.title_text,
             page_text=None,
-            footer="Tap next / Call" if self.screen.is_one_button_mode() else "A call | B back | X/Y move",
+            footer=self.screen._instruction_text(),
             items=visible_items,
             badges=visible_badges,
             selected_visible_index=selected_visible_index,
@@ -46,8 +46,8 @@ class LvglContactListView:
             charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
             power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
             accent=TALK.accent,
-            empty_title="No contacts",
-            empty_subtitle="Add contacts to call them here.",
+            empty_title=self.screen.empty_title,
+            empty_subtitle=self.screen.empty_subtitle,
             empty_icon_key="talk",
         )
 

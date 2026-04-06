@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 import pytest
 
 from yoyopy.app_context import AppContext
@@ -72,6 +74,8 @@ def test_screen_router_covers_call_hub_routes() -> None:
     router = ScreenRouter()
 
     assert router.resolve("call", "browse_contacts") == NavigationRequest.push("contacts")
+    assert router.resolve("call", "browse_history") == NavigationRequest.push("call_history")
+    assert router.resolve("call", "voice_notes") == NavigationRequest.push("voice_note_contacts")
     assert router.resolve("call", "call_started") == NavigationRequest.push("outgoing_call")
 
 
@@ -175,3 +179,31 @@ def test_screen_manager_routes_whisplay_hub_cards_through_stack(display: Display
     hub.selected_index = 3
     input_manager.simulate_action(InputAction.SELECT)
     assert screen_manager.current_screen is power
+
+
+def test_screen_manager_can_schedule_actions_for_main_thread(display: Display) -> None:
+    """A scheduled ScreenManager should defer screen actions until the scheduler runs them."""
+
+    context = AppContext()
+    input_manager = InputManager()
+    scheduled_callbacks: list[Callable[[], None]] = []
+    screen_manager = ScreenManager(
+        display,
+        input_manager,
+        action_scheduler=scheduled_callbacks.append,
+    )
+
+    hub = HubScreen(display, context)
+    listen = RoutableStubScreen(display, context)
+
+    screen_manager.register_screen("hub", hub)
+    screen_manager.register_screen("listen", listen)
+
+    screen_manager.replace_screen("hub")
+    input_manager.simulate_action(InputAction.SELECT)
+
+    assert screen_manager.current_screen is hub
+    assert len(scheduled_callbacks) == 1
+
+    scheduled_callbacks.pop()()
+    assert screen_manager.current_screen is listen

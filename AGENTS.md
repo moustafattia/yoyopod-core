@@ -1,6 +1,6 @@
 # YoyoPod Current Status & Developer Guide
 
-**Last Updated:** 2026-04-05
+**Last Updated:** 2026-04-06
 **Target Hardware:** Raspberry Pi Zero 2W
 **Project:** iPod-inspired VoIP and Mopidy player with a small-screen, button-driven UI
 
@@ -24,7 +24,7 @@
   - RTC helpers
   - PiSugar software watchdog support
 - Production Raspberry Pi deployment now has a committed systemd unit template under `deploy/systemd/`.
-- Whisplay now has an in-progress LVGL rendering path under `yoyopy/ui/lvgl_binding/`, and the Whisplay renderer default is `lvgl`.
+- Whisplay now runs on the LVGL rendering path in production under `yoyopy/ui/lvgl_binding/`.
 - CI validates the Python test suite with `uv sync --extra dev` and `uv run pytest -q`.
 - Raspberry Pi validation has a defined path through `scripts/pi_smoke.py` and `scripts/pi_remote.py`.
 
@@ -32,14 +32,11 @@ This file should reflect the repo as it exists on `main`. Older milestone notes 
 
 ---
 
-## Active LVGL Migration
+## LVGL Status
 
-- Whisplay is beginning a rendering migration from PIL drawing to LVGL-backed widgets.
-- The migration plan lives in `docs/LVGL_MIGRATION_PLAN.md`.
-- Until cutover is complete:
-  - Whisplay defaults to `display.whisplay_renderer: pil`
-  - Pimoroni and simulation remain on the PIL path
-  - current screens, routes, coordinators, FSMs, and input grammar stay intact
+- Whisplay has completed its production cutover to LVGL-backed rendering.
+- The migration plan and backend notes live in `docs/LVGL_MIGRATION_PLAN.md`.
+- Pimoroni and simulation still use the PIL rendering path.
 - Raw LVGL usage should remain confined to `yoyopy/ui/lvgl_binding/` and related display-layer code.
 
 ---
@@ -129,6 +126,7 @@ Key design points:
 - `yoyopy/voip/manager.py` - app-facing VoIP facade
 - `yoyopy/voip/backend.py` - `VoIPBackend`, `LinphonecBackend`, `MockVoIPBackend`
 - `yoyopy/voip/models.py` - SIP config and typed backend events
+- `yoyopy/voip/history.py` - persistent recent/missed-call store for the Talk flow
 
 ### Power
 
@@ -149,9 +147,11 @@ Key design points:
 - `yoyopy/ui/screens/router.py` - declarative route resolution
 - `yoyopy/ui/screens/theme.py` - Graffiti Buddy shared chrome, colors, icons, and status-bar renderer
 - `yoyopy/ui/screens/navigation/listen.py` - source chooser for the `Listen` root mode
-- `yoyopy/ui/screens/navigation/ask.py` - future-safe `Ask` mode placeholder
+- `yoyopy/ui/screens/navigation/ask.py` - staged `Ask` shell with idle/listening/thinking/response states
 - `yoyopy/ui/screens/system/power.py` - `Setup` screen with power and care pages
-- `yoyopy/ui/screens/voip/quick_call.py` - `Talk` quick-call hub
+- `yoyopy/ui/screens/voip/quick_call.py` - `Talk` quick-call hub with favorites, recents, and voice-note entry
+- `yoyopy/ui/screens/voip/call_history.py` - Talk recents and missed-call screen
+- `yoyopy/ui/screens/voip/voice_note.py` - voice-note shell for the Talk flow
 
 ### Configuration
 
@@ -225,9 +225,10 @@ Preferred remote helper:
 
 ```bash
 uv run python scripts/pi_remote.py status --host rpi-zero
-uv run python scripts/pi_remote.py preflight --host rpi-zero --with-mopidy --with-voip
+uv run python scripts/pi_remote.py preflight --host rpi-zero --with-mopidy --with-voip --with-lvgl-soak
 uv run python scripts/pi_remote.py sync --host rpi-zero --branch main
-uv run python scripts/pi_remote.py smoke --host rpi-zero --with-mopidy --with-voip
+uv run python scripts/pi_remote.py smoke --host rpi-zero --with-mopidy --with-voip --with-lvgl-soak
+uv run python scripts/pi_remote.py lvgl-soak --host rpi-zero --cycles 2
 uv run python scripts/pi_remote.py power --host rpi-zero
 uv run python scripts/pi_remote.py service install --host rpi-zero
 ```
@@ -237,6 +238,7 @@ Direct smoke helper on the Pi:
 ```bash
 uv run python scripts/pi_smoke.py
 uv run python scripts/pi_smoke.py --with-mopidy --with-voip
+uv run python scripts/pi_smoke.py --with-lvgl-soak
 ```
 
 If the Pi seems to keep old Python state after a pull, restart the running app process before retesting.
@@ -312,7 +314,7 @@ If an old doc mentions combined VoIP/music states as the implementation model, t
 The architecture cleanup is largely done. The remaining work is more product-facing:
 
 - dial pad / manual SIP entry
-- call history and missed-call UX
+- voice-note recording/send implementation behind the new shell
 - fuller settings UI
 - additional hardware-in-the-loop validation on Raspberry Pi
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from yoyopy.voip import (
     BackendStopped,
@@ -151,3 +153,29 @@ def test_voip_manager_stop_can_suppress_teardown_callbacks() -> None:
     assert manager.call_state == CallState.RELEASED
     assert manager.call_start_time is None
     assert manager.get_caller_info()["display_name"] == "Unknown"
+
+
+def test_linphone_backend_stop_kills_process_after_terminate_timeout() -> None:
+    """Stopping linphonec should hard-kill the process if terminate still hangs."""
+
+    backend = LinphonecBackend(build_config())
+    process = SimpleNamespace()
+    process.stdin = Mock()
+    process.wait = Mock(
+        side_effect=[
+            subprocess.TimeoutExpired(cmd=["linphonec"], timeout=2),
+            subprocess.TimeoutExpired(cmd=["linphonec"], timeout=1),
+            None,
+        ]
+    )
+    process.terminate = Mock()
+    process.kill = Mock()
+    backend.process = process
+    backend.running = True
+
+    backend.stop()
+
+    process.terminate.assert_called_once()
+    process.kill.assert_called_once()
+    assert process.wait.call_count == 3
+    assert backend.process is None

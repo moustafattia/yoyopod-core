@@ -134,6 +134,10 @@ class AppContext:
         self.is_connected: bool = False
         self.connection_type: str = "none"  # wifi, 4g, none
         self.current_audio_source: str = "local"
+        self.missed_calls: int = 0
+        self.recent_calls: List[str] = []
+        self.voice_note_recipient_name: str = ""
+        self.voice_note_recipient_address: str = ""
 
         # Navigation history for back button
         self.navigation_history: List[str] = []
@@ -377,3 +381,15 @@ class AppContext:
         self.app_uptime_seconds = max(0, int(app_uptime_seconds))
         self.screen_on_seconds = max(0, int(screen_on_seconds))
         self.screen_idle_seconds = max(0, int(idle_seconds))
+
+    def update_call_summary(self, *, missed_calls: int, recent_calls: list[str]) -> None:
+        """Update Talk summary state used by the hub and call-related screens."""
+
+        self.missed_calls = max(0, int(missed_calls))
+        self.recent_calls = list(recent_calls)
+
+    def set_voice_note_recipient(self, *, name: str, sip_address: str) -> None:
+        """Store the currently selected voice-note recipient."""
+
+        self.voice_note_recipient_name = name
+        self.voice_note_recipient_address = sip_address

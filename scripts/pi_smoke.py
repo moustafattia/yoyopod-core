@@ -23,6 +23,7 @@ from yoyopy.power import PowerManager
 from yoyopy.voip import VoIPConfig, VoIPManager
 from yoyopy.ui.display import Display, detect_hardware
 from yoyopy.ui.input import get_input_manager
+from scripts.lvgl_soak import run_lvgl_soak
 
 
 @dataclass
@@ -338,6 +339,23 @@ def voip_check(config_dir: Path, registration_timeout: float) -> CheckResult:
         manager.stop()
 
 
+def lvgl_soak_check(config_dir: Path) -> CheckResult:
+    """Run a small LVGL transition and sleep/wake soak on the active app path."""
+
+    ok, details = run_lvgl_soak(
+        config_dir=str(config_dir),
+        simulate=False,
+        cycles=1,
+        hold_seconds=0.15,
+        exercise_sleep=True,
+    )
+    return CheckResult(
+        name="lvgl_soak",
+        status="pass" if ok else "fail",
+        details=details,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line parser."""
     parser = argparse.ArgumentParser(
@@ -370,6 +388,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--with-voip",
         action="store_true",
         help="Also validate linphone startup and SIP registration",
+    )
+    parser.add_argument(
+        "--with-lvgl-soak",
+        action="store_true",
+        help="Also run a short LVGL transition and sleep/wake soak",
     )
     parser.add_argument(
         "--mopidy-timeout",
@@ -441,6 +464,9 @@ def main() -> int:
 
         if args.with_voip:
             results.append(voip_check(config_dir, args.voip_timeout))
+
+        if args.with_lvgl_soak:
+            results.append(lvgl_soak_check(config_dir))
     finally:
         if display is not None:
             try:

@@ -11,6 +11,7 @@ from yoyopy.voip.backend import (
     VoIPBackend,
 )
 from yoyopy.voip.manager import VoIPManager
+from yoyopy.voip.history import CallHistoryEntry, CallHistoryStore
 from yoyopy.voip.models import (
     BackendStopped,
     CallState,
@@ -24,6 +25,8 @@ from yoyopy.voip.models import (
 
 __all__ = [
     "VoIPManager",
+    "CallHistoryEntry",
+    "CallHistoryStore",
     "VoIPBackend",
     "LinphonecBackend",
     "MockVoIPBackend",

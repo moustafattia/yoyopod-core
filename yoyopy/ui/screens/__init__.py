@@ -28,10 +28,12 @@ from yoyopy.ui.screens.music import NowPlayingScreen, PlaylistScreen
 # VoIP screens
 from yoyopy.ui.screens.voip import (
     CallScreen,
+    CallHistoryScreen,
     IncomingCallScreen,
     OutgoingCallScreen,
     InCallScreen,
     ContactListScreen,
+    VoiceNoteScreen,
 )
 
 __all__ = [
@@ -53,8 +55,10 @@ __all__ = [
     'PlaylistScreen',
     # VoIP
     'CallScreen',
+    'CallHistoryScreen',
     'IncomingCallScreen',
     'OutgoingCallScreen',
     'InCallScreen',
     'ContactListScreen',
+    'VoiceNoteScreen',
 ]

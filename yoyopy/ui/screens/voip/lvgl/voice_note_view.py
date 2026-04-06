@@ -1,4 +1,4 @@
-"""LVGL-backed view for the Ask placeholder screen."""
+"""LVGL-backed view for the voice-note shell."""
 
 from __future__ import annotations
 
@@ -6,18 +6,18 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
-from yoyopy.ui.screens.theme import ASK
+from yoyopy.ui.screens.theme import TALK
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
-    from yoyopy.ui.screens.navigation.ask import AskScreen
+    from yoyopy.ui.screens.voip.voice_note import VoiceNoteScreen
 
 
 @dataclass(slots=True)
-class LvglAskView:
-    """Own the LVGL object lifecycle for AskScreen."""
+class LvglVoiceNoteView:
+    """Own the LVGL object lifecycle for VoiceNoteScreen."""
 
-    screen: "AskScreen"
+    screen: "VoiceNoteScreen"
     backend: LvglDisplayBackend
     _built: bool = False
 
@@ -42,7 +42,7 @@ class LvglAskView:
             battery_percent=self._battery_percent(context),
             charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
             power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
-            accent=ASK.accent,
+            accent=TALK.accent,
         )
 
     def destroy(self) -> None:
