@@ -1,8 +1,36 @@
-# YoyoPod Current Status & Developer Guide
+# YoyoPod — Agent Instructions
 
 **Last Updated:** 2026-04-06
 **Target Hardware:** Raspberry Pi Zero 2W
 **Project:** iPod-inspired VoIP and Mopidy player with a small-screen, button-driven UI
+
+---
+
+## Project Rules
+
+Follow all instructions in the `rules/` directory:
+- `rules/project.md` -- project overview, commands, configuration
+- `rules/architecture.md` -- system architecture, HAL layers, state machines
+- `rules/code-style.md` -- Python 3.12+, black, ruff, type hints
+- `rules/voip.md` -- linphonec integration, SIP patterns
+- `rules/lvgl.md` -- LVGL display pipeline, C shim, screenshot support
+- `rules/logging.md` -- loguru contract, subsystem tags, PID file
+- `rules/deploy.md` -- Pi deploy workflow and commands
+
+## Pi Deployment Skills
+
+Workflow instructions for deploying and debugging on Raspberry Pi are in `skills/`:
+
+| Skill | File | Purpose |
+|---|---|---|
+| deploy | `skills/deploy.md` | Git push, SSH pull, kill, restart, verify PID |
+| sync | `skills/sync.md` | Rsync dirty tree (no commit), kill, restart |
+| logs | `skills/logs.md` | Tail app logs with filtering |
+| restart | `skills/restart.md` | Kill processes and relaunch |
+| pi-status | `skills/pi-status.md` | Health check dashboard |
+| screenshot | `skills/screenshot.md` | Capture display (shadow buffer or LVGL readback) |
+
+When asked to deploy, sync, restart, check status, view logs, or take a screenshot on the Pi, read the matching file from `skills/` and follow its Steps section. All skills read config from `pi-deploy.yaml` in the project root.
 
 ---
 

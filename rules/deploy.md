@@ -1,0 +1,42 @@
+# Deploy Workflow
+
+Applies to: `pi-deploy.yaml`, deployment and debugging on Raspberry Pi
+
+## Manual Deploy
+
+```bash
+# Local: commit and push
+git push
+
+# RPi: pull and run
+ssh rpi-zero "cd yoyo-py && git pull origin main"
+ssh rpi-zero "cd yoyo-py && source .venv/bin/activate && python yoyopod.py"
+```
+
+Kill stuck processes before restarting:
+
+```bash
+ssh rpi-zero "killall -9 python linphonec"
+```
+
+## rpi-deploy Plugin
+
+The `rpi-deploy` Claude Code plugin automates the deploy cycle with slash commands:
+
+| Command | Purpose |
+|---|---|
+| `/deploy` | Git push, SSH pull, kill, restart, verify |
+| `/sync` | Rsync dirty tree (no commit), kill, restart |
+| `/logs [N] [--errors] [--filter <sub>]` | Tail app logs from Pi |
+| `/restart` | Kill processes and relaunch |
+| `/pi-status` | Health check dashboard (connectivity, memory, processes) |
+| `/screenshot [--readback]` | Capture display output as PNG |
+
+Config: `pi-deploy.yaml` in project root. Plugin repo: https://github.com/moustafattia/rpi-deploy
+
+## Target Hardware
+
+- Raspberry Pi Zero 2W (416 MB RAM)
+- SSH host alias: `rpi-zero` (configured in `~/.ssh/config`)
+- Project dir on Pi: `/home/pi/yoyo-py`
+- Venv on Pi: `/home/pi/yoyo-py/.venv`

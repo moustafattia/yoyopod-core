@@ -2459,6 +2459,38 @@ void yoyopy_lvgl_force_refresh(void) {
     lv_timer_handler();
 }
 
+int32_t yoyopy_lvgl_snapshot(unsigned char * output_buf, uint32_t buf_size) {
+    if(!g_initialized || g_display == NULL) {
+        yoyopy_set_error("display must be registered before taking a snapshot");
+        return -1;
+    }
+
+    if(output_buf == NULL || buf_size == 0) {
+        yoyopy_set_error("output buffer is NULL or zero-length");
+        return -1;
+    }
+
+    lv_obj_t * screen = lv_screen_active();
+    if(screen == NULL) {
+        yoyopy_set_error("no active screen for snapshot");
+        return -1;
+    }
+
+    lv_draw_buf_t * snapshot = lv_snapshot_take(screen, LV_COLOR_FORMAT_RGB565_SWAPPED);
+    if(snapshot == NULL) {
+        yoyopy_set_error("lv_snapshot_take returned NULL");
+        return -1;
+    }
+
+    uint32_t data_size = snapshot->header.w * snapshot->header.h
+                         * lv_color_format_get_size(snapshot->header.cf);
+    uint32_t copy_size = data_size < buf_size ? data_size : buf_size;
+    memcpy(output_buf, snapshot->data, copy_size);
+
+    lv_draw_buf_destroy(snapshot);
+    return (int32_t)copy_size;
+}
+
 const char * yoyopy_lvgl_last_error(void) {
     return g_last_error;
 }

@@ -28,5 +28,6 @@
 #define LV_USE_BUTTON 1
 #define LV_USE_IMAGE 1
 #define LV_USE_FLEX 1
+#define LV_USE_SNAPSHOT 1
 
 #endif

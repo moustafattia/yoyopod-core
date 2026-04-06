@@ -191,6 +191,7 @@ int yoyopy_lvgl_power_sync(
 void yoyopy_lvgl_power_destroy(void);
 void yoyopy_lvgl_clear_screen(void);
 void yoyopy_lvgl_force_refresh(void);
+int32_t yoyopy_lvgl_snapshot(unsigned char * output_buf, uint32_t buf_size);
 const char * yoyopy_lvgl_last_error(void);
 const char * yoyopy_lvgl_version(void);
 

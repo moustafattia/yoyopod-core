@@ -184,12 +184,12 @@ class WhisplayDisplayAdapter(DisplayHAL):
         height: int,
         pixel_data: bytes,
     ) -> None:
-        """Write an RGB565 region to hardware or the simulation buffer."""
+        """Write an RGB565 region to hardware and the PIL shadow buffer."""
 
         if not self.simulate and self.device:
             self.device.draw_image(x, y, width, height, pixel_data)
-            return
 
+        # Always keep PIL shadow buffer in sync for screenshots.
         self._paste_rgb565_region(x, y, width, height, pixel_data)
 
     def clear(self, color: Optional[Tuple[int, int, int]] = None) -> None:
@@ -405,6 +405,76 @@ class WhisplayDisplayAdapter(DisplayHAL):
                 logger.error(f"Failed to update Whisplay display: {e}")
         else:
             logger.debug("Whisplay display update (simulated)")
+
+    def save_screenshot(self, path: str) -> bool:
+        """Save the current PIL shadow buffer as a PNG screenshot.
+
+        The shadow buffer is kept in sync with every LVGL flush callback,
+        so this captures what the app most recently sent to the display.
+
+        Args:
+            path: File path to write the PNG image to.
+
+        Returns:
+            True if the screenshot was saved, False if no buffer exists.
+        """
+        if self.buffer is None:
+            logger.warning("No buffer available for screenshot")
+            return False
+        try:
+            self.buffer.save(path, "PNG")
+            logger.info("Shadow buffer screenshot saved to {}", path)
+            return True
+        except Exception as e:
+            logger.error("Failed to save screenshot to {}: {}", path, e)
+            return False
+
+    def save_screenshot_readback(self, path: str) -> bool:
+        """Save a screenshot by reading back from LVGL's internal object tree.
+
+        Uses lv_snapshot_take() via the C shim to capture what LVGL has
+        actually rendered, regardless of the shadow buffer state.
+
+        Args:
+            path: File path to write the PNG image to.
+
+        Returns:
+            True if the screenshot was saved, False on failure.
+        """
+        if self.ui_backend is None or not self.ui_backend.initialized:
+            logger.warning("LVGL backend not available for readback screenshot")
+            return False
+
+        binding = self.ui_backend.binding
+        if binding is None:
+            logger.warning("LVGL binding not available for readback screenshot")
+            return False
+
+        try:
+            pixel_data = binding.snapshot(self.WIDTH, self.HEIGHT)
+            if pixel_data is None:
+                logger.error("LVGL snapshot returned no data")
+                return False
+
+            # Convert RGB565_SWAPPED to RGB888 PIL Image
+            from PIL import Image as PilImage
+
+            img = PilImage.new("RGB", (self.WIDTH, self.HEIGHT))
+            pixels: list[tuple[int, int, int]] = []
+            for index in range(0, len(pixel_data), 2):
+                rgb565 = (pixel_data[index] << 8) | pixel_data[index + 1]
+                red = ((rgb565 >> 11) & 0x1F) * 255 // 31
+                green = ((rgb565 >> 5) & 0x3F) * 255 // 63
+                blue = (rgb565 & 0x1F) * 255 // 31
+                pixels.append((red, green, blue))
+
+            img.putdata(pixels)
+            img.save(path, "PNG")
+            logger.info("LVGL readback screenshot saved to {}", path)
+            return True
+        except Exception as e:
+            logger.error("Failed to save LVGL readback screenshot: {}", e)
+            return False
 
     def get_backend_kind(self) -> str:
         """Return the active UI rendering backend."""

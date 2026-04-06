@@ -121,6 +121,37 @@ def main() -> int:
         previous_sigterm = signal.getsignal(signal.SIGTERM)
         signal.signal(signal.SIGTERM, handle_shutdown_signal)
 
+        # Screenshot signal handlers (Unix only — SIGUSR1/SIGUSR2 unavailable on Windows).
+        screenshot_path = "/tmp/yoyopod_screenshot.png"
+        if hasattr(signal, "SIGUSR1"):
+
+            def handle_screenshot_shadow(_signum: int, _frame: object) -> None:
+                """SIGUSR1: save shadow buffer screenshot."""
+                display = getattr(app, "display", None)
+                adapter = getattr(display, "_adapter", None) if display else None
+                save_fn = getattr(adapter, "save_screenshot", None)
+                if save_fn:
+                    save_fn(screenshot_path)
+                else:
+                    app_log.warning("Screenshot not available — no save_screenshot method")
+
+            def handle_screenshot_readback(_signum: int, _frame: object) -> None:
+                """SIGUSR2: save LVGL readback screenshot."""
+                display = getattr(app, "display", None)
+                adapter = getattr(display, "_adapter", None) if display else None
+                save_fn = getattr(adapter, "save_screenshot_readback", None)
+                if save_fn:
+                    save_fn(screenshot_path)
+                else:
+                    app_log.warning("LVGL readback not available — no save_screenshot_readback method")
+
+            signal.signal(signal.SIGUSR1, handle_screenshot_shadow)
+            signal.signal(signal.SIGUSR2, handle_screenshot_readback)
+            app_log.info(
+                "Screenshot handlers installed (SIGUSR1=shadow, SIGUSR2=readback) -> {}",
+                screenshot_path,
+            )
+
         exit_code = 0
         try:
             app.run()

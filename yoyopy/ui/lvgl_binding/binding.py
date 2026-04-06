@@ -179,6 +179,7 @@ int yoyopy_lvgl_power_sync(
     void yoyopy_lvgl_power_destroy(void);
     void yoyopy_lvgl_clear_screen(void);
     void yoyopy_lvgl_force_refresh(void);
+    int32_t yoyopy_lvgl_snapshot(unsigned char * output_buf, uint32_t buf_size);
     const char * yoyopy_lvgl_last_error(void);
     const char * yoyopy_lvgl_version(void);
     """
@@ -724,6 +725,28 @@ class LvglBinding:
 
     def power_destroy(self) -> None:
         self.lib.yoyopy_lvgl_power_destroy()
+
+    def snapshot(self, width: int, height: int) -> bytes | None:
+        """Capture the active LVGL screen to an RGB565_SWAPPED byte buffer.
+
+        Uses lv_snapshot_take() to render the full LVGL object tree into
+        a temporary buffer, then copies the pixel data out.
+
+        Args:
+            width: Display width in pixels.
+            height: Display height in pixels.
+
+        Returns:
+            Bytes of RGB565_SWAPPED pixel data, or None on failure.
+        """
+        # 2 bytes per pixel for RGB565
+        buf_size = width * height * 2
+        output_buf = self.ffi.new(f"unsigned char[{buf_size}]")
+        result = self.lib.yoyopy_lvgl_snapshot(output_buf, buf_size)
+        if result < 0:
+            logger.error("LVGL snapshot failed: {}", self.last_error())
+            return None
+        return bytes(self.ffi.buffer(output_buf, result))
 
     def clear_screen(self) -> None:
         self.lib.yoyopy_lvgl_clear_screen()
