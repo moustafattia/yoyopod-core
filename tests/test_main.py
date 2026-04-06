@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import yoyopy.main as main_module
@@ -16,7 +17,8 @@ def test_configure_logger_uses_shared_utility(monkeypatch) -> None:
 
     def fake_build_logging_runtime_config(settings, *, base_dir):
         assert settings is fake_settings.logging
-        assert str(base_dir).endswith("yoyo-py")
+        assert base_dir == Path.cwd()
+        assert (base_dir / "pyproject.toml").exists()
         return fake_runtime
 
     def fake_init_logger(**kwargs) -> None:

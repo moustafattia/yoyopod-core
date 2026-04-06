@@ -282,6 +282,16 @@ class ConfigManager:
 
         return self.voip_settings.messaging.file_transfer_server_url
 
+    def get_conference_factory_uri(self) -> str:
+        """Get the configured conference-factory URI for hosted chat rooms."""
+
+        return self.voip_settings.messaging.conference_factory_uri
+
+    def get_lime_server_url(self) -> str:
+        """Get the configured Liblinphone LIME/X3DH server URL."""
+
+        return self.voip_settings.messaging.lime_server_url
+
     def get_voip_iterate_interval_ms(self) -> int:
         """Get the Liblinphone iterate cadence in milliseconds."""
 

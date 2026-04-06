@@ -355,9 +355,17 @@ class VoIPNetworkConfig:
 class VoIPMessagingConfig:
     """VoIP chat and voice-note settings."""
 
+    conference_factory_uri: str = config_value(
+        default="",
+        env="YOYOPOD_CONFERENCE_FACTORY_URI",
+    )
     file_transfer_server_url: str = config_value(
         default="",
         env="YOYOPOD_FILE_TRANSFER_SERVER_URL",
+    )
+    lime_server_url: str = config_value(
+        default="",
+        env="YOYOPOD_LIME_SERVER_URL",
     )
     iterate_interval_ms: int = config_value(
         default=20,

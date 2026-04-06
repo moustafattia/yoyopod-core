@@ -170,3 +170,31 @@ def test_config_manager_keeps_liblinphone_factory_config_path(tmp_path, monkeypa
         == "config/custom_liblinphone_factory.conf"
     )
     assert config_manager.get_voip_factory_config_path() == "config/custom_liblinphone_factory.conf"
+
+
+def test_config_manager_exposes_lime_server_url(tmp_path, monkeypatch) -> None:
+    """VoIP config should expose the configured LIME/X3DH server URL."""
+
+    monkeypatch.setenv("YOYOPOD_LIME_SERVER_URL", "https://lime.example.com/lime-server/lime-server.php")
+
+    config_manager = ConfigManager(config_dir=str(tmp_path))
+
+    assert (
+        config_manager.voip_settings.messaging.lime_server_url
+        == "https://lime.example.com/lime-server/lime-server.php"
+    )
+    assert (
+        config_manager.get_lime_server_url()
+        == "https://lime.example.com/lime-server/lime-server.php"
+    )
+
+
+def test_config_manager_exposes_conference_factory_uri(tmp_path, monkeypatch) -> None:
+    """VoIP config should expose the configured conference-factory URI."""
+
+    monkeypatch.setenv("YOYOPOD_CONFERENCE_FACTORY_URI", "sip:conference-factory@example.com")
+
+    config_manager = ConfigManager(config_dir=str(tmp_path))
+
+    assert config_manager.voip_settings.messaging.conference_factory_uri == "sip:conference-factory@example.com"
+    assert config_manager.get_conference_factory_uri() == "sip:conference-factory@example.com"

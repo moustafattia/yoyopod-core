@@ -22,12 +22,19 @@
 #include <linphone/api/c-chat-message-cbs.h>
 #include <linphone/api/c-chat-message.h>
 #include <linphone/api/c-chat-room.h>
+#include <linphone/api/c-chat-room-cbs.h>
+#include <linphone/api/c-chat-room-params.h>
 #include <linphone/api/c-content.h>
+#include <linphone/api/c-event.h>
+#include <linphone/api/c-event-log.h>
 #include <linphone/api/c-factory.h>
 #include <linphone/api/c-nat-policy.h>
 #include <linphone/api/c-recorder.h>
+#include <bctoolbox/list.h>
 #include <linphone/buffer.h>
 #include <linphone/core.h>
+#include <linphone/error_info.h>
+#include <linphone/im_notif_policy.h>
 #include <linphone/misc.h>
 
 #define YOYOPY_EVENT_QUEUE_CAPACITY 128
@@ -96,12 +103,15 @@ typedef struct {
     LinphoneAccountCbs *account_cbs;
     LinphoneCoreCbs *core_cbs;
     LinphoneChatMessageCbs *message_cbs;
+    LinphoneChatRoomCbs *chat_room_cbs;
     LinphoneCall *current_call;
     LinphoneRecorder *current_recorder;
     bool recorder_running;
     bool auto_download_incoming_voice_recordings;
     char voice_note_store_dir[512];
     char current_recording_path[512];
+    LinphoneChatRoom *attached_chat_rooms[64];
+    size_t attached_chat_room_count;
     pthread_mutex_t queue_lock;
     yoyopy_liblinphone_event_t queue[YOYOPY_EVENT_QUEUE_CAPACITY];
     size_t queue_head;
@@ -112,6 +122,14 @@ typedef struct {
 static yoyopy_liblinphone_state_t g_state = {0};
 static pthread_mutex_t g_error_lock = PTHREAD_MUTEX_INITIALIZER;
 static char g_last_error[512] = "";
+
+static void yoyopy_build_chat_room_peer(
+    LinphoneChatRoom *chat_room,
+    char *buffer,
+    size_t buffer_size
+);
+
+static void yoyopy_build_specs_string(char *buffer, size_t buffer_size);
 
 static void yoyopy_set_error(const char *format, ...) {
     va_list args;
@@ -126,6 +144,16 @@ static void yoyopy_clear_error(void) {
     pthread_mutex_lock(&g_error_lock);
     g_last_error[0] = '\0';
     pthread_mutex_unlock(&g_error_lock);
+}
+
+static void yoyopy_debug_log(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "YOYOPY-LIBLINPHONE: ");
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+    va_end(args);
 }
 
 static void yoyopy_copy_string(char *destination, size_t destination_size, const char *source) {
@@ -325,6 +353,61 @@ static void yoyopy_build_mime_type(const LinphoneContent *content, char *buffer,
     }
 }
 
+static int yoyopy_string_contains(const char *value, const char *needle) {
+    return value != NULL && needle != NULL && strstr(value, needle) != NULL;
+}
+
+static int yoyopy_extract_xml_tag_value(
+    const char *xml,
+    const char *open_tag,
+    const char *close_tag,
+    char *buffer,
+    size_t buffer_size
+) {
+    const char *start;
+    const char *end;
+    size_t length;
+
+    if (buffer_size == 0) {
+        return 0;
+    }
+    buffer[0] = '\0';
+    if (xml == NULL || open_tag == NULL || close_tag == NULL) {
+        return 0;
+    }
+
+    start = strstr(xml, open_tag);
+    if (start == NULL) {
+        return 0;
+    }
+    start += strlen(open_tag);
+    end = strstr(start, close_tag);
+    if (end == NULL || end <= start) {
+        return 0;
+    }
+    length = (size_t)(end - start);
+    if (length >= buffer_size) {
+        length = buffer_size - 1U;
+    }
+    memcpy(buffer, start, length);
+    buffer[length] = '\0';
+    return 1;
+}
+
+static int yoyopy_is_file_transfer_xml_content(const LinphoneContent *content) {
+    const char *type;
+    const char *subtype;
+
+    if (content == NULL) {
+        return 0;
+    }
+    type = linphone_content_get_type(content);
+    subtype = linphone_content_get_subtype(content);
+    return type != NULL && subtype != NULL
+           && strcmp(type, "application") == 0
+           && strcmp(subtype, "vnd.gsma.rcs-ft-http+xml") == 0;
+}
+
 static int yoyopy_is_voice_note_content(const LinphoneContent *content) {
     const char *type;
     if (content == NULL) {
@@ -334,9 +417,123 @@ static int yoyopy_is_voice_note_content(const LinphoneContent *content) {
     return type != NULL && strcmp(type, "audio") == 0;
 }
 
+static int yoyopy_is_voice_note_xml_text(const char *text) {
+    return yoyopy_string_contains(text, "voice-recording=yes");
+}
+
+static void yoyopy_extract_voice_note_payload_mime(
+    LinphoneChatMessage *message,
+    LinphoneContent *content,
+    char *buffer,
+    size_t buffer_size
+) {
+    char xml_value[256];
+    const char *text;
+    char *separator;
+
+    if (buffer_size == 0) {
+        return;
+    }
+    buffer[0] = '\0';
+
+    if (yoyopy_is_voice_note_content(content)) {
+        yoyopy_build_mime_type(content, buffer, buffer_size);
+        return;
+    }
+
+    text = linphone_chat_message_get_utf8_text(message);
+    if (!yoyopy_extract_xml_tag_value(
+            text,
+            "<content-type>",
+            "</content-type>",
+            xml_value,
+            sizeof(xml_value)
+        )) {
+        return;
+    }
+    separator = strchr(xml_value, ';');
+    if (separator != NULL) {
+        *separator = '\0';
+    }
+    yoyopy_copy_string(buffer, buffer_size, xml_value);
+}
+
+static int yoyopy_extract_voice_note_duration_ms(LinphoneChatMessage *message) {
+    char value[64];
+    const char *text = linphone_chat_message_get_utf8_text(message);
+    if (
+        !yoyopy_extract_xml_tag_value(
+            text,
+            "<am:playing-length>",
+            "</am:playing-length>",
+            value,
+            sizeof(value)
+        )
+    ) {
+        return 0;
+    }
+    return atoi(value);
+}
+
+static void yoyopy_extract_voice_note_extension(
+    LinphoneChatMessage *message,
+    const char *mime_type,
+    char *buffer,
+    size_t buffer_size
+) {
+    char file_name[256];
+    const char *text = linphone_chat_message_get_utf8_text(message);
+    const char *dot;
+
+    if (buffer_size == 0) {
+        return;
+    }
+    buffer[0] = '\0';
+    if (
+        yoyopy_extract_xml_tag_value(
+            text,
+            "<file-name>",
+            "</file-name>",
+            file_name,
+            sizeof(file_name)
+        )
+    ) {
+        dot = strrchr(file_name, '.');
+        if (dot != NULL && dot[1] != '\0') {
+            yoyopy_copy_string(buffer, buffer_size, dot + 1);
+            return;
+        }
+    }
+    if (mime_type != NULL && strstr(mime_type, "/") != NULL) {
+        const char *slash = strchr(mime_type, '/');
+        if (slash != NULL && slash[1] != '\0') {
+            yoyopy_copy_string(buffer, buffer_size, slash + 1);
+            return;
+        }
+    }
+    yoyopy_copy_string(buffer, buffer_size, "wav");
+}
+
+static int yoyopy_is_voice_note_message(LinphoneChatMessage *message) {
+    LinphoneContent *content;
+    const char *text;
+
+    if (message == NULL) {
+        return 0;
+    }
+    content = linphone_chat_message_get_file_transfer_information(message);
+    if (yoyopy_is_voice_note_content(content)) {
+        return 1;
+    }
+    if (!yoyopy_is_file_transfer_xml_content(content)) {
+        return 0;
+    }
+    text = linphone_chat_message_get_utf8_text(message);
+    return yoyopy_is_voice_note_xml_text(text);
+}
+
 static int yoyopy_message_kind_from_message(LinphoneChatMessage *message) {
-    LinphoneContent *content = linphone_chat_message_get_file_transfer_information(message);
-    return yoyopy_is_voice_note_content(content) ? YOYOPY_MESSAGE_KIND_VOICE_NOTE : YOYOPY_MESSAGE_KIND_TEXT;
+    return yoyopy_is_voice_note_message(message) ? YOYOPY_MESSAGE_KIND_VOICE_NOTE : YOYOPY_MESSAGE_KIND_TEXT;
 }
 
 static int yoyopy_message_direction_from_message(const LinphoneChatMessage *message) {
@@ -401,6 +598,7 @@ static void yoyopy_fill_message_event_common(
     LinphoneChatMessage *message
 ) {
     LinphoneContent *content;
+    char voice_note_mime[128];
 
     content = linphone_chat_message_get_file_transfer_information(message);
     event_value->message_kind = yoyopy_message_kind_from_message(message);
@@ -429,7 +627,26 @@ static void yoyopy_fill_message_event_common(
         sizeof(event_value->text),
         linphone_chat_message_get_utf8_text(message)
     );
-    yoyopy_build_mime_type(content, event_value->mime_type, sizeof(event_value->mime_type));
+    voice_note_mime[0] = '\0';
+    if (event_value->message_kind == YOYOPY_MESSAGE_KIND_VOICE_NOTE) {
+        yoyopy_extract_voice_note_payload_mime(
+            message,
+            content,
+            voice_note_mime,
+            sizeof(voice_note_mime)
+        );
+        yoyopy_copy_string(
+            event_value->mime_type,
+            sizeof(event_value->mime_type),
+            voice_note_mime[0] != '\0' ? voice_note_mime : "audio/wav"
+        );
+        event_value->duration_ms = yoyopy_extract_voice_note_duration_ms(message);
+        if (yoyopy_is_file_transfer_xml_content(content)) {
+            event_value->text[0] = '\0';
+        }
+    } else {
+        yoyopy_build_mime_type(content, event_value->mime_type, sizeof(event_value->mime_type));
+    }
     if (content != NULL) {
         yoyopy_copy_string(
             event_value->local_file_path,
@@ -448,24 +665,210 @@ static void yoyopy_attach_message_callbacks(LinphoneChatMessage *message) {
 
 static void yoyopy_generate_voice_note_path(
     const char *message_id,
-    const char *mime_type,
+    const char *extension,
     char *buffer,
     size_t buffer_size
 ) {
-    const char *extension = "wav";
-    if (mime_type != NULL && strstr(mime_type, "/") != NULL) {
-        const char *slash = strchr(mime_type, '/');
-        if (slash != NULL && slash[1] != '\0') {
-            extension = slash + 1;
-        }
+    const char *selected_extension = extension;
+    if (selected_extension == NULL || selected_extension[0] == '\0') {
+        selected_extension = "wav";
     }
-    snprintf(buffer, buffer_size, "%s/%s.%s", g_state.voice_note_store_dir, message_id, extension);
+    snprintf(
+        buffer,
+        buffer_size,
+        "%s/%s.%s",
+        g_state.voice_note_store_dir,
+        message_id,
+        selected_extension
+    );
+}
+
+static size_t yoyopy_list_size(const bctbx_list_t *list) {
+    size_t count = 0U;
+    const bctbx_list_t *item = list;
+    while (item != NULL) {
+        count += 1U;
+        item = item->next;
+    }
+    return count;
+}
+
+static void yoyopy_log_room_snapshot(LinphoneChatRoom *chat_room, const char *phase) {
+    const LinphoneChatRoomParams *room_params = NULL;
+    char peer[256];
+    peer[0] = '\0';
+    yoyopy_build_chat_room_peer(chat_room, peer, sizeof(peer));
+    if (chat_room != NULL) {
+        room_params = linphone_chat_room_get_current_params(chat_room);
+    }
+    yoyopy_debug_log(
+        "diag[%s] room peer=%s state=%d caps=%d backend=%d encryption_backend=%d group=%d encrypted=%d read_only=%d participants=%d",
+        phase,
+        peer,
+        chat_room != NULL ? (int)linphone_chat_room_get_state(chat_room) : -1,
+        chat_room != NULL ? (int)linphone_chat_room_get_capabilities(chat_room) : -1,
+        room_params != NULL ? (int)linphone_chat_room_params_get_backend(room_params) : -1,
+        room_params != NULL ? (int)linphone_chat_room_params_get_encryption_backend(room_params) : -1,
+        room_params != NULL && linphone_chat_room_params_group_enabled(room_params) ? 1 : 0,
+        room_params != NULL && linphone_chat_room_params_encryption_enabled(room_params) ? 1 : 0,
+        (chat_room != NULL && linphone_chat_room_is_read_only(chat_room)) ? 1 : 0,
+        chat_room != NULL ? linphone_chat_room_get_nb_participants(chat_room) : -1
+    );
+}
+
+static void yoyopy_log_account_diagnostics(const char *phase) {
+    const LinphoneAccountParams *params;
+    const bctbx_list_t *core_rooms;
+    bctbx_list_t *account_rooms;
+    LinphoneChatRoomParams *default_params;
+    const LinphoneAddress *conference_factory_address = NULL;
+    const char *file_transfer_server = "";
+    const char *lime_server = "";
+    char core_specs[256];
+    char conference_factory_uri[256];
+    size_t core_room_count;
+    size_t account_room_count;
+    const bctbx_list_t *item;
+
+    if (g_state.core == NULL || g_state.account == NULL) {
+        return;
+    }
+
+    params = linphone_account_get_params(g_state.account);
+    conference_factory_uri[0] = '\0';
+    if (params != NULL) {
+        conference_factory_address = linphone_account_params_get_conference_factory_address(params);
+        yoyopy_build_address_uri(
+            conference_factory_address,
+            conference_factory_uri,
+            sizeof(conference_factory_uri)
+        );
+        file_transfer_server = yoyopy_safe_string(
+            linphone_account_params_get_file_transfer_server(params)
+        );
+        lime_server = yoyopy_safe_string(
+            linphone_account_params_get_lime_server_url(params)
+        );
+    }
+
+    core_rooms = linphone_core_get_chat_rooms(g_state.core);
+    account_rooms = linphone_account_get_chat_rooms(g_state.account);
+    core_room_count = yoyopy_list_size(core_rooms);
+    account_room_count = yoyopy_list_size(account_rooms);
+
+    yoyopy_debug_log(
+        "diag[%s] account unread=%d core_rooms=%llu account_rooms=%llu cpim_basic=%d conference_factory=%s file_transfer=%s lime=%s",
+        phase,
+        linphone_account_get_unread_chat_message_count(g_state.account),
+        (unsigned long long)core_room_count,
+        (unsigned long long)account_room_count,
+        params != NULL && linphone_account_params_cpim_in_basic_chat_room_enabled(params) ? 1 : 0,
+        conference_factory_uri,
+        file_transfer_server,
+        lime_server
+    );
+    yoyopy_build_specs_string(core_specs, sizeof(core_specs));
+    yoyopy_debug_log("diag[%s] core_specs=%s", phase, core_specs);
+
+    default_params = linphone_core_create_default_chat_room_params(g_state.core);
+    if (default_params != NULL) {
+        yoyopy_debug_log(
+            "diag[%s] default_chat_room backend=%d encryption_backend=%d group=%d encrypted=%d rtt=%d ephemeral_mode=%d ephemeral_lifetime=%ld",
+            phase,
+            (int)linphone_chat_room_params_get_backend(default_params),
+            (int)linphone_chat_room_params_get_encryption_backend(default_params),
+            linphone_chat_room_params_group_enabled(default_params) ? 1 : 0,
+            linphone_chat_room_params_encryption_enabled(default_params) ? 1 : 0,
+            linphone_chat_room_params_rtt_enabled(default_params) ? 1 : 0,
+            (int)linphone_chat_room_params_get_ephemeral_mode(default_params),
+            linphone_chat_room_params_get_ephemeral_lifetime(default_params)
+        );
+        linphone_chat_room_params_unref(default_params);
+    }
+
+    item = core_rooms;
+    while (item != NULL) {
+        LinphoneChatRoom *chat_room = (LinphoneChatRoom *)bctbx_list_get_data(item);
+        yoyopy_log_room_snapshot(chat_room, phase);
+        item = item->next;
+    }
+
+    if (account_rooms != NULL) {
+        bctbx_list_free(account_rooms);
+    }
+}
+
+static void yoyopy_build_specs_string(char *buffer, size_t buffer_size) {
+    bctbx_list_t *specs;
+    bctbx_list_t *item;
+    size_t used = 0;
+
+    if (buffer_size == 0) {
+        return;
+    }
+    buffer[0] = '\0';
+    if (g_state.core == NULL) {
+        return;
+    }
+
+    specs = linphone_core_get_linphone_specs_list(g_state.core);
+    item = specs;
+    while (item != NULL) {
+        const char *spec = (const char *)bctbx_list_get_data(item);
+        int written;
+        if (spec == NULL) {
+            item = item->next;
+            continue;
+        }
+        written = snprintf(
+            buffer + used,
+            buffer_size - used,
+            "%s%s",
+            used == 0 ? "" : ",",
+            spec
+        );
+        if (written < 0 || (size_t)written >= (buffer_size - used)) {
+            break;
+        }
+        used += (size_t)written;
+        item = item->next;
+    }
+    if (specs != NULL) {
+        bctbx_list_free(specs);
+    }
+}
+
+static void yoyopy_ensure_core_spec(const char *spec) {
+    bctbx_list_t *specs;
+    bctbx_list_t *item;
+
+    if (g_state.core == NULL || spec == NULL || spec[0] == '\0') {
+        return;
+    }
+
+    specs = linphone_core_get_linphone_specs_list(g_state.core);
+    item = specs;
+    while (item != NULL) {
+        const char *current = (const char *)bctbx_list_get_data(item);
+        if (current != NULL && strcmp(current, spec) == 0) {
+            if (specs != NULL) {
+                bctbx_list_free(specs);
+            }
+            return;
+        }
+        item = item->next;
+    }
+    if (specs != NULL) {
+        bctbx_list_free(specs);
+    }
+    linphone_core_add_linphone_spec(g_state.core, spec);
 }
 
 static void yoyopy_prepare_auto_download(LinphoneChatMessage *message) {
     LinphoneContent *content;
     char message_id[128];
     char mime_type[128];
+    char extension[32];
     char target_path[512];
 
     if (!g_state.auto_download_incoming_voice_recordings || message == NULL) {
@@ -473,16 +876,51 @@ static void yoyopy_prepare_auto_download(LinphoneChatMessage *message) {
     }
 
     content = linphone_chat_message_get_file_transfer_information(message);
-    if (!yoyopy_is_voice_note_content(content)) {
+    if (!yoyopy_is_voice_note_message(message) || content == NULL) {
         return;
     }
 
     yoyopy_build_message_id(message, message_id, sizeof(message_id));
-    yoyopy_build_mime_type(content, mime_type, sizeof(mime_type));
-    yoyopy_generate_voice_note_path(message_id, mime_type, target_path, sizeof(target_path));
+    yoyopy_extract_voice_note_payload_mime(message, content, mime_type, sizeof(mime_type));
+    yoyopy_extract_voice_note_extension(message, mime_type, extension, sizeof(extension));
+    yoyopy_generate_voice_note_path(message_id, extension, target_path, sizeof(target_path));
     yoyopy_ensure_directory(g_state.voice_note_store_dir);
     linphone_content_set_file_path(content, target_path);
+    yoyopy_debug_log(
+        "auto-download voice note message_id=%s mime_type=%s target=%s",
+        message_id,
+        mime_type,
+        target_path
+    );
     linphone_chat_message_download_content(message, content);
+}
+
+static void yoyopy_build_chat_room_peer(
+    LinphoneChatRoom *chat_room,
+    char *buffer,
+    size_t buffer_size
+) {
+    if (buffer_size == 0) {
+        return;
+    }
+    buffer[0] = '\0';
+    if (chat_room == NULL) {
+        return;
+    }
+    yoyopy_build_address_uri(linphone_chat_room_get_peer_address(chat_room), buffer, buffer_size);
+}
+
+static int yoyopy_chat_room_already_attached(LinphoneChatRoom *chat_room) {
+    size_t index;
+    if (chat_room == NULL) {
+        return 1;
+    }
+    for (index = 0; index < g_state.attached_chat_room_count; ++index) {
+        if (g_state.attached_chat_rooms[index] == chat_room) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static int yoyopy_apply_transports(LinphoneCore *core, const char *transport) {
@@ -632,6 +1070,9 @@ static void yoyopy_on_registration_state_changed(
 ) {
     (void)account;
     yoyopy_queue_registration_event(state, message);
+    if (state == LinphoneRegistrationOk) {
+        yoyopy_log_account_diagnostics("registration_ok");
+    }
 }
 
 static void yoyopy_on_call_state_changed(
@@ -656,11 +1097,327 @@ static void yoyopy_on_message_received(
     LinphoneChatRoom *chat_room,
     LinphoneChatMessage *message
 ) {
+    char peer[256];
     (void)core;
     (void)chat_room;
+    peer[0] = '\0';
+    if (message != NULL) {
+        yoyopy_build_address_uri(
+            linphone_chat_message_get_peer_address(message),
+            peer,
+            sizeof(peer)
+        );
+    }
+    yoyopy_debug_log(
+        "message_received peer=%s kind=%d delivery=%d",
+        peer,
+        yoyopy_message_kind_from_message(message),
+        yoyopy_map_message_delivery_state(linphone_chat_message_get_state(message))
+    );
     yoyopy_attach_message_callbacks(message);
     yoyopy_queue_message_received_event(message);
     yoyopy_prepare_auto_download(message);
+}
+
+static void yoyopy_on_chat_room_message_received(
+    LinphoneChatRoom *chat_room,
+    LinphoneChatMessage *message
+) {
+    char peer[256];
+    peer[0] = '\0';
+    yoyopy_build_chat_room_peer(chat_room, peer, sizeof(peer));
+    yoyopy_debug_log(
+        "chat_room.message_received peer=%s kind=%d delivery=%d",
+        peer,
+        yoyopy_message_kind_from_message(message),
+        yoyopy_map_message_delivery_state(linphone_chat_message_get_state(message))
+    );
+    yoyopy_attach_message_callbacks(message);
+    yoyopy_queue_message_received_event(message);
+    yoyopy_prepare_auto_download(message);
+}
+
+static void yoyopy_on_chat_room_messages_received(
+    LinphoneChatRoom *chat_room,
+    const bctbx_list_t *messages
+) {
+    const bctbx_list_t *item = messages;
+    char peer[256];
+    peer[0] = '\0';
+    yoyopy_build_chat_room_peer(chat_room, peer, sizeof(peer));
+    yoyopy_debug_log("chat_room.messages_received peer=%s", peer);
+    while (item != NULL) {
+        LinphoneChatMessage *message = (LinphoneChatMessage *)bctbx_list_get_data(item);
+        if (message != NULL) {
+            yoyopy_on_chat_room_message_received(chat_room, message);
+        }
+        item = item->next;
+    }
+}
+
+static void yoyopy_on_chat_room_chat_message_received(
+    LinphoneChatRoom *chat_room,
+    const LinphoneEventLog *event_log
+) {
+    LinphoneChatMessage *message = linphone_event_log_get_chat_message(event_log);
+    char peer[256];
+    peer[0] = '\0';
+    yoyopy_build_chat_room_peer(chat_room, peer, sizeof(peer));
+    yoyopy_debug_log("chat_room.chat_message_received peer=%s", peer);
+    if (message != NULL) {
+        yoyopy_on_chat_room_message_received(chat_room, message);
+    }
+}
+
+static void yoyopy_on_chat_room_undecryptable_message_received(
+    LinphoneChatRoom *chat_room,
+    LinphoneChatMessage *message
+) {
+    char peer[256];
+    peer[0] = '\0';
+    yoyopy_build_chat_room_peer(chat_room, peer, sizeof(peer));
+    yoyopy_debug_log(
+        "chat_room.undecryptable_message_received peer=%s kind=%d",
+        peer,
+        message != NULL ? yoyopy_message_kind_from_message(message) : 0
+    );
+}
+
+static void yoyopy_attach_chat_room_callbacks(LinphoneChatRoom *chat_room) {
+    char peer[256];
+    if (chat_room == NULL || g_state.chat_room_cbs == NULL || yoyopy_chat_room_already_attached(chat_room)) {
+        return;
+    }
+    if (g_state.attached_chat_room_count >= (sizeof(g_state.attached_chat_rooms) / sizeof(g_state.attached_chat_rooms[0]))) {
+        yoyopy_debug_log("chat_room callback registry is full; skipping room attachment");
+        return;
+    }
+    linphone_chat_room_add_callbacks(chat_room, g_state.chat_room_cbs);
+    g_state.attached_chat_rooms[g_state.attached_chat_room_count++] = chat_room;
+    peer[0] = '\0';
+    yoyopy_build_chat_room_peer(chat_room, peer, sizeof(peer));
+    yoyopy_debug_log(
+        "attached chat_room callbacks peer=%s state=%d read_only=%d",
+        peer,
+        (int)linphone_chat_room_get_state(chat_room),
+        linphone_chat_room_is_read_only(chat_room) ? 1 : 0
+    );
+}
+
+static void yoyopy_attach_all_chat_room_callbacks(void) {
+    const bctbx_list_t *rooms;
+    const bctbx_list_t *item;
+    if (g_state.core == NULL) {
+        return;
+    }
+    rooms = linphone_core_get_chat_rooms(g_state.core);
+    item = rooms;
+    while (item != NULL) {
+        LinphoneChatRoom *chat_room = (LinphoneChatRoom *)bctbx_list_get_data(item);
+        yoyopy_attach_chat_room_callbacks(chat_room);
+        item = item->next;
+    }
+}
+
+static LinphoneChatRoomParams *yoyopy_create_preferred_chat_room_params(void) {
+    LinphoneChatRoomParams *params;
+    const LinphoneAccountParams *account_params;
+    const char *file_transfer_server = "";
+    const char *lime_server = "";
+
+    if (g_state.core == NULL) {
+        return NULL;
+    }
+
+    params = linphone_core_create_default_chat_room_params(g_state.core);
+    if (params == NULL) {
+        return NULL;
+    }
+
+    linphone_chat_room_params_enable_group(params, FALSE);
+    linphone_chat_room_params_enable_rtt(params, FALSE);
+
+    account_params = g_state.account != NULL ? linphone_account_get_params(g_state.account) : NULL;
+    if (account_params != NULL) {
+        file_transfer_server = yoyopy_safe_string(
+            linphone_account_params_get_file_transfer_server(account_params)
+        );
+        lime_server = yoyopy_safe_string(
+            linphone_account_params_get_lime_server_url(account_params)
+        );
+    }
+
+    if (file_transfer_server[0] != '\0' || lime_server[0] != '\0') {
+        linphone_chat_room_params_set_backend(params, LinphoneChatRoomBackendFlexisipChat);
+        linphone_chat_room_params_set_subject(params, "YoyoPod");
+    }
+    if (lime_server[0] != '\0') {
+        linphone_chat_room_params_set_encryption_backend(params, LinphoneChatRoomEncryptionBackendLime);
+        linphone_chat_room_params_enable_encryption(params, TRUE);
+    }
+
+    return params;
+}
+
+static LinphoneChatRoomParams *yoyopy_create_direct_chat_room_params(void) {
+    LinphoneChatRoomParams *params;
+
+    if (g_state.core == NULL) {
+        return NULL;
+    }
+
+    params = linphone_core_create_default_chat_room_params(g_state.core);
+    if (params == NULL) {
+        return NULL;
+    }
+
+    linphone_chat_room_params_set_backend(params, LinphoneChatRoomBackendBasic);
+    linphone_chat_room_params_enable_group(params, FALSE);
+    linphone_chat_room_params_enable_rtt(params, FALSE);
+    linphone_chat_room_params_enable_encryption(params, FALSE);
+    return params;
+}
+
+static int yoyopy_should_prefer_hosted_chat_rooms(void) {
+    const LinphoneAccountParams *account_params;
+    const char *file_transfer_server = "";
+    const char *lime_server = "";
+    const LinphoneAddress *conference_factory_address = NULL;
+
+    if (g_state.account == NULL) {
+        return 0;
+    }
+
+    account_params = linphone_account_get_params(g_state.account);
+    if (account_params == NULL) {
+        return 0;
+    }
+
+    conference_factory_address = linphone_account_params_get_conference_factory_address(account_params);
+    file_transfer_server = yoyopy_safe_string(
+        linphone_account_params_get_file_transfer_server(account_params)
+    );
+    lime_server = yoyopy_safe_string(
+        linphone_account_params_get_lime_server_url(account_params)
+    );
+
+    return conference_factory_address != NULL || file_transfer_server[0] != '\0' || lime_server[0] != '\0';
+}
+
+static void yoyopy_prune_stale_basic_chat_rooms(void) {
+    const bctbx_list_t *rooms;
+    const bctbx_list_t *item;
+    int removed_any = 0;
+
+    if (
+        g_state.core == NULL ||
+        !yoyopy_should_prefer_hosted_chat_rooms() ||
+        g_state.auto_download_incoming_voice_recordings
+    ) {
+        return;
+    }
+
+    rooms = linphone_core_get_chat_rooms(g_state.core);
+    item = rooms;
+    while (item != NULL) {
+        const bctbx_list_t *next = item->next;
+        LinphoneChatRoom *chat_room = (LinphoneChatRoom *)bctbx_list_get_data(item);
+        const LinphoneChatRoomParams *room_params = NULL;
+
+        if (chat_room != NULL) {
+            room_params = linphone_chat_room_get_current_params(chat_room);
+            if (
+                room_params != NULL &&
+                linphone_chat_room_params_get_backend(room_params) == LinphoneChatRoomBackendBasic
+            ) {
+                char peer[256];
+                peer[0] = '\0';
+                yoyopy_build_chat_room_peer(chat_room, peer, sizeof(peer));
+                yoyopy_debug_log("pruning stale basic chat room peer=%s", peer);
+                linphone_core_delete_chat_room(g_state.core, chat_room);
+                removed_any = 1;
+            }
+        }
+
+        item = next;
+    }
+
+    if (removed_any) {
+        g_state.attached_chat_room_count = 0U;
+    }
+}
+
+static void yoyopy_on_messages_received(
+    LinphoneCore *core,
+    LinphoneChatRoom *chat_room,
+    const bctbx_list_t *messages
+) {
+    const bctbx_list_t *item = messages;
+    (void)core;
+    (void)chat_room;
+    yoyopy_debug_log("messages_received aggregated callback triggered");
+    while (item != NULL) {
+        LinphoneChatMessage *message = (LinphoneChatMessage *)bctbx_list_get_data(item);
+        if (message != NULL) {
+            yoyopy_on_message_received(core, chat_room, message);
+        }
+        item = item->next;
+    }
+}
+
+static void yoyopy_on_message_received_unable_decrypt(
+    LinphoneCore *core,
+    LinphoneChatRoom *chat_room,
+    LinphoneChatMessage *message
+) {
+    char peer[256];
+    (void)core;
+    (void)chat_room;
+    peer[0] = '\0';
+    if (message != NULL) {
+        yoyopy_build_address_uri(
+            linphone_chat_message_get_peer_address(message),
+            peer,
+            sizeof(peer)
+        );
+    }
+    yoyopy_debug_log(
+        "message_received_unable_decrypt peer=%s kind=%d",
+        peer,
+        message != NULL ? yoyopy_message_kind_from_message(message) : 0
+    );
+}
+
+static void yoyopy_on_subscription_state_changed(
+    LinphoneCore *core,
+    LinphoneEvent *linphone_event,
+    LinphoneSubscriptionState state
+) {
+    const LinphoneErrorInfo *error_info;
+    char from[256];
+    char to[256];
+    char resource[256];
+
+    (void)core;
+    if (linphone_event == NULL) {
+        return;
+    }
+
+    error_info = linphone_event_get_error_info(linphone_event);
+    yoyopy_build_address_uri(linphone_event_get_from(linphone_event), from, sizeof(from));
+    yoyopy_build_address_uri(linphone_event_get_to(linphone_event), to, sizeof(to));
+    yoyopy_build_address_uri(linphone_event_get_resource(linphone_event), resource, sizeof(resource));
+    yoyopy_debug_log(
+        "subscription_state_changed name=%s state=%s reason=%s protocol_code=%d phrase=%s from=%s to=%s resource=%s",
+        yoyopy_safe_string(linphone_event_get_name(linphone_event)),
+        yoyopy_safe_string(linphone_subscription_state_to_string(state)),
+        yoyopy_safe_string(linphone_reason_to_string(linphone_event_get_reason(linphone_event))),
+        error_info != NULL ? linphone_error_info_get_protocol_code(error_info) : -1,
+        error_info != NULL ? yoyopy_safe_string(linphone_error_info_get_phrase(error_info)) : "",
+        from,
+        to,
+        resource
+    );
 }
 
 static void yoyopy_on_message_state_changed(
@@ -680,10 +1437,13 @@ static int yoyopy_configure_account(
     const char *sip_password_ha1,
     const char *sip_identity,
     const char *transport,
-    const char *file_transfer_server_url
+    const char *conference_factory_uri,
+    const char *file_transfer_server_url,
+    const char *lime_server_url
 ) {
     LinphoneAddress *server_address = NULL;
     LinphoneAddress *identity_address = NULL;
+    LinphoneAddress *conference_factory_address = NULL;
     LinphoneAccountParams *params = NULL;
     LinphoneAccount *account = NULL;
     LinphoneAuthInfo *auth_info = NULL;
@@ -719,9 +1479,31 @@ static int yoyopy_configure_account(
         goto fail;
     }
     linphone_account_params_enable_register(params, TRUE);
+    linphone_account_params_enable_cpim_in_basic_chat_room(params, TRUE);
+    if (conference_factory_uri != NULL && conference_factory_uri[0] != '\0') {
+        conference_factory_address = linphone_factory_create_address(
+            g_state.factory,
+            conference_factory_uri
+        );
+        if (conference_factory_address == NULL) {
+            yoyopy_set_error("Failed to create conference factory address");
+            goto fail;
+        }
+        linphone_account_params_set_conference_factory_address(params, conference_factory_address);
+        linphone_account_params_set_audio_video_conference_factory_address(
+            params,
+            conference_factory_address
+        );
+    }
     if (file_transfer_server_url != NULL && file_transfer_server_url[0] != '\0') {
         linphone_account_params_set_file_transfer_server(params, file_transfer_server_url);
         linphone_core_set_file_transfer_server(g_state.core, file_transfer_server_url);
+    }
+    if (lime_server_url != NULL && lime_server_url[0] != '\0') {
+        linphone_core_enable_lime_x3dh(g_state.core, TRUE);
+        linphone_account_params_set_lime_server_url(params, lime_server_url);
+    } else {
+        linphone_core_enable_lime_x3dh(g_state.core, FALSE);
     }
 
     account = linphone_core_create_account(g_state.core, params);
@@ -765,12 +1547,18 @@ static int yoyopy_configure_account(
 
     linphone_address_unref(server_address);
     linphone_address_unref(identity_address);
+    if (conference_factory_address != NULL) {
+        linphone_address_unref(conference_factory_address);
+    }
     linphone_account_params_unref(params);
     return 0;
 
 fail:
     if (account != NULL) {
         linphone_account_unref(account);
+    }
+    if (conference_factory_address != NULL) {
+        linphone_address_unref(conference_factory_address);
     }
     if (identity_address != NULL) {
         linphone_address_unref(identity_address);
@@ -834,7 +1622,9 @@ int yoyopy_liblinphone_start(
     const char *factory_config_path,
     const char *transport,
     const char *stun_server,
+    const char *conference_factory_uri,
     const char *file_transfer_server_url,
+    const char *lime_server_url,
     int32_t auto_download_incoming_voice_recordings,
     const char *playback_device_id,
     const char *ringer_device_id,
@@ -857,6 +1647,16 @@ int yoyopy_liblinphone_start(
         yoyopy_set_error("Missing SIP identity or SIP server for Liblinphone startup");
         return -1;
     }
+
+    linphone_logging_service_set_log_level_mask(
+        linphone_logging_service_get(),
+        LinphoneLogLevelDebug
+            | LinphoneLogLevelTrace
+            | LinphoneLogLevelMessage
+            | LinphoneLogLevelWarning
+            | LinphoneLogLevelError
+            | LinphoneLogLevelFatal
+    );
 
     g_state.core = linphone_factory_create_core_3(
         g_state.factory,
@@ -882,21 +1682,52 @@ int yoyopy_liblinphone_start(
         yoyopy_liblinphone_stop();
         return -1;
     }
+    g_state.chat_room_cbs = linphone_factory_create_chat_room_cbs(g_state.factory);
+    if (g_state.chat_room_cbs == NULL) {
+        yoyopy_set_error("Failed to create Liblinphone chat room callbacks");
+        yoyopy_liblinphone_stop();
+        return -1;
+    }
 
     g_state.auto_download_incoming_voice_recordings = auto_download_incoming_voice_recordings != 0;
     yoyopy_copy_string(g_state.voice_note_store_dir, sizeof(g_state.voice_note_store_dir), voice_note_store_dir);
     yoyopy_ensure_directory(g_state.voice_note_store_dir);
 
     linphone_chat_message_cbs_set_msg_state_changed(g_state.message_cbs, yoyopy_on_message_state_changed);
+    linphone_chat_room_cbs_set_message_received(g_state.chat_room_cbs, yoyopy_on_chat_room_message_received);
+    linphone_chat_room_cbs_set_messages_received(g_state.chat_room_cbs, yoyopy_on_chat_room_messages_received);
+    linphone_chat_room_cbs_set_chat_message_received(
+        g_state.chat_room_cbs,
+        yoyopy_on_chat_room_chat_message_received
+    );
+    linphone_chat_room_cbs_set_undecryptable_message_received(
+        g_state.chat_room_cbs,
+        yoyopy_on_chat_room_undecryptable_message_received
+    );
     linphone_core_cbs_set_call_state_changed(g_state.core_cbs, yoyopy_on_call_state_changed);
+    linphone_core_cbs_set_subscription_state_changed(
+        g_state.core_cbs,
+        yoyopy_on_subscription_state_changed
+    );
+    linphone_core_cbs_set_messages_received(g_state.core_cbs, yoyopy_on_messages_received);
     linphone_core_cbs_set_message_received(g_state.core_cbs, yoyopy_on_message_received);
+    linphone_core_cbs_set_message_received_unable_decrypt(
+        g_state.core_cbs,
+        yoyopy_on_message_received_unable_decrypt
+    );
     linphone_core_add_callbacks(g_state.core, g_state.core_cbs);
 
     linphone_core_set_playback_device(g_state.core, playback_device_id);
     linphone_core_set_ringer_device(g_state.core, ringer_device_id);
     linphone_core_set_capture_device(g_state.core, capture_device_id);
     linphone_core_set_media_device(g_state.core, media_device_id);
+    linphone_core_enable_chat(g_state.core);
+    if (linphone_core_get_im_notif_policy(g_state.core) != NULL) {
+        linphone_im_notif_policy_enable_all(linphone_core_get_im_notif_policy(g_state.core));
+    }
+    yoyopy_ensure_core_spec("conference/2.0");
     linphone_core_enable_echo_cancellation(g_state.core, echo_cancellation != 0);
+    linphone_core_set_chat_messages_aggregation_enabled(g_state.core, FALSE);
     linphone_core_set_mic_gain_db(g_state.core, ((float)mic_gain * 0.3f));
     linphone_core_set_playback_gain_db(g_state.core, ((float)speaker_volume * 0.12f) - 6.0f);
     if (yoyopy_configure_media_policy(g_state.core, g_state.factory) != 0) {
@@ -917,10 +1748,7 @@ int yoyopy_liblinphone_start(
     if (file_transfer_server_url != NULL && file_transfer_server_url[0] != '\0') {
         linphone_core_set_file_transfer_server(g_state.core, file_transfer_server_url);
     }
-    linphone_core_enable_auto_download_voice_recordings(
-        g_state.core,
-        g_state.auto_download_incoming_voice_recordings ? TRUE : FALSE
-    );
+    linphone_core_enable_auto_download_voice_recordings(g_state.core, FALSE);
 
     if (
         yoyopy_configure_account(
@@ -930,7 +1758,9 @@ int yoyopy_liblinphone_start(
             sip_password_ha1,
             sip_identity,
             transport,
-            file_transfer_server_url
+            conference_factory_uri,
+            file_transfer_server_url,
+            lime_server_url
         ) != 0
     ) {
         yoyopy_liblinphone_stop();
@@ -942,6 +1772,9 @@ int yoyopy_liblinphone_start(
         yoyopy_liblinphone_stop();
         return -1;
     }
+    yoyopy_prune_stale_basic_chat_rooms();
+    yoyopy_attach_all_chat_room_callbacks();
+    yoyopy_log_account_diagnostics("startup");
 
     g_state.started = true;
     yoyopy_clear_error();
@@ -963,6 +1796,10 @@ void yoyopy_liblinphone_stop(void) {
     if (g_state.message_cbs != NULL) {
         linphone_chat_message_cbs_unref(g_state.message_cbs);
         g_state.message_cbs = NULL;
+    }
+    if (g_state.chat_room_cbs != NULL) {
+        linphone_chat_room_cbs_unref(g_state.chat_room_cbs);
+        g_state.chat_room_cbs = NULL;
     }
     if (g_state.core_cbs != NULL) {
         linphone_core_cbs_unref(g_state.core_cbs);
@@ -988,6 +1825,8 @@ void yoyopy_liblinphone_stop(void) {
 void yoyopy_liblinphone_iterate(void) {
     if (g_state.started && g_state.core != NULL) {
         linphone_core_iterate(g_state.core);
+        yoyopy_prune_stale_basic_chat_rooms();
+        yoyopy_attach_all_chat_room_callbacks();
     }
 }
 
@@ -1077,11 +1916,82 @@ int yoyopy_liblinphone_set_muted(int32_t muted) {
     return 0;
 }
 
-static LinphoneChatRoom *yoyopy_get_chat_room(const char *sip_address) {
+static LinphoneChatRoom *yoyopy_get_chat_room_for_params(
+    const char *sip_address,
+    LinphoneChatRoomParams *params,
+    const char *phase
+) {
+    LinphoneChatRoom *chat_room = NULL;
+    LinphoneAddress *remote_address = NULL;
+    const LinphoneAddress *local_address = NULL;
+    const LinphoneAccountParams *account_params = NULL;
+    bctbx_list_t *participants = NULL;
+
     if (!g_state.started || g_state.core == NULL) {
+        if (params != NULL) {
+            linphone_chat_room_params_unref(params);
+        }
         return NULL;
     }
-    return linphone_core_get_chat_room_from_uri(g_state.core, sip_address);
+
+    remote_address = linphone_factory_create_address(g_state.factory, sip_address);
+    account_params = g_state.account != NULL ? linphone_account_get_params(g_state.account) : NULL;
+    local_address = account_params != NULL ? linphone_account_params_get_identity_address(account_params) : NULL;
+
+    if (params != NULL && remote_address != NULL) {
+        chat_room = linphone_core_search_chat_room(
+            g_state.core,
+            params,
+            local_address,
+            remote_address,
+            NULL
+        );
+        if (chat_room == NULL) {
+            participants = bctbx_list_append(participants, remote_address);
+            chat_room = linphone_core_create_chat_room_6(
+                g_state.core,
+                params,
+                local_address,
+                participants
+            );
+        }
+    }
+
+    if (chat_room == NULL) {
+        chat_room = linphone_core_get_chat_room_from_uri(g_state.core, sip_address);
+    }
+
+    yoyopy_attach_chat_room_callbacks(chat_room);
+    if (chat_room != NULL) {
+        yoyopy_log_room_snapshot(chat_room, phase != NULL ? phase : "lookup");
+    }
+
+    if (participants != NULL) {
+        bctbx_list_free(participants);
+    }
+    if (remote_address != NULL) {
+        linphone_address_unref(remote_address);
+    }
+    if (params != NULL) {
+        linphone_chat_room_params_unref(params);
+    }
+    return chat_room;
+}
+
+static LinphoneChatRoom *yoyopy_get_chat_room(const char *sip_address) {
+    return yoyopy_get_chat_room_for_params(
+        sip_address,
+        yoyopy_create_preferred_chat_room_params(),
+        "lookup"
+    );
+}
+
+static LinphoneChatRoom *yoyopy_get_direct_chat_room(const char *sip_address) {
+    return yoyopy_get_chat_room_for_params(
+        sip_address,
+        yoyopy_create_direct_chat_room_params(),
+        "direct_lookup"
+    );
 }
 
 static void yoyopy_fill_message_id_out(
@@ -1110,7 +2020,7 @@ int yoyopy_liblinphone_send_text_message(
         return -1;
     }
 
-    chat_room = yoyopy_get_chat_room(sip_address);
+    chat_room = yoyopy_get_direct_chat_room(sip_address);
     if (chat_room == NULL) {
         yoyopy_set_error("Liblinphone could not resolve a chat room for %s", sip_address);
         return -1;
@@ -1141,6 +2051,7 @@ int yoyopy_liblinphone_start_voice_recording(const char *file_path) {
         yoyopy_set_error("Failed to create Liblinphone recorder params");
         return -1;
     }
+    linphone_recorder_params_set_file_format(params, LinphoneRecorderFileFormatWav);
 
     g_state.current_recorder = linphone_core_create_recorder(g_state.core, params);
     linphone_recorder_params_unref(params);
@@ -1222,7 +2133,7 @@ int yoyopy_liblinphone_send_voice_note(
         return -1;
     }
 
-    chat_room = yoyopy_get_chat_room(sip_address);
+    chat_room = yoyopy_get_direct_chat_room(sip_address);
     if (chat_room == NULL) {
         yoyopy_set_error("Liblinphone could not resolve a chat room for %s", sip_address);
         return -1;
