@@ -1,4 +1,4 @@
-# CLAUDE.md
+# Codex Instructions
 
 Follow all instructions in the `rules/` directory at the repo root:
 - `rules/project.md` -- project overview, commands, configuration
@@ -8,9 +8,3 @@ Follow all instructions in the `rules/` directory at the repo root:
 - `rules/lvgl.md` -- LVGL display pipeline, C shim, screenshot support
 - `rules/logging.md` -- loguru contract, subsystem tags, PID file
 - `rules/deploy.md` -- Pi deploy workflow, rpi-deploy plugin commands
-
-## Claude Code Specific
-
-- Use Bash tool for SSH/SCP commands to the Pi
-- Use Read tool to display PNG screenshots (multimodal)
-- The rpi-deploy plugin provides `/deploy`, `/sync`, `/logs`, `/restart`, `/pi-status`, `/screenshot` commands
