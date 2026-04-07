@@ -87,7 +87,7 @@ class OutputVolumeController:
 
     def get_system_volume(self) -> int | None:
         """Read the current ALSA mixer percentage for the configured control."""
-        for command in self._amixer_candidates("sget"):
+        for command in self._amixer_get_candidates():
             result = self._run_amixer(command)
             if result is None:
                 return None
@@ -104,23 +104,70 @@ class OutputVolumeController:
     def set_system_volume(self, volume: int) -> bool:
         """Write one ALSA mixer percentage for the configured control."""
         target = max(0, min(100, int(volume)))
-        for command in self._amixer_candidates("sset", f"{target}%"):
+        applied = False
+        for command in self._amixer_set_candidates(f"{target}%"):
             result = self._run_amixer(command)
             if result is None:
                 return False
             if result.returncode == 0:
-                return True
+                applied = True
 
-        logger.warning("Failed to set ALSA output volume for {} to {}%", self.mixer_control, target)
+        if applied:
+            return True
+
+        logger.warning("Failed to set ALSA output volume to {}%", target)
         return False
 
-    def _amixer_candidates(self, verb: str, *extra: str) -> list[list[str]]:
-        """Return candidate amixer commands across the usual ALSA cards."""
-        candidates = [
-            [self.amixer_binary, verb, self.mixer_control, *extra],
-            [self.amixer_binary, "-c", "1", verb, self.mixer_control, *extra],
-            [self.amixer_binary, "-c", "0", verb, self.mixer_control, *extra],
-        ]
+    def _amixer_get_candidates(self) -> list[list[str]]:
+        """Return candidate amixer reads in priority order."""
+        return self._commands_for_targets(
+            "sget",
+            "",
+            targets=[
+                (None, self.mixer_control),
+                ("1", self.mixer_control),
+                ("0", self.mixer_control),
+                ("1", "Speaker"),
+                ("1", "Headphone"),
+                ("0", "Speaker"),
+                ("0", "Headphone"),
+            ],
+        )
+
+    def _amixer_set_candidates(self, value: str) -> list[list[str]]:
+        """Return candidate amixer writes for active output controls."""
+        return self._commands_for_targets(
+            "sset",
+            value,
+            targets=[
+                (None, self.mixer_control),
+                ("1", self.mixer_control),
+                ("0", self.mixer_control),
+                ("1", "Speaker"),
+                ("1", "Headphone"),
+                ("0", "Speaker"),
+                ("0", "Headphone"),
+            ],
+        )
+
+    def _commands_for_targets(
+        self,
+        verb: str,
+        value: str,
+        *,
+        targets: list[tuple[str | None, str]],
+    ) -> list[list[str]]:
+        """Build unique amixer commands for one ordered target list."""
+        candidates: list[list[str]] = []
+        for card, control in targets:
+            command = [self.amixer_binary]
+            if card is not None:
+                command.extend(["-c", card])
+            command.extend([verb, control])
+            if value:
+                command.append(value)
+            candidates.append(command)
+
         unique: list[list[str]] = []
         seen: set[tuple[str, ...]] = set()
         for command in candidates:

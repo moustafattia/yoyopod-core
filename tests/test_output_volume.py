@@ -41,7 +41,7 @@ def test_output_volume_controller_sets_system_and_music_volume(monkeypatch) -> N
     controller = OutputVolumeController(music_backend=backend)
 
     assert controller.set_volume(55) is True
-    assert calls == [["amixer", "sset", "Master", "55%"]]
+    assert calls[0] == ["amixer", "sset", "Master", "55%"]
     assert backend.get_volume() == 55
 
 
@@ -69,7 +69,11 @@ def test_output_volume_controller_falls_back_to_card_one_when_default_card_fails
 
     def fake_run(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
         calls.append(args)
-        if args == ["amixer", "sget", "Master"]:
+        if args in (
+            ["amixer", "sget", "Master"],
+            ["amixer", "-c", "1", "sget", "Master"],
+            ["amixer", "-c", "0", "sget", "Master"],
+        ):
             return subprocess.CompletedProcess(
                 args=args,
                 returncode=1,
@@ -91,7 +95,9 @@ Simple mixer control 'Master',0
     controller = OutputVolumeController()
 
     assert controller.get_system_volume() == 100
-    assert calls[:2] == [
+    assert calls[:4] == [
         ["amixer", "sget", "Master"],
         ["amixer", "-c", "1", "sget", "Master"],
+        ["amixer", "-c", "0", "sget", "Master"],
+        ["amixer", "-c", "1", "sget", "Speaker"],
     ]
