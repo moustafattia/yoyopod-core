@@ -7,6 +7,7 @@ and playlist management via HTTP JSON-RPC API.
 
 import requests
 import time
+from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass
 from threading import Thread, Event
@@ -34,12 +35,23 @@ class MopidyTrack:
         Returns:
             MopidyTrack instance
         """
-        artists = [artist.get('name', 'Unknown') for artist in track_data.get('artists', [])]
-        album = track_data.get('album', {}).get('name', '')
+        raw_artists = track_data.get('artists') or []
+        artists = [
+            str(artist.get('name') or 'Unknown')
+            for artist in raw_artists
+            if isinstance(artist, dict)
+        ]
+
+        raw_album = track_data.get('album')
+        album = raw_album.get('name', '') if isinstance(raw_album, dict) else ''
+        uri = track_data.get('uri', '')
+        name = track_data.get('name') or 'Unknown Track'
+        if isinstance(name, str) and uri.startswith('file://'):
+            name = Path(name).stem or name
 
         return cls(
-            uri=track_data.get('uri', ''),
-            name=track_data.get('name', 'Unknown Track'),
+            uri=uri,
+            name=name,
             artists=artists,
             album=album,
             length=track_data.get('length', 0),
@@ -299,13 +311,51 @@ class MopidyClient:
         try:
             tl_track = self._rpc_call("core.playback.get_current_tl_track")
 
-            if tl_track and "track" in tl_track:
-                track = MopidyTrack.from_mopidy(tl_track["track"])
+            track_data = tl_track.get("track") if isinstance(tl_track, dict) else None
+            if track_data:
+                track = MopidyTrack.from_mopidy(track_data)
                 return track
+
+            queued_track = self._fallback_track_from_tracklist()
+            if queued_track is not None:
+                return queued_track
+
+            if self.current_track is not None:
+                return self.current_track
 
             return None
         except Exception as e:
             logger.error(f"Failed to get current track: {e}")
+            return None
+
+    def _fallback_track_from_tracklist(self) -> Optional[MopidyTrack]:
+        """Return the current queued track when Mopidy lags on current_tl_track."""
+
+        try:
+            tl_tracks = self._rpc_call("core.tracklist.get_tl_tracks")
+            if not isinstance(tl_tracks, list) or not tl_tracks:
+                return None
+
+            index = self._rpc_call("core.tracklist.index")
+            if not isinstance(index, int) or index < 0 or index >= len(tl_tracks):
+                index = 0
+
+            selected_track = tl_tracks[index]
+            track_data = selected_track.get("track") if isinstance(selected_track, dict) else None
+            if track_data:
+                return MopidyTrack.from_mopidy(track_data)
+
+            for tl_track in tl_tracks:
+                if not isinstance(tl_track, dict):
+                    continue
+                track_data = tl_track.get("track")
+                if track_data:
+                    return MopidyTrack.from_mopidy(track_data)
+
+            if not track_data:
+                return None
+        except Exception as e:
+            logger.debug(f"Failed to derive current track from tracklist: {e}")
             return None
 
     def get_playback_state(self) -> str:

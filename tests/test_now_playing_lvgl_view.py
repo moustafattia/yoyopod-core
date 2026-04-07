@@ -110,6 +110,7 @@ def test_now_playing_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     assert payload["title_text"] == "Adventure Song"
     assert payload["artist_text"] == "Kid Band"
     assert payload["state_text"] == "PLAYING"
+    assert payload["footer"] == "Tap skip / Double pause"
     assert payload["progress_permille"] == 250
     assert payload["voip_state"] == 1
     assert payload["battery_percent"] == 84
@@ -139,4 +140,5 @@ def test_now_playing_screen_syncs_offline_state_through_lvgl() -> None:
     assert payload["title_text"] == "Music Offline"
     assert payload["artist_text"] == "Trying to reconnect"
     assert payload["state_text"] == "OFFLINE"
+    assert payload["footer"] == "Tap skip / Double play"
     assert payload["progress_permille"] == 0

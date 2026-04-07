@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.music.lvgl import LvglNowPlayingView
-from yoyopy.ui.screens.theme import INK, LISTEN, MUTED, SURFACE, draw_icon, render_footer, render_header, rounded_panel, text_fit
+from yoyopy.ui.screens.theme import INK, LISTEN, MUTED, SURFACE, draw_icon, render_footer, render_header, rounded_panel, text_fit, wrap_text
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
@@ -62,7 +62,7 @@ class NowPlayingScreen(Screen):
             lvgl_view.sync()
             return
 
-        track_title, artist, progress, state_label, _is_playing = self._track_snapshot()
+        track_title, artist, progress, state_label, is_playing = self._track_snapshot()
 
         content_top = render_header(
             self.display,
@@ -87,41 +87,63 @@ class NowPlayingScreen(Screen):
             shadow=True,
         )
 
-        draw_icon(self.display, "listen", (self.display.WIDTH // 2) - 24, panel_top + 16, 48, LISTEN.accent)
+        draw_icon(self.display, "listen", (self.display.WIDTH // 2) - 22, panel_top + 14, 44, LISTEN.accent)
 
         state_width, _ = self.display.get_text_size(state_label, 10)
         rounded_panel(
             self.display,
             (self.display.WIDTH - state_width - 22) // 2,
-            panel_top + 68,
+            panel_top + 64,
             (self.display.WIDTH + state_width + 22) // 2,
-            panel_top + 90,
+            panel_top + 86,
             fill=LISTEN.accent_dim,
             outline=None,
             radius=12,
         )
-        self.display.text(state_label, (self.display.WIDTH - state_width) // 2, panel_top + 74, color=LISTEN.accent, font_size=10)
+        self.display.text(state_label, (self.display.WIDTH - state_width) // 2, panel_top + 70, color=LISTEN.accent, font_size=10)
 
-        title_y = panel_top + 112
-        display_title = text_fit(self.display, track_title, self.display.WIDTH - 56, 20)
-        title_width, title_height = self.display.get_text_size(display_title, 20)
-        self.display.text(display_title, (self.display.WIDTH - title_width) // 2, title_y, color=INK, font_size=20)
+        title_y = panel_top + 102
+        title_lines = wrap_text(
+            self.display,
+            track_title,
+            self.display.WIDTH - 64,
+            18,
+            max_lines=2,
+        ) or [text_fit(self.display, track_title, self.display.WIDTH - 64, 18)]
+        title_line_height = self.display.get_text_size("Ag", 18)[1]
+        for index, line in enumerate(title_lines):
+            title_width, _ = self.display.get_text_size(line, 18)
+            self.display.text(
+                line,
+                (self.display.WIDTH - title_width) // 2,
+                title_y + (index * title_line_height),
+                color=INK,
+                font_size=18,
+            )
 
-        artist_text = text_fit(self.display, artist, self.display.WIDTH - 64, 12)
-        artist_width, _ = self.display.get_text_size(artist_text, 12)
-        self.display.text(artist_text, (self.display.WIDTH - artist_width) // 2, title_y + title_height + 10, color=MUTED, font_size=12)
+        artist_y = title_y + (len(title_lines) * title_line_height) + 4
+        artist_text = text_fit(self.display, artist, self.display.WIDTH - 64, 11)
+        artist_width, _ = self.display.get_text_size(artist_text, 11)
+        self.display.text(artist_text, (self.display.WIDTH - artist_width) // 2, artist_y, color=MUTED, font_size=11)
 
         progress_x = 28
-        progress_y = panel_bottom - 44
+        progress_y = panel_bottom - 40
         progress_width = self.display.WIDTH - 56
         self.display.rectangle(progress_x, progress_y, progress_x + progress_width, progress_y + 8, fill=(22, 25, 32))
         fill_width = max(0, min(progress_width, int(progress_width * progress)))
         if fill_width > 0:
             self.display.rectangle(progress_x, progress_y, progress_x + fill_width, progress_y + 8, fill=LISTEN.accent)
 
-        hint = "Tap skip / Play / Hold back" if self.is_one_button_mode() else "A play | B back | X/Y tracks"
+        hint = self.get_footer_text(is_playing=is_playing)
         render_footer(self.display, hint, mode="listen")
         self.display.update()
+
+    def get_footer_text(self, *, is_playing: bool) -> str:
+        """Return the gesture hint for the active playback state."""
+
+        if self.is_one_button_mode():
+            return "Tap skip / Double pause" if is_playing else "Tap skip / Double play"
+        return "A play | B back | X/Y tracks"
 
     def _track_snapshot(self) -> tuple[str, str, float, str, bool]:
         """Return current track, artist, progress and state label."""

@@ -35,8 +35,8 @@ class LvglNowPlayingView:
         if not self._built or self.backend.binding is None:
             return
 
-        track_title, artist, progress, state_label, _is_playing = self.screen._track_snapshot()
-        footer = "Tap skip / Play" if self.screen.is_one_button_mode() else "A play | B back | X/Y tracks"
+        track_title, artist, progress, state_label, is_playing = self.screen._track_snapshot()
+        footer = self.screen.get_footer_text(is_playing=is_playing)
         context = self.screen.context
 
         self.backend.binding.now_playing_sync(

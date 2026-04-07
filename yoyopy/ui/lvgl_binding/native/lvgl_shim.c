@@ -1385,8 +1385,8 @@ int yoyopy_lvgl_now_playing_build(void) {
     lv_obj_set_scrollbar_mode(g_now_playing_scene.panel, LV_SCROLLBAR_MODE_OFF);
 
     g_now_playing_scene.icon_halo = lv_obj_create(g_now_playing_scene.panel);
-    lv_obj_set_size(g_now_playing_scene.icon_halo, 76, 58);
-    lv_obj_set_pos(g_now_playing_scene.icon_halo, 66, 16);
+    lv_obj_set_size(g_now_playing_scene.icon_halo, 76, 54);
+    lv_obj_set_pos(g_now_playing_scene.icon_halo, 66, 14);
     lv_obj_set_style_radius(g_now_playing_scene.icon_halo, 20, 0);
     lv_obj_set_style_border_width(g_now_playing_scene.icon_halo, 2, 0);
     lv_obj_set_style_shadow_width(g_now_playing_scene.icon_halo, 0, 0);
@@ -1400,7 +1400,7 @@ int yoyopy_lvgl_now_playing_build(void) {
 
     g_now_playing_scene.state_chip = lv_obj_create(g_now_playing_scene.panel);
     lv_obj_set_size(g_now_playing_scene.state_chip, 92, 24);
-    lv_obj_set_pos(g_now_playing_scene.state_chip, 58, 84);
+    lv_obj_set_pos(g_now_playing_scene.state_chip, 58, 74);
     lv_obj_set_style_radius(g_now_playing_scene.state_chip, 12, 0);
     lv_obj_set_style_border_width(g_now_playing_scene.state_chip, 0, 0);
     lv_obj_set_style_pad_all(g_now_playing_scene.state_chip, 0, 0);
@@ -1413,17 +1413,18 @@ int yoyopy_lvgl_now_playing_build(void) {
     lv_obj_center(g_now_playing_scene.state_label);
 
     g_now_playing_scene.title_label = lv_label_create(g_now_playing_scene.panel);
-    lv_obj_set_width(g_now_playing_scene.title_label, 176);
-    lv_obj_set_pos(g_now_playing_scene.title_label, 16, 118);
+    lv_obj_set_size(g_now_playing_scene.title_label, 176, 44);
+    lv_obj_set_pos(g_now_playing_scene.title_label, 16, 106);
     lv_label_set_long_mode(g_now_playing_scene.title_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_style_text_font(g_now_playing_scene.title_label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(g_now_playing_scene.title_label, &lv_font_montserrat_18, 0);
     lv_obj_set_style_text_align(g_now_playing_scene.title_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_line_space(g_now_playing_scene.title_label, -2, 0);
 
     g_now_playing_scene.artist_label = lv_label_create(g_now_playing_scene.panel);
-    lv_obj_set_width(g_now_playing_scene.artist_label, 176);
-    lv_obj_set_pos(g_now_playing_scene.artist_label, 16, 148);
+    lv_obj_set_size(g_now_playing_scene.artist_label, 176, 16);
+    lv_obj_set_pos(g_now_playing_scene.artist_label, 16, 154);
     lv_label_set_long_mode(g_now_playing_scene.artist_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_style_text_font(g_now_playing_scene.artist_label, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(g_now_playing_scene.artist_label, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_align(g_now_playing_scene.artist_label, LV_TEXT_ALIGN_CENTER, 0);
 
     g_now_playing_scene.progress_track = lv_obj_create(g_now_playing_scene.panel);
