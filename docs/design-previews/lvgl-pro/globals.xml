@@ -36,24 +36,7 @@
 	</consts>
 
 	<styles>
-		<style
-			name="screen_root"
-			bg_color="#bg"
-			bg_opa="100%"
-			border_width="0"
-			pad_all="0"
-		/>
-		<style
-			name="battery_frame"
-			bg_opa="0%"
-			border_width="1"
-			border_color="#muted"
-			radius="2"
-			pad_all="0"
-		/>
-		<style name="battery_tip" bg_color="#muted" bg_opa="100%" border_width="0" radius="1" />
-		<style name="battery_fill" bg_color="#ink" bg_opa="100%" border_width="0" radius="1" />
-		<style name="footer_text" text_color="#muted" />
+		<!-- Keep global styles empty; the screen XML files are self-contained. -->
 	</styles>
 
 	<subjects>

@@ -6,6 +6,7 @@ This folder is a small LVGL Pro project you can open directly in the editor or i
   - `whisplay_portrait` for `screens/hub.xml`
   - `standard_landscape` for `screens/main_menu.xml`
 - `globals.xml` carries the shared YoyoPod palette pulled from `yoyopy/ui/screens/theme.py`.
+- `translations.xml` is intentionally minimal so the editor/codegen pipeline has a valid translations file to load.
 - The screen XML files are viewer-friendly recreations of:
   - `yoyopy/ui/screens/navigation/hub.py`
   - `yoyopy/ui/screens/navigation/menu.py`
