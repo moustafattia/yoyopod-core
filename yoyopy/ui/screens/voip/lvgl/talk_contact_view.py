@@ -24,38 +24,39 @@ class LvglTalkContactView:
     def build(self) -> None:
         if self._built or self.backend.binding is None:
             return
-        self.backend.binding.playlist_build()
+        self.backend.binding.talk_actions_build()
         self._built = True
 
     def sync(self) -> None:
         if not self._built or self.backend.binding is None:
             return
 
-        visible_items, visible_badges, selected_visible_index = self.screen.get_visible_actions()
+        visible_items, _visible_subtitles, selected_visible_index = self.screen.get_visible_actions()
+        visible_icon_keys = self.screen.get_visible_action_icons()
         context = self.screen.context
-        self.backend.binding.playlist_sync(
-            title_text=self.screen.current_contact_name(),
-            page_text=None,
-            status_chip_text=None,
-            status_chip_kind=0,
-            footer="Tap next / Double choose",
-            items=visible_items,
-            badges=visible_badges,
-            selected_visible_index=selected_visible_index,
+        self.backend.binding.talk_actions_sync(
+            contact_name=self.screen.current_contact_name(),
+            title_text=visible_items[selected_visible_index] if visible_items else None,
+            status_text=None,
+            status_kind=0,
+            footer="Tap Next | 2x Select | Hold Back",
+            icon_keys=visible_icon_keys,
+            color_kinds=[0 for _ in visible_icon_keys],
+            action_count=len(visible_items),
+            selected_index=selected_visible_index,
+            layout_kind=0,
+            button_size_kind=0 if self.screen.action_button_size() == "small" else 1,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),
             charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
             power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
             accent=TALK.accent,
-            empty_title="No actions",
-            empty_subtitle="",
-            empty_icon_key="talk",
         )
 
     def destroy(self) -> None:
         if not self._built or self.backend.binding is None:
             return
-        self.backend.binding.playlist_destroy()
+        self.backend.binding.talk_actions_destroy()
         self._built = False
 
     @staticmethod

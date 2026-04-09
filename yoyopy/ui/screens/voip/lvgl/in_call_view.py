@@ -41,7 +41,7 @@ class LvglInCallView:
             is_muted = self.screen.voip_manager.is_muted
 
         footer = (
-            f"Tap {'unmute' if is_muted else 'mute'} / End"
+            f"Tap = {'Unmute' if is_muted else 'Mute'} | Hold = End"
             if self.screen.is_one_button_mode()
             else f"X {'unmute' if is_muted else 'mute'} | B end"
         )
@@ -49,8 +49,8 @@ class LvglInCallView:
 
         self.backend.binding.in_call_sync(
             caller_name=caller_name,
-            duration_text=self.screen.format_duration(duration_seconds),
-            mute_text="Muted" if is_muted else "Mic on",
+            duration_text=f"IN CALL | {self.screen.format_duration(duration_seconds)}",
+            mute_text="MUTED" if is_muted else "",
             footer=footer,
             muted=is_muted,
             voip_state=self._voip_state(context),

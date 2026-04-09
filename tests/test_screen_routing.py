@@ -77,6 +77,8 @@ def test_screen_router_covers_call_hub_routes() -> None:
     assert router.resolve("call", "call_started") == NavigationRequest.push("outgoing_call")
     assert router.resolve("talk_contact", "voice_note") == NavigationRequest.push("voice_note")
     assert router.resolve("talk_contact", "call_started") == NavigationRequest.push("outgoing_call")
+    assert router.resolve("contacts", "open_contact") == NavigationRequest.push("talk_contact")
+    assert router.resolve("contacts", "voice_note_selected") == NavigationRequest.push("voice_note")
 
 
 def test_screen_router_covers_whisplay_hub_routes() -> None:

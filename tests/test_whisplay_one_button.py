@@ -282,11 +282,11 @@ def test_hub_select_requests_setup_route_for_setup_card(
     assert hub.consume_navigation_request() == NavigationRequest.route("select", payload="Setup")
 
 
-def test_hub_cards_use_mode_tinted_surfaces(
+def test_hub_cards_use_mode_specific_hero_tiles(
     display: Display,
     one_button_context: AppContext,
 ) -> None:
-    """The root cards should tint their surface differently per mode."""
+    """The root cards should tint their centered hero tile differently per mode."""
     hub = HubScreen(
         display,
         one_button_context,
@@ -297,13 +297,38 @@ def test_hub_cards_use_mode_tinted_surfaces(
 
     hub.selected_index = 0
     hub.render()
-    listen_fill = display.get_adapter().buffer.getpixel((40, 84))
+    listen_fill = display.get_adapter().buffer.getpixel((86, 74))
 
     hub.selected_index = 1
     hub.render()
-    talk_fill = display.get_adapter().buffer.getpixel((40, 84))
+    talk_fill = display.get_adapter().buffer.getpixel((86, 74))
 
     assert listen_fill != talk_fill
+
+
+def test_hub_listen_subtitle_handles_active_track_without_crashing(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """The Hub should summarize an active track without raising at render time."""
+
+    backend = FakeMusicBackend()
+    backend.current_track = Track(
+        uri="/music/golden-hour.mp3",
+        name="Golden Hour",
+        artists=["Kacey Musgraves"],
+        length=214000,
+    )
+    backend.play()
+    hub = HubScreen(
+        display,
+        one_button_context,
+        music_backend=backend,
+        local_music_service=LocalMusicService(FakeMusicBackend()),
+        voip_manager=FakeVoIPManager(),
+    )
+
+    assert hub._listen_subtitle().startswith("Playing ")
 
 
 def test_now_playing_advance_and_select_follow_one_button_mapping(
@@ -461,11 +486,11 @@ def test_voice_note_screen_uses_hold_to_record_in_one_button_mode(
     assert voip_manager.send_attempts == 1
 
 
-def test_contact_list_advance_wraps_and_select_calls_contact(
+def test_contact_list_advance_wraps_and_select_opens_contact(
     display: Display,
     one_button_context: AppContext,
 ) -> None:
-    """The contact list should wrap on ADVANCE and call on SELECT."""
+    """The contact list should wrap on ADVANCE and open TalkContact on SELECT."""
     voip_manager = FakeVoIPManager()
     contacts = [
         FakeContact("Alice", "sip:alice@example.com", favorite=True),
@@ -484,8 +509,10 @@ def test_contact_list_advance_wraps_and_select_calls_contact(
     screen.on_select()
 
     assert screen.selected_index == 0
-    assert voip_manager.make_calls == [("sip:alice@example.com", "Alice")]
-    assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
+    assert one_button_context.talk_contact_name == "Alice"
+    assert one_button_context.talk_contact_address == "sip:alice@example.com"
+    assert voip_manager.make_calls == []
+    assert screen.consume_navigation_request() == NavigationRequest.route("open_contact")
 
 
 def test_incoming_call_select_answers_and_back_rejects(

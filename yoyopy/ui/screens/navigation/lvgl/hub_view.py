@@ -44,8 +44,8 @@ class LvglHubView:
         self.backend.binding.hub_sync(
             icon_key=selected_card.icon,
             title=selected_card.title,
-            subtitle=selected_card.subtitle,
-            footer="Tap next / Double open",
+            subtitle="",
+            footer="Tap = Next | 2x Tap = Open",
             time_text=datetime.now().strftime("%H:%M"),
             accent=theme.accent,
             selected_index=self.screen.selected_index,

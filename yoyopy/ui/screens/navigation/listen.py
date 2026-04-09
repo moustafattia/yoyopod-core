@@ -9,13 +9,9 @@ from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.navigation.lvgl import LvglListenView
 from yoyopy.ui.screens.theme import (
-    LISTEN,
-    MUTED,
-    SURFACE,
     draw_list_item,
     render_footer,
     render_header,
-    rounded_panel,
 )
 
 if TYPE_CHECKING:
@@ -94,55 +90,50 @@ class ListenScreen(Screen):
             self.display,
             self.context,
             mode="listen",
-            title="Listen",
-            page_text=None,
+            title="Your Music",
+            subtitle="Local library",
             show_time=False,
             show_mode_chip=False,
         )
 
-        panel_top = content_top + 4
-        panel_bottom = self.display.HEIGHT - 26
-        rounded_panel(
-            self.display,
-            12,
-            panel_top,
-            self.display.WIDTH - 12,
-            panel_bottom,
-            fill=SURFACE,
-            outline=None,
-            radius=22,
-        )
-
-        list_top = panel_top + 10
-        item_height = 46
+        list_top = content_top + 8
+        item_height = 76
         for index, item in enumerate(self.items):
             y1 = list_top + (index * item_height)
-            y2 = y1 + 40
-            if y2 > panel_bottom - 8:
+            y2 = y1 + 68
+            if y2 > self.display.HEIGHT - 38:
                 break
 
             draw_list_item(
                 self.display,
-                x1=20,
+                x1=18,
                 y1=y1,
-                x2=self.display.WIDTH - 20,
+                x2=self.display.WIDTH - 18,
                 y2=y2,
                 title=item.title,
                 subtitle=item.subtitle,
                 mode="listen",
                 selected=index == self.selected_index,
+                icon=self._item_icon_key(item.key),
             )
 
-        dots_y = panel_bottom - 12
-        dots_width = 16 * len(self.items)
-        dots_x = (self.display.WIDTH - dots_width) // 2
-        for index in range(len(self.items)):
-            color = LISTEN.accent if index == self.selected_index else MUTED
-            self.display.circle(dots_x + (index * 16), dots_y, 3, fill=color)
-
-        help_text = "Tap next / Open / Hold back" if self.is_one_button_mode() else "A open | B back | X/Y move"
+        help_text = (
+            "Tap = Next  ·  2× Tap = Open  ·  Hold = Back"
+            if self.is_one_button_mode()
+            else "A open | B back | X/Y move"
+        )
         render_footer(self.display, help_text, mode="listen")
         self.display.update()
+
+    @staticmethod
+    def _item_icon_key(key: str) -> str:
+        """Return the icon key used for each Listen landing row."""
+
+        if key == "playlists":
+            return "playlist"
+        if key == "recent":
+            return "music_note"
+        return "listen"
 
     def on_select(self, data=None) -> None:
         """Open the selected local library action."""

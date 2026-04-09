@@ -8,7 +8,20 @@ from typing import TYPE_CHECKING, Optional
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.navigation.lvgl import LvglHubView
-from yoyopy.ui.screens.theme import BACKGROUND, INK, SURFACE, draw_icon, format_battery_compact, mix, render_backdrop, render_footer, render_status_bar, rounded_panel, text_fit, theme_for
+from yoyopy.ui.screens.theme import (
+    BACKGROUND,
+    FOOTER_BAR,
+    INK,
+    MUTED_DIM,
+    draw_icon,
+    format_battery_compact,
+    mix,
+    render_backdrop,
+    render_status_bar,
+    rounded_panel,
+    text_fit,
+    theme_for,
+)
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
@@ -145,22 +158,16 @@ class HubScreen(Screen):
         return format_battery_compact(self.context)
 
     @staticmethod
-    def _card_fill_color(mode: str) -> tuple[int, int, int]:
-        """Return a low-opacity mode tint for the hub card surface."""
+    def _tile_fill_color(mode: str) -> tuple[int, int, int]:
+        """Return the main hero-tile fill for the selected hub card."""
         theme = theme_for(mode)
-        return mix(theme.accent, SURFACE, 0.9)
+        return mix(theme.accent, theme.hero_end, 0.35)
 
     @staticmethod
-    def _icon_halo_fill(mode: str) -> tuple[int, int, int]:
-        """Return a darker mode tint for the icon halo."""
+    def _tile_glow_color(mode: str) -> tuple[int, int, int]:
+        """Return a soft mode glow behind the hero tile."""
         theme = theme_for(mode)
-        return mix(theme.accent, BACKGROUND, 0.8)
-
-    @staticmethod
-    def _icon_halo_outline(mode: str) -> tuple[int, int, int]:
-        """Return a subtle outline for the icon halo."""
-        theme = theme_for(mode)
-        return mix(theme.accent, BACKGROUND, 0.6)
+        return mix(theme.accent, BACKGROUND, 0.72)
 
     def render(self) -> None:
         """Render the selected root card."""
@@ -172,61 +179,78 @@ class HubScreen(Screen):
         cards = self._cards()
         self.selected_index %= len(cards)
         selected_card = cards[self.selected_index]
-        theme = render_backdrop(self.display, selected_card.mode)
+        render_backdrop(self.display, selected_card.mode)
         render_status_bar(self.display, self.context, show_time=True)
 
-        card_left = 16
-        card_top = self.display.STATUS_BAR_HEIGHT + 24
-        card_right = self.display.WIDTH - 16
-        card_bottom = self.display.HEIGHT - 30
-        rounded_panel(
-            self.display,
-            card_left,
-            card_top,
-            card_right,
-            card_bottom,
-            fill=self._card_fill_color(selected_card.mode),
-            outline=theme.accent_dim,
-            radius=28,
-            shadow=True,
-        )
+        tile_size = 96
+        tile_left = (self.display.WIDTH - tile_size) // 2
+        tile_top = self.display.STATUS_BAR_HEIGHT + 30
+        glow_padding = 10
 
-        halo_left = (self.display.WIDTH // 2) - 42
-        halo_top = card_top + 18
-        halo_right = (self.display.WIDTH // 2) + 42
-        halo_bottom = halo_top + 64
         rounded_panel(
             self.display,
-            halo_left,
-            halo_top,
-            halo_right,
-            halo_bottom,
-            fill=self._icon_halo_fill(selected_card.mode),
-            outline=self._icon_halo_outline(selected_card.mode),
-            radius=22,
+            tile_left - glow_padding,
+            tile_top - glow_padding,
+            tile_left + tile_size + glow_padding,
+            tile_top + tile_size + glow_padding,
+            fill=self._tile_glow_color(selected_card.mode),
+            outline=None,
+            radius=24,
             shadow=False,
         )
 
-        draw_icon(self.display, selected_card.icon, (self.display.WIDTH // 2) - 30, card_top + 24, 60, theme.accent)
+        rounded_panel(
+            self.display,
+            tile_left,
+            tile_top,
+            tile_left + tile_size,
+            tile_top + tile_size,
+            fill=self._tile_fill_color(selected_card.mode),
+            outline=None,
+            radius=16,
+            shadow=True,
+        )
 
-        title_y = card_top + 106
+        draw_icon(
+            self.display,
+            selected_card.icon,
+            tile_left + 20,
+            tile_top + 20,
+            56,
+            INK,
+        )
+
+        title_y = tile_top + tile_size + 24
         title_text = selected_card.title
-        title_width, title_height = self.display.get_text_size(title_text, 28)
-        self.display.text(title_text, (self.display.WIDTH - title_width) // 2, title_y, color=theme.accent, font_size=28)
+        title_width, title_height = self.display.get_text_size(title_text, 22)
+        self.display.text(
+            title_text,
+            (self.display.WIDTH - title_width) // 2,
+            title_y,
+            color=INK,
+            font_size=22,
+        )
 
-        subtitle = text_fit(self.display, selected_card.subtitle, self.display.WIDTH - 58, 13)
-        subtitle_width, _ = self.display.get_text_size(subtitle, 13)
-        self.display.text(subtitle, (self.display.WIDTH - subtitle_width) // 2, title_y + title_height + 10, color=INK, font_size=13)
-
-        dots_y = card_bottom - 18
-        dots_width = 18 * len(cards)
+        dots_y = title_y + title_height + 30
+        dot_gap = 10
+        dots_width = ((len(cards) - 1) * dot_gap) + 4
         dots_x = (self.display.WIDTH - dots_width) // 2
+        inactive_dot = mix(INK, BACKGROUND, 0.8)
         for index in range(len(cards)):
-            dot_color = theme.accent if index == self.selected_index else theme.accent_dim
-            radius = 4 if index == self.selected_index else 3
-            self.display.circle(dots_x + (index * 18), dots_y, radius, fill=dot_color)
+            dot_color = INK if index == self.selected_index else inactive_dot
+            self.display.circle(dots_x + (index * dot_gap), dots_y, 2, fill=dot_color)
 
-        render_footer(self.display, "Tap next / Double open", mode=selected_card.mode)
+        footer_top = self.display.HEIGHT - 32
+        self.display.rectangle(0, footer_top, self.display.WIDTH, self.display.HEIGHT, fill=FOOTER_BAR)
+        footer_text = "Tap = Next | 2x Tap = Open"
+        footer_width, footer_height = self.display.get_text_size(footer_text, 10)
+        self.display.text(
+            footer_text,
+            (self.display.WIDTH - footer_width) // 2,
+            footer_top + ((32 - footer_height) // 2) - 1,
+            color=MUTED_DIM,
+            font_size=10,
+        )
         self.display.update()
 
     def on_advance(self, data=None) -> None:

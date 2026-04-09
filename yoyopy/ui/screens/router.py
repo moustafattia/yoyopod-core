@@ -136,7 +136,9 @@ class ScreenRouter:
             },
             "contacts": {
                 "back": NavigationRequest.pop(),
+                "open_contact": NavigationRequest.push("talk_contact"),
                 "call_started": NavigationRequest.push("outgoing_call"),
+                "voice_note_selected": NavigationRequest.push("voice_note"),
             },
             "call_history": {
                 "back": NavigationRequest.pop(),

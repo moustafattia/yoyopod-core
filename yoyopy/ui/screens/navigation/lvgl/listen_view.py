@@ -36,14 +36,22 @@ class LvglListenView:
             return
 
         items = [item.title for item in self.screen.items[:4]]
+        subtitles = [item.subtitle for item in self.screen.items[:4]]
+        icon_keys = [self.screen._item_icon_key(item.key) for item in self.screen.items[:4]]
 
-        footer = "Tap next / Open" if self.screen.is_one_button_mode() else "A open | B back | X/Y move"
+        footer = (
+            "Tap next / 2x open / Hold back"
+            if self.screen.is_one_button_mode()
+            else "A open | B back | X/Y move"
+        )
 
         context = self.screen.context
         self.backend.binding.listen_sync(
             page_text=None,
             footer=footer,
             items=items,
+            subtitles=subtitles,
+            icon_keys=icon_keys,
             selected_index=self.screen.selected_index,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),

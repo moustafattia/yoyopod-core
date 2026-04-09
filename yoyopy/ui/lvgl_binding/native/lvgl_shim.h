@@ -61,6 +61,45 @@ int yoyopy_lvgl_hub_sync(
     int32_t power_available
 );
 void yoyopy_lvgl_hub_destroy(void);
+int yoyopy_lvgl_talk_build(void);
+int yoyopy_lvgl_talk_sync(
+    const char * title_text,
+    const char * icon_key,
+    int32_t outlined,
+    const char * footer,
+    int32_t selected_index,
+    int32_t total_cards,
+    int32_t voip_state,
+    int32_t battery_percent,
+    int32_t charging,
+    int32_t power_available,
+    uint32_t accent_rgb
+);
+void yoyopy_lvgl_talk_destroy(void);
+int yoyopy_lvgl_talk_actions_build(void);
+int yoyopy_lvgl_talk_actions_sync(
+    const char * contact_name,
+    const char * title_text,
+    const char * status_text,
+    int32_t status_kind,
+    const char * footer,
+    const char * icon_0,
+    int32_t color_kind_0,
+    const char * icon_1,
+    int32_t color_kind_1,
+    const char * icon_2,
+    int32_t color_kind_2,
+    int32_t action_count,
+    int32_t selected_index,
+    int32_t layout_kind,
+    int32_t button_size_kind,
+    int32_t voip_state,
+    int32_t battery_percent,
+    int32_t charging,
+    int32_t power_available,
+    uint32_t accent_rgb
+);
+void yoyopy_lvgl_talk_actions_destroy(void);
 int yoyopy_lvgl_listen_build(void);
 int yoyopy_lvgl_listen_sync(
     const char * page_text,
@@ -69,6 +108,14 @@ int yoyopy_lvgl_listen_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * subtitle_0,
+    const char * subtitle_1,
+    const char * subtitle_2,
+    const char * subtitle_3,
+    const char * icon_0,
+    const char * icon_1,
+    const char * icon_2,
+    const char * icon_3,
     int32_t item_count,
     int32_t selected_index,
     int32_t voip_state,
@@ -91,10 +138,18 @@ int yoyopy_lvgl_playlist_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * subtitle_0,
+    const char * subtitle_1,
+    const char * subtitle_2,
+    const char * subtitle_3,
     const char * badge_0,
     const char * badge_1,
     const char * badge_2,
     const char * badge_3,
+    const char * icon_0,
+    const char * icon_1,
+    const char * icon_2,
+    const char * icon_3,
     int32_t item_count,
     int32_t selected_visible_index,
     int32_t voip_state,
@@ -176,12 +231,15 @@ int yoyopy_lvgl_power_build(void);
 int yoyopy_lvgl_power_sync(
     const char * title_text,
     const char * page_text,
+    const char * icon_key,
     const char * footer,
     const char * item_0,
     const char * item_1,
     const char * item_2,
     const char * item_3,
     int32_t item_count,
+    int32_t current_page_index,
+    int32_t total_pages,
     int32_t voip_state,
     int32_t battery_percent,
     int32_t charging,

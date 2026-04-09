@@ -65,6 +65,8 @@ def test_hub_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     assert len(binding.hub_sync_payloads) == 1
     first_payload = binding.hub_sync_payloads[-1]
     assert first_payload["title"] == "Listen"
+    assert first_payload["subtitle"] == ""
+    assert first_payload["footer"] == "Tap = Next | 2x Tap = Open"
     assert first_payload["selected_index"] == 0
     assert first_payload["total_cards"] == 4
     assert first_payload["voip_state"] == 1

@@ -21,12 +21,18 @@ class FakeLvglBinding:
     """Small native-binding double for LVGL view tests."""
 
     def __init__(self) -> None:
-        self.hub_build_calls = 0
-        self.hub_destroy_calls = 0
-        self.hub_sync_payloads: list[dict] = []
+        self.talk_build_calls = 0
+        self.talk_destroy_calls = 0
+        self.talk_sync_payloads: list[dict] = []
+        self.talk_actions_build_calls = 0
+        self.talk_actions_destroy_calls = 0
+        self.talk_actions_sync_payloads: list[dict] = []
         self.playlist_build_calls = 0
         self.playlist_destroy_calls = 0
         self.playlist_sync_payloads: list[dict] = []
+        self.incoming_call_build_calls = 0
+        self.incoming_call_destroy_calls = 0
+        self.incoming_call_sync_payloads: list[dict] = []
         self.outgoing_call_build_calls = 0
         self.outgoing_call_destroy_calls = 0
         self.outgoing_call_sync_payloads: list[dict] = []
@@ -40,14 +46,23 @@ class FakeLvglBinding:
         self.power_destroy_calls = 0
         self.power_sync_payloads: list[dict] = []
 
-    def hub_build(self) -> None:
-        self.hub_build_calls += 1
+    def talk_build(self) -> None:
+        self.talk_build_calls += 1
 
-    def hub_sync(self, **payload) -> None:
-        self.hub_sync_payloads.append(payload)
+    def talk_sync(self, **payload) -> None:
+        self.talk_sync_payloads.append(payload)
 
-    def hub_destroy(self) -> None:
-        self.hub_destroy_calls += 1
+    def talk_destroy(self) -> None:
+        self.talk_destroy_calls += 1
+
+    def talk_actions_build(self) -> None:
+        self.talk_actions_build_calls += 1
+
+    def talk_actions_sync(self, **payload) -> None:
+        self.talk_actions_sync_payloads.append(payload)
+
+    def talk_actions_destroy(self) -> None:
+        self.talk_actions_destroy_calls += 1
 
     def playlist_build(self) -> None:
         self.playlist_build_calls += 1
@@ -57,6 +72,15 @@ class FakeLvglBinding:
 
     def playlist_destroy(self) -> None:
         self.playlist_destroy_calls += 1
+
+    def incoming_call_build(self) -> None:
+        self.incoming_call_build_calls += 1
+
+    def incoming_call_sync(self, **payload) -> None:
+        self.incoming_call_sync_payloads.append(payload)
+
+    def incoming_call_destroy(self) -> None:
+        self.incoming_call_destroy_calls += 1
 
     def outgoing_call_build(self) -> None:
         self.outgoing_call_build_calls += 1
@@ -208,23 +232,23 @@ def test_call_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     screen.enter()
     screen.render()
 
-    assert binding.hub_build_calls == 1
-    payload = binding.hub_sync_payloads[-1]
-    assert payload["title"] == "Hagar"
-    assert payload["subtitle"] == "Call or voice note"
-    assert payload["footer"] == "Tap next / Double open"
+    assert binding.talk_build_calls == 1
+    payload = binding.talk_sync_payloads[-1]
+    assert payload["title_text"] == "Hagar"
+    assert payload["icon_key"] is None
+    assert payload["footer"] == "Tap Next | 2x Open | Hold Back"
     assert payload["selected_index"] == 0
     assert payload["total_cards"] == 2
 
     screen.on_advance()
     screen.render()
 
-    payload = binding.hub_sync_payloads[-1]
-    assert payload["title"] == "Mama"
+    payload = binding.talk_sync_payloads[-1]
+    assert payload["title_text"] == "Mama"
     assert payload["selected_index"] == 1
 
     screen.exit()
-    assert binding.hub_destroy_calls == 1
+    assert binding.talk_destroy_calls == 1
 
 
 def test_call_screen_can_reenter_lvgl_view_without_lifecycle_errors() -> None:
@@ -248,12 +272,12 @@ def test_call_screen_can_reenter_lvgl_view_without_lifecycle_errors() -> None:
         if advance:
             screen.on_advance()
         screen.render()
-        payload = binding.hub_sync_payloads[-1]
-        assert payload["title"] == expected_title
+        payload = binding.talk_sync_payloads[-1]
+        assert payload["title_text"] == expected_title
         screen.exit()
 
-    assert binding.hub_build_calls == 2
-    assert binding.hub_destroy_calls == 2
+    assert binding.talk_build_calls == 2
+    assert binding.talk_destroy_calls == 2
 
 
 def test_talk_contact_screen_syncs_actions_through_lvgl() -> None:
@@ -271,14 +295,18 @@ def test_talk_contact_screen_syncs_actions_through_lvgl() -> None:
     screen.enter()
     screen.render()
 
-    assert binding.playlist_build_calls == 1
-    payload = binding.playlist_sync_payloads[-1]
-    assert payload["title_text"] == "Mama"
-    assert payload["items"] == ["Call", "Voice Note"]
-    assert payload["footer"] == "Tap next / Double choose"
+    assert binding.talk_actions_build_calls == 1
+    payload = binding.talk_actions_sync_payloads[-1]
+    assert payload["contact_name"] == "Mama"
+    assert payload["title_text"] == "Call"
+    assert payload["icon_keys"] == ["call", "voice_note"]
+    assert payload["action_count"] == 2
+    assert payload["layout_kind"] == 0
+    assert payload["button_size_kind"] == 1
+    assert payload["footer"] == "Tap Next | 2x Select | Hold Back"
 
     screen.exit()
-    assert binding.playlist_destroy_calls == 1
+    assert binding.talk_actions_destroy_calls == 1
 
 
 def test_contact_list_screen_syncs_sorted_contacts_through_lvgl() -> None:
@@ -303,10 +331,13 @@ def test_contact_list_screen_syncs_sorted_contacts_through_lvgl() -> None:
 
     assert binding.playlist_build_calls == 1
     payload = binding.playlist_sync_payloads[-1]
-    assert payload["title_text"] == "Contacts"
+    assert payload["title_text"] == "More People"
     assert payload["page_text"] is None
     assert payload["items"] == ["Mama", "Zed", "Mona"]
+    assert payload["subtitles"] == ["", "", ""]
     assert payload["badges"] == ["", "", ""]
+    assert payload["icon_keys"] == ["mono:MA", "mono:ZE", "mono:MO"]
+    assert payload["footer"] == "Tap Next | 2x Open | Hold Back"
 
     screen.exit()
     assert binding.playlist_destroy_calls == 1
@@ -334,7 +365,7 @@ def test_outgoing_call_screen_syncs_current_callee_through_lvgl() -> None:
     payload = binding.outgoing_call_sync_payloads[-1]
     assert payload["callee_name"] == "Parent"
     assert payload["callee_address"] == "sip:parent@example.com"
-    assert payload["footer"] == "Hold cancel"
+    assert payload["footer"] == "Hold = Cancel"
 
     screen.exit()
     assert binding.outgoing_call_destroy_calls == 1
@@ -360,10 +391,10 @@ def test_in_call_screen_syncs_duration_and_mute_state_through_lvgl() -> None:
     assert binding.in_call_build_calls == 1
     payload = binding.in_call_sync_payloads[-1]
     assert payload["caller_name"] == "Parent"
-    assert payload["duration_text"] == "01:23"
-    assert payload["mute_text"] == "Muted"
+    assert payload["duration_text"] == "IN CALL | 01:23"
+    assert payload["mute_text"] == "MUTED"
     assert payload["muted"] is True
-    assert payload["footer"] == "Tap unmute / End"
+    assert payload["footer"] == "Tap = Unmute | Hold = End"
 
     screen.exit()
     assert binding.in_call_destroy_calls == 1
@@ -389,8 +420,8 @@ def test_ask_screen_syncs_staged_shell_through_lvgl() -> None:
     assert binding.ask_destroy_calls == 1
 
 
-def test_voice_note_screen_uses_playlist_scene_with_talk_voice_note_copy() -> None:
-    """VoiceNoteScreen should use the richer playlist-style LVGL scene for review states."""
+def test_voice_note_screen_uses_talk_actions_scene_for_voice_note_states() -> None:
+    """VoiceNoteScreen should delegate to the Talk actions scene on LVGL."""
 
     from yoyopy.ui.screens.voip.voice_note import VoiceNoteScreen
 
@@ -402,16 +433,16 @@ def test_voice_note_screen_uses_playlist_scene_with_talk_voice_note_copy() -> No
     screen.enter()
     screen.render()
 
-    payload = binding.playlist_sync_payloads[-1]
-    assert payload["title_text"] == "Hagar"
-    assert payload["status_chip_text"] == "Ready"
-    assert payload["empty_title"] == "Voice Note"
-    assert payload["empty_subtitle"] == "Hold to record for Hagar."
+    payload = binding.talk_actions_sync_payloads[-1]
+    assert payload["contact_name"] == "Hagar"
+    assert payload["title_text"] == "Voice Note"
+    assert payload["status_text"] == "Hold to record"
     assert payload["footer"] == "Hold record / Double back"
-    assert payload["empty_icon_key"] == "voice_note"
+    assert payload["layout_kind"] == 1
+    assert payload["icon_keys"] == ["voice_note"]
 
     screen.exit()
-    assert binding.playlist_destroy_calls == 1
+    assert binding.talk_actions_destroy_calls == 1
 
 
 def test_power_screen_cycles_three_lvgl_pages() -> None:
@@ -445,6 +476,10 @@ def test_power_screen_cycles_three_lvgl_pages() -> None:
     payload = binding.power_sync_payloads[-1]
     assert payload["title_text"] == "Power"
     assert payload["page_text"] is None
+    assert payload["icon_key"] == "battery"
+    assert payload["current_page_index"] == 0
+    assert payload["total_pages"] == 3
+    assert payload["footer"] == "Tap = Page / Hold = Back"
     assert payload["items"] == [
         "Source: Unavailable",
         "Battery: Unknown",
@@ -455,12 +490,14 @@ def test_power_screen_cycles_three_lvgl_pages() -> None:
     screen.on_advance()
     screen.render()
     assert binding.power_sync_payloads[-1]["title_text"] == "Time"
+    assert binding.power_sync_payloads[-1]["icon_key"] == "clock"
     assert binding.power_sync_payloads[-1]["page_text"] is None
 
     screen.on_advance()
     screen.render()
     payload = binding.power_sync_payloads[-1]
     assert payload["title_text"] == "Care"
+    assert payload["icon_key"] == "care"
     assert payload["page_text"] is None
 
     screen.exit()

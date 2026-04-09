@@ -64,6 +64,69 @@ def _capture_screenshot(
     return False
 
 
+def _request_screenshot_capture(
+    *,
+    app: object,
+    screenshot_path: str,
+    app_log,
+    prefer_readback: bool,
+) -> None:
+    """Queue screenshot capture onto the app loop when possible."""
+
+    def capture_on_app_loop() -> None:
+        display = getattr(app, "display", None)
+        adapter = None
+        if display is not None:
+            get_adapter = getattr(display, "get_adapter", None)
+            if callable(get_adapter):
+                adapter = get_adapter()
+            else:
+                adapter = getattr(display, "_adapter", None)
+
+        should_reset_shadow_sync = False
+        if adapter is not None and hasattr(adapter, "_force_shadow_buffer_sync"):
+            setattr(adapter, "_force_shadow_buffer_sync", True)
+            should_reset_shadow_sync = True
+
+        try:
+            screen_manager = getattr(app, "screen_manager", None)
+            refresh_current_screen = (
+                getattr(screen_manager, "refresh_current_screen", None)
+                if screen_manager is not None
+                else None
+            )
+            if callable(refresh_current_screen):
+                refresh_current_screen()
+
+            get_ui_backend = getattr(display, "get_ui_backend", None)
+            if callable(get_ui_backend):
+                ui_backend = get_ui_backend()
+                force_refresh = getattr(ui_backend, "force_refresh", None) if ui_backend is not None else None
+                if callable(force_refresh):
+                    force_refresh()
+
+            _capture_screenshot(
+                adapter=adapter,
+                screenshot_path=screenshot_path,
+                app_log=app_log,
+                prefer_readback=prefer_readback,
+            )
+        finally:
+            if should_reset_shadow_sync:
+                setattr(adapter, "_force_shadow_buffer_sync", False)
+
+    queue_callback = getattr(app, "_queue_main_thread_callback", None)
+    if callable(queue_callback):
+        queue_callback(capture_on_app_loop)
+        app_log.info(
+            "Queued screenshot capture request ({})",
+            "readback-first" if prefer_readback else "shadow-first",
+        )
+        return
+
+    capture_on_app_loop()
+
+
 def load_app_settings(config_dir: str = "config") -> YoyoPodConfig:
     """Load app settings early enough to configure logging before app setup."""
 
@@ -165,10 +228,8 @@ def main() -> int:
 
             def handle_screenshot_default(_signum: int, _frame: object) -> None:
                 """SIGUSR1: save a screenshot using readback-first capture."""
-                display = getattr(app, "display", None)
-                adapter = getattr(display, "_adapter", None) if display else None
-                _capture_screenshot(
-                    adapter=adapter,
+                _request_screenshot_capture(
+                    app=app,
                     screenshot_path=screenshot_path,
                     app_log=app_log,
                     prefer_readback=True,
@@ -176,10 +237,8 @@ def main() -> int:
 
             def handle_screenshot_legacy_shadow(_signum: int, _frame: object) -> None:
                 """SIGUSR2: save a screenshot using shadow-first capture for debugging."""
-                display = getattr(app, "display", None)
-                adapter = getattr(display, "_adapter", None) if display else None
-                _capture_screenshot(
-                    adapter=adapter,
+                _request_screenshot_capture(
+                    app=app,
                     screenshot_path=screenshot_path,
                     app_log=app_log,
                     prefer_readback=False,

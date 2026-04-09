@@ -4,11 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import json
 import os
 import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -56,9 +60,11 @@ class PiDeployConfig:
     screenshot_path: str = "/tmp/yoyopod_screenshot.png"
     rsync_exclude: tuple[str, ...] = (
         ".git/",
+        ".cache/",
         "__pycache__/",
         "*.pyc",
         ".venv/",
+        "build/",
         "logs/",
         "node_modules/",
         "*.egg-info/",
@@ -120,9 +126,11 @@ def parse_pi_deploy_config(data: dict[str, object]) -> PiDeployConfig:
                 "rsync_exclude",
                 (
                     ".git/",
+                    ".cache/",
                     "__pycache__/",
                     "*.pyc",
                     ".venv/",
+                    "build/",
                     "logs/",
                     "node_modules/",
                     "*.egg-info/",
@@ -324,7 +332,7 @@ def build_parser(deploy_config: PiDeployConfig) -> argparse.ArgumentParser:
     screenshot_parser.add_argument(
         "--readback",
         action="store_true",
-        help="Use LVGL readback (SIGUSR2) instead of the shadow buffer (SIGUSR1)",
+        help="Use LVGL readback/default capture (SIGUSR1) instead of the legacy shadow-first path (SIGUSR2)",
     )
     screenshot_parser.add_argument(
         "--output",
@@ -759,9 +767,11 @@ def build_sync_command(config: RemoteConfig, skip_uv_sync: bool) -> str:
 def build_rsync_command(
     config: RemoteConfig,
     deploy_config: PiDeployConfig,
+    *,
+    executable: str = "rsync",
 ) -> list[str]:
     """Create the local rsync command for a dirty-tree sync."""
-    command = ["rsync", "-avz", "--delete"]
+    command = [executable, "-avz", "--delete"]
     for pattern in deploy_config.rsync_exclude:
         command.extend(["--exclude", pattern])
 
@@ -770,24 +780,298 @@ def build_rsync_command(
     return command
 
 
+def resolve_local_executable(program: str) -> str | None:
+    """Resolve one local executable, including common Windows install paths."""
+
+    resolved = shutil.which(program)
+    if resolved:
+        return resolved
+
+    if not sys.platform.startswith("win"):
+        return None
+
+    candidate_paths: list[Path] = []
+    if program.lower() == "rsync":
+        candidate_paths.extend(
+            [
+                Path(r"C:\msys64\usr\bin\rsync.exe"),
+                Path(r"C:\Program Files\Git\usr\bin\rsync.exe"),
+                Path(r"C:\Program Files\Git\bin\rsync.exe"),
+            ]
+        )
+    elif program.lower() == "scp":
+        candidate_paths.extend(
+            [
+                Path(r"C:\Windows\System32\OpenSSH\scp.exe"),
+            ]
+        )
+
+    for candidate in candidate_paths:
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def should_use_direct_rsync(rsync_binary: str | None) -> bool:
+    """Return whether the local rsync binary is safe for direct remote sync."""
+
+    if not rsync_binary:
+        return False
+
+    force_rsync = os.getenv("YOYOPOD_PI_FORCE_RSYNC", "").strip().lower()
+    if force_rsync in {"1", "true", "yes", "on"}:
+        return True
+
+    if not sys.platform.startswith("win"):
+        return True
+
+    normalized = str(Path(rsync_binary)).replace("/", "\\").lower()
+    known_windows_rsyncs = {
+        r"c:\msys64\usr\bin\rsync.exe",
+        r"c:\program files\git\usr\bin\rsync.exe",
+        r"c:\program files\git\bin\rsync.exe",
+    }
+    return normalized not in known_windows_rsyncs
+
+
+def sync_path_is_excluded(
+    rel_path: str,
+    patterns: Sequence[str],
+    *,
+    is_dir: bool,
+) -> bool:
+    """Return whether one repo-relative path should be skipped during sync."""
+
+    normalized = rel_path.strip("/")
+    if not normalized:
+        return False
+
+    segments = normalized.split("/")
+    basename = segments[-1]
+    for pattern in patterns:
+        candidate = str(pattern).strip()
+        if not candidate:
+            continue
+
+        if candidate.endswith("/"):
+            dir_pattern = candidate.rstrip("/")
+            if any(fnmatch.fnmatch(segment, dir_pattern) for segment in segments):
+                return True
+            continue
+
+        if fnmatch.fnmatch(normalized, candidate) or fnmatch.fnmatch(basename, candidate):
+            return True
+
+    return False
+
+
+def build_sync_file_manifest(
+    repo_root: Path,
+    deploy_config: PiDeployConfig,
+) -> list[str]:
+    """Collect the repo-relative file list that should be mirrored to the Pi."""
+
+    manifest: list[str] = []
+    for current_root, dirnames, filenames in os.walk(repo_root):
+        current_root_path = Path(current_root)
+        relative_root = current_root_path.relative_to(repo_root)
+
+        kept_dirnames: list[str] = []
+        for dirname in sorted(dirnames):
+            rel_dir = (relative_root / dirname).as_posix()
+            if rel_dir == ".":
+                rel_dir = dirname
+            if sync_path_is_excluded(rel_dir, deploy_config.rsync_exclude, is_dir=True):
+                continue
+            kept_dirnames.append(dirname)
+        dirnames[:] = kept_dirnames
+
+        for filename in sorted(filenames):
+            rel_file = (relative_root / filename).as_posix()
+            if rel_file == ".":
+                rel_file = filename
+            if sync_path_is_excluded(rel_file, deploy_config.rsync_exclude, is_dir=False):
+                continue
+            manifest.append(rel_file)
+
+    return manifest
+
+
+def build_archive_sync_extract_command(
+    config: RemoteConfig,
+    *,
+    archive_path: str,
+    manifest_path: str,
+) -> str:
+    """Create the remote command that unpacks and mirrors an scp-uploaded archive."""
+
+    project_dir_literal = repr(config.project_dir)
+    archive_path_literal = repr(archive_path)
+    manifest_path_literal = repr(manifest_path)
+    return f"""python - <<'PY'
+import fnmatch
+import json
+import os
+import tarfile
+from pathlib import Path
+
+
+def is_excluded(rel_path: str, patterns: tuple[str, ...]) -> bool:
+    normalized = rel_path.strip("/")
+    if not normalized:
+        return False
+
+    segments = normalized.split("/")
+    basename = segments[-1]
+    for pattern in patterns:
+        candidate = str(pattern).strip()
+        if not candidate:
+            continue
+
+        if candidate.endswith("/"):
+            dir_pattern = candidate.rstrip("/")
+            if any(fnmatch.fnmatch(segment, dir_pattern) for segment in segments):
+                return True
+            continue
+
+        if fnmatch.fnmatch(normalized, candidate) or fnmatch.fnmatch(basename, candidate):
+            return True
+
+    return False
+
+
+project_dir = Path(os.path.expanduser({project_dir_literal})).resolve()
+archive_path = Path({archive_path_literal})
+manifest_path = Path({manifest_path_literal})
+
+with manifest_path.open("r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+expected_files = set(payload["files"])
+exclude_patterns = tuple(payload["exclude"])
+project_dir.mkdir(parents=True, exist_ok=True)
+
+with tarfile.open(archive_path, "r:gz") as archive:
+    members = archive.getmembers()
+    for member in members:
+        member_path = Path(member.name)
+        if member_path.is_absolute() or ".." in member_path.parts:
+            raise SystemExit(f"Unsafe archive member: {{member.name}}")
+    archive.extractall(project_dir)
+
+for path in sorted(project_dir.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+    rel_path = path.relative_to(project_dir).as_posix()
+    if is_excluded(rel_path, exclude_patterns):
+        continue
+
+    if path.is_file() or path.is_symlink():
+        if rel_path not in expected_files:
+            path.unlink()
+        continue
+
+    try:
+        path.rmdir()
+    except OSError:
+        pass
+
+archive_path.unlink(missing_ok=True)
+manifest_path.unlink(missing_ok=True)
+PY"""
+
+
 def build_restart_command(deploy_config: PiDeployConfig) -> str:
     """Create the remote restart command for the production app."""
     pid_file = shell_quote(deploy_config.pid_file)
     activate_script = shell_quote(_activate_script_path(deploy_config.venv))
+    service_name = 'yoyopod@"$(id -un)".service'
 
-    commands = [
-        f"(test -f {pid_file} && kill -9 $(cat {pid_file}) 2>/dev/null) || true",
+    cleanup_commands = [
+        f"rm -f {pid_file}",
     ]
     for process_name in deploy_config.kill_processes:
-        commands.append(f"killall -9 {shell_quote(process_name)} 2>/dev/null || true")
+        cleanup_commands.append(
+            f"killall -9 {shell_quote(process_name)} >/dev/null 2>&1 || true"
+        )
 
-    commands.extend(
+    cleanup_sequence = "; ".join(cleanup_commands)
+    manual_restart = (
+        f"(test -f {pid_file} && kill -9 $(cat {pid_file}) >/dev/null 2>&1) || true; "
+        "killall -9 python >/dev/null 2>&1 || true; "
+        f"{cleanup_sequence}; "
+        f"source {activate_script} && (nohup {deploy_config.start_cmd} > /dev/null 2>&1 &)"
+    )
+    managed_restart = (
+        f"if systemctl cat {service_name} >/dev/null 2>&1; then "
+        f"sudo systemctl stop {service_name} >/dev/null 2>&1 || true; "
+        f"{cleanup_sequence}; "
+        f"sudo systemctl start {service_name}; "
+        f"else {manual_restart}; "
+        "fi"
+    )
+    return " && ".join(
         [
-            f"source {activate_script} && nohup {deploy_config.start_cmd} > /dev/null 2>&1 &",
+            build_native_shim_refresh_command(deploy_config),
+            managed_restart,
             build_startup_verification_command(deploy_config),
         ]
     )
-    return " && ".join(commands)
+
+
+def build_native_shim_refresh_command(deploy_config: PiDeployConfig) -> str:
+    """Create the remote command that rebuilds missing or stale native shims."""
+
+    activate_script = shell_quote(_activate_script_path(deploy_config.venv))
+    return (
+        "{ "
+        f"source {activate_script} && python - <<'PY'\n"
+        "import subprocess\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "\n"
+        "\n"
+        "def newest_mtime(paths: list[Path]) -> float:\n"
+        "    newest = 0.0\n"
+        "    for path in paths:\n"
+        "        if not path.exists():\n"
+        "            continue\n"
+        "        if path.is_dir():\n"
+        "            for candidate in path.rglob('*'):\n"
+        "                if candidate.is_file():\n"
+        "                    newest = max(newest, candidate.stat().st_mtime)\n"
+        "            continue\n"
+        "        newest = max(newest, path.stat().st_mtime)\n"
+        "    return newest\n"
+        "\n"
+        "\n"
+        "def is_stale(binary: Path, sources: list[Path]) -> bool:\n"
+        "    if not binary.exists():\n"
+        "        return True\n"
+        "    return newest_mtime(sources) > binary.stat().st_mtime\n"
+        "\n"
+        "\n"
+        "jobs = [\n"
+        "    (\n"
+        "        'LVGL',\n"
+        "        Path('yoyopy/ui/lvgl_binding/native/build/libyoyopy_lvgl_shim.so'),\n"
+        "        [Path('scripts/lvgl_build.py'), Path('yoyopy/ui/lvgl_binding/native')],\n"
+        "        [sys.executable, 'scripts/lvgl_build.py'],\n"
+        "    ),\n"
+        "    (\n"
+        "        'Liblinphone',\n"
+        "        Path('yoyopy/voip/liblinphone_binding/native/build/libyoyopy_liblinphone_shim.so'),\n"
+        "        [Path('scripts/liblinphone_build.py'), Path('yoyopy/voip/liblinphone_binding/native')],\n"
+        "        [sys.executable, 'scripts/liblinphone_build.py'],\n"
+        "    ),\n"
+        "]\n"
+        "\n"
+        "for label, output, sources, command in jobs:\n"
+        "    if not is_stale(output, sources):\n"
+        "        continue\n"
+        "    print(f'[pi-remote] info=rebuilding {label} native shim')\n"
+        "    subprocess.run(command, check=True)\n"
+        "PY\n"
+        "} "
+    )
 
 
 def build_smoke_command(args: argparse.Namespace) -> str:
@@ -1015,7 +1299,69 @@ def run_rsync_deploy(
     skip_restart: bool,
 ) -> int:
     """Rsync the local working tree to the Pi and optionally restart the app."""
-    exit_code = run_local(build_rsync_command(config, deploy_config), "rsync")
+    rsync_binary = resolve_local_executable("rsync")
+    if should_use_direct_rsync(rsync_binary):
+        exit_code = run_local(
+            build_rsync_command(config, deploy_config, executable=rsync_binary),
+            "rsync",
+        )
+    else:
+        scp_binary = resolve_local_executable("scp")
+        if not scp_binary:
+            raise SystemExit(
+                "Neither `rsync` nor `scp` is available locally. "
+                "Install one of them or run from a machine with SSH copy tools."
+            )
+
+        print("")
+        if rsync_binary:
+            print(
+                "[pi-remote] info=local Windows rsync is not reliable for remote Unix paths; "
+                "falling back to archive+scp sync"
+            )
+        else:
+            print("[pi-remote] info=local rsync not found, falling back to archive+scp sync")
+        print("")
+
+        manifest = build_sync_file_manifest(REPO_ROOT, deploy_config)
+        remote_archive_path = "/tmp/yoyopod_sync.tar.gz"
+        remote_manifest_path = "/tmp/yoyopod_sync_manifest.json"
+
+        with tempfile.TemporaryDirectory(prefix="yoyopod-sync-") as temp_dir_raw:
+            temp_dir = Path(temp_dir_raw)
+            archive_path = temp_dir / "yoyopod_sync.tar.gz"
+            manifest_path = temp_dir / "yoyopod_sync_manifest.json"
+
+            with tarfile.open(archive_path, "w:gz") as archive:
+                for rel_path in manifest:
+                    archive.add(REPO_ROOT / rel_path, arcname=rel_path)
+
+            manifest_payload = {
+                "files": manifest,
+                "exclude": list(deploy_config.rsync_exclude),
+            }
+            manifest_path.write_text(
+                json.dumps(manifest_payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            upload_command = [
+                scp_binary,
+                str(archive_path),
+                str(manifest_path),
+                f"{config.ssh_target}:/tmp/",
+            ]
+            exit_code = run_local(upload_command, "scp-sync-upload")
+            if exit_code == 0:
+                exit_code = run_remote(
+                    config,
+                    build_archive_sync_extract_command(
+                        config,
+                        archive_path=remote_archive_path,
+                        manifest_path=remote_manifest_path,
+                    ),
+                )
+
     if exit_code != 0 or skip_restart:
         return exit_code
 
@@ -1041,7 +1387,17 @@ def run_screenshot(
             print(alive_result.stderr.strip())
         return 1
 
-    signal_name = "USR2" if args.readback else "USR1"
+    clear_result = run_remote_capture(
+        config,
+        f"rm -f {screenshot_path}",
+    )
+    if clear_result.returncode != 0:
+        print("Failed to clear the previous screenshot on the Raspberry Pi.")
+        if clear_result.stderr.strip():
+            print(clear_result.stderr.strip())
+        return clear_result.returncode
+
+    signal_name = "USR1" if args.readback else "USR2"
     signal_result = run_remote_capture(
         config,
         f"kill -{signal_name} $(cat {pid_file})",
@@ -1054,7 +1410,13 @@ def run_screenshot(
 
     verify_result = run_remote_capture(
         config,
-        f"sleep 1 && test -f {screenshot_path} && echo READY || echo MISSING",
+        (
+            "for _ in $(seq 1 10); do "
+            f"test -f {screenshot_path} && echo READY && exit 0; "
+            "sleep 1; "
+            "done; "
+            "echo MISSING"
+        ),
     )
     if verify_result.returncode != 0 or verify_result.stdout.strip() != "READY":
         print(

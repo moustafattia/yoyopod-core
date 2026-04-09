@@ -24,24 +24,23 @@ class LvglCallView:
     def build(self) -> None:
         if self._built or self.backend.binding is None:
             return
-        self.backend.binding.hub_build()
+        self.backend.binding.talk_build()
         self._built = True
 
     def sync(self) -> None:
         if not self._built or self.backend.binding is None:
             return
 
-        title_text, subtitle_text, selected_index, total_cards = self.screen.current_card_model()
+        model = self.screen.current_card_model()
         context = self.screen.context
-        self.backend.binding.hub_sync(
-            icon_key="talk",
-            title=title_text or "Talk",
-            subtitle=subtitle_text or "Call or voice note",
-            footer="Tap next / Double open",
-            time_text=None,
+        self.backend.binding.talk_sync(
+            title_text=str(model.get("title") or "Talk"),
+            icon_key=str(model.get("icon_key")) if model.get("icon_key") is not None else None,
+            outlined=bool(model.get("outlined", False)),
+            footer="Tap Next | 2x Open | Hold Back",
             accent=TALK.accent,
-            selected_index=selected_index,
-            total_cards=max(1, total_cards),
+            selected_index=int(model.get("selected_index", 0)),
+            total_cards=max(1, int(model.get("total_cards", 0))),
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),
             charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
@@ -51,7 +50,7 @@ class LvglCallView:
     def destroy(self) -> None:
         if not self._built or self.backend.binding is None:
             return
-        self.backend.binding.hub_destroy()
+        self.backend.binding.talk_destroy()
         self._built = False
 
     @staticmethod

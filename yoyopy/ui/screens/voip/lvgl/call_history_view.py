@@ -32,6 +32,8 @@ class LvglCallHistoryView:
             return
 
         visible_items, visible_badges, selected_visible_index = self.screen.get_visible_window()
+        visible_subtitles = self.screen.get_visible_subtitles()
+        visible_icon_keys = self.screen.get_visible_icon_keys()
         context = self.screen.context
 
         self.backend.binding.playlist_sync(
@@ -39,7 +41,9 @@ class LvglCallHistoryView:
             page_text=None,
             footer=self.screen._instruction_text(),
             items=visible_items,
+            subtitles=visible_subtitles,
             badges=visible_badges,
+            icon_keys=visible_icon_keys,
             selected_visible_index=selected_visible_index,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),

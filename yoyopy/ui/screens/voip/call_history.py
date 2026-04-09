@@ -9,12 +9,10 @@ from loguru import logger
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.theme import (
-    SURFACE,
     draw_empty_state,
     draw_list_item,
     render_footer,
     render_header,
-    rounded_panel,
     text_fit,
 )
 from yoyopy.ui.screens.voip.lvgl.call_history_view import LvglCallHistoryView
@@ -152,39 +150,28 @@ class CallHistoryScreen(Screen):
         elif self.selected_index >= self.scroll_offset + self.max_visible_items:
             self.scroll_offset = self.selected_index - self.max_visible_items + 1
 
-        panel_top = content_top + 6
-        panel_bottom = self.display.HEIGHT - 28
-        rounded_panel(
-            self.display,
-            12,
-            panel_top,
-            self.display.WIDTH - 12,
-            panel_bottom,
-            fill=SURFACE,
-            outline=None,
-            radius=24,
-        )
-
-        item_height = 46
+        item_height = 52
+        list_top = content_top + 8
         for row in range(self.max_visible_items):
             entry_index = self.scroll_offset + row
             if entry_index >= len(self.entries):
                 break
 
             entry = self.entries[entry_index]
-            y1 = panel_top + 10 + (row * item_height)
-            y2 = y1 + 38
+            y1 = list_top + (row * item_height)
+            y2 = y1 + 44
             draw_list_item(
                 self.display,
-                x1=20,
+                x1=18,
                 y1=y1,
-                x2=self.display.WIDTH - 20,
+                x2=self.display.WIDTH - 18,
                 y2=y2,
                 title=text_fit(self.display, entry.title, self.display.WIDTH - 90, 15),
-                subtitle="",
+                subtitle=entry.subtitle,
                 mode="talk",
                 selected=entry_index == self.selected_index,
                 badge=None,
+                icon="call" if entry.direction == "outgoing" else "talk",
             )
 
         render_footer(self.display, self._instruction_text(), mode="talk")
@@ -215,6 +202,35 @@ class CallHistoryScreen(Screen):
                 selected_visible_index = row
 
         return visible_titles, visible_badges, selected_visible_index
+
+    def get_visible_subtitles(self) -> list[str]:
+        """Return visible subtitles for the shared LVGL scene."""
+
+        if not self.entries:
+            return []
+
+        subtitles: list[str] = []
+        for row in range(self.max_visible_items):
+            entry_index = self.scroll_offset + row
+            if entry_index >= len(self.entries):
+                break
+            subtitles.append(self.entries[entry_index].subtitle)
+        return subtitles
+
+    def get_visible_icon_keys(self) -> list[str]:
+        """Return visible icon keys for the shared LVGL scene."""
+
+        if not self.entries:
+            return []
+
+        icons: list[str] = []
+        for row in range(self.max_visible_items):
+            entry_index = self.scroll_offset + row
+            if entry_index >= len(self.entries):
+                break
+            entry = self.entries[entry_index]
+            icons.append("call" if entry.direction == "outgoing" else "talk")
+        return icons
 
     def on_select(self, data=None) -> None:
         """Redial the selected recent call when VoIP is ready."""

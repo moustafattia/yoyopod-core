@@ -20,9 +20,11 @@ startup_marker: "YoyoPod starting"
 screenshot_path: /tmp/yoyopod_screenshot.png
 rsync_exclude:
   - .git/
+  - .cache/
   - __pycache__/
   - "*.pyc"
   - .venv/
+  - build/
   - logs/
   - node_modules/
   - "*.egg-info/"

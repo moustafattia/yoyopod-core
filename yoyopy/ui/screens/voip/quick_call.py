@@ -40,10 +40,22 @@ class TalkPerson:
     subtitle: str = "Call or voice note"
 
 
+@dataclass(slots=True)
+class TalkDeckCard:
+    """One carousel card in the Talk deck."""
+
+    kind: str
+    title: str
+    sip_address: str = ""
+    outlined: bool = False
+    icon_key: str | None = None
+
+
 class CallScreen(Screen):
     """Talk screen showing one person at a time."""
 
     _MAX_CONTACTS = 10
+    _MAX_FEATURED_CONTACTS = 2
 
     def __init__(
         self,
@@ -58,6 +70,7 @@ class CallScreen(Screen):
         self.config_manager = config_manager
         self.call_history_store = call_history_store
         self.people: list[TalkPerson] = []
+        self.deck_cards: list[TalkDeckCard] = []
         self.selected_index = 0
         self._lvgl_view: "ScreenView | None" = None
 
@@ -116,8 +129,28 @@ class CallScreen(Screen):
             )
             for contact in contacts
         ]
+        self.deck_cards = []
 
-        if not self.people:
+        for person in self.people[: self._MAX_FEATURED_CONTACTS]:
+            self.deck_cards.append(
+                TalkDeckCard(
+                    kind="person",
+                    title=person.title,
+                    sip_address=person.sip_address,
+                )
+            )
+
+        if len(self.people) > self._MAX_FEATURED_CONTACTS:
+            self.deck_cards.append(
+                TalkDeckCard(
+                    kind="more_people",
+                    title="More People",
+                    outlined=True,
+                    icon_key="people",
+                )
+            )
+
+        if not self.deck_cards:
             self.selected_index = 0
             return
 
@@ -128,24 +161,57 @@ class CallScreen(Screen):
         if preferred_address:
             for index, person in enumerate(self.people):
                 if person.sip_address == preferred_address:
-                    self.selected_index = index
+                    self.selected_index = min(index, len(self.deck_cards) - 1)
                     break
 
-        self.selected_index = min(self.selected_index, len(self.people) - 1)
+        self.selected_index = min(self.selected_index, len(self.deck_cards) - 1)
 
     def _selected_person(self) -> TalkPerson | None:
         """Return the currently selected contact card."""
 
         if not self.people:
             return None
+        if self.selected_index >= len(self.people):
+            return None
         return self.people[self.selected_index]
 
-    def current_card_model(self) -> tuple[str, str, int, int]:
+    def _selected_card(self) -> TalkDeckCard | None:
+        """Return the currently selected Talk carousel card."""
+
+        if not self.deck_cards:
+            return None
+        return self.deck_cards[self.selected_index]
+
+    def current_card_model(self) -> dict[str, object]:
         """Return the active Talk card content for both PIL and LVGL paths."""
+
+        selected_card = self._selected_card()
+        if selected_card is None:
+            return {
+                "title": "",
+                "icon_key": None,
+                "outlined": False,
+                "selected_index": 0,
+                "total_cards": 0,
+            }
+        if selected_card.kind != "person":
+            return {
+                "title": selected_card.title,
+                "icon_key": selected_card.icon_key,
+                "outlined": selected_card.outlined,
+                "selected_index": self.selected_index,
+                "total_cards": len(self.deck_cards),
+            }
 
         selected_person = self._selected_person()
         if selected_person is None:
-            return ("", "", 0, 0)
+            return {
+                "title": selected_card.title,
+                "icon_key": selected_card.icon_key,
+                "outlined": selected_card.outlined,
+                "selected_index": self.selected_index,
+                "total_cards": len(self.deck_cards),
+            }
         subtitle = selected_person.subtitle
         if self.context is not None:
             latest_note = self.context.latest_voice_note_by_contact.get(selected_person.sip_address, {})
@@ -155,12 +221,14 @@ class CallScreen(Screen):
                 subtitle = "Latest note sent"
             elif latest_note.get("local_file_path"):
                 subtitle = "Play latest note"
-        return (
-            selected_person.title,
-            subtitle,
-            self.selected_index,
-            len(self.people),
-        )
+        return {
+            "title": selected_person.title,
+            "subtitle": subtitle,
+            "icon_key": None,
+            "outlined": False,
+            "selected_index": self.selected_index,
+            "total_cards": len(self.deck_cards),
+        }
 
     def render(self) -> None:
         """Render the Talk contact deck."""
@@ -171,9 +239,9 @@ class CallScreen(Screen):
             return
 
         theme = render_backdrop(self.display, "talk")
-        render_status_bar(self.display, self.context, show_time=False)
+        render_status_bar(self.display, self.context, show_time=True)
 
-        if not self.people:
+        if not self.deck_cards:
             draw_empty_state(
                 self.display,
                 mode="talk",
@@ -186,76 +254,52 @@ class CallScreen(Screen):
             self.display.update()
             return
 
-        title_text, subtitle_text, selected_index, total_people = self.current_card_model()
-        card_left = 16
-        card_top = self.display.STATUS_BAR_HEIGHT + 24
-        card_right = self.display.WIDTH - 16
-        card_bottom = self.display.HEIGHT - 30
-        rounded_panel(
-            self.display,
-            card_left,
-            card_top,
-            card_right,
-            card_bottom,
-            fill=mix(TALK.accent, SURFACE, 0.9),
-            outline=TALK.accent_dim,
-            radius=28,
-            shadow=True,
+        from yoyopy.ui.screens.theme import (
+            draw_talk_large_card,
+            draw_talk_page_dots,
+            talk_monogram,
         )
 
-        draw_icon(self.display, "talk", (self.display.WIDTH // 2) - 30, card_top + 24, 60, theme.accent)
+        card = self.current_card_model()
+        title_text = str(card["title"])
+        selected_index = int(card["selected_index"])
+        total_cards = int(card["total_cards"])
+        outlined = bool(card["outlined"])
+        icon_key = card.get("icon_key")
+        card_top = self.display.STATUS_BAR_HEIGHT + 42
+        card_left = (self.display.WIDTH - 112) // 2
+        draw_talk_large_card(
+            self.display,
+            left=card_left,
+            top=card_top,
+            size=112,
+            color=theme.accent,
+            label=None if icon_key else talk_monogram(title_text),
+            icon=str(icon_key) if icon_key else None,
+            outlined=outlined,
+        )
 
-        fitted_title = text_fit(self.display, title_text, self.display.WIDTH - 50, 28)
-        title_width, title_height = self.display.get_text_size(fitted_title, 28)
-        title_y = card_top + 106
+        title_font_size = 20 if len(title_text) > 10 else 24
+        fitted_title = text_fit(self.display, title_text, self.display.WIDTH - 48, title_font_size)
+        title_width, title_height = self.display.get_text_size(fitted_title, title_font_size)
+        title_y = card_top + 126
         self.display.text(
             fitted_title,
             (self.display.WIDTH - title_width) // 2,
             title_y,
+            color=INK,
+            font_size=title_font_size,
+        )
+        draw_talk_page_dots(
+            self.display,
+            center_x=self.display.WIDTH // 2,
+            top=title_y + title_height + 18,
+            total=max(1, total_cards),
+            current=selected_index,
             color=theme.accent,
-            font_size=28,
         )
 
-        fitted_subtitle = text_fit(self.display, subtitle_text, self.display.WIDTH - 54, 13)
-        subtitle_width, _ = self.display.get_text_size(fitted_subtitle, 13)
-        self.display.text(
-            fitted_subtitle,
-            (self.display.WIDTH - subtitle_width) // 2,
-            title_y + title_height + 10,
-            color=INK if not self._show_missed_calls() else MUTED,
-            font_size=13,
-        )
-
-        if self._show_missed_calls():
-            badge = self._missed_calls_badge()
-            badge_width, _ = self.display.get_text_size(badge, 11)
-            rounded_panel(
-                self.display,
-                (self.display.WIDTH - badge_width - 18) // 2,
-                title_y + title_height + 32,
-                (self.display.WIDTH + badge_width + 18) // 2,
-                title_y + title_height + 54,
-                fill=TALK.accent_dim,
-                outline=None,
-                radius=11,
-            )
-            self.display.text(
-                badge,
-                (self.display.WIDTH - badge_width) // 2,
-                title_y + title_height + 38,
-                color=INK,
-                font_size=11,
-            )
-
-        dots_y = card_bottom - 18
-        dots_width = max(1, total_people) * 14
-        dots_x = (self.display.WIDTH - dots_width) // 2
-        for index in range(total_people):
-            dot_color = theme.accent if index == selected_index else TALK.accent_dim
-            radius = 4 if index == selected_index else 3
-            self.display.circle(dots_x + (index * 14), dots_y, radius, fill=dot_color)
-
-        render_footer(self.display, "Tap next / Double open", mode="talk")
+        render_footer(self.display, "Tap Next | 2x Open | Hold Back", mode="talk")
         self.display.update()
 
     def _show_missed_calls(self) -> bool:
@@ -274,6 +318,12 @@ class CallScreen(Screen):
         """Open the selected contact's action menu."""
 
         selected_person = self._selected_person()
+        selected_card = self._selected_card()
+        if selected_card is None:
+            return
+        if selected_card.kind == "more_people":
+            self.request_push("contacts")
+            return
         if selected_person is None:
             return
 
@@ -292,6 +342,6 @@ class CallScreen(Screen):
     def on_advance(self, data=None) -> None:
         """Move through contacts with wraparound."""
 
-        if not self.people:
+        if not self.deck_cards:
             return
-        self.selected_index = (self.selected_index + 1) % len(self.people)
+        self.selected_index = (self.selected_index + 1) % len(self.deck_cards)

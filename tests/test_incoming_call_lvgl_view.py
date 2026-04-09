@@ -75,7 +75,7 @@ def test_incoming_call_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     assert payload["battery_percent"] == 49
     assert payload["charging"] is False
     assert payload["power_available"] is True
-    assert payload["footer"] == "Open answer / Reject"
+    assert payload["footer"] == "Tap = Answer | Hold = Decline"
 
     screen.exit()
     assert binding.incoming_call_destroy_calls == 1

@@ -12,7 +12,7 @@ argument-hint: "[line_count] [--errors] [--filter <subsystem>] [--follow]"
 
 Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `scripts/pi_remote.py` merges them directly, and `uv run python scripts/pi_remote.py config edit` is the preferred way to create or update the local override.
 
-If the file does not exist, stop and tell the user to create it.
+If the file does not exist yet, run `uv run python scripts/pi_remote.py config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
 ## Argument Parsing
 

@@ -8,8 +8,18 @@ from loguru import logger
 
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
+from yoyopy.ui.screens.theme import (
+    ERROR,
+    INK,
+    SUCCESS,
+    TALK,
+    draw_talk_large_card,
+    draw_talk_status_chip,
+    render_footer,
+    render_status_bar,
+    talk_monogram,
+)
 from yoyopy.ui.screens.voip.lvgl import LvglInCallView
-from yoyopy.ui.screens.theme import INK, MUTED, TALK, draw_icon, render_footer, render_header, rounded_panel
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
@@ -31,11 +41,13 @@ class InCallScreen(Screen):
 
     def enter(self) -> None:
         """Create the LVGL view when the screen becomes active."""
+
         super().enter()
         self._ensure_lvgl_view()
 
     def exit(self) -> None:
         """Tear down any active LVGL view when leaving the live call."""
+
         if self._lvgl_view is not None:
             self._lvgl_view.destroy()
             self._lvgl_view = None
@@ -43,6 +55,7 @@ class InCallScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
+
         if self._lvgl_view is not None:
             return self._lvgl_view
 
@@ -60,12 +73,14 @@ class InCallScreen(Screen):
     @staticmethod
     def format_duration(seconds: int) -> str:
         """Format call duration as MM:SS."""
+
         minutes = seconds // 60
         secs = seconds % 60
         return f"{minutes:02d}:{secs:02d}"
 
     def render(self) -> None:
         """Render the active-call screen."""
+
         lvgl_view = self._ensure_lvgl_view()
         if lvgl_view is not None:
             lvgl_view.sync()
@@ -79,55 +94,43 @@ class InCallScreen(Screen):
             duration = self.voip_manager.get_call_duration()
             is_muted = self.voip_manager.is_muted
 
-        content_top = render_header(
-            self.display,
-            self.context,
-            mode="talk",
-            title="Talk",
-            show_time=False,
-            show_mode_chip=False,
-        )
-
-        panel_top = content_top + 8
-        panel_bottom = self.display.HEIGHT - 28
-        rounded_panel(
-            self.display,
-            16,
-            panel_top,
-            self.display.WIDTH - 16,
-            panel_bottom,
-            fill=(32, 35, 42),
-            outline=TALK.accent_dim,
-            radius=28,
-            shadow=True,
-        )
-
-        draw_icon(self.display, "live", (self.display.WIDTH // 2) - 20, panel_top + 12, 40, TALK.accent)
-
+        render_status_bar(self.display, self.context, show_time=True)
         caller_name = caller_info.get("display_name", "Unknown")
+        card_top = self.display.STATUS_BAR_HEIGHT + 42
+        card_left = (self.display.WIDTH - 112) // 2
+        draw_talk_large_card(
+            self.display,
+            left=card_left,
+            top=card_top,
+            size=112,
+            color=TALK.accent,
+            label=talk_monogram(caller_name),
+        )
         name_width, name_height = self.display.get_text_size(caller_name, 20)
-        self.display.text(caller_name, (self.display.WIDTH - name_width) // 2, panel_top + 70, color=INK, font_size=20)
+        title_y = card_top + 126
+        self.display.text(caller_name, (self.display.WIDTH - name_width) // 2, title_y, color=INK, font_size=20)
 
         duration_text = self.format_duration(duration)
-        duration_width, duration_height = self.display.get_text_size(duration_text, 26)
-        self.display.text(duration_text, (self.display.WIDTH - duration_width) // 2, panel_top + 106, color=TALK.accent, font_size=26)
-
-        mute_label = "Muted" if is_muted else "Mic on"
-        mute_width, _ = self.display.get_text_size(mute_label, 12)
-        rounded_panel(
+        chip_bottom = draw_talk_status_chip(
             self.display,
-            (self.display.WIDTH - mute_width - 24) // 2,
-            panel_top + 148,
-            (self.display.WIDTH + mute_width + 24) // 2,
-            panel_top + 172,
-            fill=TALK.accent_dim,
-            outline=None,
-            radius=12,
+            center_x=self.display.WIDTH // 2,
+            top=title_y + name_height + 10,
+            text=f"IN CALL | {duration_text}",
+            color=SUCCESS,
         )
-        self.display.text(mute_label, (self.display.WIDTH - mute_width) // 2, panel_top + 154, color=INK if is_muted else TALK.accent, font_size=12)
+
+        if is_muted:
+            draw_talk_status_chip(
+                self.display,
+                center_x=self.display.WIDTH // 2,
+                top=chip_bottom + 8,
+                text="MUTED",
+                color=ERROR,
+                icon="mic_off",
+            )
 
         footer = (
-            f"Tap {'unmute' if is_muted else 'mute'} / Hold end"
+            f"Tap = {'Unmute' if is_muted else 'Mute'} | Hold = End"
             if self.is_one_button_mode()
             else f"X {'unmute' if is_muted else 'mute'} | B end call"
         )
@@ -136,28 +139,34 @@ class InCallScreen(Screen):
 
     def _hangup_call(self) -> None:
         """End the current call."""
+
         logger.info("Ending call")
         if self.voip_manager and self.voip_manager.hangup():
             self.request_route("call_hangup")
 
     def _toggle_mute(self) -> None:
         """Toggle microphone mute."""
+
         logger.info("Toggling mute")
         if self.voip_manager:
             self.voip_manager.toggle_mute()
 
     def on_back(self, data=None) -> None:
         """End the current call."""
+
         self._hangup_call()
 
     def on_call_hangup(self, data=None) -> None:
         """End the current call from a dedicated action."""
+
         self._hangup_call()
 
     def on_up(self, data=None) -> None:
         """Toggle microphone mute."""
+
         self._toggle_mute()
 
     def on_advance(self, data=None) -> None:
         """Toggle microphone mute in one-button mode."""
+
         self._toggle_mute()

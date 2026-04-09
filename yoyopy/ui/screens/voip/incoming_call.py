@@ -9,7 +9,15 @@ from loguru import logger
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.voip.lvgl import LvglIncomingCallView
-from yoyopy.ui.screens.theme import INK, MUTED, TALK, draw_icon, render_footer, render_header, rounded_panel, text_fit, wrap_text
+from yoyopy.ui.screens.theme import (
+    INK,
+    TALK,
+    draw_talk_large_card,
+    draw_talk_status_chip,
+    render_footer,
+    render_status_bar,
+    talk_monogram,
+)
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
@@ -69,46 +77,34 @@ class IncomingCallScreen(Screen):
             lvgl_view.sync()
             return
 
-        content_top = render_header(
+        render_status_bar(self.display, self.context, show_time=True)
+        card_top = self.display.STATUS_BAR_HEIGHT + 42
+        card_left = (self.display.WIDTH - 112) // 2
+        draw_talk_large_card(
             self.display,
-            self.context,
-            mode="talk",
-            title="Incoming",
-            show_time=False,
-            show_mode_chip=False,
+            left=card_left,
+            top=card_top,
+            size=112,
+            color=TALK.accent,
+            label=talk_monogram(self.caller_name or "Unknown"),
         )
-
-        panel_top = content_top + 8
-        panel_bottom = self.display.HEIGHT - 28
-        rounded_panel(
-            self.display,
-            16,
-            panel_top,
-            self.display.WIDTH - 16,
-            panel_bottom,
-            fill=(32, 35, 42),
-            outline=TALK.accent_dim,
-            radius=28,
-            shadow=True,
-        )
-
-        pulse_color = TALK.accent if self.ring_animation_frame % 2 == 0 else TALK.accent_soft
-        self.display.circle(self.display.WIDTH // 2, panel_top + 34, 24, outline=pulse_color, width=3)
-        draw_icon(self.display, "incoming", (self.display.WIDTH // 2) - 20, panel_top + 14, 40, TALK.accent)
         self.ring_animation_frame += 1
 
-        display_name = text_fit(self.display, self.caller_name, self.display.WIDTH - 52, 20)
+        display_name = self.caller_name or "Unknown"
+        if len(display_name) > 14:
+            display_name = f"{display_name[:13]}..."
         name_width, name_height = self.display.get_text_size(display_name, 20)
-        self.display.text(display_name, (self.display.WIDTH - name_width) // 2, panel_top + 76, color=INK, font_size=20)
+        title_y = card_top + 126
+        self.display.text(display_name, (self.display.WIDTH - name_width) // 2, title_y, color=INK, font_size=20)
+        draw_talk_status_chip(
+            self.display,
+            center_x=self.display.WIDTH // 2,
+            top=title_y + name_height + 10,
+            text="INCOMING CALL",
+            color=TALK.accent,
+        )
 
-        lines = wrap_text(self.display, self.caller_address or "Unknown", self.display.WIDTH - 56, 11, max_lines=1)
-        line_y = panel_top + 106
-        for line in lines:
-            width, _ = self.display.get_text_size(line, 11)
-            self.display.text(line, (self.display.WIDTH - width) // 2, line_y, color=MUTED, font_size=11)
-            line_y += 13
-
-        footer = "Open answer / Hold reject" if self.is_one_button_mode() else "A answer | B reject"
+        footer = "Tap = Answer | Hold = Decline" if self.is_one_button_mode() else "A answer | B reject"
         render_footer(self.display, footer, mode="talk")
         self.display.update()
 

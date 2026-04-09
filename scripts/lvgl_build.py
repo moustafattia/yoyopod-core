@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -18,9 +19,30 @@ def run(command: list[str], cwd: Path | None = None) -> None:
     subprocess.run(command, cwd=str(cwd) if cwd else None, check=True)
 
 
+def has_valid_lvgl_source(source_dir: Path) -> bool:
+    required_paths = (
+        source_dir / "CMakeLists.txt",
+        source_dir / ".git",
+        source_dir / ".git" / "index",
+        source_dir / "src" / "misc" / "lv_ext_data.h",
+    )
+    if any(not path.exists() for path in required_paths):
+        return False
+
+    status = subprocess.run(
+        ["git", "-C", str(source_dir), "status", "--short", "--untracked-files=no"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return status.returncode == 0 and not status.stdout.strip()
+
+
 def ensure_lvgl_source(source_dir: Path) -> None:
     if source_dir.exists():
-        return
+        if has_valid_lvgl_source(source_dir):
+            return
+        shutil.rmtree(source_dir)
     source_dir.parent.mkdir(parents=True, exist_ok=True)
     run(["git", "clone", "--depth", "1", "--branch", LVGL_TAG, LVGL_REPO, str(source_dir)])
 

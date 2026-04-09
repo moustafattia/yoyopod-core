@@ -6,6 +6,8 @@ Applies to: `yoyopy/ui/lvgl_binding/**`, `yoyopy/ui/display/adapters/whisplay.py
 
 LVGL 9.5.0 is the standard rendering layer for all hardware displays. The architecture is display-hardware-agnostic -- LVGL renders to its internal buffer, then flush callbacks route pixels to whatever SPI display is connected.
 
+For the Figma-to-Whisplay implementation workflow, screen extraction order, and hardware validation loop, also follow `rules/design-fidelity.md`.
+
 ## Rendering Pipeline
 
 ```
@@ -51,6 +53,9 @@ Must rebuild on Pi after changing `lv_conf.h` or `lvgl_shim.c`.
 
 ## Screenshot Support
 
-Default screenshot capture should use LVGL readback first via `SIGUSR1`.
-If readback is unavailable, it may fall back to the adapter screenshot path.
-`SIGUSR2` is reserved as a legacy shadow-first debug path only.
+- `scripts/pi_remote.py screenshot` defaults to the shadow-first path via `SIGUSR2`.
+- `scripts/pi_remote.py screenshot --readback` requests LVGL readback via `SIGUSR1`.
+- The remote helper now clears the previous remote PNG before capture and waits for a fresh file.
+- To confirm which path actually succeeded, check the app log:
+  - `Saved screenshot via LVGL readback` means native LVGL snapshotting succeeded.
+  - `Saved screenshot via shadow buffer` means the shadow path was used instead.

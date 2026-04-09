@@ -11,12 +11,10 @@ from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.music.lvgl import LvglPlaylistView
 from yoyopy.ui.screens.theme import (
-    SURFACE,
     draw_empty_state,
     draw_list_item,
     render_footer,
     render_header,
-    rounded_panel,
     text_fit,
 )
 
@@ -126,6 +124,18 @@ class PlaylistScreen(Screen):
 
         return visible_titles, visible_badges, selected_visible_index
 
+    def get_visible_subtitles(self) -> list[str]:
+        """Return visible subtitles for the shared LVGL scene."""
+
+        visible_titles, _, _ = self.get_visible_window()
+        return ["" for _ in visible_titles]
+
+    def get_visible_icon_keys(self) -> list[str]:
+        """Return visible icon keys for the shared LVGL scene."""
+
+        visible_titles, _, _ = self.get_visible_window()
+        return ["playlist" for _ in visible_titles]
+
     def fetch_playlists(self) -> None:
         """Fetch local playlists from the app-facing local music service."""
         if self.music_service is None:
@@ -209,40 +219,29 @@ class PlaylistScreen(Screen):
 
         self._update_scroll_window()
 
-        panel_top = content_top + 6
-        panel_bottom = self.display.HEIGHT - 28
-        rounded_panel(
-            self.display,
-            12,
-            panel_top,
-            self.display.WIDTH - 12,
-            panel_bottom,
-            fill=SURFACE,
-            outline=None,
-            radius=24,
-        )
-
-        item_height = 50
+        item_height = 52
+        list_top = content_top + 8
         for row in range(self.max_visible_items):
             playlist_index = self.scroll_offset + row
             if playlist_index >= len(self.playlists):
                 break
 
             playlist = self.playlists[playlist_index]
-            y1 = panel_top + 10 + (row * item_height)
-            y2 = y1 + 42
+            y1 = list_top + (row * item_height)
+            y2 = y1 + 44
             badge = f"{playlist.track_count}" if getattr(playlist, "track_count", 0) else None
             draw_list_item(
                 self.display,
-                x1=20,
+                x1=18,
                 y1=y1,
-                x2=self.display.WIDTH - 20,
+                x2=self.display.WIDTH - 18,
                 y2=y2,
                 title=text_fit(self.display, playlist.name, self.display.WIDTH - 92, 15),
                 subtitle="",
                 mode="listen",
                 selected=playlist_index == self.selected_index,
                 badge=badge,
+                icon="playlist",
             )
 
         help_text = f"{self.get_footer_text()} / Hold back" if self.is_one_button_mode() else self.get_footer_text()

@@ -1,6 +1,6 @@
 # YoyoPod Audio Stack
 
-**Last Verified:** 2026-04-08  
+**Last Verified:** 2026-04-08
 **Verified Against:** `origin/main` plus live `rpi-zero` runtime
 
 ## Overview

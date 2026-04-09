@@ -24,7 +24,7 @@ class LvglVoiceNoteView:
     def build(self) -> None:
         if self._built or self.backend.binding is None:
             return
-        self.backend.binding.playlist_build()
+        self.backend.binding.talk_actions_build()
         self._built = True
 
     def sync(self) -> None:
@@ -32,34 +32,54 @@ class LvglVoiceNoteView:
             return
 
         context = self.screen.context
-        title_text, subtitle_text, footer_text, _icon_key = self.screen.current_view_model()
-        items, badges, selected_index = self.screen.current_actions_for_view()
-        status_chip_text, status_chip_kind = self.screen.current_status_chip()
-        page_text = self.screen._duration_label() or None
+        title_text, _subtitle_text, footer_text, _icon_key = self.screen.current_view_model()
+        items, _badges, selected_index = self.screen.current_actions_for_view()
+        action_icon_keys = self.screen.current_action_icons()
+        if items:
+            self.backend.binding.talk_actions_sync(
+                contact_name=self.screen.recipient_name(),
+                title_text=items[selected_index] if items else None,
+                status_text=None,
+                status_kind=0,
+                footer=footer_text,
+                icon_keys=action_icon_keys,
+                color_kinds=self.screen.current_action_color_kinds(),
+                action_count=len(items),
+                selected_index=selected_index,
+                layout_kind=0,
+                button_size_kind=0,
+                voip_state=self._voip_state(context),
+                battery_percent=self._battery_percent(context),
+                charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
+                power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
+                accent=TALK.accent,
+            )
+            return
 
-        self.backend.binding.playlist_sync(
-            title_text=self.screen.recipient_name(),
-            page_text=page_text,
-            status_chip_text=status_chip_text,
-            status_chip_kind=status_chip_kind,
+        status_text, _status_color = self.screen.current_primary_status()
+        self.backend.binding.talk_actions_sync(
+            contact_name=self.screen.recipient_name(),
+            title_text=title_text,
+            status_text=status_text,
+            status_kind=self.screen.current_primary_status_kind(),
             footer=footer_text,
-            items=items,
-            badges=badges,
-            selected_visible_index=selected_index,
+            icon_keys=[self.screen.current_primary_icon()],
+            color_kinds=[self.screen.current_primary_color_kind()],
+            action_count=1,
+            selected_index=0,
+            layout_kind=1,
+            button_size_kind=2,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),
             charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
             power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
             accent=TALK.accent,
-            empty_title=title_text,
-            empty_subtitle=subtitle_text,
-            empty_icon_key="voice_note",
         )
 
     def destroy(self) -> None:
         if not self._built or self.backend.binding is None:
             return
-        self.backend.binding.playlist_destroy()
+        self.backend.binding.talk_actions_destroy()
         self._built = False
 
     @staticmethod

@@ -14,8 +14,10 @@ from yoyopy.ui.screens.theme import (
     MUTED,
     SETUP,
     SURFACE_RAISED,
+    draw_icon,
     render_footer,
-    render_header,
+    render_backdrop,
+    render_status_bar,
     rounded_panel,
     text_fit,
 )
@@ -91,58 +93,95 @@ class PowerScreen(Screen):
         pages = self.build_pages(snapshot=snapshot, status=status)
         self.page_index %= len(pages)
         active_page = pages[self.page_index]
-        page_text = f"{self.page_index + 1}/{len(pages)}"
+        render_backdrop(self.display, "setup")
+        render_status_bar(self.display, self.context, show_time=False)
 
-        content_top = render_header(
-            self.display,
-            self.context,
-            mode="setup",
-            title="Setup",
-            page_text=page_text,
-            show_time=False,
-            show_mode_chip=False,
-        )
-
-        panel_top = content_top + 8
-        panel_bottom = self.display.HEIGHT - 26
+        halo_size = 56
+        halo_left = (self.display.WIDTH - halo_size) // 2
+        halo_top = self.display.STATUS_BAR_HEIGHT + 16
         rounded_panel(
             self.display,
-            12,
-            panel_top,
-            self.display.WIDTH - 12,
-            panel_bottom,
-            fill=SURFACE_RAISED,
-            outline=SETUP.accent_dim,
-            radius=24,
-            shadow=True,
-        )
-
-        pill_width, _ = self.display.get_text_size(active_page.title.upper(), 10)
-        rounded_panel(
-            self.display,
-            22,
-            panel_top + 10,
-            22 + pill_width + 18,
-            panel_top + 32,
-            fill=SETUP.accent_dim,
+            halo_left,
+            halo_top,
+            halo_left + halo_size,
+            halo_top + halo_size,
+            fill=(73, 77, 89),
             outline=None,
-            radius=12,
+            radius=28,
         )
-        self.display.text(active_page.title.upper(), 31, panel_top + 16, color=SETUP.accent, font_size=10)
+        draw_icon(
+            self.display,
+            self._page_icon_key(active_page.title),
+            halo_left + 14,
+            halo_top + 14,
+            28,
+            (225, 228, 234),
+        )
 
-        row_y = panel_top + 46
-        row_gap = 20 if self.display.is_portrait() else 22
+        title_width, _ = self.display.get_text_size(active_page.title, 22)
+        self.display.text(
+            active_page.title,
+            (self.display.WIDTH - title_width) // 2,
+            halo_top + halo_size + 12,
+            color=INK,
+            font_size=22,
+        )
+
+        row_y = halo_top + halo_size + 44
+        row_height = 30
+        row_gap = 6
         for label, value in active_page.rows:
-            label_text = text_fit(self.display, label, 90, 11)
-            value_text = text_fit(self.display, value, self.display.WIDTH - 120, 12)
-            self.display.text(label_text, 22, row_y, color=MUTED, font_size=11)
+            row_bottom = row_y + row_height
+            if row_bottom > self.display.HEIGHT - 42:
+                break
+            rounded_panel(
+                self.display,
+                16,
+                row_y,
+                self.display.WIDTH - 16,
+                row_bottom,
+                fill=SURFACE_RAISED,
+                outline=None,
+                radius=12,
+            )
+            label_text = text_fit(self.display, label, 100, 11)
+            value_text = text_fit(self.display, value, self.display.WIDTH - 130, 12)
+            self.display.text(label_text, 28, row_y + 8, color=MUTED, font_size=11)
             value_width, _ = self.display.get_text_size(value_text, 12)
-            self.display.text(value_text, self.display.WIDTH - value_width - 22, row_y, color=INK, font_size=12)
-            row_y += row_gap
+            self.display.text(value_text, self.display.WIDTH - value_width - 28, row_y + 8, color=INK, font_size=12)
+            row_y += row_height + row_gap
 
-        help_text = "Tap page / Hold back" if self.is_one_button_mode() else "A page | B back | X/Y page"
+        self._render_page_dots(total_pages=len(pages))
+
+        help_text = (
+            "Tap = Page  ·  Hold = Back"
+            if self.is_one_button_mode()
+            else "A page | B back | X/Y page"
+        )
         render_footer(self.display, help_text, mode="setup")
         self.display.update()
+
+    def _page_icon_key(self, title: str) -> str:
+        """Return the page hero icon for the current Setup page."""
+
+        if title == "Power":
+            return "battery"
+        if title == "Time":
+            return "clock"
+        return "care"
+
+    def _render_page_dots(self, *, total_pages: int) -> None:
+        """Render the compact Setup page-position dots."""
+
+        if total_pages <= 1:
+            return
+
+        dots_width = max(0, (total_pages - 1) * 10)
+        dots_x = (self.display.WIDTH - dots_width) // 2
+        dots_y = self.display.HEIGHT - 42
+        for index in range(total_pages):
+            color = SETUP.accent if index == self.page_index else MUTED
+            self.display.circle(dots_x + (index * 10), dots_y, 2, fill=color)
 
     def build_pages(
         self,

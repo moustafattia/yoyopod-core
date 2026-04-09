@@ -42,6 +42,16 @@ class LvglPlaylistView:
         context = self.screen.context
 
         visible_items, visible_badges, selected_visible_index = self.screen.get_visible_window()
+        visible_subtitles = (
+            self.screen.get_visible_subtitles()
+            if hasattr(self.screen, "get_visible_subtitles")
+            else ["" for _ in visible_items]
+        )
+        visible_icon_keys = (
+            self.screen.get_visible_icon_keys()
+            if hasattr(self.screen, "get_visible_icon_keys")
+            else ["playlist" for _ in visible_items]
+        )
 
         empty_title, empty_subtitle = self._empty_state_copy()
 
@@ -50,7 +60,9 @@ class LvglPlaylistView:
             page_text=None,
             footer=footer,
             items=visible_items,
+            subtitles=visible_subtitles,
             badges=visible_badges,
+            icon_keys=visible_icon_keys,
             selected_visible_index=selected_visible_index,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),

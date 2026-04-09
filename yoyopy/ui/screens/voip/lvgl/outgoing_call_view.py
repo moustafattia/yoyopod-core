@@ -38,7 +38,7 @@ class LvglOutgoingCallView:
             callee_name = caller_info.get("display_name", callee_name) or "Unknown"
             callee_address = caller_info.get("address", callee_address) or "Unknown"
 
-        footer = "Hold cancel" if self.screen.is_one_button_mode() else "B cancel"
+        footer = "Hold = Cancel" if self.screen.is_one_button_mode() else "B cancel"
         context = self.screen.context
 
         self.backend.binding.outgoing_call_sync(

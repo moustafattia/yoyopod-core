@@ -12,6 +12,9 @@ if(NOT LVGL_SOURCE_DIR)
   message(FATAL_ERROR "LVGL_SOURCE_DIR must point to an LVGL checkout")
 endif()
 
+# YoyoPod does not use LVGL vector graphics or Lottie, so keep ThorVG off
+# even if upstream desktop defaults enable it.
+set(CONFIG_LV_USE_THORVG_INTERNAL OFF CACHE BOOL "Disable LVGL ThorVG integration" FORCE)
 set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "Disable LVGL examples" FORCE)
 set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "Disable LVGL demos" FORCE)
 

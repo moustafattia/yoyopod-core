@@ -45,8 +45,11 @@ class LvglPowerView:
         self.backend.binding.power_sync(
             title_text=active_page.title,
             page_text=None,
-            footer="Tap page / Back" if self.screen.is_one_button_mode() else "A page | B back",
+            icon_key=self.screen._page_icon_key(active_page.title),
+            footer="Tap = Page / Hold = Back" if self.screen.is_one_button_mode() else "A page | B back",
             items=items,
+            current_page_index=self.screen.page_index,
+            total_pages=len(pages),
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),
             charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,

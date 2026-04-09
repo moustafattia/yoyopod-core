@@ -12,13 +12,13 @@ argument-hint: "[--readback]"
 
 Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `scripts/pi_remote.py` merges them directly, and `uv run python scripts/pi_remote.py config edit` is the preferred way to create or update the local override.
 
-If the file does not exist, stop and tell the user to create it.
+If the file does not exist yet, run `uv run python scripts/pi_remote.py config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
 ## Argument Parsing
 
 Parse the arguments string provided after `/yoyopod-screenshot`:
 
-- **--readback flag:** If `--readback` is present, use LVGL readback. Otherwise use the shadow buffer.
+- **--readback flag:** If `--readback` is present, request LVGL readback. Otherwise use the shadow buffer.
 
 ## Steps
 
@@ -32,8 +32,16 @@ Parse the arguments string provided after `/yoyopod-screenshot`:
 
 3. **Explain what was captured.** After showing the image:
    - Default mode: "This is the shadow buffer - what the app sent to the display."
-   - `--readback`: "This is the LVGL readback - what LVGL actually rendered."
+   - `--readback`: "This is the requested LVGL readback path - what LVGL actually rendered if the native snapshot succeeded."
 
    Remind the user they can ask follow-up questions about what they see, such as "why is the status bar missing?" or "what screen is this?"
 
-4. **Clean up.** Delete the temporary local screenshot file after displaying it.
+4. **If the user is debugging screenshot fidelity, verify the capture path in logs.** Run:
+   ```bash
+   uv run python scripts/pi_remote.py logs --lines 20
+   ```
+   Confirm one of these outcomes:
+   - `Saved screenshot via LVGL readback` means the readback path succeeded.
+   - `Saved screenshot via shadow buffer` means the capture used the shadow path instead.
+
+5. **Clean up.** Delete the temporary local screenshot file after displaying it.

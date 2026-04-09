@@ -8,10 +8,19 @@ from typing import TYPE_CHECKING, Optional
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.theme import (
-    draw_empty_state,
-    draw_list_item,
+    ERROR,
+    INK,
+    MUTED,
+    SUCCESS,
+    TALK,
+    WARNING,
+    draw_talk_action_button,
+    draw_talk_page_dots,
+    draw_talk_person_header,
+    draw_talk_status_chip,
     render_footer,
-    render_header,
+    render_status_bar,
+    talk_monogram,
 )
 from yoyopy.ui.screens.voip.lvgl.voice_note_view import LvglVoiceNoteView
 
@@ -95,6 +104,11 @@ class VoiceNoteScreen(Screen):
         if self.context is None:
             return ""
         return self.context.voice_note_recipient_address or self.context.talk_contact_address
+
+    def recipient_monogram(self) -> str:
+        """Return a compact label for the active recipient."""
+
+        return talk_monogram(self.recipient_name())
 
     def _sync_state_from_manager(self, default_state: str = "ready") -> None:
         """Reflect the active voice-note draft from VoIPManager into the screen/context."""
@@ -191,6 +205,123 @@ class VoiceNoteScreen(Screen):
             min(self._selected_action_index, max(0, len(actions) - 1)),
         )
 
+    def current_action_subtitles(self) -> list[str]:
+        """Return subtitles for the current action list."""
+
+        subtitles: list[str] = []
+        for action in self.actions():
+            if action.key == "send":
+                subtitles.append("Deliver this voice note")
+            elif action.key == "play":
+                subtitles.append("Listen before sending")
+            elif action.key == "again":
+                subtitles.append("Record a new version")
+            else:
+                subtitles.append("Try that step again")
+        return subtitles
+
+    def current_action_icons(self) -> list[str]:
+        """Return icon keys for the current action list."""
+
+        icons: list[str] = []
+        for action in self.actions():
+            if action.key == "send":
+                icons.append("check")
+            elif action.key == "play":
+                icons.append("play")
+            elif action.key == "retry":
+                icons.append("retry")
+            else:
+                icons.append("close")
+        return icons
+
+    def current_action_colors(self) -> list[tuple[int, int, int]]:
+        """Return the Talk action colors for the current button row."""
+
+        colors: list[tuple[int, int, int]] = []
+        for action in self.actions():
+            if action.key == "send":
+                colors.append(SUCCESS)
+            elif action.key == "play":
+                colors.append(TALK.accent)
+            elif action.key == "retry":
+                colors.append(WARNING)
+            elif action.key == "again":
+                colors.append(WARNING)
+            else:
+                colors.append(ERROR)
+        return colors
+
+    def current_action_color_kinds(self) -> list[int]:
+        """Return native LVGL color kinds for the current action row."""
+
+        kinds: list[int] = []
+        for action in self.actions():
+            if action.key == "send":
+                kinds.append(1)
+            elif action.key == "play":
+                kinds.append(0)
+            elif action.key in {"retry", "again"}:
+                kinds.append(2)
+            else:
+                kinds.append(3)
+        return kinds
+
+    def current_primary_icon(self) -> str:
+        """Return the large centered action icon for non-review states."""
+
+        if self._state == "sent":
+            return "check"
+        if self._state == "failed":
+            return "close"
+        return "voice_note"
+
+    def current_primary_color(self) -> tuple[int, int, int]:
+        """Return the large centered action color for non-review states."""
+
+        if self._state == "sent":
+            return SUCCESS
+        if self._state == "sending":
+            return TALK.accent
+        return ERROR
+
+    def current_primary_color_kind(self) -> int:
+        """Return the native LVGL color kind for the centered action."""
+
+        if self._state == "sent":
+            return 1
+        if self._state == "sending":
+            return 0
+        if self._state == "ready":
+            return 3
+        return 3
+
+    def current_primary_status(self) -> tuple[str, tuple[int, int, int]]:
+        """Return the main status label and color for non-review states."""
+
+        if self._state == "ready":
+            return ("Hold to record", MUTED)
+        if self._state == "recording":
+            return ("Recording", ERROR)
+        if self._state == "sending":
+            return ("Sending", TALK.accent)
+        if self._state == "sent":
+            return ("Sent", SUCCESS)
+        if self._state == "failed":
+            return ("Couldn't send", ERROR)
+        return ("Voice Note", MUTED)
+
+    def current_primary_status_kind(self) -> int:
+        """Return the native LVGL color kind for the centered status label."""
+
+        if self._state == "sent":
+            return 1
+        if self._state == "sending":
+            return 0
+        if self._state == "ready":
+            return 4
+        return 3
+
     def current_status_chip(self) -> tuple[str | None, int]:
         """Return the current state-chip label and style kind."""
 
@@ -262,44 +393,74 @@ class VoiceNoteScreen(Screen):
             lvgl_view.sync()
             return
 
-        title_text, subtitle_text, footer_text, icon_key = self.current_view_model()
-        content_top = render_header(
+        title_text, _subtitle_text, footer_text, _icon_key = self.current_view_model()
+        render_status_bar(self.display, self.context, show_time=True)
+        bottom = draw_talk_person_header(
             self.display,
-            self.context,
-            mode="talk",
-            title=self.recipient_name(),
-            subtitle=subtitle_text,
-            icon=icon_key,
-            show_time=False,
-            show_mode_chip=False,
+            center_x=self.display.WIDTH // 2,
+            top=self.display.STATUS_BAR_HEIGHT + 26,
+            name=self.recipient_name(),
+            label=self.recipient_monogram(),
         )
 
         items, badges, selected_index = self.current_actions_for_view()
         if items:
-            panel_top = content_top + 8
-            for row, item_title in enumerate(items):
-                y1 = panel_top + (row * 48)
-                y2 = y1 + 40
-                draw_list_item(
+            icons = self.current_action_icons()
+            colors = self.current_action_colors()
+            diameter = 56
+            gap = 12
+            center_y = bottom + 52
+            row_width = (len(items) * diameter) + (max(0, len(items) - 1) * gap)
+            start_center = ((self.display.WIDTH - row_width) // 2) + (diameter // 2)
+            for row, _item_title in enumerate(items):
+                draw_talk_action_button(
                     self.display,
-                    x1=18,
-                    y1=y1,
-                    x2=self.display.WIDTH - 18,
-                    y2=y2,
-                    title=item_title,
-                    subtitle="",
-                    mode="talk",
-                    selected=row == selected_index,
-                    badge=badges[row] or None,
+                    center_x=start_center + (row * (diameter + gap)),
+                    center_y=center_y,
+                    button_size="small",
+                    color=colors[row],
+                    icon=icons[row],
+                    filled=row == selected_index,
+                    active=row == selected_index,
                 )
-        else:
-            draw_empty_state(
+
+            label = items[selected_index]
+            label_width, label_height = self.display.get_text_size(label, 16)
+            label_y = center_y + (diameter // 2) + 14
+            self.display.text(
+                label,
+                (self.display.WIDTH - label_width) // 2,
+                label_y,
+                color=INK,
+                font_size=16,
+            )
+            draw_talk_page_dots(
                 self.display,
-                mode="talk",
-                title=title_text,
-                subtitle=subtitle_text,
-                icon=icon_key,
-                top=content_top,
+                center_x=self.display.WIDTH // 2,
+                top=label_y + label_height + 14,
+                total=len(items),
+                current=selected_index,
+                color=SUCCESS if self._state == "review" else WARNING,
+            )
+        else:
+            center_y = bottom + 64
+            draw_talk_action_button(
+                self.display,
+                center_x=self.display.WIDTH // 2,
+                center_y=center_y,
+                button_size="large",
+                color=self.current_primary_color(),
+                icon=self.current_primary_icon(),
+                filled=False,
+                active=True,
+            )
+            status_text, status_color = self.current_primary_status()
+            draw_talk_status_chip(
+                self.display,
+                center_x=self.display.WIDTH // 2,
+                top=center_y + 54,
+                text=status_text,
+                color=status_color,
             )
 
         render_footer(self.display, footer_text, mode="talk")

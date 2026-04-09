@@ -71,6 +71,9 @@ def test_listen_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     first_payload = binding.listen_sync_payloads[-1]
     assert first_payload["page_text"] is None
     assert first_payload["items"] == ["Playlists", "Recent", "Shuffle"]
+    assert first_payload["subtitles"] == ["Saved mixes", "Played lately", "Start something fun"]
+    assert first_payload["icon_keys"] == ["playlist", "music_note", "listen"]
+    assert first_payload["footer"] == "Tap next / 2x open / Hold back"
     assert first_payload["selected_index"] == 0
     assert first_payload["voip_state"] == 2
     assert first_payload["battery_percent"] == 58
@@ -80,6 +83,7 @@ def test_listen_screen_builds_syncs_and_destroys_lvgl_view() -> None:
 
     second_payload = binding.listen_sync_payloads[-1]
     assert second_payload["page_text"] is None
+    assert second_payload["icon_keys"] == ["playlist", "music_note", "listen"]
     assert second_payload["selected_index"] == 1
 
     screen.exit()

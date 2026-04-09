@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PIL import Image
+
 from yoyopy.ui.display.adapters.whisplay import WhisplayDisplayAdapter
 
 
@@ -62,12 +64,44 @@ def test_simulated_lvgl_flush_keeps_shadow_buffer_for_debug(monkeypatch) -> None
     assert mirrored == [(0, 0, 4, 2, payload)]
 
 
-def test_shadow_screenshot_falls_back_to_lvgl_readback_when_shadow_sync_is_disabled(monkeypatch) -> None:
-    """Hardware LVGL screenshots should use readback instead of per-flush shadow sync."""
+def test_shadow_screenshot_forces_one_redraw_into_buffer_when_shadow_sync_is_disabled(monkeypatch) -> None:
+    """Hardware LVGL screenshots should force one redraw into the PIL buffer."""
 
     adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
     adapter.simulate = False
-    adapter.ui_backend = type("Backend", (), {"available": True})()
+    mirrored: list[tuple[int, int, int, int, bytes]] = []
+    saved_paths: list[tuple[str, str]] = []
+    adapter.buffer = type(
+        "Buffer",
+        (),
+        {"save": lambda _self, path, fmt: saved_paths.append((path, fmt))},
+    )()
+    monkeypatch.setattr(
+        adapter,
+        "_paste_rgb565_region",
+        lambda x, y, width, height, pixel_data: mirrored.append((x, y, width, height, pixel_data)),
+    )
+
+    class Backend:
+        available = True
+        initialized = True
+
+        def force_refresh(self) -> None:
+            adapter.draw_rgb565_region(1, 2, 2, 1, b"\x12\x34" * 2)
+
+    adapter.ui_backend = Backend()
+
+    assert adapter.save_screenshot("/tmp/test.png") is True
+    assert mirrored == [(1, 2, 2, 1, b"\x12\x34" * 2)]
+    assert saved_paths == [("/tmp/test.png", "PNG")]
+
+
+def test_shadow_screenshot_falls_back_to_lvgl_readback_when_force_refresh_is_unavailable(monkeypatch) -> None:
+    """Hardware LVGL screenshots should still fall back to readback when needed."""
+
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
+    adapter.simulate = False
+    adapter.ui_backend = type("Backend", (), {"available": True, "initialized": False})()
 
     readback_calls: list[str] = []
     monkeypatch.setattr(
@@ -98,3 +132,33 @@ def test_shadow_sync_mode_tracks_runtime_fallback_state_changes() -> None:
     adapter.renderer = "lvgl"
     adapter.ui_backend = type("Backend", (), {"available": False})()
     assert adapter.shadow_buffer_sync_enabled is True
+
+
+def test_readback_screenshot_decodes_rgb565_swapped_pixels(tmp_path) -> None:
+    """Readback screenshots should decode the shim's RGB565_SWAPPED contract."""
+
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
+    pixel_data = b"\xF8\x00" * (adapter.WIDTH * adapter.HEIGHT)
+
+    class Binding:
+        def snapshot(self, width: int, height: int) -> bytes:
+            assert width == adapter.WIDTH
+            assert height == adapter.HEIGHT
+            return pixel_data
+
+    adapter.ui_backend = type(
+        "Backend",
+        (),
+        {
+            "initialized": True,
+            "binding": Binding(),
+        },
+    )()
+
+    screenshot_path = tmp_path / "readback.png"
+
+    assert adapter.save_screenshot_readback(str(screenshot_path)) is True
+
+    with Image.open(screenshot_path) as screenshot:
+        assert screenshot.size == (adapter.WIDTH, adapter.HEIGHT)
+        assert screenshot.getpixel((0, 0)) == (255, 0, 0)

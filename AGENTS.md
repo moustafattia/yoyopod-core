@@ -1,6 +1,6 @@
 # YoyoPod - Agent Instructions
 
-**Last Updated:** 2026-04-07
+**Last Updated:** 2026-04-09
 **Target Hardware:** Raspberry Pi Zero 2W
 **Project:** iPod-inspired VoIP and mpv-based local music player with a small-screen, button-driven UI
 
@@ -12,6 +12,7 @@ Follow all instructions in the `rules/` directory:
 - `rules/project.md` -- project overview, commands, configuration
 - `rules/architecture.md` -- system architecture, HAL layers, state machines
 - `rules/code-style.md` -- Python 3.12+, black, ruff, type hints
+- `rules/design-fidelity.md` -- Figma-to-Whisplay workflow, screen extraction, and hardware validation loop
 - `rules/voip.md` -- Liblinphone integration, SIP and messaging patterns
 - `rules/lvgl.md` -- LVGL display pipeline, C shim, screenshot support
 - `rules/logging.md` -- loguru contract, subsystem tags, PID file

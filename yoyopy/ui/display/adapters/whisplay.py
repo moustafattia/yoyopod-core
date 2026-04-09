@@ -80,6 +80,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         self.renderer = renderer.lower().strip() or "pil"
         self.lvgl_buffer_lines = max(1, int(lvgl_buffer_lines))
         self.ui_backend = None
+        self._force_shadow_buffer_sync = False
 
         # Create PIL drawing buffer
         self._create_buffer()
@@ -127,6 +128,8 @@ class WhisplayDisplayAdapter(DisplayHAL):
         if self.simulate or self.renderer != "lvgl":
             return True
         if self.ui_backend is None:
+            return True
+        if self._force_shadow_buffer_sync:
             return True
         return not bool(getattr(self.ui_backend, "available", False))
 
@@ -436,10 +439,23 @@ class WhisplayDisplayAdapter(DisplayHAL):
             True if the screenshot was saved, False if no buffer exists.
         """
         if not self.shadow_buffer_sync_enabled:
+            if self.ui_backend is None or not getattr(self.ui_backend, "initialized", False):
+                logger.info(
+                    "Shadow-buffer screenshots are disabled for hardware LVGL; using LVGL readback instead"
+                )
+                return self.save_screenshot_readback(path)
+
             logger.info(
-                "Shadow-buffer screenshots are disabled for hardware LVGL; using LVGL readback instead"
+                "Shadow-buffer screenshots are disabled for hardware LVGL; forcing one redraw into the PIL buffer"
             )
-            return self.save_screenshot_readback(path)
+            self._force_shadow_buffer_sync = True
+            try:
+                self.ui_backend.force_refresh()
+            except Exception as e:
+                logger.error("Failed to refresh the LVGL scene for shadow screenshot: {}", e)
+                return False
+            finally:
+                self._force_shadow_buffer_sync = False
 
         if self.buffer is None:
             logger.warning("No buffer available for screenshot")
