@@ -400,17 +400,28 @@ def test_in_call_screen_syncs_duration_and_mute_state_through_lvgl() -> None:
     assert binding.in_call_destroy_calls == 1
 
 
-def test_ask_screen_exposes_voice_commands_and_ai_requests_items() -> None:
-    """AskScreen submenu should list Voice Commands and AI Requests."""
+def test_ask_screen_builds_syncs_and_destroys_lvgl_view() -> None:
+    """AskScreen should delegate its voice-command shell through LVGL."""
 
     from yoyopy.ui.screens.navigation.ask import AskScreen as _AskScreen
 
-    screen = _AskScreen(display=object(), context=make_one_button_context())
-    items = screen.items()
+    binding = FakeLvglBinding()
+    screen = _AskScreen(
+        display=FakeLvglDisplay(binding),
+        context=make_one_button_context(),
+    )
 
-    titles = [item.title for item in items]
-    assert "Voice Commands" in titles
-    assert "AI Requests" in titles
+    screen.render()
+
+    assert binding.ask_build_calls == 1
+    payload = binding.ask_sync_payloads[-1]
+    assert payload["title_text"] == "Ask"
+    assert payload["subtitle_text"] == "Ask me anything..."
+    assert payload["footer"] == "Double listen / Hold back"
+    assert payload["icon_key"] == "ask"
+
+    screen.exit()
+    assert binding.ask_destroy_calls == 1
 
 
 def test_voice_note_screen_uses_talk_actions_scene_for_voice_note_states() -> None:

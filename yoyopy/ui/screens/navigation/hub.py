@@ -242,7 +242,7 @@ class HubScreen(Screen):
 
         footer_top = self.display.HEIGHT - 32
         self.display.rectangle(0, footer_top, self.display.WIDTH, self.display.HEIGHT, fill=FOOTER_BAR)
-        footer_text = "Tap = Next | 2x Tap = Open"
+        footer_text = "Tap = Next \u00b7 2\u00d7 = Open \u00b7 Hold = Ask"
         footer_width, footer_height = self.display.get_text_size(footer_text, 10)
         self.display.text(
             footer_text,
@@ -262,5 +262,9 @@ class HubScreen(Screen):
         self.request_route("select", payload=self._cards()[self.selected_index].title)
 
     def on_back(self, data=None) -> None:
-        """Back is intentionally a no-op on the root hub."""
-        return
+        """Open Ask in quick-command mode (hold-to-ask shortcut)."""
+        if self.screen_manager is not None:
+            ask_screen = self.screen_manager.screens.get("ask")
+            if ask_screen is not None and hasattr(ask_screen, "set_quick_command"):
+                ask_screen.set_quick_command(True)
+        self.request_route("hold_ask")
