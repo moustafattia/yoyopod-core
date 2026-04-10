@@ -400,17 +400,15 @@ def test_in_call_screen_syncs_duration_and_mute_state_through_lvgl() -> None:
     assert binding.in_call_destroy_calls == 1
 
 
-def test_ask_screen_exposes_voice_commands_and_ai_requests_items() -> None:
-    """AskScreen submenu should list Voice Commands and AI Requests."""
+def test_ask_screen_initializes_in_idle_state() -> None:
+    """Unified AskScreen should initialize in the idle state."""
 
     from yoyopy.ui.screens.navigation.ask import AskScreen as _AskScreen
 
     screen = _AskScreen(display=object(), context=make_one_button_context())
-    items = screen.items()
-
-    titles = [item.title for item in items]
-    assert "Voice Commands" in titles
-    assert "AI Requests" in titles
+    assert screen._state == "idle"
+    assert screen._headline == "Ask"
+    assert screen._body == "Ask me anything..."
 
 
 def test_voice_note_screen_uses_talk_actions_scene_for_voice_note_states() -> None:

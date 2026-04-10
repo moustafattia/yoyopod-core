@@ -242,23 +242,32 @@ def test_screen_manager_can_schedule_actions_for_main_thread(display: Display) -
     assert screen_manager.current_screen is listen
 
 
-def test_ask_screen_routes_to_selected_subflow() -> None:
-    """Ask should expose Voice Commands and AI Requests as first-level choices."""
+def test_ask_screen_state_transitions() -> None:
+    """AskScreen should transition through idle -> listening -> thinking -> reply."""
 
     ask = AskScreen(display=object(), context=AppContext())
+    assert ask._state == "idle"
+    assert ask._headline == "Ask"
+    assert ask._body == "Ask me anything..."
 
-    assert ask.items()[0].title == "Voice Commands"
+    ask._set_state("listening", "Listening", "Speak now...")
+    assert ask._state == "listening"
 
-    ask.on_select()
-    assert ask.consume_navigation_request() == NavigationRequest.route(
-        "select", payload="Voice Commands"
-    )
+    ask._set_state("thinking", "Thinking", "Just a moment...")
+    assert ask._state == "thinking"
 
-    ask.on_advance()
-    ask.on_select()
-    assert ask.consume_navigation_request() == NavigationRequest.route(
-        "select", payload="AI Requests"
-    )
+    ask._set_response("Volume", "Volume is 75.")
+    assert ask._state == "reply"
+    assert ask._headline == "Volume"
+    assert ask._body == "Volume is 75."
+
+
+def test_ask_screen_back_pops() -> None:
+    """Back from any Ask state should pop the screen."""
+
+    ask = AskScreen(display=object(), context=AppContext())
+    ask.on_back()
+    assert ask.consume_navigation_request() == NavigationRequest.route("back")
 
 
 class _FakeContact:
@@ -362,13 +371,13 @@ class _FakeVoiceService:
         return True
 
 
-def test_voice_commands_screen_applies_local_device_actions() -> None:
+def test_ask_screen_applies_local_device_actions() -> None:
     """Voice commands should update mic and volume state through local hooks."""
 
     context = AppContext()
     volume_up_calls: list[int] = []
     voip_manager = _FakeVoipManager()
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=object(),
         context=context,
         voip_manager=voip_manager,
@@ -392,10 +401,10 @@ def test_voice_commands_screen_applies_local_device_actions() -> None:
     assert context.voice.last_spoken_text == "Voice commands mic is live."
 
 
-def test_voice_commands_screen_can_start_music_from_local_hook() -> None:
+def test_ask_screen_can_start_music_from_local_hook() -> None:
     """Basic play-music commands should route into the local music flow."""
 
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=object(),
         context=AppContext(),
         play_music_action=lambda: True,
@@ -406,12 +415,12 @@ def test_voice_commands_screen_can_start_music_from_local_hook() -> None:
     assert screen.consume_navigation_request() == NavigationRequest.route("shuffle_started")
 
 
-def test_voice_commands_screen_can_place_call_for_named_contact() -> None:
+def test_ask_screen_can_place_call_for_named_contact() -> None:
     """Call commands should resolve child-facing labels and trigger VoIP dialing."""
 
     context = AppContext()
     voip_manager = _FakeVoipManager()
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=object(),
         context=context,
         config_manager=_FakeConfigManager(
@@ -427,12 +436,12 @@ def test_voice_commands_screen_can_place_call_for_named_contact() -> None:
     assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
 
 
-def test_voice_commands_screen_can_place_call_for_parent_aliases() -> None:
+def test_ask_screen_can_place_call_for_parent_aliases() -> None:
     """Parent aliases like mom and dad should resolve against kid-facing labels."""
 
     context = AppContext()
     voip_manager = _FakeVoipManager()
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=object(),
         context=context,
         config_manager=_FakeConfigManager(
@@ -453,12 +462,12 @@ def test_voice_commands_screen_can_place_call_for_parent_aliases() -> None:
     assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
 
 
-def test_voice_commands_screen_select_can_capture_and_execute_command() -> None:
+def test_ask_screen_select_can_capture_and_execute_command() -> None:
     """Selecting command mode should capture speech and execute the transcript."""
 
     context = AppContext()
     service = _FakeVoiceService("mute mic")
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=object(),
         context=context,
         voice_settings_provider=lambda: VoiceSettings(),
@@ -475,7 +484,7 @@ def test_voice_commands_screen_select_can_capture_and_execute_command() -> None:
     assert not service.last_audio_path.exists()
 
 
-def test_voice_commands_screen_select_in_simulation_still_uses_local_capture() -> None:
+def test_ask_screen_select_in_simulation_still_uses_local_capture() -> None:
     """Simulation mode should mirror the screen only and still use Pi-side capture."""
 
     class _FakeDisplay:
@@ -483,7 +492,7 @@ def test_voice_commands_screen_select_in_simulation_still_uses_local_capture() -
 
     context = AppContext()
     service = _FakeVoiceService("call mom")
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=_FakeDisplay(),
         context=context,
         voice_settings_provider=lambda: VoiceSettings(),
@@ -498,14 +507,14 @@ def test_voice_commands_screen_select_in_simulation_still_uses_local_capture() -
     assert not service.last_audio_path.exists()
 
 
-def test_voice_commands_screen_fallback_settings_keep_configured_voice_defaults() -> None:
+def test_ask_screen_fallback_settings_keep_configured_voice_defaults() -> None:
     """Missing providers should still inherit configured backend/model voice settings."""
 
     context = AppContext()
     context.configure_voice(commands_enabled=True, ai_requests_enabled=True, screen_read_enabled=True)
     context.set_mic_muted(True)
     context.set_volume(77)
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=object(),
         context=context,
         config_manager=_FakeConfigManager([]),
@@ -528,12 +537,12 @@ def test_voice_commands_screen_fallback_settings_keep_configured_voice_defaults(
     assert settings.mic_muted is True
 
 
-def test_voice_commands_screen_ignores_stale_results_after_back() -> None:
+def test_ask_screen_ignores_stale_results_after_back() -> None:
     """Leaving the screen should invalidate late transcripts from the old listen cycle."""
 
     context = AppContext()
     voip_manager = _FakeVoipManager()
-    screen = VoiceCommandsScreen(
+    screen = AskScreen(
         display=object(),
         context=context,
         config_manager=_FakeConfigManager(
