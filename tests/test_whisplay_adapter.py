@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from PIL import Image
 
-from yoyopy.ui.display.adapters.whisplay import WhisplayDisplayAdapter
+from yoyopy.ui.display.adapters.whisplay import (
+    WhisplayDisplayAdapter,
+    _patch_vendor_gpiod_compat,
+)
 
 
 class FakeDevice:
@@ -22,6 +27,78 @@ class FakeDevice:
         pixel_data: bytes,
     ) -> None:
         self.draw_calls.append((x, y, width, height, pixel_data))
+
+
+def test_vendor_gpiod_compat_aliases_pypi_module_shapes() -> None:
+    """PyPI gpiod layouts should be normalized for the vendor driver."""
+
+    chip_calls: list[object] = []
+    request_calls: list[tuple[object, object]] = []
+
+    class FakeLineRequest:
+        DIRECTION_OUTPUT = 3
+        DIRECTION_INPUT = 2
+        FLAG_BIAS_DISABLE = 8
+
+        def __init__(self) -> None:
+            self.consumer = None
+            self.request_type = None
+            self.flags = None
+
+    class FakeLine:
+        def request(self, config: object, default_val: object = None) -> dict[str, object]:
+            request_calls.append((config, default_val))
+            return {"config": config, "default_val": default_val}
+
+    class FakeChip:
+        def get_line(self, offset: int) -> FakeLine:
+            assert offset == 7
+            return FakeLine()
+
+    fake_gpiod = SimpleNamespace(
+        chip=lambda path: chip_calls.append(path) or FakeChip(),
+        line_request=FakeLineRequest,
+    )
+    fake_module = SimpleNamespace(gpiod=fake_gpiod)
+
+    _patch_vendor_gpiod_compat(fake_module)
+
+    assert fake_gpiod.LINE_REQ_DIR_OUT == FakeLineRequest.DIRECTION_OUTPUT
+    assert fake_gpiod.LINE_REQ_DIR_IN == FakeLineRequest.DIRECTION_INPUT
+    assert fake_gpiod.LINE_REQ_FLAG_BIAS_DISABLE == FakeLineRequest.FLAG_BIAS_DISABLE
+    chip = fake_gpiod.Chip("gpiochip0")
+    result = chip.get_line(7).request(
+        consumer="whisplay",
+        type=fake_gpiod.LINE_REQ_DIR_OUT,
+        flags=fake_gpiod.LINE_REQ_FLAG_BIAS_DISABLE,
+        default_val=1,
+    )
+
+    assert result["default_val"] == 1
+    assert request_calls[0][0].consumer == "whisplay"
+    assert request_calls[0][0].request_type == FakeLineRequest.DIRECTION_OUTPUT
+    assert request_calls[0][0].flags == FakeLineRequest.FLAG_BIAS_DISABLE
+    assert chip_calls == ["/dev/gpiochip0"]
+
+
+def test_vendor_gpiod_compat_retries_existing_chip_with_dev_prefix() -> None:
+    """Legacy ``gpiod.Chip`` call sites should retry with ``/dev`` when needed."""
+
+    chip_calls: list[object] = []
+
+    def fake_chip(path: object) -> dict[str, object]:
+        chip_calls.append(path)
+        if path == "gpiochip1":
+            raise FileNotFoundError(path)
+        return {"path": path}
+
+    fake_gpiod = SimpleNamespace(Chip=fake_chip)
+    fake_module = SimpleNamespace(gpiod=fake_gpiod)
+
+    _patch_vendor_gpiod_compat(fake_module)
+
+    assert fake_gpiod.Chip("gpiochip1") == {"path": "/dev/gpiochip1"}
+    assert chip_calls == ["gpiochip1", "/dev/gpiochip1"]
 
 
 def test_hardware_lvgl_flush_skips_shadow_buffer_sync(monkeypatch) -> None:

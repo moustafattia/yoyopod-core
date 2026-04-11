@@ -866,6 +866,32 @@ def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None
     assert app.menu_screen.render_calls == render_calls_before + 1
 
 
+def test_raw_user_activity_wakes_screen_without_rerendering_current_pil_screen() -> None:
+    """Raw button activity should wake the screen without flashing the current view."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+    app.display = FakeDisplay()
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=75, backlight_timeout_seconds=30),
+    )
+
+    app._screen_timeout_seconds = app._resolve_screen_timeout_seconds()
+    app._active_brightness = app._resolve_active_brightness()
+    app._configure_screen_power(initial_now=0.0)
+    app._sleep_screen(31.0)
+
+    assert app.context.screen_awake is False
+    render_calls_before = app.menu_screen.render_calls
+
+    _publish_from_worker(app, UserActivityEvent(action_name=None))
+
+    assert app.event_bus.drain() == 1
+    assert app.display.set_backlight_calls[-1] == 0.75
+    assert app.context.screen_awake is True
+    assert app.menu_screen.render_calls == render_calls_before
+
+
 def test_user_activity_event_wakes_sleeping_lvgl_screen_with_forced_refresh() -> None:
     """LVGL wake should explicitly refresh the active scene after backlight sleep."""
 

@@ -22,6 +22,7 @@ dependencies = [
     "pygame>=2.5.0",
     "requests>=2.31.0",
     "loguru>=0.7.0",
+    "gpiod<2; platform_system == 'Linux'",
     "displayhatmini>=0.0.1; platform_system == 'Linux'",
     "pyyaml>=6.0.3",
     "vosk>=0.3.45",

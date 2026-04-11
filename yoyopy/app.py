@@ -1018,7 +1018,14 @@ class YoyoPodApp:
     def _handle_user_activity_event(self, event: UserActivityEvent) -> None:
         """Wake the display and reset the inactivity timer on user activity."""
         logger.debug(f"User activity received: {event.action_name or 'unknown'}")
-        self._mark_user_activity(now=time.monotonic(), render_on_wake=True)
+        # Raw physical activity (for example the first Whisplay button press before
+        # one-button gesture resolution) should wake the backlight without forcing
+        # an immediate redraw of the current screen. The semantic action render that
+        # follows should own the visible transition.
+        self._mark_user_activity(
+            now=time.monotonic(),
+            render_on_wake=event.action_name is not None,
+        )
 
     def _handle_recovery_attempt_completed_event(
         self,
