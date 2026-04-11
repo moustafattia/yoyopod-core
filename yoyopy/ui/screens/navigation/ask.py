@@ -981,10 +981,11 @@ class AskScreen(Screen):
             with NamedTemporaryFile(prefix="yoyopy-beep-", suffix=".wav", delete=False) as handle:
                 beep_path = Path(handle.name)
             self._write_beep_wav(beep_path)
-            device_id = None
-            if self.context is not None:
-                device_id = getattr(self.context.voice, "speaker_device_id", None)
-            self._output_player.play_wav(beep_path, device_id=device_id, timeout_seconds=2.0)
+            device_id = self.context.voice.speaker_device_id if self.context is not None else None
+            play_kwargs = {"timeout_seconds": 2.0}
+            if device_id:
+                play_kwargs["device_id"] = device_id
+            self._output_player.play_wav(beep_path, **play_kwargs)
         except Exception:
             logger.debug("Voice attention tone unavailable")
         finally:
