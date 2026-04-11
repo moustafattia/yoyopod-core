@@ -29,6 +29,7 @@ from yoyopy.voice.devices import (
 
 if TYPE_CHECKING:
     from yoyopy.app_context import AppContext
+    from yoyopy.config import ConfigManager
     from yoyopy.power import PowerManager, PowerSnapshot
     from yoyopy.ui.screens import ScreenView
 
@@ -52,6 +53,7 @@ class PowerScreen(Screen):
         *,
         power_manager: Optional["PowerManager"] = None,
         status_provider: Optional[Callable[[], dict[str, object]]] = None,
+        config_manager: Optional["ConfigManager"] = None,
         volume_up_action: Optional[Callable[[int], int | None]] = None,
         volume_down_action: Optional[Callable[[int], int | None]] = None,
         mute_action: Optional[Callable[[], bool]] = None,
@@ -60,6 +62,7 @@ class PowerScreen(Screen):
         super().__init__(display, context, "PowerStatus")
         self.power_manager = power_manager
         self.status_provider = status_provider or (lambda: {})
+        self.config_manager = config_manager
         self.volume_up_action = volume_up_action
         self.volume_down_action = volume_down_action
         self.mute_action = mute_action
@@ -655,6 +658,8 @@ class PowerScreen(Screen):
             direction,
         )
         self.context.configure_voice(speaker_device_id=next_device)
+        if self.config_manager is not None:
+            self.config_manager.set_voice_speaker_device_id(next_device)
 
     def _cycle_capture_device(self, direction: int) -> None:
         if self.context is None:
@@ -665,6 +670,8 @@ class PowerScreen(Screen):
             direction,
         )
         self.context.configure_voice(capture_device_id=next_device)
+        if self.config_manager is not None:
+            self.config_manager.set_voice_capture_device_id(next_device)
 
     def _next_page(self) -> None:
         """Advance to the next page with wraparound."""

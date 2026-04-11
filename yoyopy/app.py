@@ -413,12 +413,16 @@ class YoyoPodApp:
                 )
             if self.context is not None and self.app_settings is not None:
                 voice_cfg = self.app_settings.voice
+                speaker_device_id = voice_cfg.speaker_device_id.strip() or None
+                capture_device_id = voice_cfg.capture_device_id.strip() or None
                 self.context.configure_voice(
                     commands_enabled=voice_cfg.commands_enabled,
                     ai_requests_enabled=voice_cfg.ai_requests_enabled,
                     screen_read_enabled=voice_cfg.screen_read_enabled,
                     stt_enabled=voice_cfg.stt_enabled,
                     tts_enabled=voice_cfg.tts_enabled,
+                    speaker_device_id=speaker_device_id,
+                    capture_device_id=capture_device_id,
                 )
                 self._refresh_talk_summary()
             self._update_screen_runtime_metrics(time.monotonic())
@@ -724,6 +728,7 @@ class YoyoPodApp:
                 self.context,
                 power_manager=self.power_manager,
                 status_provider=self.get_status,
+                config_manager=self.config_manager,
                 volume_up_action=self.volume_up,
                 volume_down_action=self.volume_down,
                 mute_action=self.voip_manager.mute if self.voip_manager is not None else None,

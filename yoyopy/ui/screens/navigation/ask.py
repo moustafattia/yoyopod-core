@@ -443,17 +443,18 @@ class AskScreen(Screen):
         """Return configured voice defaults when a screen-level provider is absent."""
 
         capture_device_id = None
-        if self.config_manager is not None:
-            capture_device_id = self.config_manager.get_capture_device_id()
-
         speaker_device_id = None
         if self.config_manager is not None:
-            speaker_device_id = getattr(self.config_manager, "get_ring_output_device", lambda: None)()
+            voice_cfg = getattr(self.config_manager.get_app_settings(), "voice", None)
+            if voice_cfg is not None:
+                capture_device_id = getattr(voice_cfg, "capture_device_id", "").strip() or None
+                speaker_device_id = getattr(voice_cfg, "speaker_device_id", "").strip() or None
+            if capture_device_id is None:
+                capture_device_id = self.config_manager.get_capture_device_id()
+            if speaker_device_id is None:
+                speaker_device_id = getattr(self.config_manager, "get_ring_output_device", lambda: None)()
 
-        defaults = VoiceSettings(
-            capture_device_id=capture_device_id,
-            speaker_device_id=speaker_device_id or None,
-        )
+        defaults = VoiceSettings(capture_device_id=capture_device_id, speaker_device_id=speaker_device_id or None)
         if self.config_manager is None:
             return defaults
 
