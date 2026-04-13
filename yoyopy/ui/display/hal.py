@@ -275,6 +275,26 @@ class DisplayHAL(ABC):
 
         return None
 
+    def draw_rgb565_region(
+        self, x: int, y: int, width: int, height: int, pixel_data: bytes
+    ) -> None:
+        """Receive an RGB565 pixel region from the LVGL flush callback.
+
+        Adapters that support LVGL rendering override this to push pixel
+        data to their hardware (SPI, framebuffer, WebSocket, etc.).
+        The default implementation is a no-op.
+        """
+        pass
+
+    def get_flush_target(self) -> "DisplayHAL | None":
+        """Return this adapter as an LVGL flush target, or None.
+
+        Adapters that can receive RGB565 region updates from LVGL's flush
+        callback should override this to return ``self``.  The display
+        factory uses this to wire the LvglDisplayBackend automatically.
+        """
+        return None
+
     # Helper methods (default implementations, can be overridden)
     def get_orientation(self) -> str:
         """
