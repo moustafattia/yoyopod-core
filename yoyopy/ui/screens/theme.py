@@ -42,6 +42,12 @@ STATUS_BATTERY_SIDE_INSET_PORTRAIT = 18
 STATUS_BATTERY_SIDE_INSET_LANDSCAPE = 10
 STATUS_BATTERY_GAP_PORTRAIT = 28
 STATUS_BATTERY_GAP_LANDSCAPE = 24
+STATUS_SIGNAL_BAR_WIDTH = 3
+STATUS_SIGNAL_BAR_GAP = 1
+STATUS_SIGNAL_BAR_HEIGHTS = (4, 7, 10, 13)
+STATUS_SIGNAL_GPS_GAP = 6
+STATUS_GPS_RADIUS = 3
+STATUS_NETWORK_VOIP_GAP = 8
 HEADER_SIDE_INSET_PORTRAIT = 18
 HEADER_SIDE_INSET_LANDSCAPE = 16
 
@@ -313,10 +319,35 @@ def render_status_bar(
     battery_gap = STATUS_BATTERY_GAP_PORTRAIT if is_portrait else STATUS_BATTERY_GAP_LANDSCAPE
 
     dot_y = (bar_height // 2) + (2 if is_portrait else 1)
+    cursor_x = side_inset
+
+    # -- Signal bars (only when network is active) --
+    if context is not None and context.connection_type != "none":
+        signal = context.signal_strength
+        connected = context.is_connected
+        bar_base_y = dot_y + 3
+        for i, h in enumerate(STATUS_SIGNAL_BAR_HEIGHTS):
+            bx = cursor_x + i * (STATUS_SIGNAL_BAR_WIDTH + STATUS_SIGNAL_BAR_GAP)
+            by = bar_base_y - h
+            if i < signal:
+                bar_color = SUCCESS if connected else MUTED
+            else:
+                bar_color = (60, 63, 70)
+            display.rectangle(bx, by, bx + STATUS_SIGNAL_BAR_WIDTH, bar_base_y, fill=bar_color)
+        cursor_x += 4 * (STATUS_SIGNAL_BAR_WIDTH + STATUS_SIGNAL_BAR_GAP) + STATUS_SIGNAL_GPS_GAP
+
+    # -- GPS indicator (only when network is active) --
+    if context is not None and context.connection_type != "none":
+        gps_fix = getattr(context, "gps_has_fix", False)
+        gps_color = SUCCESS if gps_fix else MUTED
+        display.circle(cursor_x + STATUS_GPS_RADIUS, dot_y, STATUS_GPS_RADIUS, fill=gps_color)
+        cursor_x += STATUS_GPS_RADIUS * 2 + STATUS_NETWORK_VOIP_GAP
+
+    # -- VoIP indicator --
     voip_state = _voip_state(context)
-    time_x = side_inset
+    time_x = cursor_x
     if voip_state != "none":
-        dot_x = side_inset + 3
+        dot_x = cursor_x + 3
         display.circle(dot_x, dot_y, 3, fill=SUCCESS if voip_state == "ready" else ERROR)
         time_x += voip_gap
 
