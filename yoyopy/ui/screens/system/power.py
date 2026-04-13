@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Optional
+
+from loguru import logger
 
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
@@ -47,6 +50,7 @@ class PowerScreen(Screen):
         context: Optional["AppContext"] = None,
         *,
         power_manager: Optional["PowerManager"] = None,
+        network_manager: Optional[object] = None,
         status_provider: Optional[Callable[[], dict[str, object]]] = None,
         refresh_voice_device_options_action: Optional[Callable[[], None]] = None,
         playback_device_options_provider: Optional[Callable[[], list[str]]] = None,
@@ -60,6 +64,7 @@ class PowerScreen(Screen):
     ) -> None:
         super().__init__(display, context, "PowerStatus")
         self.power_manager = power_manager
+        self.network_manager = network_manager
         self.status_provider = status_provider or (lambda: {})
         self.refresh_voice_device_options_action = refresh_voice_device_options_action
         self.playback_device_options_provider = playback_device_options_provider
@@ -74,6 +79,8 @@ class PowerScreen(Screen):
         self.selected_row = 0
         self.in_detail = False
         self._lvgl_view: "ScreenView | None" = None
+        self._last_gps_query_at = 0.0
+        self._gps_refresh_interval_seconds = 2.0
 
     def enter(self) -> None:
         """Create the LVGL view when the screen becomes active."""
@@ -120,13 +127,10 @@ class PowerScreen(Screen):
 
         snapshot = self._get_snapshot()
         status = self._get_status()
-        pages = self.build_pages(snapshot=snapshot, status=status)
+        pages = self._build_pages_for_display(snapshot=snapshot, status=status)
         self.page_index %= len(pages)
         active_page = pages[self.page_index]
-        if active_page.rows:
-            self.selected_row %= len(active_page.rows)
-        else:
-            self.selected_row = 0
+        picker_mode = not self.is_one_button_mode() and not self.in_detail
         render_backdrop(self.display, "setup")
         render_status_bar(self.display, self.context, show_time=False)
         page_text = f"{self.page_index + 1}/{len(pages)}"
@@ -144,11 +148,11 @@ class PowerScreen(Screen):
             outline=None,
             radius=22,
         )
-        icon_key = self._page_icon_key(active_page.title) if self.in_detail else "power"
+        icon_key = self._page_icon_key(active_page.title)
         draw_icon(self.display, icon_key, halo_left + 10, halo_top + 10, 24, (225, 228, 234))
 
         title_y = halo_top + halo_size + 8
-        header_title = active_page.title if self.in_detail else "Setup"
+        header_title = "Setup" if picker_mode else active_page.title
         title_width, _ = self.display.get_text_size(header_title, 18)
         self.display.text(
             header_title,
@@ -177,29 +181,17 @@ class PowerScreen(Screen):
             font_size=10,
         )
 
-        if self.in_detail:
+        if not picker_mode:
+            visible_rows, visible_selected_index = self._visible_rows_for_page(active_page)
             row_y = title_y + 18
             row_height = 20
             row_gap = 4
             max_row_bottom = self.display.HEIGHT - 60
-
-            rows = list(active_page.rows)
-            # When an interactive page has more rows than we can show, keep the selected
-            # row visible instead of rendering a fixed top slice.
-            start_row = 0
-            if active_page.interactive and rows:
-                max_visible = max(1, (max_row_bottom - row_y) // (row_height + row_gap))
-                max_visible = min(max_visible, len(rows))
-                start_row = max(
-                    0, min(self.selected_row - (max_visible // 2), len(rows) - max_visible)
-                )
-
-            for row_offset, (label, value) in enumerate(rows[start_row:]):
-                row_index = start_row + row_offset
+            for row_index, (label, value) in enumerate(visible_rows):
                 row_bottom = row_y + row_height
                 if row_bottom > max_row_bottom:
                     break
-                is_selected = active_page.interactive and row_index == self.selected_row
+                is_selected = visible_selected_index is not None and row_index == visible_selected_index
                 rounded_panel(
                     self.display,
                     16,
@@ -229,7 +221,6 @@ class PowerScreen(Screen):
                 )
                 row_y += row_height + row_gap
         else:
-            # This is the layout you liked: show the top-level pages as a list card.
             panel_top = title_y + 20
             panel_bottom = self.display.HEIGHT - 60
             rounded_panel(
@@ -243,25 +234,18 @@ class PowerScreen(Screen):
                 radius=24,
             )
 
-            picker_items = [
-                ("Power", "Battery and charging", "battery"),
-                ("Time", "RTC and alarms", "clock"),
-                ("Care", "Screen and watchdog", "care"),
-                ("Voice", "Commands and volume", "voice_note"),
-            ]
-
             item_height = 40
             row_top = panel_top + 10
             row_bottom = panel_bottom - 8
             available = max(0, row_bottom - row_top)
-            max_visible = max(1, min(len(picker_items), available // item_height))
-            start_index = max(
-                0, min(self.page_index - (max_visible // 2), len(picker_items) - max_visible)
-            )
+            max_visible = max(1, min(len(pages), available // item_height))
 
-            for offset in range(max_visible):
-                index = start_index + offset
-                title, subtitle, icon = picker_items[index]
+            for offset, (index, page) in enumerate(
+                self._visible_picker_pages(pages, max_items=max_visible)
+            ):
+                title = page.title
+                subtitle = self._page_subtitle(page.title)
+                icon = self._page_icon_key(page.title)
                 y1 = row_top + (offset * item_height)
                 y2 = y1 + (item_height - 4)
                 selected = index == self.page_index
@@ -304,7 +288,76 @@ class PowerScreen(Screen):
             return "clock"
         if title == "Voice":
             return "voice_note"
+        if title == "Network":
+            return "signal"
+        if title == "GPS":
+            return "care"
         return "care"
+
+    @staticmethod
+    def _page_subtitle(title: str) -> str:
+        """Return the short subtitle shown in the Setup page picker."""
+
+        if title == "Power":
+            return "Battery and charging"
+        if title == "Network":
+            return "Cellular status"
+        if title == "GPS":
+            return "Location fix"
+        if title == "Time":
+            return "RTC and alarms"
+        if title == "Care":
+            return "Screen and watchdog"
+        if title == "Voice":
+            return "Commands and audio"
+        return ""
+
+    def _visible_picker_pages(
+        self,
+        pages: list[PowerPage],
+        *,
+        max_items: int,
+    ) -> list[tuple[int, PowerPage]]:
+        """Return the visible page-picker window around the current page."""
+
+        if not pages:
+            return []
+
+        max_items = max(1, min(max_items, len(pages)))
+        start_index = max(0, min(self.page_index - (max_items // 2), len(pages) - max_items))
+        return [(start_index + offset, pages[start_index + offset]) for offset in range(max_items)]
+
+    def _visible_rows_for_page(
+        self,
+        page: PowerPage,
+        *,
+        max_rows: int | None = None,
+    ) -> tuple[list[tuple[str, str]], int | None]:
+        """Return the visible row window plus the selected index inside it."""
+
+        if max_rows is None:
+            max_rows = self._row_capacity_for_page(page)
+
+        if not page.rows:
+            self.selected_row = 0
+            return [], None
+
+        self.selected_row %= len(page.rows)
+        if not page.interactive or len(page.rows) <= max_rows:
+            return page.rows[:max_rows], (self.selected_row if page.interactive else None)
+
+        start = max(0, self.selected_row - (max_rows - 1))
+        end = min(len(page.rows), start + max_rows)
+        start = max(0, end - max_rows)
+        visible_rows = page.rows[start:end]
+        return visible_rows, self.selected_row - start
+
+    def _row_capacity_for_page(self, page: PowerPage) -> int:
+        """Return how many rows the current display/layout can safely show."""
+
+        if self.display.is_portrait() and not page.interactive:
+            return 5
+        return 4
 
     def _render_page_dots(self, *, total_pages: int) -> None:
         """Render the compact Setup page-position dots."""
@@ -329,18 +382,52 @@ class PowerScreen(Screen):
         battery_rows = self._build_battery_rows(snapshot=snapshot)
         runtime_rows = self._build_runtime_rows(snapshot=snapshot, status=status)
 
-        return [
+        pages = [
             PowerPage(title="Power", rows=battery_rows[:4]),
-            PowerPage(title="Time", rows=battery_rows[4:6] + runtime_rows[:2]),
-            PowerPage(title="Care", rows=runtime_rows[2:]),
-            PowerPage(title="Voice", rows=self._build_voice_rows(), interactive=True),
         ]
+        if self.network_manager is not None and self.network_manager.config.enabled:
+            pages.append(PowerPage(title="Network", rows=self._build_network_rows()))
+            pages.append(PowerPage(title="GPS", rows=self._build_gps_rows()))
+        voice_interactive = not self.is_one_button_mode()
+        pages.extend(
+            [
+                PowerPage(title="Time", rows=battery_rows[4:6] + runtime_rows[:2]),
+                PowerPage(title="Care", rows=runtime_rows[2:]),
+                PowerPage(
+                    title="Voice",
+                    rows=self._build_voice_rows(summary_mode=not voice_interactive),
+                    interactive=voice_interactive,
+                ),
+            ]
+        )
+        return pages
 
-    def _build_voice_rows(self) -> list[tuple[str, str]]:
+    def _build_pages_for_display(
+        self,
+        *,
+        snapshot: Optional["PowerSnapshot"],
+        status: dict[str, object],
+    ) -> list[PowerPage]:
+        """Build pages and opportunistically refresh GPS when the GPS page is active."""
+
+        pages = self.build_pages(snapshot=snapshot, status=status)
+        if not pages:
+            return pages
+
+        self.page_index %= len(pages)
+        active_page = pages[self.page_index]
+        if active_page.title != "GPS":
+            return pages
+
+        if self._maybe_refresh_gps_page():
+            pages = self.build_pages(snapshot=snapshot, status=status)
+        return pages
+
+    def _build_voice_rows(self, *, summary_mode: bool = False) -> list[tuple[str, str]]:
         """Build the voice-related settings page."""
 
         if self.context is None:
-            return [
+            rows = [
                 ("Voice Cmds", "Unknown"),
                 ("AI Requests", "Unknown"),
                 ("Screen Read", "Unknown"),
@@ -349,9 +436,18 @@ class PowerScreen(Screen):
                 ("Mic", "Unknown"),
                 ("Volume", "--"),
             ]
+            if summary_mode:
+                return [
+                    ("Voice Cmds", "Unknown"),
+                    ("AI Requests", "Unknown"),
+                    ("Screen Read", "Unknown"),
+                    ("Mic", "Unknown"),
+                    ("Volume", "--"),
+                ]
+            return rows
 
         voice = self.context.voice
-        return [
+        rows = [
             ("Voice Cmds", "On" if voice.commands_enabled else "Off"),
             ("AI Requests", "On" if voice.ai_requests_enabled else "Off"),
             ("Screen Read", "On" if voice.screen_read_enabled else "Off"),
@@ -360,6 +456,118 @@ class PowerScreen(Screen):
             ("Mic", "Muted" if voice.mic_muted else "Live"),
             ("Volume", f"{voice.output_volume}%"),
         ]
+        if summary_mode:
+            return [
+                ("Voice Cmds", rows[0][1]),
+                ("AI Requests", rows[1][1]),
+                ("Screen Read", rows[2][1]),
+                ("Mic", rows[5][1]),
+                ("Volume", rows[6][1]),
+            ]
+        return rows
+
+    def _build_network_rows(self) -> list[tuple[str, str]]:
+        """Build the cellular network status page."""
+        if self.network_manager is None or not self.network_manager.config.enabled:
+            return [("Status", "Disabled")]
+        state = self.network_manager.modem_state
+        from yoyopy.network.models import ModemPhase
+
+        if state.phase == ModemPhase.ONLINE:
+            status_text = "Online"
+        elif state.phase in (
+            ModemPhase.REGISTERED,
+            ModemPhase.PPP_STARTING,
+            ModemPhase.PPP_STOPPING,
+        ):
+            status_text = "Registered"
+        elif state.phase in (ModemPhase.PROBING, ModemPhase.READY, ModemPhase.REGISTERING):
+            status_text = "Connecting"
+        else:
+            status_text = "Offline"
+        return [
+            ("Status", status_text),
+            ("Carrier", state.carrier or "Unknown"),
+            ("Type", state.network_type or "Unknown"),
+            ("Signal", f"{state.signal.bars}/4" if state.signal else "Unknown"),
+            ("PPP", "Up" if state.phase == ModemPhase.ONLINE else "Down"),
+        ]
+
+    def _build_gps_rows(self) -> list[tuple[str, str]]:
+        """Build the GPS status page."""
+        if self.network_manager is None or not self.network_manager.config.enabled:
+            return [
+                ("Fix", "Disabled"),
+                ("Lat", "--"),
+                ("Lng", "--"),
+                ("Alt", "--"),
+                ("Speed", "--"),
+            ]
+        if not self.network_manager.config.gps_enabled:
+            return [
+                ("Fix", "Disabled"),
+                ("Lat", "--"),
+                ("Lng", "--"),
+                ("Alt", "--"),
+                ("Speed", "--"),
+            ]
+        state = self.network_manager.modem_state
+        from yoyopy.network.models import ModemPhase
+
+        if state.gps is None:
+            fix_status = "Searching"
+            if state.phase in (ModemPhase.OFF, ModemPhase.PROBING, ModemPhase.READY):
+                fix_status = "Starting"
+            elif state.phase not in (
+                ModemPhase.REGISTERING,
+                ModemPhase.REGISTERED,
+                ModemPhase.PPP_STARTING,
+                ModemPhase.PPP_STOPPING,
+                ModemPhase.ONLINE,
+            ):
+                fix_status = "Unavailable"
+            return [
+                ("Fix", fix_status),
+                ("Lat", "--"),
+                ("Lng", "--"),
+                ("Alt", "--"),
+                ("Speed", "--"),
+            ]
+        coord = state.gps
+        return [
+            ("Fix", "Yes"),
+            ("Lat", f"{coord.lat:.6f}"),
+            ("Lng", f"{coord.lng:.6f}"),
+            ("Alt", f"{coord.altitude:.1f}m"),
+            ("Speed", f"{coord.speed:.1f}km/h"),
+        ]
+
+    def _maybe_refresh_gps_page(self) -> bool:
+        """Query GPS when the user is actively viewing the GPS page."""
+
+        if self.network_manager is None or not self.network_manager.config.enabled:
+            return False
+        if not self.network_manager.config.gps_enabled:
+            return False
+
+        query_gps = getattr(self.network_manager, "query_gps", None)
+        if not callable(query_gps):
+            return False
+
+        now = time.monotonic()
+        if now - self._last_gps_query_at < self._gps_refresh_interval_seconds:
+            return False
+
+        self._last_gps_query_at = now
+        try:
+            coord = query_gps()
+        except Exception as exc:
+            logger.warning("GPS refresh failed on Setup screen: {}", exc)
+            return False
+
+        if self.context is not None:
+            self.context.update_network_status(gps_has_fix=coord is not None)
+        return coord is not None
 
     def _get_snapshot(self) -> Optional["PowerSnapshot"]:
         """Return the latest power snapshot."""
@@ -538,18 +746,19 @@ class PowerScreen(Screen):
     def _instruction_text(self, page: PowerPage) -> str:
         """Return footer hints for the current page."""
 
+        if self.is_one_button_mode():
+            return "Tap page / Hold back"
+
         if not self.in_detail:
-            return (
-                "Tap next / Double open / Hold back"
-                if self.is_one_button_mode()
-                else "A open | B back | X/Y move"
-            )
+            return "A open | B back | X/Y move"
 
         if page.interactive:
-            if self.is_one_button_mode():
-                return "Tap item / Double change / Hold back"
             return "A change | B back | X/Y item | L/R page"
-        return "Tap page / Hold back" if self.is_one_button_mode() else "A page | B back | X/Y page"
+        return "A page | B back | X/Y page"
+
+    def prefers_simple_one_button_navigation(self) -> bool:
+        """Use fast page-to-page taps on Whisplay Setup screens."""
+        return self.is_one_button_mode()
 
     def _active_pages(self) -> list[PowerPage]:
         """Return the current page list for navigation helpers."""
@@ -696,6 +905,9 @@ class PowerScreen(Screen):
 
     def on_advance(self, data=None) -> None:
         """Single-button tap cycles pages."""
+        if self.is_one_button_mode():
+            self._next_page()
+            return
         if not self.in_detail:
             self._next_page()
             return
@@ -714,6 +926,9 @@ class PowerScreen(Screen):
 
     def on_select(self, data=None) -> None:
         """Open the selected page, or adjust interactive settings in detail mode."""
+        if self.is_one_button_mode():
+            self._next_page()
+            return
         if not self.in_detail:
             self.in_detail = True
             self.selected_row = 0
@@ -725,6 +940,9 @@ class PowerScreen(Screen):
 
     def on_back(self, data=None) -> None:
         """Return to the previous screen."""
+        if self.is_one_button_mode():
+            self.request_route("back")
+            return
         if self.in_detail:
             self.in_detail = False
             self.selected_row = 0

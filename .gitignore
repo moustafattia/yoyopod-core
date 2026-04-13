@@ -35,6 +35,8 @@ uv.lock
 # IDEs
 .vscode/
 .idea/
+.claude/worktrees/
+.superpowers/
 *.swp
 *.swo
 *~

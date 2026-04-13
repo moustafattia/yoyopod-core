@@ -7,6 +7,7 @@ from datetime import datetime
 from yoyopy.app_context import AppContext
 from yoyopy.power import BatteryState, PowerDeviceInfo, PowerSnapshot, RTCState, ShutdownState
 from yoyopy.ui.display import Display
+from yoyopy.ui.input import InteractionProfile
 from yoyopy.ui.screens.system.power import PowerScreen
 
 
@@ -180,6 +181,42 @@ def test_power_screen_voice_page_toggles_runtime_voice_settings() -> None:
         screen.on_left()
         assert context.voice.output_volume == 50
         assert volume_calls == [("up", 5), ("down", 5)]
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_one_button_voice_page_stays_in_fast_page_mode() -> None:
+    """Whisplay Setup should treat Voice like a normal page, not an interactive trap."""
+
+    display = Display(simulate=True)
+    try:
+        context = AppContext(interaction_profile=InteractionProfile.ONE_BUTTON)
+        screen = PowerScreen(
+            display,
+            context,
+            power_manager=StubPowerManager(_snapshot()),
+            status_provider=lambda: {},
+        )
+
+        screen.page_index = 3
+        page = screen._active_page()
+        assert page.title == "Voice"
+        assert page.interactive is False
+
+        visible_rows, visible_selected_index = screen._visible_rows_for_page(page)
+        assert [label for label, _ in visible_rows] == [
+            "Voice Cmds",
+            "AI Requests",
+            "Screen Read",
+            "Mic",
+            "Volume",
+        ]
+        assert visible_selected_index is None
+
+        screen.on_advance()
+        assert screen.page_index == 0
+        assert screen.selected_row == 0
+        assert screen._active_page().title == "Power"
     finally:
         display.cleanup()
 

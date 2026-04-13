@@ -92,3 +92,15 @@ def test_network_config_from_yaml_data():
     assert config.network.enabled is True
     assert config.network.apn == "internet"
     assert config.network.serial_port == "/dev/ttyAMA0"
+
+
+def test_app_context_update_network_status_with_gps():
+    """update_network_status should set gps_has_fix."""
+    ctx = AppContext()
+    assert ctx.gps_has_fix is False
+
+    ctx.update_network_status(gps_has_fix=True)
+    assert ctx.gps_has_fix is True
+
+    ctx.update_network_status(gps_has_fix=False)
+    assert ctx.gps_has_fix is False

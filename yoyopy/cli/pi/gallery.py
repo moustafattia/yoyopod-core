@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Callable, Optional
+from typing import Annotated, Callable
 
 import typer
 
@@ -132,6 +132,32 @@ class _FakePowerManager:
 
     def get_snapshot(self) -> object:
         return self._snapshot
+
+
+class _FakeNetworkManager:
+    """Minimal network manager for deterministic Setup captures."""
+
+    def __init__(self, *, gps: object | None = None) -> None:
+        from yoyopy.network.models import ModemPhase, ModemState, SignalInfo
+
+        self.config = type("Config", (), {"enabled": True, "gps_enabled": True})()
+        self._gps = gps
+        self._state = ModemState(
+            phase=ModemPhase.REGISTERED,
+            signal=SignalInfo(csq=20),
+            carrier="Telekom.de",
+            network_type="4G",
+            sim_ready=True,
+            gps=gps,
+        )
+
+    @property
+    def modem_state(self) -> object:
+        return self._state
+
+    def query_gps(self) -> object | None:
+        self._state.gps = self._gps
+        return self._gps
 
 
 class _FakeVoipManager:
@@ -309,10 +335,12 @@ def _capture_screen(
         output_path = output_dir / f"{spec.name}.png"
         if save_readback(str(output_path)):
             from loguru import logger
+
             logger.info("Captured {} via LVGL readback", output_path.name)
             return
         if save_shadow(str(output_path)):
             from loguru import logger
+
             logger.warning("Captured {} via shadow-buffer fallback", output_path.name)
             return
         raise RuntimeError(f"failed to save screenshot to {output_path}")
@@ -399,9 +427,21 @@ def _build_music_service() -> _FakeMusicService:
             _DemoPlaylistSummary("Wind Down", "playlist:winddown", 14),
         ],
         recents=[
-            RecentTrackEntry(uri="track:golden-hour", title="Golden Hour", artist="Kacey Musgraves", album="Golden Hour"),
-            RecentTrackEntry(uri="track:midnight-train", title="Midnight Train", artist="Sam Smith", album="Gloria"),
-            RecentTrackEntry(uri="track:coastline", title="Coastline", artist="Hollow Coves", album="Moments"),
+            RecentTrackEntry(
+                uri="track:golden-hour",
+                title="Golden Hour",
+                artist="Kacey Musgraves",
+                album="Golden Hour",
+            ),
+            RecentTrackEntry(
+                uri="track:midnight-train",
+                title="Midnight Train",
+                artist="Sam Smith",
+                album="Gloria",
+            ),
+            RecentTrackEntry(
+                uri="track:coastline", title="Coastline", artist="Hollow Coves", album="Moments"
+            ),
         ],
     )
 
@@ -604,8 +644,6 @@ def _build_capture_specs(display: object) -> list[_CaptureSpec]:
         PlaylistScreen,
         PowerScreen,
         RecentTracksScreen,
-        TalkContactScreen,
-        VoiceNoteScreen,
     )
 
     contacts = _build_contacts()
@@ -718,6 +756,17 @@ def _build_capture_specs(display: object) -> list[_CaptureSpec]:
             ),
         ),
         _CaptureSpec(
+            "12b_gps",
+            lambda: PowerScreen(
+                display,
+                _build_context(),
+                power_manager=_FakePowerManager(power_snapshot),
+                network_manager=_FakeNetworkManager(),
+                status_provider=_build_power_status,
+            ),
+            prepare=lambda screen: setattr(screen, "page_index", 2),
+        ),
+        _CaptureSpec(
             "13_time",
             lambda: PowerScreen(
                 display,
@@ -794,9 +843,20 @@ def _build_capture_specs(display: object) -> list[_CaptureSpec]:
 
 @gallery_app.callback(invoke_without_command=True)
 def gallery(
-    output_dir: Annotated[str, typer.Option("--output-dir", help="Directory where PNG captures should be written.")] = "temp/pi_gallery",
-    simulate: Annotated[bool, typer.Option("--simulate", help="Use the Whisplay adapter in simulation mode instead of driving hardware.")] = False,
-    settle_seconds: Annotated[float, typer.Option("--settle-seconds", help="How long to let LVGL settle before each capture.")] = 0.18,
+    output_dir: Annotated[
+        str, typer.Option("--output-dir", help="Directory where PNG captures should be written.")
+    ] = "temp/pi_gallery",
+    simulate: Annotated[
+        bool,
+        typer.Option(
+            "--simulate",
+            help="Use the Whisplay adapter in simulation mode instead of driving hardware.",
+        ),
+    ] = False,
+    settle_seconds: Annotated[
+        float,
+        typer.Option("--settle-seconds", help="How long to let LVGL settle before each capture."),
+    ] = 0.18,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Capture a deterministic gallery of Whisplay LVGL screens."""
@@ -816,9 +876,7 @@ def gallery(
     )
     backend = display.get_ui_backend()
     if backend is None or not getattr(backend, "available", False):
-        logger.error(
-            "LVGL backend unavailable. Build it first with `uv run yoyoctl build lvgl`."
-        )
+        logger.error("LVGL backend unavailable. Build it first with `uv run yoyoctl build lvgl`.")
         raise typer.Exit(code=1)
     if not backend.initialize():
         logger.error("Failed to initialize the Whisplay LVGL backend")

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import TALK
 
 if TYPE_CHECKING:
@@ -33,6 +34,7 @@ class LvglCallView:
 
         model = self.screen.current_card_model()
         context = self.screen.context
+        sync_network_status(self.backend.binding, context)
         self.backend.binding.talk_sync(
             title_text=str(model.get("title") or "Talk"),
             icon_key=str(model.get("icon_key")) if model.get("icon_key") is not None else None,

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import TALK
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ class LvglInCallView:
             else f"X {'unmute' if is_muted else 'mute'} | B end"
         )
         context = self.screen.context
+        sync_network_status(self.backend.binding, context)
 
         self.backend.binding.in_call_sync(
             caller_name=caller_name,
