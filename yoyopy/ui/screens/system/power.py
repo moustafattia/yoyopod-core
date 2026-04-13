@@ -46,6 +46,7 @@ class PowerScreen(Screen):
         context: Optional["AppContext"] = None,
         *,
         power_manager: Optional["PowerManager"] = None,
+        network_manager: Optional[object] = None,
         status_provider: Optional[Callable[[], dict[str, object]]] = None,
         volume_up_action: Optional[Callable[[int], int | None]] = None,
         volume_down_action: Optional[Callable[[int], int | None]] = None,
@@ -54,6 +55,7 @@ class PowerScreen(Screen):
     ) -> None:
         super().__init__(display, context, "PowerStatus")
         self.power_manager = power_manager
+        self.network_manager = network_manager
         self.status_provider = status_provider or (lambda: {})
         self.volume_up_action = volume_up_action
         self.volume_down_action = volume_down_action
@@ -217,6 +219,10 @@ class PowerScreen(Screen):
             return "clock"
         if title == "Voice":
             return "voice_note"
+        if title == "Network":
+            return "signal"
+        if title == "GPS":
+            return "care"
         return "care"
 
     def _render_page_dots(self, *, total_pages: int) -> None:
@@ -242,12 +248,18 @@ class PowerScreen(Screen):
         battery_rows = self._build_battery_rows(snapshot=snapshot)
         runtime_rows = self._build_runtime_rows(snapshot=snapshot, status=status)
 
-        return [
+        pages = [
             PowerPage(title="Power", rows=battery_rows[:4]),
+        ]
+        if self.network_manager is not None and self.network_manager.config.enabled:
+            pages.append(PowerPage(title="Network", rows=self._build_network_rows()))
+            pages.append(PowerPage(title="GPS", rows=self._build_gps_rows()))
+        pages.extend([
             PowerPage(title="Time", rows=battery_rows[4:6] + runtime_rows[:2]),
             PowerPage(title="Care", rows=runtime_rows[2:]),
             PowerPage(title="Voice", rows=self._build_voice_rows(), interactive=True),
-        ]
+        ])
+        return pages
 
     def _build_voice_rows(self) -> list[tuple[str, str]]:
         """Build the voice-related settings page."""
@@ -268,6 +280,46 @@ class PowerScreen(Screen):
             ("Screen Read", "On" if voice.screen_read_enabled else "Off"),
             ("Mic", "Muted" if voice.mic_muted else "Live"),
             ("Volume", f"{voice.output_volume}%"),
+        ]
+
+    def _build_network_rows(self) -> list[tuple[str, str]]:
+        """Build the cellular network status page."""
+        if self.network_manager is None or not self.network_manager.config.enabled:
+            return [("Status", "Disabled")]
+        state = self.network_manager.modem_state
+        from yoyopy.network.models import ModemPhase
+        if state.phase == ModemPhase.ONLINE:
+            status_text = "Online"
+        elif state.phase in (ModemPhase.REGISTERED, ModemPhase.PPP_STARTING, ModemPhase.PPP_STOPPING):
+            status_text = "Registered"
+        elif state.phase in (ModemPhase.PROBING, ModemPhase.READY, ModemPhase.REGISTERING):
+            status_text = "Connecting"
+        else:
+            status_text = "Offline"
+        return [
+            ("Status", status_text),
+            ("Carrier", state.carrier or "Unknown"),
+            ("Type", state.network_type or "Unknown"),
+            ("Signal", f"{state.signal.bars}/4" if state.signal else "Unknown"),
+            ("PPP", "Up" if state.phase == ModemPhase.ONLINE else "Down"),
+        ]
+
+    def _build_gps_rows(self) -> list[tuple[str, str]]:
+        """Build the GPS status page."""
+        if self.network_manager is None or not self.network_manager.config.enabled:
+            return [("Fix", "Disabled"), ("Lat", "--"), ("Lng", "--"), ("Alt", "--"), ("Speed", "--")]
+        if not self.network_manager.config.gps_enabled:
+            return [("Fix", "Disabled"), ("Lat", "--"), ("Lng", "--"), ("Alt", "--"), ("Speed", "--")]
+        state = self.network_manager.modem_state
+        if state.gps is None:
+            return [("Fix", "No"), ("Lat", "--"), ("Lng", "--"), ("Alt", "--"), ("Speed", "--")]
+        coord = state.gps
+        return [
+            ("Fix", "Yes"),
+            ("Lat", f"{coord.lat:.6f}"),
+            ("Lng", f"{coord.lng:.6f}"),
+            ("Alt", f"{coord.altitude:.1f}m"),
+            ("Speed", f"{coord.speed:.1f}km/h"),
         ]
 
     def _get_snapshot(self) -> Optional["PowerSnapshot"]:
