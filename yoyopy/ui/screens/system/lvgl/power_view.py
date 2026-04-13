@@ -34,7 +34,7 @@ class LvglPowerView:
 
         snapshot = self.screen._get_snapshot()
         status = self.screen._get_status()
-        pages = self.screen.build_pages(snapshot=snapshot, status=status)
+        pages = self.screen._build_pages_for_display(snapshot=snapshot, status=status)
         if not pages:
             return
 
@@ -48,14 +48,22 @@ class LvglPowerView:
             title_text=active_page.title,
             page_text=None,
             icon_key=self.screen._page_icon_key(active_page.title),
-            footer="Tap = Page / Hold = Back" if self.screen.is_one_button_mode() else "A page | B back",
+            footer=(
+                "Tap = Page / Hold = Back"
+                if self.screen.is_one_button_mode()
+                else "A page | B back"
+            ),
             items=items,
             current_page_index=self.screen.page_index,
             total_pages=len(pages),
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),
-            charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
-            power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
+            charging=(
+                bool(getattr(context, "battery_charging", False)) if context is not None else False
+            ),
+            power_available=(
+                bool(getattr(context, "power_available", True)) if context is not None else True
+            ),
             accent=SETUP.accent,
         )
 

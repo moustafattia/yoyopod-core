@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Optional
+
+from loguru import logger
 
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
@@ -64,6 +67,8 @@ class PowerScreen(Screen):
         self.page_index = 0
         self.selected_row = 0
         self._lvgl_view: "ScreenView | None" = None
+        self._last_gps_query_at = 0.0
+        self._gps_refresh_interval_seconds = 8.0
 
     def enter(self) -> None:
         """Create the LVGL view when the screen becomes active."""
@@ -104,7 +109,7 @@ class PowerScreen(Screen):
 
         snapshot = self._get_snapshot()
         status = self._get_status()
-        pages = self.build_pages(snapshot=snapshot, status=status)
+        pages = self._build_pages_for_display(snapshot=snapshot, status=status)
         self.page_index %= len(pages)
         active_page = pages[self.page_index]
         if active_page.rows:
@@ -254,11 +259,34 @@ class PowerScreen(Screen):
         if self.network_manager is not None and self.network_manager.config.enabled:
             pages.append(PowerPage(title="Network", rows=self._build_network_rows()))
             pages.append(PowerPage(title="GPS", rows=self._build_gps_rows()))
-        pages.extend([
-            PowerPage(title="Time", rows=battery_rows[4:6] + runtime_rows[:2]),
-            PowerPage(title="Care", rows=runtime_rows[2:]),
-            PowerPage(title="Voice", rows=self._build_voice_rows(), interactive=True),
-        ])
+        pages.extend(
+            [
+                PowerPage(title="Time", rows=battery_rows[4:6] + runtime_rows[:2]),
+                PowerPage(title="Care", rows=runtime_rows[2:]),
+                PowerPage(title="Voice", rows=self._build_voice_rows(), interactive=True),
+            ]
+        )
+        return pages
+
+    def _build_pages_for_display(
+        self,
+        *,
+        snapshot: Optional["PowerSnapshot"],
+        status: dict[str, object],
+    ) -> list[PowerPage]:
+        """Build pages and opportunistically refresh GPS when the GPS page is active."""
+
+        pages = self.build_pages(snapshot=snapshot, status=status)
+        if not pages:
+            return pages
+
+        self.page_index %= len(pages)
+        active_page = pages[self.page_index]
+        if active_page.title != "GPS":
+            return pages
+
+        if self._maybe_refresh_gps_page():
+            pages = self.build_pages(snapshot=snapshot, status=status)
         return pages
 
     def _build_voice_rows(self) -> list[tuple[str, str]]:
@@ -288,9 +316,14 @@ class PowerScreen(Screen):
             return [("Status", "Disabled")]
         state = self.network_manager.modem_state
         from yoyopy.network.models import ModemPhase
+
         if state.phase == ModemPhase.ONLINE:
             status_text = "Online"
-        elif state.phase in (ModemPhase.REGISTERED, ModemPhase.PPP_STARTING, ModemPhase.PPP_STOPPING):
+        elif state.phase in (
+            ModemPhase.REGISTERED,
+            ModemPhase.PPP_STARTING,
+            ModemPhase.PPP_STOPPING,
+        ):
             status_text = "Registered"
         elif state.phase in (ModemPhase.PROBING, ModemPhase.READY, ModemPhase.REGISTERING):
             status_text = "Connecting"
@@ -307,12 +340,43 @@ class PowerScreen(Screen):
     def _build_gps_rows(self) -> list[tuple[str, str]]:
         """Build the GPS status page."""
         if self.network_manager is None or not self.network_manager.config.enabled:
-            return [("Fix", "Disabled"), ("Lat", "--"), ("Lng", "--"), ("Alt", "--"), ("Speed", "--")]
+            return [
+                ("Fix", "Disabled"),
+                ("Lat", "--"),
+                ("Lng", "--"),
+                ("Alt", "--"),
+                ("Speed", "--"),
+            ]
         if not self.network_manager.config.gps_enabled:
-            return [("Fix", "Disabled"), ("Lat", "--"), ("Lng", "--"), ("Alt", "--"), ("Speed", "--")]
+            return [
+                ("Fix", "Disabled"),
+                ("Lat", "--"),
+                ("Lng", "--"),
+                ("Alt", "--"),
+                ("Speed", "--"),
+            ]
         state = self.network_manager.modem_state
+        from yoyopy.network.models import ModemPhase
+
         if state.gps is None:
-            return [("Fix", "No"), ("Lat", "--"), ("Lng", "--"), ("Alt", "--"), ("Speed", "--")]
+            fix_status = "Searching"
+            if state.phase in (ModemPhase.OFF, ModemPhase.PROBING, ModemPhase.READY):
+                fix_status = "Starting"
+            elif state.phase not in (
+                ModemPhase.REGISTERING,
+                ModemPhase.REGISTERED,
+                ModemPhase.PPP_STARTING,
+                ModemPhase.PPP_STOPPING,
+                ModemPhase.ONLINE,
+            ):
+                fix_status = "Unavailable"
+            return [
+                ("Fix", fix_status),
+                ("Lat", "--"),
+                ("Lng", "--"),
+                ("Alt", "--"),
+                ("Speed", "--"),
+            ]
         coord = state.gps
         return [
             ("Fix", "Yes"),
@@ -321,6 +385,33 @@ class PowerScreen(Screen):
             ("Alt", f"{coord.altitude:.1f}m"),
             ("Speed", f"{coord.speed:.1f}km/h"),
         ]
+
+    def _maybe_refresh_gps_page(self) -> bool:
+        """Query GPS when the user is actively viewing the GPS page."""
+
+        if self.network_manager is None or not self.network_manager.config.enabled:
+            return False
+        if not self.network_manager.config.gps_enabled:
+            return False
+
+        query_gps = getattr(self.network_manager, "query_gps", None)
+        if not callable(query_gps):
+            return False
+
+        now = time.monotonic()
+        if now - self._last_gps_query_at < self._gps_refresh_interval_seconds:
+            return False
+
+        self._last_gps_query_at = now
+        try:
+            coord = query_gps()
+        except Exception as exc:
+            logger.warning("GPS refresh failed on Setup screen: {}", exc)
+            return False
+
+        if self.context is not None:
+            self.context.update_network_status(gps_has_fix=coord is not None)
+        return coord is not None
 
     def _get_snapshot(self) -> Optional["PowerSnapshot"]:
         """Return the latest power snapshot."""

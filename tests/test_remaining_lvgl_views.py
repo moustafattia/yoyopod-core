@@ -561,3 +561,49 @@ def test_power_screen_cycles_four_lvgl_pages() -> None:
 
     screen.exit()
     assert binding.power_destroy_calls == 1
+
+
+def test_power_screen_reports_full_network_page_count_through_lvgl() -> None:
+    """Network-enabled Setup pages should preserve the full page count in LVGL payloads."""
+
+    from yoyopy.network.models import ModemPhase, ModemState, SignalInfo
+
+    class _FakeNetworkManager:
+        def __init__(self) -> None:
+            self.config = type("Config", (), {"enabled": True, "gps_enabled": True})()
+            self._state = ModemState(
+                phase=ModemPhase.REGISTERED,
+                signal=SignalInfo(csq=20),
+                carrier="Telekom.de",
+                network_type="4G",
+                sim_ready=True,
+            )
+            self.query_gps_calls = 0
+
+        @property
+        def modem_state(self) -> ModemState:
+            return self._state
+
+        def query_gps(self):
+            self.query_gps_calls += 1
+            return None
+
+    binding = FakeLvglBinding()
+    screen = PowerScreen(
+        FakeLvglDisplay(binding),
+        make_one_button_context(),
+        network_manager=_FakeNetworkManager(),
+        status_provider=lambda: {},
+    )
+    screen.page_index = 2
+
+    screen.enter()
+    screen.render()
+
+    payload = binding.power_sync_payloads[-1]
+    assert payload["title_text"] == "GPS"
+    assert payload["current_page_index"] == 2
+    assert payload["total_pages"] == 6
+    assert payload["items"][0] == "Fix: Searching"
+
+    screen.exit()

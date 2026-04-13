@@ -8,6 +8,7 @@
 #include <time.h>
 
 #define KEY_QUEUE_CAPACITY 32
+#define YOYOPY_POWER_MAX_DOTS 8
 
 typedef struct {
     int32_t key;
@@ -214,7 +215,7 @@ typedef struct {
     lv_obj_t * title_label;
     lv_obj_t * item_panels[4];
     lv_obj_t * item_titles[4];
-    lv_obj_t * dots[3];
+    lv_obj_t * dots[YOYOPY_POWER_MAX_DOTS];
     lv_obj_t * footer_label;
 } yoyopy_power_scene_t;
 
@@ -3147,7 +3148,7 @@ int yoyopy_lvgl_power_build(void) {
         lv_obj_center(g_power_scene.item_titles[index]);
     }
 
-    for(int index = 0; index < 3; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_DOTS; ++index) {
         g_power_scene.dots[index] = lv_obj_create(g_power_scene.screen);
         lv_obj_remove_style_all(g_power_scene.dots[index]);
         lv_obj_set_style_bg_opa(g_power_scene.dots[index], LV_OPA_COVER, 0);
@@ -3228,13 +3229,18 @@ int yoyopy_lvgl_power_sync(
     if(total_pages < 0) {
         total_pages = 0;
     }
-    if(total_pages > 3) {
-        total_pages = 3;
+    if(total_pages > YOYOPY_POWER_MAX_DOTS) {
+        total_pages = YOYOPY_POWER_MAX_DOTS;
     }
-    if(current_page_index < 0) {
+    if(total_pages > 0) {
+        current_page_index = current_page_index % total_pages;
+        if(current_page_index < 0) {
+            current_page_index += total_pages;
+        }
+    } else if(current_page_index < 0) {
         current_page_index = 0;
     }
-    for(int index = 0; index < 3; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_DOTS; ++index) {
         if(index >= total_pages) {
             lv_obj_add_flag(g_power_scene.dots[index], LV_OBJ_FLAG_HIDDEN);
             continue;

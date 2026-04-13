@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from yoyopy.ui.screens.system.power import PowerPage, PowerScreen
+from yoyopy.ui.screens.system.power import PowerScreen
 from yoyopy.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
 
 
@@ -48,10 +48,15 @@ class FakeNetworkManager:
             network_type="4G",
             sim_ready=True,
         )
+        self.query_gps_calls = 0
 
     @property
     def modem_state(self) -> ModemState:
         return self._state
+
+    def query_gps(self):
+        self.query_gps_calls += 1
+        return self._state.gps
 
 
 def test_network_page_online():
@@ -92,12 +97,29 @@ def test_gps_page_with_fix():
 
 
 def test_gps_page_no_fix():
-    """GPS page should show dashes when no GPS fix."""
+    """GPS page should show a searching state when GPS has no fix yet."""
     nm = FakeNetworkManager()
     screen = PowerScreen(FakeDisplay(), network_manager=nm)
     rows = screen._build_gps_rows()
-    assert ("Fix", "No") in rows
+    assert ("Fix", "Searching") in rows
     assert ("Lat", "--") in rows
+
+
+def test_active_gps_page_refreshes_coordinates_before_render():
+    """The GPS Setup page should trigger a GPS query when it becomes active."""
+
+    nm = FakeNetworkManager()
+    nm._state.gps = GpsCoordinate(lat=48.8738, lng=2.3522, altitude=349.6, speed=0.0)
+    screen = PowerScreen(FakeDisplay(), network_manager=nm)
+    screen.page_index = 2
+
+    pages = screen._build_pages_for_display(snapshot=None, status={})
+
+    assert nm.query_gps_calls == 1
+    gps_page = pages[2]
+    assert gps_page.title == "GPS"
+    assert ("Fix", "Yes") in gps_page.rows
+    assert any("48.8738" in value for _, value in gps_page.rows)
 
 
 def test_build_pages_includes_network_when_enabled():
