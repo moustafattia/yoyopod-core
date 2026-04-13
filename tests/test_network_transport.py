@@ -132,3 +132,36 @@ def test_get_registration_not_registered():
     transport.responses["AT+CEREG?"] = "+CEREG: 0,0\nOK"
     at = AtCommandSet(transport)
     assert at.get_registration() is False
+
+
+from yoyopy.network.gps import GpsReader
+
+
+def test_gps_reader_query_with_fix():
+    """GpsReader.query should return coordinates when GPS has a fix."""
+    transport = FakeTransport()
+    transport.responses["AT+CGPSINFO"] = (
+        "+CGPSINFO: 4852.4300,N,00221.1300,E,130426,120000.0,35.0,0.5,\nOK"
+    )
+    reader = GpsReader(transport)
+    coord = reader.query()
+    assert coord is not None
+    assert coord.lat > 0
+    assert coord.lng > 0
+
+
+def test_gps_reader_query_no_fix():
+    """GpsReader.query should return None when no GPS fix."""
+    transport = FakeTransport()
+    transport.responses["AT+CGPSINFO"] = "+CGPSINFO: ,,,,,,,,\nOK"
+    reader = GpsReader(transport)
+    assert reader.query() is None
+
+
+def test_gps_reader_enable():
+    """GpsReader.enable should send AT+CGPS=1."""
+    transport = FakeTransport()
+    transport.responses["AT+CGPS=1"] = "OK"
+    reader = GpsReader(transport)
+    assert reader.enable() is True
+    assert "AT+CGPS=1" in transport.sent
