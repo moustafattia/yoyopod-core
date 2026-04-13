@@ -44,17 +44,23 @@ yoyopy/network/
 
 ## Transport Layer
 
-`SerialTransport` wraps `pyserial` for `/dev/ttyS0` (configurable). Provides:
+`SerialTransport` wraps `pyserial` for `/dev/ttyUSB2` (configurable). Provides:
 
 - `send_command(cmd: str, timeout: float) -> str` — send AT command, return response
 - `open()` / `close()` — lifecycle
 - Thread lock for serial port access (one command at a time)
 
-The serial port is shared between AT commands and PPP. When PPP is active, AT commands cannot use the port. Approach:
+**Validated discovery:** The SIM7600G-H exposes 5 USB serial ports via the pogo pin connector:
 
-1. All telemetry/GPS queries happen before PPP starts or after PPP stops.
-2. Signal info is cached from the last pre-PPP snapshot.
-3. CMUX (`AT+CMUX`) for live telemetry during PPP is deferred to a later iteration.
+| Port | Purpose |
+|---|---|
+| `/dev/ttyUSB0` | Diagnostic |
+| `/dev/ttyUSB1` | GPS NMEA |
+| `/dev/ttyUSB2` | **AT commands** (primary) |
+| `/dev/ttyUSB3` | **Modem/PPP data** |
+| `/dev/ttyUSB4` | Audio |
+
+Because AT commands and PPP use separate USB ports, there is no serial sharing problem. GPS queries, telemetry, and PPP all work simultaneously. CMUX is not needed.
 
 ---
 
@@ -118,11 +124,7 @@ OFF → PROBING → READY → REGISTERING → REGISTERED → PPP_STARTING → ON
 
 `GpsCoordinate` dataclass: `lat`, `lng`, `altitude`, `speed`, `timestamp`.
 
-**Serial port constraint:** GPS queries require the serial port, so when PPP is active:
-
-- Briefly tear down PPP → query GPS → restart PPP.
-- Acceptable for demo since location requests are infrequent.
-- CMUX in a later iteration eliminates this.
+GPS queries use the AT command port (`/dev/ttyUSB2`) which is separate from the PPP data port (`/dev/ttyUSB3`), so GPS works during active PPP sessions without interruption.
 
 ---
 
@@ -214,17 +216,18 @@ For quick testing without the server: `yoyoctl pi network gps` over SSH.
 
 ## Pi Setup Requirements (one-time)
 
-- Enable UART: `enable_uart=1` in `/boot/config.txt`, disable Bluetooth serial overlay
+- Disable ModemManager: `sudo systemctl disable ModemManager`
 - Install pppd: `sudo apt install ppp`
 - Add `pyserial` as project dependency
 - User in `dialout` group for serial access
+- Connect both LTE and GPS antennas to the HAT
 
 ---
 
 ## Deferred to Future Iterations
 
-- **CMUX multiplexing** — live telemetry and GPS during active PPP session
 - **SMS support** — not needed for demo
 - **WiFi/4G failover** — always 4G for now
 - **Proper tracking backend** — replace demo server with real API
 - **Modem audio codec** — calls use Whisplay audio, not modem audio
+- **Policy routing** — route VoIP traffic over 4G while keeping SSH on WiFi

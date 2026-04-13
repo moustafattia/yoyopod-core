@@ -77,7 +77,8 @@ def test_network_config_defaults():
     """NetworkConfig should be disabled by default with sane defaults."""
     config = build_config_model(YoyoPodConfig, {})
     assert config.network.enabled is False
-    assert config.network.serial_port == "/dev/ttyS0"
+    assert config.network.serial_port == "/dev/ttyUSB2"
+    assert config.network.ppp_port == "/dev/ttyUSB3"
     assert config.network.baud_rate == 115200
     assert config.network.apn == ""
     assert config.network.gps_enabled is True

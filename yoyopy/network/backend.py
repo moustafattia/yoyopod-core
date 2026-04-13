@@ -34,7 +34,7 @@ class Sim7600Backend:
         )
         self._at = AtCommandSet(self._transport)
         self._ppp = PppProcess(
-            serial_port=config.serial_port,
+            serial_port=config.ppp_port,
             apn=config.apn,
             baud_rate=config.baud_rate,
         )
@@ -118,15 +118,8 @@ class Sim7600Backend:
             self._state.phase = ModemPhase.REGISTERED
 
     def query_gps(self) -> GpsCoordinate | None:
-        ppp_was_active = self._ppp.is_alive()
-        if ppp_was_active:
-            self.stop_ppp()
-
+        """Query GPS. Safe to call during active PPP since AT and PPP use separate USB ports."""
         coord = self._gps.query()
         if coord is not None:
             self._state.gps = coord
-
-        if ppp_was_active:
-            self.start_ppp()
-
         return coord

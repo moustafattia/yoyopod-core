@@ -108,7 +108,8 @@ logging:
 # 4G Cellular Network Settings
 network:
   enabled: false
-  serial_port: /dev/ttyS0
+  serial_port: /dev/ttyUSB2
+  ppp_port: /dev/ttyUSB3
   baud_rate: 115200
   apn: ""
   gps_enabled: true
