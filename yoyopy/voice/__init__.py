@@ -12,6 +12,7 @@ from yoyopy.voice.commands import (
     VoiceCommandTemplate,
     match_voice_command,
 )
+from yoyopy.voice.devices import VoiceDeviceCatalog
 from yoyopy.voice.models import (
     VoiceCaptureRequest,
     VoiceCaptureResult,
@@ -37,6 +38,7 @@ __all__ = [
     "SpeechToTextBackend",
     "SubprocessAudioCaptureBackend",
     "TextToSpeechBackend",
+    "VoiceDeviceCatalog",
     "VoiceCaptureRequest",
     "VoiceCaptureResult",
     "VoiceCommandIntent",

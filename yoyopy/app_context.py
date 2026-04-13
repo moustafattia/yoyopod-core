@@ -88,12 +88,17 @@ class VoiceState:
     stt_enabled: bool = True
     tts_enabled: bool = True
     mic_muted: bool = False
+    speaker_device_id: str | None = None
+    capture_device_id: str | None = None
     stt_available: bool = False
     tts_available: bool = False
     last_transcript: str = ""
     last_spoken_text: str = ""
     last_mode: str = ""
     output_volume: int = 50
+
+
+_VOICE_UNSET = object()
 
 
 class AppContext:
@@ -480,6 +485,8 @@ class AppContext:
         screen_read_enabled: bool | None = None,
         stt_enabled: bool | None = None,
         tts_enabled: bool | None = None,
+        speaker_device_id: str | None | object = _VOICE_UNSET,
+        capture_device_id: str | None | object = _VOICE_UNSET,
     ) -> None:
         """Update persistent voice feature toggles cached in context."""
 
@@ -493,6 +500,10 @@ class AppContext:
             self.voice.stt_enabled = stt_enabled
         if tts_enabled is not None:
             self.voice.tts_enabled = tts_enabled
+        if speaker_device_id is not _VOICE_UNSET:
+            self.voice.speaker_device_id = speaker_device_id  # type: ignore[assignment]
+        if capture_device_id is not _VOICE_UNSET:
+            self.voice.capture_device_id = capture_device_id  # type: ignore[assignment]
 
     def update_voice_backend_status(self, *, stt_available: bool, tts_available: bool) -> None:
         """Update backend availability flags used by voice UI flows."""

@@ -64,11 +64,18 @@ class MenuScreen(Screen):
         )
 
         item_height = 54
-        for index, item in enumerate(self.items):
-            y1 = panel_top + 10 + (index * item_height)
+        row_top = panel_top + 10
+        row_bottom = panel_bottom - 8
+        # Compute how many rows can fit and scroll so the selected row is visible.
+        max_visible = (row_bottom - row_top - 44) // item_height + 1
+        max_visible = max(1, min(len(self.items), max_visible))
+        start_index = max(0, min(self.selected_index - (max_visible // 2), len(self.items) - max_visible))
+
+        for offset in range(max_visible):
+            index = start_index + offset
+            item = self.items[index]
+            y1 = row_top + (offset * item_height)
             y2 = y1 + 44
-            if y2 > panel_bottom - 8:
-                break
 
             mode, icon, subtitle = ITEM_MODES.get(item, ("setup", "setup", "Mode"))
             draw_list_item(

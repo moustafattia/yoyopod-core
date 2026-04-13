@@ -313,6 +313,31 @@ class _FakeConfigManager:
         return 61
 
 
+class _FakeConfigManagerWithSpeaker(_FakeConfigManager):
+    def get_app_settings(self):
+        return SimpleNamespace(
+            voice=SimpleNamespace(
+                commands_enabled=False,
+                ai_requests_enabled=False,
+                screen_read_enabled=True,
+                stt_enabled=True,
+                tts_enabled=False,
+                stt_backend="dummy-stt",
+                tts_backend="dummy-tts",
+                vosk_model_path="models/custom-model",
+                speaker_device_id="plughw:CARD=wm8960soundcard,DEV=0",
+                capture_device_id="plughw:CARD=wm8960soundcard,DEV=0",
+                sample_rate_hz=22050,
+                record_seconds=6,
+                tts_rate_wpm=180,
+                tts_voice="en-us",
+            )
+        )
+
+    def get_ring_output_device(self) -> str:
+        return "wm8960-soundcard"
+
+
 class _FakeVoipManager:
     def __init__(self) -> None:
         self.make_calls: list[tuple[str, str]] = []
@@ -469,6 +494,21 @@ def test_ask_screen_can_place_call_for_parent_aliases() -> None:
     screen.on_voice_command({"transcript": "call dad"})
     assert voip_manager.make_calls[-1] == ("sip:dad@example.com", "Dad")
     assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
+
+
+def test_ask_screen_default_voice_settings_keep_saved_speaker_device() -> None:
+    """Fallback voice settings should preserve the saved speaker route for TTS playback."""
+
+    screen = AskScreen(
+        display=object(),
+        context=AppContext(),
+        config_manager=_FakeConfigManagerWithSpeaker([]),
+    )
+
+    settings = screen._default_voice_settings()
+
+    assert settings.speaker_device_id == "plughw:CARD=wm8960soundcard,DEV=0"
+    assert settings.capture_device_id == "plughw:CARD=wm8960soundcard,DEV=0"
 
 
 def test_ask_screen_select_can_capture_and_execute_command() -> None:

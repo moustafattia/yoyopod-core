@@ -7,6 +7,7 @@ Manages typed app/VoIP settings and contacts from YAML configuration files.
 from __future__ import annotations
 
 import os
+import tempfile
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
@@ -133,6 +134,39 @@ class ConfigManager:
             self.app_config_loaded = False
             return False
 
+    def save_app_config(self) -> bool:
+        """Persist the current typed application config to yoyopod_config.yaml.
+
+        This is a whole-model write. Prefer targeted layer patches for UI-driven
+        settings updates so env overlays and board-layer shape stay intact.
+        """
+
+        try:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            data = config_to_dict(self.app_settings)
+            self._atomic_write_yaml(self.app_config_file, data)
+            self.app_config = data
+            self.app_config_loaded = True
+            logger.info("App configuration saved successfully")
+            return True
+        except Exception:
+            logger.exception("Error saving app config")
+            return False
+
+    def _save_app_config_layer_patch(self, patch: dict[str, Any]) -> bool:
+        """Persist one partial update into the active app-config layer only."""
+
+        try:
+            current = self._load_yaml_mapping(self.app_config_file)
+            data = _deep_merge_mappings(current, patch)
+            self._atomic_write_yaml(self.app_config_file, data)
+            self.app_config_loaded = True
+            logger.info("App configuration layer updated successfully")
+            return True
+        except Exception:
+            logger.exception("Error updating app config layer")
+            return False
+
     def load_voip_config(self) -> bool:
         """
         Load typed VoIP configuration from file.
@@ -175,8 +209,7 @@ class ConfigManager:
         self.contacts_loaded = any(path.exists() for path in self.contacts_layers)
         if not self.contacts_loaded:
             logger.warning(
-                "Contacts file not found: "
-                + ", ".join(str(path) for path in self.contacts_layers)
+                "Contacts file not found: " + ", ".join(str(path) for path in self.contacts_layers)
             )
             self._create_default_contacts()
             return False
@@ -231,6 +264,35 @@ class ConfigManager:
         except Exception:
             logger.exception("Error saving contacts")
             return False
+
+    @staticmethod
+    def _atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
+        """Write YAML atomically so power loss never corrupts the config file."""
+
+        directory = path.parent
+        directory.mkdir(parents=True, exist_ok=True)
+
+        fd, tmp_path = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(directory))
+        tmp = Path(tmp_path)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                yaml.dump(data, handle, default_flow_style=False, sort_keys=False)
+            os.replace(str(tmp), str(path))
+        finally:
+            try:
+                tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _load_yaml_mapping(path: Path) -> dict[str, Any]:
+        """Load one YAML mapping from disk, tolerating missing files."""
+
+        if not path.exists():
+            return {}
+        with open(path, "r", encoding="utf-8") as handle:
+            loaded = yaml.safe_load(handle) or {}
+        return loaded if isinstance(loaded, dict) else {}
 
     def _create_default_voip_config(self) -> None:
         """Create a default typed VoIP configuration file."""
@@ -329,6 +391,30 @@ class ConfigManager:
         """Return the typed application configuration model."""
 
         return self.app_settings
+
+    def set_voice_capture_device_id(self, device_id: str | None) -> bool:
+        """Persist the capture device selector used by local voice interactions."""
+
+        value = (device_id or "").strip()
+        if "\n" in value or "\r" in value:
+            raise ValueError("Invalid ALSA device id (contains newline)")
+        if not self._save_app_config_layer_patch({"voice": {"capture_device_id": value}}):
+            return False
+        self.app_settings.voice.capture_device_id = value
+        self.app_config.setdefault("voice", {})["capture_device_id"] = value
+        return True
+
+    def set_voice_speaker_device_id(self, device_id: str | None) -> bool:
+        """Persist the playback device selector used by local voice interactions."""
+
+        value = (device_id or "").strip()
+        if "\n" in value or "\r" in value:
+            raise ValueError("Invalid ALSA device id (contains newline)")
+        if not self._save_app_config_layer_patch({"voice": {"speaker_device_id": value}}):
+            return False
+        self.app_settings.voice.speaker_device_id = value
+        self.app_config.setdefault("voice", {})["speaker_device_id"] = value
+        return True
 
     def get_app_config_dict(self) -> dict[str, Any]:
         """Return the plain-dict form of the application configuration."""

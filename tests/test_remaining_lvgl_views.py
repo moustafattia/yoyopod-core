@@ -478,44 +478,71 @@ def test_power_screen_cycles_four_lvgl_pages() -> None:
 
     assert binding.power_build_calls == 1
     payload = binding.power_sync_payloads[-1]
-    assert payload["title_text"] == "Power"
+    # Setup now opens in a picker mode (Power/Time/Care/Voice) and enters
+    # detail when the user opens the selected page.
+    assert payload["title_text"] == "Setup"
     assert payload["page_text"] is None
     assert payload["icon_key"] == "battery"
     assert payload["current_page_index"] == 0
     assert payload["total_pages"] == 4
-    assert payload["footer"] == "Tap = Page / Hold = Back"
+    assert payload["footer"] == "Tap next / Double open / Hold back"
     assert payload["items"] == [
-        "Source: Unavailable",
-        "Battery: Unknown",
-        "Charging: Unknown",
-        "RTC: Unknown",
+        "> Power",
+        "Time",
+        "Care",
+        "Voice",
     ]
 
     screen.on_advance()
     screen.render()
-    assert binding.power_sync_payloads[-1]["title_text"] == "Time"
+    payload = binding.power_sync_payloads[-1]
+    assert payload["title_text"] == "Setup"
+    assert payload["icon_key"] == "clock"
+    assert payload["items"] == [
+        "Power",
+        "> Time",
+        "Care",
+        "Voice",
+    ]
     assert binding.power_sync_payloads[-1]["icon_key"] == "clock"
     assert binding.power_sync_payloads[-1]["page_text"] is None
 
     screen.on_advance()
     screen.render()
     payload = binding.power_sync_payloads[-1]
-    assert payload["title_text"] == "Care"
+    assert payload["title_text"] == "Setup"
     assert payload["icon_key"] == "care"
     assert payload["page_text"] is None
+    assert payload["items"] == [
+        "Power",
+        "Time",
+        "> Care",
+        "Voice",
+    ]
 
     screen.on_advance()
+    screen.render()
+    payload = binding.power_sync_payloads[-1]
+    assert payload["title_text"] == "Setup"
+    assert payload["icon_key"] == "voice_note"
+    assert payload["page_text"] is None
+    assert payload["items"] == [
+        "Power",
+        "Time",
+        "Care",
+        "> Voice",
+    ]
+
+    # Open the selected Voice page to confirm it renders interactively.
+    screen.on_select()
     screen.render()
     payload = binding.power_sync_payloads[-1]
     assert payload["title_text"] == "Voice"
     assert payload["icon_key"] == "voice_note"
     assert payload["page_text"] is None
-    assert payload["items"] == [
-        "Voice Cmds: On",
-        "AI Requests: On",
-        "Screen Read: Off",
-        "Mic: Live",
-    ]
+    assert payload["footer"] == "Tap item / Double change / Hold back"
+    assert payload["items"][0].startswith("> Voice Cmds:")
+    assert any("Speaker:" in item for item in payload["items"])
 
     screen.exit()
     assert binding.power_destroy_calls == 1

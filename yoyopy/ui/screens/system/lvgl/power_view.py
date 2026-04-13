@@ -39,14 +39,54 @@ class LvglPowerView:
 
         self.screen.page_index %= len(pages)
         active_page = pages[self.screen.page_index]
-        items = [f"{label}: {value}" for label, value in active_page.rows[:4]]
+
+        # Page picker (Power/Time/Care/Voice) without showing page contents.
+        if not getattr(self.screen, "in_detail", True):
+            items: list[str] = []
+            for index, page in enumerate(pages[:4]):
+                prefix = "> " if index == self.screen.page_index else ""
+                items.append(f"{prefix}{page.title}")
+
+            context = self.screen.context
+            self.backend.binding.power_sync(
+                title_text="Setup",
+                page_text=None,
+                icon_key=self.screen._page_icon_key(active_page.title),
+                footer=self.screen._instruction_text(active_page),
+                items=items,
+                current_page_index=self.screen.page_index,
+                total_pages=len(pages),
+                voip_state=self._voip_state(context),
+                battery_percent=self._battery_percent(context),
+                charging=bool(getattr(context, "battery_charging", False)) if context is not None else False,
+                power_available=bool(getattr(context, "power_available", True)) if context is not None else True,
+                accent=SETUP.accent,
+            )
+            return
+
+        rows = list(active_page.rows)
+        selected_row = max(0, min(self.screen.selected_row, max(0, len(rows) - 1))) if rows else 0
+
+        # LVGL power scene only supports 4 visible rows. For interactive pages,
+        # scroll so the selected row remains visible.
+        start_row = 0
+        if active_page.interactive and rows:
+            max_visible = min(4, len(rows))
+            start_row = max(0, min(selected_row - (max_visible // 2), len(rows) - max_visible))
+
+        visible_rows = rows[start_row : start_row + 4]
+        items: list[str] = []
+        for offset, (label, value) in enumerate(visible_rows):
+            absolute_index = start_row + offset
+            prefix = "> " if active_page.interactive and absolute_index == selected_row else ""
+            items.append(f"{prefix}{label}: {value}")
         context = self.screen.context
 
         self.backend.binding.power_sync(
             title_text=active_page.title,
             page_text=None,
             icon_key=self.screen._page_icon_key(active_page.title),
-            footer="Tap = Page / Hold = Back" if self.screen.is_one_button_mode() else "A page | B back",
+            footer=self.screen._instruction_text(active_page),
             items=items,
             current_page_index=self.screen.page_index,
             total_pages=len(pages),

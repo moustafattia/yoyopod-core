@@ -25,19 +25,35 @@ class AlsaOutputPlayer:
 
         return shutil.which(self.aplay_binary) is not None
 
-    def play_wav(self, audio_path: Path, *, timeout_seconds: float = 6.0) -> bool:
+    def play_wav(
+        self,
+        audio_path: Path,
+        *,
+        device_id: str | None = None,
+        timeout_seconds: float = 6.0,
+    ) -> bool:
         """Play one WAV file, retrying through likely ALSA devices."""
 
         if not self.is_available():
             return False
 
         with _PLAYBACK_LOCK:
-            return self._play_wav_locked(audio_path, timeout_seconds=timeout_seconds)
+            return self._play_wav_locked(
+                audio_path,
+                device_id=device_id,
+                timeout_seconds=timeout_seconds,
+            )
 
-    def _play_wav_locked(self, audio_path: Path, *, timeout_seconds: float = 6.0) -> bool:
+    def _play_wav_locked(
+        self,
+        audio_path: Path,
+        *,
+        device_id: str | None,
+        timeout_seconds: float = 6.0,
+    ) -> bool:
         """Inner play implementation, called with _PLAYBACK_LOCK held."""
 
-        for device in self._device_candidates():
+        for device in self._device_candidates(device_id):
             command = [self.aplay_binary, "-q"]
             if device:
                 command.extend(["-D", device])
@@ -58,10 +74,15 @@ class AlsaOutputPlayer:
                 return True
         return False
 
-    def _device_candidates(self) -> list[str | None]:
+    def _device_candidates(self, configured_device_id: str | None) -> list[str | None]:
         """Return playback-device candidates, prioritizing known-good USB routes."""
 
         candidates: list[str | None] = []
+        if configured_device_id:
+            normalized = configured_device_id.strip()
+            if normalized.upper().startswith("ALSA:"):
+                normalized = normalized.split(":", 1)[1].strip()
+            candidates.append(normalized or None)
         if self._preferred_device is not None:
             candidates.append(self._preferred_device)
 

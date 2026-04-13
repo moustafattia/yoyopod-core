@@ -211,6 +211,9 @@ class AppVoiceConfig:
     screen_read_enabled: bool = config_value(default=False, env="YOYOPOD_SCREEN_READ_ENABLED")
     stt_enabled: bool = config_value(default=True, env="YOYOPOD_STT_ENABLED")
     tts_enabled: bool = config_value(default=True, env="YOYOPOD_TTS_ENABLED")
+    # Optional ALSA selectors for local voice TTS/STT. Empty string means "Auto".
+    speaker_device_id: str = config_value(default="", env="YOYOPOD_VOICE_SPEAKER_DEVICE")
+    capture_device_id: str = config_value(default="", env="YOYOPOD_VOICE_CAPTURE_DEVICE")
     stt_backend: str = config_value(default="vosk", env="YOYOPOD_STT_BACKEND")
     tts_backend: str = config_value(default="espeak-ng", env="YOYOPOD_TTS_BACKEND")
     vosk_model_path: str = config_value(

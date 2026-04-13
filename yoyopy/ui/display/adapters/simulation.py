@@ -180,7 +180,13 @@ class SimulationDisplayAdapter(DisplayHAL):
         if self.draw is None:
             return
 
-        self.draw.rectangle([(x1, y1), (x2, y2)], fill=fill, outline=outline, width=width)
+        # PIL requires top-left <= bottom-right; some icon helpers may compute
+        # inverted coordinates for very small sizes.
+        left = min(x1, x2)
+        right = max(x1, x2)
+        top = min(y1, y2)
+        bottom = max(y1, y2)
+        self.draw.rectangle([(left, top), (right, bottom)], fill=fill, outline=outline, width=width)
 
     def circle(
         self,

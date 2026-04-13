@@ -21,6 +21,7 @@ class VoiceSettings:
     stt_backend: str = "vosk"
     tts_backend: str = "espeak-ng"
     vosk_model_path: str = "models/vosk-model-small-en-us"
+    speaker_device_id: str | None = None
     capture_device_id: str | None = None
     sample_rate_hz: int = 16000
     record_seconds: int = 4

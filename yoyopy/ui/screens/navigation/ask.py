@@ -415,6 +415,16 @@ class AskScreen(Screen):
         defaults = self._default_voice_settings()
         if self.context is not None:
             voice = self.context.voice
+            capture_device_id = (
+                voice.capture_device_id
+                if voice.capture_device_id is not None
+                else defaults.capture_device_id
+            )
+            speaker_device_id = (
+                voice.speaker_device_id
+                if voice.speaker_device_id is not None
+                else defaults.speaker_device_id
+            )
             return replace(
                 defaults,
                 commands_enabled=voice.commands_enabled,
@@ -424,6 +434,8 @@ class AskScreen(Screen):
                 tts_enabled=voice.tts_enabled,
                 mic_muted=voice.mic_muted,
                 output_volume=voice.output_volume,
+                capture_device_id=capture_device_id,
+                speaker_device_id=speaker_device_id,
             )
         return defaults
 
@@ -431,10 +443,18 @@ class AskScreen(Screen):
         """Return configured voice defaults when a screen-level provider is absent."""
 
         capture_device_id = None
+        speaker_device_id = None
         if self.config_manager is not None:
-            capture_device_id = self.config_manager.get_capture_device_id()
+            voice_cfg = getattr(self.config_manager.get_app_settings(), "voice", None)
+            if voice_cfg is not None:
+                capture_device_id = getattr(voice_cfg, "capture_device_id", "").strip() or None
+                speaker_device_id = getattr(voice_cfg, "speaker_device_id", "").strip() or None
+            if capture_device_id is None:
+                capture_device_id = self.config_manager.get_capture_device_id()
+            if speaker_device_id is None:
+                speaker_device_id = getattr(self.config_manager, "get_ring_output_device", lambda: None)()
 
-        defaults = VoiceSettings(capture_device_id=capture_device_id)
+        defaults = VoiceSettings(capture_device_id=capture_device_id, speaker_device_id=speaker_device_id or None)
         if self.config_manager is None:
             return defaults
 
@@ -462,6 +482,7 @@ class AskScreen(Screen):
             stt_backend=voice_cfg.stt_backend,
             tts_backend=voice_cfg.tts_backend,
             vosk_model_path=voice_cfg.vosk_model_path,
+            speaker_device_id=speaker_device_id,
             capture_device_id=capture_device_id,
             sample_rate_hz=voice_cfg.sample_rate_hz,
             record_seconds=voice_cfg.record_seconds,
@@ -961,7 +982,11 @@ class AskScreen(Screen):
             with NamedTemporaryFile(prefix="yoyopy-beep-", suffix=".wav", delete=False) as handle:
                 beep_path = Path(handle.name)
             self._write_beep_wav(beep_path)
-            self._output_player.play_wav(beep_path, timeout_seconds=2.0)
+            device_id = self.context.voice.speaker_device_id if self.context is not None else None
+            play_kwargs = {"timeout_seconds": 2.0}
+            if device_id:
+                play_kwargs["device_id"] = device_id
+            self._output_player.play_wav(beep_path, **play_kwargs)
         except Exception:
             logger.debug("Voice attention tone unavailable")
         finally:

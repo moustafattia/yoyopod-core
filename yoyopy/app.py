@@ -65,8 +65,7 @@ from yoyopy.ui.screens import (
     VoiceNoteScreen,
 )
 from yoyopy.network import NetworkManager
-from yoyopy.events import NetworkPppUpEvent
-from yoyopy.voice import VoiceSettings
+from yoyopy.voice import VoiceDeviceCatalog, VoiceSettings
 from yoyopy.voip import CallHistoryStore, VoIPConfig, VoIPManager
 
 
@@ -136,6 +135,7 @@ class YoyoPodApp:
         self.network_manager: Optional[NetworkManager] = None
         self.call_history_store: Optional[CallHistoryStore] = None
         self.recent_track_store: Optional[RecentTrackHistoryStore] = None
+        self.voice_device_catalog: Optional[VoiceDeviceCatalog] = None
 
         # Screen instances
         self.hub_screen: Optional[HubScreen] = None
@@ -296,6 +296,8 @@ class YoyoPodApp:
             self.recent_track_store = RecentTrackHistoryStore(
                 self.config_manager.config_dir / "recent_tracks.json"
             )
+            self.voice_device_catalog = VoiceDeviceCatalog()
+            self.voice_device_catalog.refresh_async()
 
             if self.config_manager.app_config_loaded:
                 logger.info(f"Loaded configuration from {self.config_manager.app_config_file}")
@@ -416,12 +418,16 @@ class YoyoPodApp:
                 )
             if self.context is not None and self.app_settings is not None:
                 voice_cfg = self.app_settings.voice
+                speaker_device_id = voice_cfg.speaker_device_id.strip() or None
+                capture_device_id = voice_cfg.capture_device_id.strip() or None
                 self.context.configure_voice(
                     commands_enabled=voice_cfg.commands_enabled,
                     ai_requests_enabled=voice_cfg.ai_requests_enabled,
                     screen_read_enabled=voice_cfg.screen_read_enabled,
                     stt_enabled=voice_cfg.stt_enabled,
                     tts_enabled=voice_cfg.tts_enabled,
+                    speaker_device_id=speaker_device_id,
+                    capture_device_id=capture_device_id,
                 )
                 self._refresh_talk_summary()
             self._update_screen_runtime_metrics(time.monotonic())
@@ -717,10 +723,25 @@ class YoyoPodApp:
                         if voice_cfg is not None
                         else "models/vosk-model-small-en-us"
                     ),
+                    speaker_device_id=(
+                        self.context.voice.speaker_device_id
+                        if self.context is not None
+                        and self.context.voice.speaker_device_id is not None
+                        else (
+                            self.config_manager.get_ring_output_device()
+                            if self.config_manager is not None
+                            else None
+                        )
+                    ),
                     capture_device_id=(
-                        self.config_manager.get_capture_device_id()
-                        if self.config_manager is not None
-                        else None
+                        self.context.voice.capture_device_id
+                        if self.context is not None
+                        and self.context.voice.capture_device_id is not None
+                        else (
+                            self.config_manager.get_capture_device_id()
+                            if self.config_manager is not None
+                            else None
+                        )
                     ),
                     sample_rate_hz=voice_cfg.sample_rate_hz if voice_cfg is not None else 16000,
                     record_seconds=voice_cfg.record_seconds if voice_cfg is not None else 4,
@@ -733,6 +754,31 @@ class YoyoPodApp:
                 self.context,
                 power_manager=self.power_manager,
                 status_provider=self.get_status,
+                refresh_voice_device_options_action=(
+                    self.voice_device_catalog.refresh_async
+                    if self.voice_device_catalog is not None
+                    else None
+                ),
+                playback_device_options_provider=(
+                    self.voice_device_catalog.playback_devices
+                    if self.voice_device_catalog is not None
+                    else None
+                ),
+                capture_device_options_provider=(
+                    self.voice_device_catalog.capture_devices
+                    if self.voice_device_catalog is not None
+                    else None
+                ),
+                persist_speaker_device_action=(
+                    self.config_manager.set_voice_speaker_device_id
+                    if self.config_manager is not None
+                    else None
+                ),
+                persist_capture_device_action=(
+                    self.config_manager.set_voice_capture_device_id
+                    if self.config_manager is not None
+                    else None
+                ),
                 volume_up_action=self.volume_up,
                 volume_down_action=self.volume_down,
                 mute_action=self.voip_manager.mute if self.voip_manager is not None else None,
