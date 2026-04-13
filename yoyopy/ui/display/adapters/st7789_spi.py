@@ -73,7 +73,10 @@ class ST7789SpiDriver:
         self._spi.open(spi_bus, spi_device)
         self._spi.max_speed_hz = spi_speed_hz
         self._spi.mode = 0
-        self._spi.no_cs = True
+        try:
+            self._spi.no_cs = True
+        except OSError:
+            logger.debug("SPI no_cs not supported by this driver, using hardware CS")
         self._spi.bits_per_word = 8
         logger.info(
             "ST7789 SPI opened: bus={}, device={}, speed={}MHz",
@@ -87,17 +90,20 @@ class ST7789SpiDriver:
             raise RuntimeError("gpiod module is required but not installed")
 
         self._dc_line = self._request_output_line(dc_chip, dc_line, "st7789-dc")
-        self._cs_line = self._request_output_line(cs_chip, cs_line, "st7789-cs")
+        try:
+            self._cs_line = self._request_output_line(cs_chip, cs_line, "st7789-cs")
+            self._cs_line.set_value(1)  # CS idle high
+        except Exception as e:
+            logger.warning("Software CS not available ({}), relying on hardware CS", e)
+            self._cs_line = None
         self._backlight_line = self._request_output_line(
             backlight_chip,
             backlight_line,
             "st7789-bl",
         )
 
-        # CS idle high
-        self._cs_line.set_value(1)
-
-        logger.info("ST7789 GPIO lines acquired (DC, CS, backlight)")
+        logger.info("ST7789 GPIO lines acquired (DC{}, backlight)",
+                     "+CS" if self._cs_line else "")
 
     def _request_output_line(
         self, chip_name: str, line_offset: int, consumer: str
@@ -140,7 +146,8 @@ class ST7789SpiDriver:
 
     def command(self, cmd: int, data: bytes = b"") -> None:
         """Send a command byte (DC=low), optionally followed by data bytes (DC=high)."""
-        self._cs_line.set_value(0)
+        if self._cs_line:
+            self._cs_line.set_value(0)
 
         # Command phase: DC low
         self._dc_line.set_value(0)
@@ -151,7 +158,8 @@ class ST7789SpiDriver:
             self._dc_line.set_value(1)
             self._spi.writebytes2(list(data))
 
-        self._cs_line.set_value(1)
+        if self._cs_line:
+            self._cs_line.set_value(1)
 
     def draw_image(
         self, x: int, y: int, width: int, height: int, pixel_data: bytes
@@ -187,7 +195,8 @@ class ST7789SpiDriver:
         )
 
         # Write pixel data (RAMWR)
-        self._cs_line.set_value(0)
+        if self._cs_line:
+            self._cs_line.set_value(0)
         self._dc_line.set_value(0)
         self._spi.writebytes2([_RAMWR])
         self._dc_line.set_value(1)
@@ -197,7 +206,8 @@ class ST7789SpiDriver:
             chunk = pixel_data[offset : offset + _SPI_CHUNK_SIZE]
             self._spi.writebytes2(chunk)
 
-        self._cs_line.set_value(1)
+        if self._cs_line:
+            self._cs_line.set_value(1)
 
     def set_backlight(self, on: bool) -> None:
         """Turn backlight on or off."""

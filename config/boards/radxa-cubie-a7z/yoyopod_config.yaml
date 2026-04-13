@@ -14,6 +14,8 @@ display:
     spi_bus: 1
     spi_device: 0
     spi_speed_hz: 60000000
+    # PD13 = SPI1-MISO on PIN_21, freed by custom spi1-no-miso overlay.
+    # PD13 = gpiochip0 line 109. Used as DC (data/command) for ST7789.
     dc:
       chip: "gpiochip0"
       line: 109

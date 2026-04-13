@@ -1,0 +1,21 @@
+{
+  "messages": [
+    {
+      "id": "mock-note-1",
+      "peer_sip_address": "sip:mom@example.com",
+      "sender_sip_address": "sip:alice@sip.example.com",
+      "recipient_sip_address": "sip:mom@example.com",
+      "kind": "voice_note",
+      "direction": "outgoing",
+      "delivery_state": "failed",
+      "created_at": "2026-04-13T00:34:08.223936+00:00",
+      "updated_at": "2026-04-13T00:34:08.224394+00:00",
+      "text": "",
+      "local_file_path": "data\\test_voice_notes\\voice-note-20260413T003408Z.wav",
+      "mime_type": "audio/wav",
+      "duration_ms": 1500,
+      "unread": false,
+      "display_name": "Mom"
+    }
+  ]
+}
