@@ -244,6 +244,7 @@ int yoyopy_lvgl_power_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * item_4,
     int32_t item_count,
     int32_t current_page_index,
     int32_t total_pages,

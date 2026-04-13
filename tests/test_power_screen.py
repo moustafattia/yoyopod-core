@@ -201,6 +201,7 @@ def test_power_screen_one_button_voice_page_stays_in_fast_page_mode() -> None:
         assert [label for label, _ in visible_rows] == [
             "Voice Cmds",
             "AI Requests",
+            "Screen Read",
             "Mic",
             "Volume",
         ]

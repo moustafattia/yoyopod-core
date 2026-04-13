@@ -556,6 +556,7 @@ def test_power_screen_cycles_four_lvgl_pages() -> None:
     assert payload["items"] == [
         "Voice Cmds: On",
         "AI Requests: On",
+        "Screen Read: Off",
         "Mic: Live",
         "Volume: 50%",
     ]
@@ -584,6 +585,7 @@ def test_power_screen_one_button_voice_page_wraps_immediately() -> None:
     assert binding.power_sync_payloads[-1]["items"] == [
         "Voice Cmds: On",
         "AI Requests: On",
+        "Screen Read: Off",
         "Mic: Live",
         "Volume: 50%",
     ]
@@ -637,6 +639,12 @@ def test_power_screen_reports_full_network_page_count_through_lvgl() -> None:
     assert payload["title_text"] == "GPS"
     assert payload["current_page_index"] == 2
     assert payload["total_pages"] == 6
-    assert payload["items"][0] == "Fix: Searching"
+    assert payload["items"] == [
+        "Fix: Searching",
+        "Lat: --",
+        "Lng: --",
+        "Alt: --",
+        "Speed: --",
+    ]
 
     screen.exit()

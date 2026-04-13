@@ -9,6 +9,7 @@
 
 #define KEY_QUEUE_CAPACITY 32
 #define YOYOPY_POWER_MAX_DOTS 8
+#define YOYOPY_POWER_MAX_ITEMS 5
 
 typedef struct {
     int32_t key;
@@ -213,8 +214,8 @@ typedef struct {
     lv_obj_t * icon_halo;
     lv_obj_t * icon_label;
     lv_obj_t * title_label;
-    lv_obj_t * item_panels[4];
-    lv_obj_t * item_titles[4];
+    lv_obj_t * item_panels[YOYOPY_POWER_MAX_ITEMS];
+    lv_obj_t * item_titles[YOYOPY_POWER_MAX_ITEMS];
     lv_obj_t * dots[YOYOPY_POWER_MAX_DOTS];
     lv_obj_t * footer_label;
 } yoyopy_power_scene_t;
@@ -3126,16 +3127,16 @@ int yoyopy_lvgl_power_build(void) {
     lv_obj_set_style_text_font(g_power_scene.title_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_align(g_power_scene.title_label, LV_TEXT_ALIGN_CENTER, 0);
 
-    for(int index = 0; index < 4; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_ITEMS; ++index) {
         g_power_scene.item_panels[index] = lv_obj_create(g_power_scene.screen);
-        lv_obj_set_size(g_power_scene.item_panels[index], 208, 24);
-        lv_obj_set_pos(g_power_scene.item_panels[index], 16, 126 + (index * 28));
-        lv_obj_set_style_radius(g_power_scene.item_panels[index], 12, 0);
+        lv_obj_set_size(g_power_scene.item_panels[index], 208, 18);
+        lv_obj_set_pos(g_power_scene.item_panels[index], 16, 126 + (index * 22));
+        lv_obj_set_style_radius(g_power_scene.item_panels[index], 10, 0);
         lv_obj_set_style_border_width(g_power_scene.item_panels[index], 0, 0);
         lv_obj_set_style_pad_left(g_power_scene.item_panels[index], 12, 0);
         lv_obj_set_style_pad_right(g_power_scene.item_panels[index], 12, 0);
-        lv_obj_set_style_pad_top(g_power_scene.item_panels[index], 4, 0);
-        lv_obj_set_style_pad_bottom(g_power_scene.item_panels[index], 4, 0);
+        lv_obj_set_style_pad_top(g_power_scene.item_panels[index], 2, 0);
+        lv_obj_set_style_pad_bottom(g_power_scene.item_panels[index], 2, 0);
         lv_obj_set_style_shadow_width(g_power_scene.item_panels[index], 0, 0);
         lv_obj_set_style_outline_width(g_power_scene.item_panels[index], 0, 0);
         lv_obj_set_scrollbar_mode(g_power_scene.item_panels[index], LV_SCROLLBAR_MODE_OFF);
@@ -3171,6 +3172,7 @@ int yoyopy_lvgl_power_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * item_4,
     int32_t item_count,
     int32_t current_page_index,
     int32_t total_pages,
@@ -3191,7 +3193,9 @@ int yoyopy_lvgl_power_sync(
     const lv_color_t accent = yoyopy_color_u24(accent_rgb);
     const lv_color_t accent_dim = yoyopy_mix_u24(accent_rgb, YOYOPY_THEME_BACKGROUND_RGB, 65);
     const lv_color_t muted = yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB);
-    const char * rows[4] = {item_0, item_1, item_2, item_3};
+    const char * rows[YOYOPY_POWER_MAX_ITEMS] = {item_0, item_1, item_2, item_3, item_4};
+
+    (void)page_text;
 
     lv_obj_set_style_bg_color(g_power_scene.screen, background, 0);
     lv_obj_set_style_bg_opa(g_power_scene.screen, LV_OPA_COVER, 0);
@@ -3213,7 +3217,7 @@ int yoyopy_lvgl_power_sync(
     lv_label_set_text(g_power_scene.title_label, title_text != NULL ? title_text : "Setup");
     lv_obj_set_style_text_color(g_power_scene.title_label, ink, 0);
 
-    for(int index = 0; index < 4; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_ITEMS; ++index) {
         if(index < item_count && rows[index] != NULL && rows[index][0] != '\0') {
             lv_obj_clear_flag(g_power_scene.item_panels[index], LV_OBJ_FLAG_HIDDEN);
             lv_obj_set_style_bg_color(g_power_scene.item_panels[index], row_fill, 0);

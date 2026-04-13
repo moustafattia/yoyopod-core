@@ -232,6 +232,7 @@ int yoyopy_lvgl_power_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * item_4,
     int32_t item_count,
     int32_t current_page_index,
     int32_t total_pages,
@@ -939,8 +940,8 @@ class LvglBinding:
         power_available: bool,
         accent: tuple[int, int, int],
     ) -> None:
-        normalized_items = list(items[:4])
-        while len(normalized_items) < 4:
+        normalized_items = list(items[:5])
+        while len(normalized_items) < 5:
             normalized_items.append("")
 
         title_raw = self.ffi.new("char[]", title_text.encode("utf-8"))
@@ -953,6 +954,7 @@ class LvglBinding:
         item_1_raw = self.ffi.new("char[]", normalized_items[1].encode("utf-8"))
         item_2_raw = self.ffi.new("char[]", normalized_items[2].encode("utf-8"))
         item_3_raw = self.ffi.new("char[]", normalized_items[3].encode("utf-8"))
+        item_4_raw = self.ffi.new("char[]", normalized_items[4].encode("utf-8"))
         result = self.lib.yoyopy_lvgl_power_sync(
             title_raw,
             page_text_raw,
@@ -962,6 +964,7 @@ class LvglBinding:
             item_1_raw,
             item_2_raw,
             item_3_raw,
+            item_4_raw,
             len(items),
             current_page_index,
             total_pages,

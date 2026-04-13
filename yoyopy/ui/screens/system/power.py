@@ -231,9 +231,12 @@ class PowerScreen(Screen):
         self,
         page: PowerPage,
         *,
-        max_rows: int = 4,
+        max_rows: int | None = None,
     ) -> tuple[list[tuple[str, str]], int | None]:
         """Return the visible row window plus the selected index inside it."""
+
+        if max_rows is None:
+            max_rows = self._row_capacity_for_page(page)
 
         if not page.rows:
             self.selected_row = 0
@@ -248,6 +251,13 @@ class PowerScreen(Screen):
         start = max(0, end - max_rows)
         visible_rows = page.rows[start:end]
         return visible_rows, self.selected_row - start
+
+    def _row_capacity_for_page(self, page: PowerPage) -> int:
+        """Return how many rows the current display/layout can safely show."""
+
+        if self.display.is_portrait() and not page.interactive:
+            return 5
+        return 4
 
     def _render_page_dots(self, *, total_pages: int) -> None:
         """Render the compact Setup page-position dots."""
@@ -324,7 +334,7 @@ class PowerScreen(Screen):
                 ("Mic", "Unknown"),
                 ("Volume", "--"),
             ]
-            return rows[:4] if summary_mode else rows
+            return rows
 
         voice = self.context.voice
         rows = [
@@ -335,12 +345,7 @@ class PowerScreen(Screen):
             ("Volume", f"{voice.output_volume}%"),
         ]
         if summary_mode:
-            return [
-                rows[0],
-                rows[1],
-                rows[3],
-                rows[4],
-            ]
+            return rows
         return rows
 
     def _build_network_rows(self) -> list[tuple[str, str]]:
