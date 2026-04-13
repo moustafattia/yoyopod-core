@@ -204,6 +204,8 @@ typedef struct {
 } yoyopy_power_scene_t;
 
 static int g_initialized = 0;
+static int g_display_width  = 240;
+static int g_display_height = 280;
 static lv_display_t * g_display = NULL;
 static lv_indev_t * g_indev = NULL;
 static lv_group_t * g_group = NULL;
@@ -735,43 +737,50 @@ static lv_color_t yoyopy_color_for_kind(int32_t color_kind, uint32_t accent_rgb)
     return yoyopy_color_u24(accent_rgb);
 }
 
-#define YOYOPY_STATUS_DOT_X 18
-#define YOYOPY_STATUS_DOT_Y 15
-#define YOYOPY_STATUS_TIME_X 38
-#define YOYOPY_STATUS_TIME_Y 9
-#define YOYOPY_STATUS_BATTERY_X 172
-#define YOYOPY_STATUS_BATTERY_Y 11
-#define YOYOPY_STATUS_BATTERY_TIP_X 186
-#define YOYOPY_STATUS_BATTERY_TIP_Y 14
-#define YOYOPY_STATUS_BATTERY_LABEL_X 196
+/* Status bar — left-side constants are fixed, right-side computed from width */
+#define YOYOPY_STATUS_BAR_H       32
+#define YOYOPY_STATUS_DOT_X       18
+#define YOYOPY_STATUS_DOT_Y       15
+#define YOYOPY_STATUS_TIME_X      38
+#define YOYOPY_STATUS_TIME_Y       9
+#define YOYOPY_STATUS_BATTERY_Y   11
+#define YOYOPY_STATUS_BATTERY_TIP_Y  14
 #define YOYOPY_STATUS_BATTERY_LABEL_Y 8
-#define YOYOPY_FOOTER_BAR_HEIGHT 32
-#define YOYOPY_FOOTER_BAR_TOP 248
-#define YOYOPY_FOOTER_WIDTH 214
-#define YOYOPY_FOOTER_OFFSET_Y -8
+
+static inline int status_battery_x(void)       { return g_display_width - 68; }
+static inline int status_battery_tip_x(void)   { return g_display_width - 54; }
+static inline int status_battery_label_x(void) { return g_display_width - 44; }
+
+/* Footer bar */
+#define YOYOPY_FOOTER_BAR_H   32
+#define YOYOPY_FOOTER_PAD      8
+
+static inline int footer_bar_top(void)  { return g_display_height - YOYOPY_FOOTER_BAR_H; }
+static inline int footer_width(void)    { return g_display_width - (2 * YOYOPY_FOOTER_PAD); }
+static inline int center_x(void)        { return g_display_width / 2; }
 
 static void yoyopy_build_footer_bar(lv_obj_t * parent) {
     lv_obj_t * bar = lv_obj_create(parent);
     lv_obj_remove_style_all(bar);
-    lv_obj_set_size(bar, 240, YOYOPY_FOOTER_BAR_HEIGHT);
-    lv_obj_set_pos(bar, 0, YOYOPY_FOOTER_BAR_TOP);
+    lv_obj_set_size(bar, g_display_width, YOYOPY_FOOTER_BAR_H);
+    lv_obj_set_pos(bar, 0, footer_bar_top());
     lv_obj_set_style_bg_color(bar, yoyopy_color_u24(YOYOPY_THEME_FOOTER_RGB), 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
     lv_obj_set_scrollbar_mode(bar, LV_SCROLLBAR_MODE_OFF);
 }
 
 static void yoyopy_prepare_footer_label(lv_obj_t * label) {
-    lv_obj_set_width(label, YOYOPY_FOOTER_WIDTH);
+    lv_obj_set_width(label, footer_width());
     lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_CLIP);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, YOYOPY_FOOTER_OFFSET_Y);
+    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -YOYOPY_FOOTER_PAD);
 }
 
 static void yoyopy_apply_footer_label(lv_obj_t * label, const char * text, lv_color_t color) {
     lv_label_set_text(label, text != NULL ? text : "");
     lv_obj_set_style_text_color(label, color, 0);
-    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, YOYOPY_FOOTER_OFFSET_Y);
+    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -YOYOPY_FOOTER_PAD);
 }
 
 static void yoyopy_status_bar_build(lv_obj_t * parent, yoyopy_status_bar_t * bar, int show_time) {
@@ -793,7 +802,7 @@ static void yoyopy_status_bar_build(lv_obj_t * parent, yoyopy_status_bar_t * bar
     bar->battery_outline = lv_obj_create(parent);
     lv_obj_remove_style_all(bar->battery_outline);
     lv_obj_set_size(bar->battery_outline, 14, 8);
-    lv_obj_set_pos(bar->battery_outline, YOYOPY_STATUS_BATTERY_X, YOYOPY_STATUS_BATTERY_Y);
+    lv_obj_set_pos(bar->battery_outline, status_battery_x(), YOYOPY_STATUS_BATTERY_Y);
     lv_obj_set_style_border_width(bar->battery_outline, 1, 0);
     lv_obj_set_style_border_color(bar->battery_outline, yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB), 0);
     lv_obj_set_style_radius(bar->battery_outline, 2, 0);
@@ -809,12 +818,12 @@ static void yoyopy_status_bar_build(lv_obj_t * parent, yoyopy_status_bar_t * bar
     bar->battery_tip = lv_obj_create(parent);
     lv_obj_remove_style_all(bar->battery_tip);
     lv_obj_set_size(bar->battery_tip, 2, 4);
-    lv_obj_set_pos(bar->battery_tip, YOYOPY_STATUS_BATTERY_TIP_X, YOYOPY_STATUS_BATTERY_TIP_Y);
+    lv_obj_set_pos(bar->battery_tip, status_battery_tip_x(), YOYOPY_STATUS_BATTERY_TIP_Y);
     lv_obj_set_style_bg_color(bar->battery_tip, yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB), 0);
     lv_obj_set_style_bg_opa(bar->battery_tip, LV_OPA_COVER, 0);
 
     bar->battery_label = lv_label_create(parent);
-    lv_obj_set_pos(bar->battery_label, YOYOPY_STATUS_BATTERY_LABEL_X, YOYOPY_STATUS_BATTERY_LABEL_Y);
+    lv_obj_set_pos(bar->battery_label, status_battery_label_x(), YOYOPY_STATUS_BATTERY_LABEL_Y);
     lv_obj_set_style_text_font(bar->battery_label, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(bar->battery_label, yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB), 0);
 }
@@ -3099,6 +3108,9 @@ int yoyopy_lvgl_register_display(
         yoyopy_set_error("display already registered");
         return -1;
     }
+
+    g_display_width  = (int)width;
+    g_display_height = (int)height;
 
     if(flush_cb == NULL) {
         yoyopy_set_error("flush callback is required");
