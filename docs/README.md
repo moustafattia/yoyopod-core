@@ -25,13 +25,16 @@ Plan docs are useful, but they are not automatically the current implementation 
 ### Start here
 
 - [`../README.md`](../README.md), repo overview and quick start
+- [`CONTRIBUTOR_WORKFLOW.md`](CONTRIBUTOR_WORKFLOW.md), day-to-day contributor path and PR checklist
 - [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md), setup, running, validation, package layout
 - [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md), current runtime architecture
 
 ### Setup, bringup, and deployment
 
+- [`CONTRIBUTOR_WORKFLOW.md`](CONTRIBUTOR_WORKFLOW.md), contributor onboarding and daily workflow
 - [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md), main developer setup guide
 - [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md), repo-owned setup and dependency contract
+- [`QUALITY_GATES.md`](QUALITY_GATES.md), current staged quality gate and audit contract
 - [`DEPLOYED_PI_DEPENDENCIES.md`](DEPLOYED_PI_DEPENDENCIES.md), deployed/runtime dependency inventory
 - [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md), day-to-day Raspberry Pi workflow
 - [`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md), validation checklist for CI-safe and on-device checks
@@ -84,9 +87,10 @@ Archive files are for historical context only. They are not the source of truth 
 
 1. `README.md`
 2. `docs/README.md`
-3. `docs/DEVELOPMENT_GUIDE.md`
-4. `docs/SYSTEM_ARCHITECTURE.md`
-5. `rules/project.md`
+3. `docs/CONTRIBUTOR_WORKFLOW.md`
+4. `docs/DEVELOPMENT_GUIDE.md`
+5. `docs/SYSTEM_ARCHITECTURE.md`
+6. `rules/project.md`
 
 ### Working on runtime code
 
@@ -97,7 +101,9 @@ Archive files are for historical context only. They are not the source of truth 
 
 ### Working on Raspberry Pi deployment
 
-1. `docs/DEVELOPMENT_GUIDE.md`
-2. `docs/PI_DEV_WORKFLOW.md`
-3. `docs/RPI_SMOKE_VALIDATION.md`
-4. `skills/yoyopod-*.md` guidance via `AGENTS.md`
+1. `docs/CONTRIBUTOR_WORKFLOW.md`
+2. `docs/SETUP_CONTRACT.md`
+3. `docs/DEVELOPMENT_GUIDE.md`
+4. `docs/PI_DEV_WORKFLOW.md`
+5. `docs/RPI_SMOKE_VALIDATION.md`
+6. `skills/yoyopod-*.md` guidance via `AGENTS.md`

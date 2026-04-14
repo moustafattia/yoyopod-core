@@ -6,7 +6,8 @@ If you are new here, read these first:
 
 1. [`../README.md`](../README.md)
 2. [`README.md`](README.md)
-3. [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md)
+3. [`CONTRIBUTOR_WORKFLOW.md`](CONTRIBUTOR_WORKFLOW.md)
+4. [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md)
 
 ## Source of truth
 
@@ -199,6 +200,20 @@ yoyopy/
   fsm.py
   app_context.py
   coordinators/
+  runtime/
+    boot.py
+    loop.py
+    recovery.py
+    screen_power.py
+    shutdown.py
+    models.py
+  cli/
+    setup.py
+    remote/
+      setup.py
+      ops.py
+      infra.py
+      lvgl.py
   audio/
     history.py
     local_service.py
@@ -222,13 +237,19 @@ yoyopy/
     lvgl_binding/
     screens/
     web_server.py
+scripts/
+  quality.py
+sitecustomize.py
 ```
 
 ## Current Active Docs
 
 Start with [`README.md`](README.md) for the full docs map.
 
-Current runtime and setup docs:
+Current contributor, runtime, and setup docs:
+- `docs/CONTRIBUTOR_WORKFLOW.md`
+- `docs/QUALITY_GATES.md`
+- `docs/SETUP_CONTRACT.md`
 - `docs/SYSTEM_ARCHITECTURE.md`
 - `docs/POWER_MODULE.md`
 - `docs/LOCAL_FIRST_MUSIC_PLAN.md`
