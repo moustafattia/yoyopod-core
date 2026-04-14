@@ -5,7 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from yoyopy.audio.music.models import MusicConfig, Playlist, Track
+from yoyopy.app_context import AppContext
+from yoyopy.audio.music.models import MusicConfig, PlaybackQueue, Playlist, Track
 
 
 def test_track_get_artist_string_with_artists() -> None:
@@ -93,9 +94,49 @@ def test_playlist_dataclass() -> None:
     assert pl.track_count == 5
 
 
+def test_playback_queue_tracks_current_selection() -> None:
+    queue = PlaybackQueue(
+        name="Road Trip",
+        tracks=[
+            Track(uri="demo://golden-hour", name="Golden Hour", artists=["Kacey Musgraves"]),
+            Track(uri="demo://midnight-train", name="Midnight Train", artists=["Sam Smith"]),
+        ],
+    )
+
+    assert queue.track_count == 2
+    assert queue.current_track() == queue.tracks[0]
+    assert queue.has_previous() is False
+    assert queue.has_next() is True
+
+    assert queue.next_track() == queue.tracks[1]
+    assert queue.current_track() == queue.tracks[1]
+    assert queue.has_previous() is True
+    assert queue.has_next() is False
+
+    assert queue.previous_track() == queue.tracks[0]
+    assert queue.current_track() == queue.tracks[0]
+
+
+def test_app_context_demo_playlist_uses_canonical_track_model() -> None:
+    context = AppContext()
+    playlist = context.create_demo_playlist()
+    context.set_playlist(playlist)
+    context.playback.position = 45.0
+
+    track = context.get_current_track()
+
+    assert isinstance(track, Track)
+    assert track is not None
+    assert track.name == "The Adventure Begins"
+    assert track.length == 180_000
+    assert context.get_playback_progress() == 0.25
+
+
 def test_music_config_defaults() -> None:
     cfg = MusicConfig(music_dir=Path("/home/pi/Music"))
-    expected_socket = r"\\.\pipe\yoyopod-mpv" if sys.platform == "win32" else "/tmp/yoyopod-mpv.sock"
+    expected_socket = (
+        r"\\.\pipe\yoyopod-mpv" if sys.platform == "win32" else "/tmp/yoyopod-mpv.sock"
+    )
     assert cfg.mpv_socket == expected_socket
     assert cfg.mpv_binary == "mpv"
     assert cfg.alsa_device == "default"

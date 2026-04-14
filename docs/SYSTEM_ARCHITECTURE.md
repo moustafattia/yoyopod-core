@@ -85,7 +85,7 @@ yoyopod.py / yoyopy.main
 - `yoyopy/audio/music/backend.py`: `MusicBackend`, `MpvBackend`, `MockMusicBackend`
 - `yoyopy/audio/music/process.py`: app-managed mpv process lifecycle
 - `yoyopy/audio/music/ipc.py`: low-level mpv JSON IPC client
-- `yoyopy/audio/music/models.py`: `Track`, `Playlist`, `MusicConfig`
+- `yoyopy/audio/music/models.py`: `Track`, `Playlist`, `PlaybackQueue`, `MusicConfig`
 - `yoyopy/audio/volume.py`: shared ALSA and mpv output-volume coordination
 - `yoyopy/voip/manager.py`: call, message, and voice-note facade
 - `yoyopy/voip/liblinphone_binding/`: native Liblinphone shim and CPython binding
@@ -205,6 +205,8 @@ and updates:
 3. `LocalMusicService` handles local playlist and filesystem browse concerns
 4. callbacks refresh `NowPlayingScreen`
 5. the derived runtime state stays synchronized with actual playback state
+
+Shared music-domain model ownership lives in `yoyopy/audio/music/models.py`. `Track` is the canonical track shape, `Playlist` is the local-library playlist summary, and `PlaybackQueue` is the runtime ordered queue used when the app needs selected-track state.
 
 ### 4G / GPS Bringup
 

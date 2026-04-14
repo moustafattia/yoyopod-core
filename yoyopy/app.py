@@ -1307,11 +1307,11 @@ class YoyoPodApp:
             current_screen = self.screen_manager.get_current_screen().route_name
 
         current_track = None
-        if self.context is not None and self.context.get_current_track() is not None:
-            track = self.context.get_current_track()
+        track = self.context.get_current_track() if self.context is not None else None
+        if track is not None:
             current_track = {
-                "title": track.title,
-                "artist": track.artist,
+                "title": track.name,
+                "artist": track.get_artist_string(),
             }
 
         payload = {

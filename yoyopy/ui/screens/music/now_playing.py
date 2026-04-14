@@ -64,7 +64,9 @@ class NowPlayingScreen(Screen):
         if getattr(self.display, "backend_kind", "pil") != "lvgl":
             return None
 
-        ui_backend = self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        ui_backend = (
+            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        )
         if ui_backend is None or not getattr(ui_backend, "initialized", False):
             return None
 
@@ -133,7 +135,13 @@ class NowPlayingScreen(Screen):
         artist_y = title_bottom + 8
         artist_text = text_fit(self.display, artist, self.display.WIDTH - 36, 11)
         artist_width, _ = self.display.get_text_size(artist_text, 11)
-        self.display.text(artist_text, (self.display.WIDTH - artist_width) // 2, artist_y, color=MUTED, font_size=11)
+        self.display.text(
+            artist_text,
+            (self.display.WIDTH - artist_width) // 2,
+            artist_y,
+            color=MUTED,
+            font_size=11,
+        )
 
         state_width, state_height = self.display.get_text_size(state_text, 10)
         chip_width = state_width + 26
@@ -258,8 +266,8 @@ class NowPlayingScreen(Screen):
             return ("No Track Yet", "Pick local music to begin", 0.0, "READY", False)
 
         return (
-            track.title,
-            track.artist,
+            track.name,
+            track.get_artist_string(),
             self.context.get_playback_progress() if self.context else 0.0,
             "PLAYING" if self.context and self.context.playback.is_playing else "PAUSED",
             bool(self.context and self.context.playback.is_playing),
@@ -298,34 +306,34 @@ class NowPlayingScreen(Screen):
         if self.context:
             self.context.next_track()
 
-    def on_select(self, data=None) -> None:
+    def on_select(self, data: object | None = None) -> None:
         """Toggle play/pause."""
         self._toggle_playback()
 
-    def on_play_pause(self, data=None) -> None:
+    def on_play_pause(self, data: object | None = None) -> None:
         """Toggle play/pause from a dedicated action."""
         self._toggle_playback()
 
-    def on_back(self, data=None) -> None:
+    def on_back(self, data: object | None = None) -> None:
         """Go back."""
         self.request_route("back")
 
-    def on_advance(self, data=None) -> None:
+    def on_advance(self, data: object | None = None) -> None:
         """Advance to the next track in one-button mode."""
         self._next_track()
 
-    def on_up(self, data=None) -> None:
+    def on_up(self, data: object | None = None) -> None:
         """Go to the previous track."""
         self._previous_track()
 
-    def on_prev_track(self, data=None) -> None:
+    def on_prev_track(self, data: object | None = None) -> None:
         """Go to the previous track from a dedicated media action."""
         self._previous_track()
 
-    def on_down(self, data=None) -> None:
+    def on_down(self, data: object | None = None) -> None:
         """Go to the next track."""
         self._next_track()
 
-    def on_next_track(self, data=None) -> None:
+    def on_next_track(self, data: object | None = None) -> None:
         """Go to the next track from a dedicated media action."""
         self._next_track()

@@ -58,6 +58,16 @@ audio:
   default_volume: 100
 ```
 
+## Music Domain Models
+
+`yoyopy/audio/music/models.py` is the canonical ownership point for shared music-domain data.
+
+- `Track` is the shared track model used by mpv metadata, recent-history persistence, and UI playback reads.
+- `Playlist` is the discovered local-playlist summary returned by library scans.
+- `PlaybackQueue` is the runtime ordered track queue used when the app needs selected-track state.
+
+`AppContext` and demo helpers should reference these models instead of defining parallel `Track` or `Playlist` dataclasses.
+
 ## Music Control Path
 
 ### 1. Local library selection

@@ -359,7 +359,8 @@ def _capture_screen(
 
 def _build_context() -> object:
     """Create one stable one-button app context."""
-    from yoyopy.app_context import AppContext, Playlist, Track as ContextTrack
+    from yoyopy.app_context import AppContext
+    from yoyopy.audio.music.models import PlaybackQueue, Track
     from yoyopy.ui.input import InteractionProfile
 
     context = AppContext(interaction_profile=InteractionProfile.ONE_BUTTON)
@@ -391,11 +392,21 @@ def _build_context() -> object:
         },
     )
 
-    demo_playlist = Playlist(
+    demo_playlist = PlaybackQueue(
         name="Road Trip",
         tracks=[
-            ContextTrack(title="Golden Hour", artist="Kacey Musgraves", duration=214.0),
-            ContextTrack(title="Midnight Train", artist="Sam Smith", duration=198.0),
+            Track(
+                uri="demo://golden-hour",
+                name="Golden Hour",
+                artists=["Kacey Musgraves"],
+                length=214_000,
+            ),
+            Track(
+                uri="demo://midnight-train",
+                name="Midnight Train",
+                artists=["Sam Smith"],
+                length=198_000,
+            ),
         ],
     )
     context.set_playlist(demo_playlist)

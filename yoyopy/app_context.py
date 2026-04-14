@@ -7,11 +7,12 @@ current playlist, playback status, volume, and user settings.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
-from pathlib import Path
+
 from loguru import logger
 
+from yoyopy.audio.music.models import PlaybackQueue, Track
 from yoyopy.ui.input.hal import InteractionProfile
 
 if TYPE_CHECKING:
@@ -20,56 +21,9 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Track:
-    """Represents a single audio track."""
-    title: str
-    artist: str
-    duration: float = 0.0  # Duration in seconds
-    file_path: Optional[Path] = None
-    stream_url: Optional[str] = None
-    album: Optional[str] = None
-    artwork_url: Optional[str] = None
-
-
-@dataclass
-class Playlist:
-    """Represents a playlist of tracks."""
-    name: str
-    tracks: List[Track] = field(default_factory=list)
-    current_index: int = 0
-
-    def current_track(self) -> Optional[Track]:
-        """Get the currently playing track."""
-        if 0 <= self.current_index < len(self.tracks):
-            return self.tracks[self.current_index]
-        return None
-
-    def next_track(self) -> Optional[Track]:
-        """Move to next track and return it."""
-        if self.current_index < len(self.tracks) - 1:
-            self.current_index += 1
-            return self.current_track()
-        return None
-
-    def previous_track(self) -> Optional[Track]:
-        """Move to previous track and return it."""
-        if self.current_index > 0:
-            self.current_index -= 1
-            return self.current_track()
-        return None
-
-    def has_next(self) -> bool:
-        """Check if there's a next track."""
-        return self.current_index < len(self.tracks) - 1
-
-    def has_previous(self) -> bool:
-        """Check if there's a previous track."""
-        return self.current_index > 0
-
-
-@dataclass
 class PlaybackState:
     """Current playback state."""
+
     is_playing: bool = False
     is_paused: bool = False
     is_stopped: bool = True
@@ -111,7 +65,7 @@ class AppContext:
 
     def __init__(
         self,
-        audio_manager: Optional['AudioManager'] = None,
+        audio_manager: Optional["AudioManager"] = None,
         interaction_profile: InteractionProfile = InteractionProfile.STANDARD,
     ) -> None:
         """
@@ -128,10 +82,10 @@ class AppContext:
         self.interaction_profile = interaction_profile
 
         # Current playlist
-        self.current_playlist: Optional[Playlist] = None
+        self.current_playlist: Optional[PlaybackQueue] = None
 
         # Available playlists
-        self.playlists: Dict[str, Playlist] = {}
+        self.playlists: Dict[str, PlaybackQueue] = {}
 
         # User settings
         self.settings = {
@@ -177,7 +131,7 @@ class AppContext:
 
         logger.info("AppContext initialized")
 
-    def set_playlist(self, playlist: Playlist) -> None:
+    def set_playlist(self, playlist: PlaybackQueue) -> None:
         """
         Set the current playlist.
 
@@ -200,14 +154,15 @@ class AppContext:
         Returns:
             True if playback started, False otherwise
         """
-        if not self.current_playlist or not self.current_playlist.current_track():
+        track = self.get_current_track()
+        if track is None:
             logger.warning("Cannot play: no track selected")
             return False
 
         self.playback.is_playing = True
         self.playback.is_paused = False
         self.playback.is_stopped = False
-        logger.info(f"Playing: {self.get_current_track().title}")
+        logger.info(f"Playing: {track.name}")
         return True
 
     def pause(self) -> None:
@@ -301,7 +256,7 @@ class AppContext:
         if self.current_playlist:
             track = self.current_playlist.next_track()
             if track:
-                logger.info(f"Next track: {track.title}")
+                logger.info(f"Next track: {track.name}")
                 if self.playback.is_playing:
                     self.play()
             return track
@@ -312,38 +267,42 @@ class AppContext:
         if self.current_playlist:
             track = self.current_playlist.previous_track()
             if track:
-                logger.info(f"Previous track: {track.title}")
+                logger.info(f"Previous track: {track.name}")
                 if self.playback.is_playing:
                     self.play()
             return track
         return None
 
-    def create_demo_playlist(self) -> Playlist:
+    def create_demo_playlist(self) -> PlaybackQueue:
         """Create a demo playlist for testing."""
         demo_tracks = [
             Track(
-                title="The Adventure Begins",
-                artist="Story Time Stories",
-                duration=180.0,
+                uri="demo://the-adventure-begins",
+                name="The Adventure Begins",
+                artists=["Story Time Stories"],
+                length=180_000,
             ),
             Track(
-                title="Journey to the Mountains",
-                artist="Story Time Stories",
-                duration=240.0,
+                uri="demo://journey-to-the-mountains",
+                name="Journey to the Mountains",
+                artists=["Story Time Stories"],
+                length=240_000,
             ),
             Track(
-                title="The Magic Forest",
-                artist="Bedtime Tales",
-                duration=200.0,
+                uri="demo://the-magic-forest",
+                name="The Magic Forest",
+                artists=["Bedtime Tales"],
+                length=200_000,
             ),
             Track(
-                title="Ocean Waves & Dreams",
-                artist="Relaxing Sounds",
-                duration=300.0,
+                uri="demo://ocean-waves-and-dreams",
+                name="Ocean Waves & Dreams",
+                artists=["Relaxing Sounds"],
+                length=300_000,
             ),
         ]
 
-        playlist = Playlist(name="Demo Playlist", tracks=demo_tracks)
+        playlist = PlaybackQueue(name="Demo Playlist", tracks=demo_tracks)
         self.playlists["demo"] = playlist
         logger.info(f"Created demo playlist with {len(demo_tracks)} tracks")
         return playlist
@@ -356,15 +315,15 @@ class AppContext:
             Progress from 0.0 to 1.0
         """
         track = self.get_current_track()
-        if track and track.duration > 0:
-            return min(1.0, self.playback.position / track.duration)
+        if track and track.length > 0:
+            return min(1.0, self.playback.position / (track.length / 1000))
         return 0.0
 
     def update_system_status(
         self,
         battery: Optional[int] = None,
         signal: Optional[int] = None,
-        connected: Optional[bool] = None
+        connected: Optional[bool] = None,
     ) -> None:
         """
         Update system status information.

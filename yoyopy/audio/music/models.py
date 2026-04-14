@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,14 @@ def _artist_list(value: object) -> list[str]:
 def _track_number(value: object) -> int | None:
     """Coerce one runtime track-number field into an integer when possible."""
     if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if not isinstance(value, str):
         return None
     try:
         return int(value)
@@ -71,9 +79,7 @@ class Track:
         )
 
         file_track: Track | None = None
-        if path_obj.exists() and (
-            not title or not artists or not album_name or track_no is None
-        ):
+        if path_obj.exists() and (not title or not artists or not album_name or track_no is None):
             file_track = cls.from_file_tags(path_obj)
 
         return cls(
@@ -82,7 +88,11 @@ class Track:
             artists=artists or (file_track.artists if file_track is not None else ["Unknown"]),
             album=album_name or (file_track.album if file_track is not None else ""),
             length=duration_ms or (file_track.length if file_track is not None else 0),
-            track_no=track_no if track_no is not None else (file_track.track_no if file_track is not None else None),
+            track_no=(
+                track_no
+                if track_no is not None
+                else (file_track.track_no if file_track is not None else None)
+            ),
         )
 
     @classmethod
@@ -116,6 +126,55 @@ class Playlist:
     uri: str
     name: str
     track_count: int = 0
+
+
+@dataclass(slots=True)
+class PlaybackQueue:
+    """Runtime ordered track queue and current selection state."""
+
+    name: str
+    tracks: list[Track] = field(default_factory=list)
+    source_uri: str | None = None
+    current_index: int = 0
+
+    @property
+    def track_count(self) -> int:
+        """Return the number of tracks currently loaded into the queue."""
+
+        return len(self.tracks)
+
+    def current_track(self) -> Track | None:
+        """Return the selected track when the queue is not empty."""
+
+        if 0 <= self.current_index < len(self.tracks):
+            return self.tracks[self.current_index]
+        return None
+
+    def next_track(self) -> Track | None:
+        """Advance to the next track and return it when available."""
+
+        if self.current_index < len(self.tracks) - 1:
+            self.current_index += 1
+            return self.current_track()
+        return None
+
+    def previous_track(self) -> Track | None:
+        """Move back to the previous track and return it when available."""
+
+        if self.current_index > 0:
+            self.current_index -= 1
+            return self.current_track()
+        return None
+
+    def has_next(self) -> bool:
+        """Return True when the queue can advance to another track."""
+
+        return self.current_index < len(self.tracks) - 1
+
+    def has_previous(self) -> bool:
+        """Return True when the queue can move back to an earlier track."""
+
+        return self.current_index > 0
 
 
 def _default_mpv_socket() -> str:
