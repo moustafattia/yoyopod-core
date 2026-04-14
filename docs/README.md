@@ -78,6 +78,13 @@ These are useful when you need to understand how the repo got here, but they are
 - [`UI_RESTRUCTURE_PROPOSAL.md`](UI_RESTRUCTURE_PROPOSAL.md), refactor status record for the UI split and remaining cleanup
 - [`PHASE2_SUMMARY.md`](PHASE2_SUMMARY.md), milestone summary for early screen integration
 
+## Generated planning workspace
+
+- [`superpowers/README.md`](superpowers/README.md), status and usage notes for generated plan/spec workspaces
+- [`superpowers/`](superpowers/), historical agent-generated plans and specs that may retain older repo names or environment-specific paths
+
+Treat this directory as preserved planning context, not as the current implementation contract.
+
 ## Archived history
 
 - [`archive/README.md`](archive/README.md), archive policy
