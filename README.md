@@ -26,6 +26,10 @@ For the full setup, validation, and Pi workflow, start with:
 - [`docs/DEVELOPMENT_GUIDE.md`](docs/DEVELOPMENT_GUIDE.md)
 - [`docs/SETUP_CONTRACT.md`](docs/SETUP_CONTRACT.md)
 
+The current setup commands define a baseline executable contract, not a fully
+solved setup story. Non-apt assets like Vosk models and board/modem-specific
+bringup still need explicit follow-through.
+
 Run on hardware:
 
 ```bash

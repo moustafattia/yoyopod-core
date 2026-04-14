@@ -21,8 +21,12 @@ Treat plan docs and checklists as supporting context unless they explicitly stat
 ## Python Environment
 
 ```bash
-uv sync --extra dev
+uv run yoyoctl setup host
+uv run yoyoctl setup verify-host
 ```
+
+These commands define the baseline executable setup contract. They do not yet
+cover non-apt assets like Vosk models or every board/modem-specific setup edge.
 
 ## System Dependencies
 
@@ -50,10 +54,12 @@ Feature-gated extras are documented there too, including:
 Example:
 
 ```bash
-sudo apt install -y mpv ffmpeg liblinphone-dev pkg-config cmake alsa-utils i2c-tools
-yoyoctl build liblinphone
-yoyoctl build lvgl
+uv run yoyoctl setup pi
+uv run yoyoctl setup verify-pi
 ```
+
+Treat those commands as the baseline package/build verifier, not proof that all
+feature assets and hardware-specific setup are complete.
 
 For PiSugar-based hardware, make sure `pisugar-server` is installed and running too.
 
@@ -144,6 +150,8 @@ Preferred remote helper:
 
 ```bash
 yoyoctl remote config show
+uv run yoyoctl remote setup
+uv run yoyoctl remote verify-setup
 yoyoctl remote status
 yoyoctl remote preflight --branch main --with-music --with-voip --with-lvgl-soak
 yoyoctl remote sync --branch main
@@ -151,6 +159,9 @@ yoyoctl remote smoke --with-music --with-voip
 yoyoctl remote service status
 yoyoctl remote logs --lines 200
 ```
+
+That remote flow mirrors the same baseline contract. You still need feature-specific
+follow-through for assets like Vosk models and for unusual board/modem bringup.
 
 The detailed deploy and validation flows live in:
 
