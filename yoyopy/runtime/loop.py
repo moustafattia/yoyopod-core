@@ -37,9 +37,8 @@ class RuntimeLoopService:
         """Schedule a callback to run on the coordinator thread."""
         self.app._pending_main_thread_callbacks.put(callback)
 
-    def queue_lvgl_input_action(self, action: Any, data: Optional[Any] = None) -> None:
+    def queue_lvgl_input_action(self, action: Any, _data: Optional[Any] = None) -> None:
         """Queue semantic actions for LVGL from input polling threads."""
-        del data
         if self.app._lvgl_input_bridge is None:
             return
         self.app._lvgl_input_bridge.enqueue_action(action)
@@ -84,18 +83,18 @@ class RuntimeLoopService:
         screen_update_interval: float,
     ) -> float:
         """Run one coordinator-loop iteration and return the next screen refresh timestamp."""
-        self.app._iterate_voip_backend_if_due(monotonic_now)
-        self.app._process_pending_main_thread_actions()
-        self.app._attempt_manager_recovery(now=monotonic_now)
-        self.app._poll_power_status(now=monotonic_now)
-        self.app._pump_lvgl_backend(monotonic_now)
-        self.app._feed_watchdog_if_due(monotonic_now)
-        self.app._process_pending_shutdown(monotonic_now)
+        self.iterate_voip_backend_if_due(monotonic_now)
+        self.process_pending_main_thread_actions()
+        self.app.recovery_service.attempt_manager_recovery(now=monotonic_now)
+        self.app.recovery_service.poll_power_status(now=monotonic_now)
+        self.pump_lvgl_backend(monotonic_now)
+        self.app.recovery_service.feed_watchdog_if_due(monotonic_now)
+        self.app.shutdown_service.process_pending_shutdown(monotonic_now)
         if self.app._shutdown_completed:
             return last_screen_update
 
-        self.app._update_screen_power(monotonic_now)
-        overlay_active = self.app._update_power_overlays(monotonic_now)
+        self.app.screen_power_service.update_screen_power(monotonic_now)
+        overlay_active = self.app.screen_power_service.update_power_overlays(monotonic_now)
         if overlay_active:
             return current_time
 
@@ -103,9 +102,12 @@ class RuntimeLoopService:
             return current_time
 
         if current_time - last_screen_update >= screen_update_interval:
-            self.app._update_now_playing_if_needed()
-            self.app._update_in_call_if_needed()
-            self.app._update_power_screen_if_needed()
+            self.app.boot_service.ensure_coordinators()
+            assert self.app.playback_coordinator is not None
+            assert self.app.screen_coordinator is not None
+            self.app.playback_coordinator.update_now_playing_if_needed()
+            self.app.screen_coordinator.update_in_call_if_needed()
+            self.app.screen_coordinator.update_power_screen_if_needed()
             return current_time
 
         return last_screen_update
@@ -180,7 +182,7 @@ class RuntimeLoopService:
         try:
             last_screen_update = time.time()
             screen_update_interval = 1.0
-            self.app._start_watchdog(now=time.monotonic())
+            self.app.recovery_service.start_watchdog(now=time.monotonic())
 
             if self.app.simulate:
                 logger.info("")

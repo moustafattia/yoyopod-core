@@ -2,6 +2,22 @@
 
 This guide holds the operational detail that does not belong on the repo landing page.
 
+If you are new here, read these first:
+
+1. [`../README.md`](../README.md)
+2. [`README.md`](README.md)
+3. [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md)
+
+## Source of truth
+
+For current behavior, trust:
+- current code in `yoyopy/`
+- this guide for setup and workflow
+- [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md) for runtime topology
+- [`../AGENTS.md`](../AGENTS.md) and `rules/` for repo guidance
+
+Treat plan docs and checklists as supporting context unless they explicitly state they are current.
+
 ## Python Environment
 
 ```bash
@@ -10,23 +26,36 @@ uv sync --extra dev
 
 ## System Dependencies
 
-Raspberry Pi OS packages expected by the current stack:
+The current repo-owned setup contract lives in [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md).
+
+Short version:
+
+Core Raspberry Pi packages and services expected by the active stack:
 
 - `mpv`
+- `ffmpeg`
 - `liblinphone-dev`
 - `pkg-config`
 - `cmake`
 - `alsa-utils`
 - `i2c-tools`
-- `pisugar-server`
+- `pisugar-server` on PiSugar-based targets
+
+Feature-gated extras are documented there too, including:
+
+- `espeak-ng` for the current TTS path
+- `ppp` for the modem PPP path
+- Vosk model files under `models/`
 
 Example:
 
 ```bash
-sudo apt install mpv liblinphone-dev pkg-config cmake alsa-utils i2c-tools
+sudo apt install -y mpv ffmpeg liblinphone-dev pkg-config cmake alsa-utils i2c-tools
 yoyoctl build liblinphone
 yoyoctl build lvgl
 ```
+
+For PiSugar-based hardware, make sure `pisugar-server` is installed and running too.
 
 ## Configuration
 
@@ -88,8 +117,17 @@ Local validation:
 
 ```bash
 python -m compileall yoyopy tests demos scripts
+uv run python scripts/quality.py gate
 uv run pytest -q
 ```
+
+Full quality audit of the current repo debt:
+
+```bash
+uv run python scripts/quality.py audit
+```
+
+The staged gate contract and exact target set live in [`QUALITY_GATES.md`](QUALITY_GATES.md).
 
 Pi smoke:
 
@@ -177,10 +215,16 @@ yoyopy/
 
 ## Current Active Docs
 
+Start with [`README.md`](README.md) for the full docs map.
+
+Current runtime and setup docs:
 - `docs/SYSTEM_ARCHITECTURE.md`
 - `docs/POWER_MODULE.md`
 - `docs/LOCAL_FIRST_MUSIC_PLAN.md`
 - `docs/MPV_DEPENDENCIES.md`
-- `docs/LVGL_MIGRATION_PLAN.md`
+- `docs/PI_DEV_WORKFLOW.md`
+- `docs/RPI_SMOKE_VALIDATION.md`
+
+Plan and migration docs can still be useful, but they are not automatically the source of truth.
 
 Historical milestone notes are archived under `docs/archive/`.

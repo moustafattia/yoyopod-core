@@ -1,6 +1,9 @@
 """Tests for Raspberry Pi remote workflow helpers."""
 
+import yaml
+
 from yoyopy.cli.remote.ops import (
+    DEPLOY_CONFIG_PATH,
     PiDeployConfig,
     RemoteConfig,
     build_archive_sync_extract_command,
@@ -35,10 +38,20 @@ from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
 
+
+def _tracked_project_dir() -> str:
+    """Read the repo-owned default project dir from the tracked deploy contract."""
+
+    payload = yaml.safe_load(DEPLOY_CONFIG_PATH.read_text(encoding="utf-8"))
+    return str(payload["project_dir"])
+
+
+DEFAULT_PROJECT_DIR = _tracked_project_dir()
+
 DEPLOY_CONFIG = PiDeployConfig(
     host="rpi-zero",
     user="pi",
-    project_dir="~/yoyo-py",
+    project_dir=DEFAULT_PROJECT_DIR,
     branch="main",
     venv=".venv",
     start_cmd="python yoyopod.py",
@@ -55,7 +68,7 @@ DEPLOY_CONFIG = PiDeployConfig(
 def test_quote_remote_project_dir_preserves_home_expansion() -> None:
     """Tilde-based project paths should still expand on the remote shell."""
     assert quote_remote_project_dir("~") == '"$HOME"'
-    assert quote_remote_project_dir("~/yoyo-py") == '"$HOME/yoyo-py"'
+    assert quote_remote_project_dir(DEFAULT_PROJECT_DIR) == f'"$HOME/{DEFAULT_PROJECT_DIR[2:]}"'
 
 
 def test_quote_remote_project_dir_quotes_plain_paths() -> None:
@@ -72,8 +85,8 @@ def test_load_pi_deploy_config_merges_local_override(tmp_path) -> None:
         "\n".join(
             [
                 'host: ""',
-                "user: \"\"",
-                "project_dir: ~/yoyo-py",
+                'user: ""',
+                f"project_dir: {DEFAULT_PROJECT_DIR}",
                 "branch: main",
                 "venv: .venv",
                 "start_cmd: python yoyopod.py",
@@ -118,7 +131,7 @@ def test_build_local_override_template_targets_machine_specific_fields() -> None
     assert "machine-specific defaults" in template
     assert "host: rpi-zero" in template
     assert "user: pi" in template
-    assert "project_dir: ~/yoyo-py" in template
+    assert f"project_dir: {DEFAULT_PROJECT_DIR}" in template
     assert "branch: main" in template
 
 
@@ -136,7 +149,7 @@ def test_build_sync_command_includes_uv_sync_by_default() -> None:
     config = RemoteConfig(
         host="rpi-zero",
         user="pi",
-        project_dir="~/yoyo-py",
+        project_dir=DEFAULT_PROJECT_DIR,
         branch="main",
     )
 
@@ -149,14 +162,14 @@ def test_build_rsync_command_uses_excludes_and_remote_target() -> None:
     config = RemoteConfig(
         host="rpi-zero",
         user="pi",
-        project_dir="~/yoyo-py",
+        project_dir=DEFAULT_PROJECT_DIR,
         branch="main",
     )
 
     command = build_rsync_command(config, DEPLOY_CONFIG)
 
     assert command[:3] == ["rsync", "-avz", "--delete"]
-    assert command[-2:] == ["./", "pi@rpi-zero:~/yoyo-py/"]
+    assert command[-2:] == ["./", f"pi@rpi-zero:{DEFAULT_PROJECT_DIR}/"]
     assert "--exclude" in command
     assert ".git/" in command
     assert "logs/" in command
@@ -168,7 +181,7 @@ def test_build_rsync_command_supports_custom_executable() -> None:
     config = RemoteConfig(
         host="rpi-zero",
         user="pi",
-        project_dir="~/yoyo-py",
+        project_dir=DEFAULT_PROJECT_DIR,
         branch="main",
     )
 
@@ -227,7 +240,7 @@ def test_build_sync_file_manifest_skips_excluded_entries(tmp_path) -> None:
     deploy_config = PiDeployConfig(
         host="rpi-zero",
         user="pi",
-        project_dir="~/yoyo-py",
+        project_dir=DEFAULT_PROJECT_DIR,
         branch="main",
         venv=".venv",
         start_cmd="python yoyopod.py",
@@ -276,7 +289,7 @@ def test_build_archive_sync_extract_command_targets_remote_project_dir() -> None
     config = RemoteConfig(
         host="rpi-zero",
         user="pi",
-        project_dir="~/yoyo-py",
+        project_dir=DEFAULT_PROJECT_DIR,
         branch="main",
     )
 
@@ -287,9 +300,9 @@ def test_build_archive_sync_extract_command_targets_remote_project_dir() -> None
     )
 
     assert "python - <<'PY'" in command
-    assert "Path(os.path.expanduser('~/yoyo-py')).resolve()" in command
-    assert 'payload = json.load(handle)' in command
-    assert 'archive.extractall(project_dir)' in command
+    assert f"Path(os.path.expanduser('{DEFAULT_PROJECT_DIR}')).resolve()" in command
+    assert "payload = json.load(handle)" in command
+    assert "archive.extractall(project_dir)" in command
 
 
 def test_build_smoke_command_adds_optional_checks() -> None:
@@ -417,7 +430,10 @@ def test_build_restart_command_reuses_pid_and_startup_contract() -> None:
 
     assert "'yoyoctl', 'build', 'lvgl'" in command
     assert "'yoyoctl', 'build', 'liblinphone'" in command
-    assert 'if systemctl cat yoyopod@"$(id -un)".service >/dev/null 2>&1; then sudo systemctl stop yoyopod@"$(id -un)".service >/dev/null 2>&1 || true;' in command
+    assert (
+        'if systemctl cat yoyopod@"$(id -un)".service >/dev/null 2>&1; then sudo systemctl stop yoyopod@"$(id -un)".service >/dev/null 2>&1 || true;'
+        in command
+    )
     assert 'sudo systemctl start yoyopod@"$(id -un)".service;' in command
     assert "rm -f /tmp/yoyopod.pid" in command
     assert "killall -9 python" in command
@@ -469,7 +485,7 @@ def test_run_screenshot_uses_sigusr1_for_readback(monkeypatch, tmp_path) -> None
 
     args = Namespace(readback=True, output=str(tmp_path / "pi_screenshot.png"))
     exit_code = run_screenshot(
-        RemoteConfig(host="rpi-zero", user="pi", project_dir="~/yoyo-py", branch="main"),
+        RemoteConfig(host="rpi-zero", user="pi", project_dir=DEFAULT_PROJECT_DIR, branch="main"),
         DEPLOY_CONFIG,
         args,
     )
@@ -477,7 +493,7 @@ def test_run_screenshot_uses_sigusr1_for_readback(monkeypatch, tmp_path) -> None
     assert exit_code == 0
     assert any(command.startswith("rm -f ") for command in recorded_commands)
     assert any(command.startswith("kill -USR1 ") for command in recorded_commands)
-    assert any(command.startswith("for _ in $(seq 1 10); do ") for command in recorded_commands)
+    assert any(command.startswith("for _ in $(seq 1 20); do ") for command in recorded_commands)
 
 
 def test_run_screenshot_uses_sigusr2_for_default_shadow_path(monkeypatch, tmp_path) -> None:
@@ -501,7 +517,7 @@ def test_run_screenshot_uses_sigusr2_for_default_shadow_path(monkeypatch, tmp_pa
 
     args = Namespace(readback=False, output=str(tmp_path / "pi_screenshot.png"))
     exit_code = run_screenshot(
-        RemoteConfig(host="rpi-zero", user="pi", project_dir="~/yoyo-py", branch="main"),
+        RemoteConfig(host="rpi-zero", user="pi", project_dir=DEFAULT_PROJECT_DIR, branch="main"),
         DEPLOY_CONFIG,
         args,
     )
@@ -509,7 +525,7 @@ def test_run_screenshot_uses_sigusr2_for_default_shadow_path(monkeypatch, tmp_pa
     assert exit_code == 0
     assert any(command.startswith("rm -f ") for command in recorded_commands)
     assert any(command.startswith("kill -USR2 ") for command in recorded_commands)
-    assert any(command.startswith("for _ in $(seq 1 10); do ") for command in recorded_commands)
+    assert any(command.startswith("for _ in $(seq 1 20); do ") for command in recorded_commands)
 
 
 def test_build_service_command_supports_install_and_logs() -> None:
@@ -519,6 +535,9 @@ def test_build_service_command_supports_install_and_logs() -> None:
     logs_command = build_service_command("logs", lines=25, deploy_config=DEPLOY_CONFIG)
 
     assert "deploy/systemd/yoyopod@.service" in install_command
+    assert "printf 'YOYOPOD_PROJECT_DIR=%s\\n'" in install_command
+    assert DEFAULT_PROJECT_DIR in install_command
+    assert "/etc/default/yoyopod" in install_command
     assert 'sudo systemctl enable --now yoyopod@"$(id -un)".service' in install_command
     assert "/tmp/yoyopod.pid" in install_command
     assert "YoyoPod starting" in install_command
@@ -542,6 +561,6 @@ def test_build_startup_verification_command_checks_pid_and_marker() -> None:
     command = build_startup_verification_command(DEPLOY_CONFIG, attempts=3)
 
     assert "test -f /tmp/yoyopod.pid" in command
-    assert "kill -0 \"$pid\"" in command
+    assert 'kill -0 "$pid"' in command
     assert "grep -F 'YoyoPod starting' logs/yoyopod.log" in command
-    assert "grep -F \"pid=$pid\"" in command
+    assert 'grep -F "pid=$pid"' in command

@@ -12,10 +12,10 @@ from yoyopy.cli.remote.ops import (
     validate_config,
 )
 
-
 # ---------------------------------------------------------------------------
 # Command builder
 # ---------------------------------------------------------------------------
+
 
 def build_lvgl_soak_command(
     *,
@@ -41,15 +41,32 @@ def build_lvgl_soak_command(
 # Typer command
 # ---------------------------------------------------------------------------
 
+
 def lvgl_soak(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    cycles: Annotated[int, typer.Option("--cycles", help="How many full transition cycles to run.")] = 2,
-    hold_seconds: Annotated[float, typer.Option("--hold-seconds", help="How long to keep each screen active.")] = 0.2,
-    skip_sleep: Annotated[bool, typer.Option("--skip-sleep", help="Skip the sleep/wake exercise.")] = False,
-    verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose soak logging.")] = False,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    cycles: Annotated[
+        int, typer.Option("--cycles", help="How many full transition cycles to run.")
+    ] = 2,
+    hold_seconds: Annotated[
+        float, typer.Option("--hold-seconds", help="How long to keep each screen active.")
+    ] = 0.2,
+    skip_sleep: Annotated[
+        bool, typer.Option("--skip-sleep", help="Skip the sleep/wake exercise.")
+    ] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="Enable verbose soak logging.")
+    ] = False,
 ) -> None:
     """Run the LVGL Whisplay soak helper remotely."""
     config = _resolve_remote_config(host, user, project_dir, branch)

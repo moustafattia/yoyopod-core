@@ -60,18 +60,17 @@ class ScreenPowerService:
     def handle_screen_changed_event(self, event: ScreenChangedEvent) -> None:
         """Apply queued screen-change state sync on the coordinator thread."""
         self.app._sync_screen_changed(event.screen_name)
-        self.app._mark_user_activity(now=time.monotonic(), render_on_wake=False)
+        self.mark_user_activity(now=time.monotonic(), render_on_wake=False)
 
-    def queue_user_activity_event(self, action: Any, data: Any | None = None) -> None:
+    def queue_user_activity_event(self, action: Any, _data: Any | None = None) -> None:
         """Publish semantic user activity onto the main-thread event bus."""
-        del data
         action_name = getattr(action, "value", None)
         self.app.event_bus.publish(UserActivityEvent(action_name=action_name))
 
     def handle_user_activity_event(self, event: UserActivityEvent) -> None:
         """Wake the display and reset the inactivity timer on user activity."""
         logger.debug(f"User activity received: {event.action_name or 'unknown'}")
-        self.app._mark_user_activity(
+        self.mark_user_activity(
             now=time.monotonic(),
             render_on_wake=event.action_name is not None,
         )
@@ -83,7 +82,7 @@ class ScreenPowerService:
             event.battery_percent,
             event.threshold_percent,
         )
-        self.app._set_power_alert(
+        self.set_power_alert(
             title="Low Battery",
             subtitle=f"{event.battery_percent:.0f}% remaining",
             color=self.app.display.COLOR_YELLOW if self.app.display is not None else (255, 255, 0),
@@ -103,7 +102,7 @@ class ScreenPowerService:
             self.update_screen_runtime_metrics(activity_now)
             return
 
-        self.app._wake_screen(activity_now, render_current=render_on_wake)
+        self.wake_screen(activity_now, render_current=render_on_wake)
 
     def wake_screen(self, now: float, *, render_current: bool) -> None:
         """Restore active brightness and optionally re-render the current screen."""
@@ -165,7 +164,7 @@ class ScreenPowerService:
     def update_screen_power(self, now: float) -> None:
         """Apply inactivity-based screen timeout policy and refresh runtime metrics."""
         if self.app._pending_shutdown is not None or self.app._power_alert is not None:
-            self.app._wake_screen(now, render_current=False)
+            self.wake_screen(now, render_current=False)
             return
 
         self.update_screen_runtime_metrics(now)
@@ -175,7 +174,7 @@ class ScreenPowerService:
         if now - self.app._last_user_activity_at < self.app._screen_timeout_seconds:
             return
 
-        self.app._sleep_screen(now)
+        self.sleep_screen(now)
 
     def set_power_alert(
         self,
@@ -186,7 +185,7 @@ class ScreenPowerService:
         duration_seconds: float,
     ) -> None:
         """Queue a short-lived fullscreen power alert overlay."""
-        self.app._wake_screen(time.monotonic(), render_current=False)
+        self.wake_screen(time.monotonic(), render_current=False)
         self.app._power_alert = PowerAlert(
             title=title,
             subtitle=subtitle,

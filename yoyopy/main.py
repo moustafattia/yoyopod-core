@@ -5,10 +5,14 @@ This module provides the console-script target used by `pyproject.toml`
 and keeps the installed entry point aligned with the top-level launcher.
 """
 
+from __future__ import annotations
+
 import os
-import sys
 import signal
+import sys
 from pathlib import Path
+from types import FrameType
+from typing import Any
 
 from loguru import logger
 
@@ -31,7 +35,7 @@ def _capture_screenshot(
     *,
     adapter: object | None,
     screenshot_path: str,
-    app_log,
+    app_log: Any,
     prefer_readback: bool,
 ) -> bool:
     """Capture a screenshot using readback-first or shadow-first fallback order."""
@@ -41,11 +45,15 @@ def _capture_screenshot(
         return False
 
     ordered_methods = (
-        ("save_screenshot_readback", "LVGL readback"),
-        ("save_screenshot", "shadow buffer"),
-    ) if prefer_readback else (
-        ("save_screenshot", "shadow buffer"),
-        ("save_screenshot_readback", "LVGL readback"),
+        (
+            ("save_screenshot_readback", "LVGL readback"),
+            ("save_screenshot", "shadow buffer"),
+        )
+        if prefer_readback
+        else (
+            ("save_screenshot", "shadow buffer"),
+            ("save_screenshot_readback", "LVGL readback"),
+        )
     )
 
     for method_name, label in ordered_methods:
@@ -68,7 +76,7 @@ def _request_screenshot_capture(
     *,
     app: object,
     screenshot_path: str,
-    app_log,
+    app_log: Any,
     prefer_readback: bool,
 ) -> None:
     """Queue screenshot capture onto the app loop when possible."""
@@ -101,7 +109,9 @@ def _request_screenshot_capture(
             get_ui_backend = getattr(display, "get_ui_backend", None)
             if callable(get_ui_backend):
                 ui_backend = get_ui_backend()
-                force_refresh = getattr(ui_backend, "force_refresh", None) if ui_backend is not None else None
+                force_refresh = (
+                    getattr(ui_backend, "force_refresh", None) if ui_backend is not None else None
+                )
                 if callable(force_refresh):
                     force_refresh()
 
@@ -214,7 +224,7 @@ def main() -> int:
         app_log.info("=" * 60)
         app_log.info("")
 
-        def handle_shutdown_signal(signum, _frame) -> None:
+        def handle_shutdown_signal(signum: int, _frame: FrameType | None) -> None:
             signal_name = signal.Signals(signum).name
             app_log.info(f"Received {signal_name}, shutting down...")
             raise KeyboardInterrupt
@@ -224,9 +234,11 @@ def main() -> int:
 
         # Screenshot signal handlers (Unix only — SIGUSR1/SIGUSR2 unavailable on Windows).
         screenshot_path = "/tmp/yoyopod_screenshot.png"
-        if hasattr(signal, "SIGUSR1"):
+        sigusr1 = getattr(signal, "SIGUSR1", None)
+        sigusr2 = getattr(signal, "SIGUSR2", None)
+        if sigusr1 is not None and sigusr2 is not None:
 
-            def handle_screenshot_default(_signum: int, _frame: object) -> None:
+            def handle_screenshot_default(_signum: int, _frame: FrameType | None) -> None:
                 """SIGUSR1: save a screenshot using readback-first capture."""
                 _request_screenshot_capture(
                     app=app,
@@ -235,7 +247,7 @@ def main() -> int:
                     prefer_readback=True,
                 )
 
-            def handle_screenshot_legacy_shadow(_signum: int, _frame: object) -> None:
+            def handle_screenshot_legacy_shadow(_signum: int, _frame: FrameType | None) -> None:
                 """SIGUSR2: save a screenshot using shadow-first capture for debugging."""
                 _request_screenshot_capture(
                     app=app,
@@ -244,8 +256,8 @@ def main() -> int:
                     prefer_readback=False,
                 )
 
-            signal.signal(signal.SIGUSR1, handle_screenshot_default)
-            signal.signal(signal.SIGUSR2, handle_screenshot_legacy_shadow)
+            signal.signal(sigusr1, handle_screenshot_default)
+            signal.signal(sigusr2, handle_screenshot_legacy_shadow)
             app_log.info(
                 "Screenshot handlers installed (SIGUSR1=default/readback-first, SIGUSR2=legacy shadow-first) -> {}",
                 screenshot_path,

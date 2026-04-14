@@ -17,8 +17,6 @@ from yoyopy.cli.remote.ops import (
     DEPLOY_CONFIG_PATH,
     LOCAL_DEPLOY_CONFIG_PATH,
     PiDeployConfig,
-    RemoteConfig,
-    _activate_script_path,
     _resolve_remote_config,
     build_startup_verification_command,
     load_pi_deploy_config,
@@ -28,10 +26,10 @@ from yoyopy.cli.remote.ops import (
     validate_config,
 )
 
-
 # ---------------------------------------------------------------------------
 # Config helpers (inlined from pi_remote.py)
 # ---------------------------------------------------------------------------
+
 
 def build_local_override_template(base_config: PiDeployConfig) -> str:
     """Create the starter template for the gitignored local override file."""
@@ -99,6 +97,7 @@ def build_config_editor_command(
 # Service command builder
 # ---------------------------------------------------------------------------
 
+
 def build_service_command(
     action: str,
     *,
@@ -117,6 +116,11 @@ def build_service_command(
         return " && ".join(
             [
                 "test -f deploy/systemd/yoyopod@.service",
+                (
+                    "printf 'YOYOPOD_PROJECT_DIR=%s\\n' "
+                    f"{shell_quote(deploy.project_dir)} | "
+                    "sudo tee /etc/default/yoyopod >/dev/null"
+                ),
                 "sudo cp deploy/systemd/yoyopod@.service /etc/systemd/system/yoyopod@.service",
                 "sudo systemctl daemon-reload",
                 f"sudo systemctl enable --now {service_name}",
@@ -152,6 +156,7 @@ def build_service_command(
 # Power command builder
 # ---------------------------------------------------------------------------
 
+
 def build_power_command(*, verbose: bool = False) -> str:
     """Create the remote PiSugar power-status command."""
     parts = ["uv run yoyoctl pi power battery"]
@@ -164,12 +169,23 @@ def build_power_command(*, verbose: bool = False) -> str:
 # Typer commands
 # ---------------------------------------------------------------------------
 
+
 def power(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose power helper logging.")] = False,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="Enable verbose power helper logging.")
+    ] = False,
 ) -> None:
     """Inspect PiSugar power telemetry remotely."""
     config = _resolve_remote_config(host, user, project_dir, branch)
@@ -180,12 +196,25 @@ def power(
 
 
 def config(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    action: Annotated[str, typer.Argument(help="Config action to run locally (show, paths, init-local, edit).")] = "show",
-    editor: Annotated[Optional[str], typer.Option("--editor", help="Override the editor command for `config edit`.")] = None,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    action: Annotated[
+        str, typer.Argument(help="Config action to run locally (show, paths, init-local, edit).")
+    ] = "show",
+    editor: Annotated[
+        Optional[str],
+        typer.Option("--editor", help="Override the editor command for `config edit`."),
+    ] = None,
 ) -> None:
     """Show or edit the merged Raspberry Pi deploy config."""
     deploy_config = load_pi_deploy_config()
@@ -231,12 +260,27 @@ def config(
 
 
 def service(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    action: Annotated[str, typer.Argument(help="Service action to run remotely (status, install, start, stop, restart, logs).")] = "status",
-    lines: Annotated[int, typer.Option("--lines", help="How many journal lines to show for `service logs`.")] = 100,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    action: Annotated[
+        str,
+        typer.Argument(
+            help="Service action to run remotely (status, install, start, stop, restart, logs)."
+        ),
+    ] = "status",
+    lines: Annotated[
+        int, typer.Option("--lines", help="How many journal lines to show for `service logs`.")
+    ] = 100,
 ) -> None:
     """Install or inspect the production YoyoPod systemd service."""
     config_obj = _resolve_remote_config(host, user, project_dir, branch)

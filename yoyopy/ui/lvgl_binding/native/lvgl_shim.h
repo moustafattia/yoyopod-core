@@ -45,6 +45,13 @@ void yoyopy_lvgl_tick_inc(uint32_t ms);
 uint32_t yoyopy_lvgl_timer_handler(void);
 int yoyopy_lvgl_queue_key_event(int32_t key, int32_t pressed);
 int yoyopy_lvgl_show_probe_scene(int32_t scene_id);
+int yoyopy_lvgl_set_status_bar_state(
+    int32_t network_enabled,
+    int32_t network_connected,
+    int32_t wifi_connected,
+    int32_t signal_strength,
+    int32_t gps_has_fix
+);
 int yoyopy_lvgl_hub_build(void);
 int yoyopy_lvgl_hub_sync(
     const char * icon_key,
@@ -237,6 +244,7 @@ int yoyopy_lvgl_power_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * item_4,
     int32_t item_count,
     int32_t current_page_index,
     int32_t total_pages,

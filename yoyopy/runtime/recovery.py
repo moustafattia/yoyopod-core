@@ -42,7 +42,7 @@ class RecoverySupervisor:
                 if start_polling is not None:
                     start_polling()
 
-        self.app._finalize_recovery_attempt(
+        self.finalize_recovery_attempt(
             "Music",
             self.app._music_recovery,
             event.recovered,
@@ -55,8 +55,8 @@ class RecoverySupervisor:
             return
 
         recovery_now = time.monotonic() if now is None else now
-        self.app._attempt_voip_recovery(recovery_now)
-        self.app._attempt_music_recovery(recovery_now)
+        self.attempt_voip_recovery(recovery_now)
+        self.attempt_music_recovery(recovery_now)
 
     def poll_power_status(self, now: float | None = None, force: bool = False) -> None:
         """Refresh PiSugar power telemetry on the coordinator thread."""
@@ -67,7 +67,7 @@ class RecoverySupervisor:
         if not force and poll_now < self.app._next_power_poll_at:
             return
 
-        self.app._ensure_coordinators()
+        self.app.boot_service.ensure_coordinators()
         assert self.app.power_coordinator is not None
         snapshot = self.app.power_manager.refresh()
         self.app.power_coordinator.publish_snapshot(snapshot)
@@ -167,7 +167,7 @@ class RecoverySupervisor:
             return
 
         logger.info("Attempting VoIP recovery")
-        self.app._finalize_recovery_attempt(
+        self.finalize_recovery_attempt(
             "VoIP",
             self.app._voip_recovery,
             self.app.voip_manager.start(),
@@ -206,12 +206,12 @@ class RecoverySupervisor:
 
         logger.info("Attempting music backend recovery")
         self.app._music_recovery.in_flight = True
-        self.app._start_music_recovery_worker(recovery_now)
+        self.start_music_recovery_worker(recovery_now)
 
     def start_music_recovery_worker(self, recovery_now: float) -> None:
         """Launch the non-blocking music recovery attempt worker."""
         worker = threading.Thread(
-            target=self.app._run_music_recovery_attempt,
+            target=self.run_music_recovery_attempt,
             args=(recovery_now,),
             daemon=True,
             name="music-recovery",
@@ -222,7 +222,7 @@ class RecoverySupervisor:
         """Run a single music recovery attempt off the coordinator thread."""
         recovered = False
         if not self.app._stopping and self.app.music_backend is not None:
-            recovered = self.app._start_music_backend()
+            recovered = self.start_music_backend()
 
         self.app.event_bus.publish(
             RecoveryAttemptCompletedEvent(

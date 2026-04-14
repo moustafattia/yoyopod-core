@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import LISTEN
 
 if TYPE_CHECKING:
@@ -40,6 +41,7 @@ class LvglPlaylistView:
             "Tap next / Load" if self.screen.is_one_button_mode() else "A load | B back | X/Y move"
         )
         context = self.screen.context
+        sync_network_status(self.backend.binding, context)
 
         visible_items, visible_badges, selected_visible_index = self.screen.get_visible_window()
         visible_subtitles = (

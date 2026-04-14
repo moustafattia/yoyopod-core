@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import theme_for
 
 if TYPE_CHECKING:
@@ -40,6 +41,7 @@ class LvglHubView:
         selected_card = cards[self.screen.selected_index % len(cards)]
         theme = theme_for(selected_card.mode)
         context = self.screen.context
+        sync_network_status(self.backend.binding, context)
 
         self.backend.binding.hub_sync(
             icon_key=selected_card.icon,

@@ -1,6 +1,6 @@
 # YoyoPod System Architecture
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-14
 **Status:** Current implementation
 
 This document describes the architecture that exists on `main`.
@@ -14,11 +14,18 @@ YoyoPod runs as a single Python application that coordinates:
 - screen navigation
 - mpv-based local music playback
 - SIP calling and messaging through Liblinphone
+- power management, battery telemetry, and watchdog behavior
+- modem networking, PPP connectivity, and GPS queries
+- local voice capture, speech-to-text, and spoken feedback
 - state transitions between playback and call flows
 
 The production entrypoint is `yoyopod.py`, which delegates to `YoyoPodApp` in `yoyopy/app.py`.
 `YoyoPodApp` is now a thin composition shell around focused runtime services in
 `yoyopy/runtime/`.
+
+This extraction is a first pass, not the end state. `yoyopy/runtime/boot.py` is
+still the biggest remaining runtime hotspot and should be the next split target
+if more setup logic accumulates there.
 
 ## Runtime Topology
 
@@ -29,10 +36,11 @@ yoyopod.py / yoyopy.main
      -> RuntimeLoopService
      -> RecoverySupervisor
      -> ScreenPowerService
-     -> ShutdownLifecycleService
-     -> Display facade
-        -> Display factory
-           -> PimoroniDisplayAdapter | WhisplayDisplayAdapter | SimulationDisplayAdapter
+      -> ShutdownLifecycleService
+      -> EventBus
+      -> Display facade
+         -> Display factory
+            -> PimoroniDisplayAdapter | WhisplayDisplayAdapter | SimulationDisplayAdapter
      -> InputManager
         -> FourButtonInputAdapter | PTTInputAdapter | KeyboardInputAdapter
      -> ScreenManager
@@ -40,16 +48,27 @@ yoyopod.py / yoyopy.main
         -> music screens
         -> voip screens
      -> MusicFSM / CallFSM / CallInterruptionPolicy
-     -> CoordinatorRuntime
-     -> AppContext
-     -> LocalMusicService
-     -> MpvBackend
+      -> CoordinatorRuntime
+      -> CallCoordinator / PlaybackCoordinator / ScreenCoordinator / PowerCoordinator
+      -> AppContext
+      -> LocalMusicService
+      -> MpvBackend
         -> MpvProcess
         -> MpvIpcClient
            -> mpv JSON IPC over Unix socket / named pipe
-     -> VoIPManager
-        -> LiblinphoneBackend
-           -> native Liblinphone shim
+      -> VoIPManager
+         -> LiblinphoneBackend
+            -> native Liblinphone shim
+      -> PowerManager
+         -> PiSugarBackend
+         -> PiSugarWatchdog
+      -> NetworkManager
+         -> Sim7600Backend
+         -> PPP process / GPS queries
+      -> VoiceService
+         -> audio capture backend
+         -> Vosk STT backend
+         -> espeak-ng TTS backend
 ```
 
 ## Package Structure
@@ -67,6 +86,14 @@ yoyopod.py / yoyopy.main
 - `yoyopy/runtime/screen_power.py`: screen wake/sleep policy and power overlays
 - `yoyopy/runtime/shutdown.py`: shutdown countdowns, hooks, and lifecycle cleanup
 
+### Coordinators
+
+- `yoyopy/coordinators/call.py`: call-flow orchestration
+- `yoyopy/coordinators/playback.py`: music-flow orchestration
+- `yoyopy/coordinators/power.py`: power and shutdown-related orchestration
+- `yoyopy/coordinators/screen.py`: screen refresh and call-screen updates
+- `yoyopy/coordinators/runtime.py`: derived runtime state and shared runtime references
+
 ### Audio and VoIP
 
 - `yoyopy/audio/local_service.py`: local playlists, shuffle source collection, recent history integration
@@ -78,6 +105,12 @@ yoyopod.py / yoyopy.main
 - `yoyopy/voip/manager.py`: call, message, and voice-note facade
 - `yoyopy/voip/liblinphone_binding/`: native Liblinphone shim and CPython binding
 - `config/liblinphone_factory.conf`: repo-managed Liblinphone factory config for media, codec, and network defaults
+
+### Power, Network, and Voice
+
+- `yoyopy/power/`: PiSugar power, RTC, watchdog, and safety policy code
+- `yoyopy/network/`: modem backend, PPP process management, GPS, and transport code
+- `yoyopy/voice/`: local capture, STT, TTS, and command-matching code
 
 ### UI Layer
 

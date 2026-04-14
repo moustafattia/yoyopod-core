@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import LISTEN
 
 if TYPE_CHECKING:
@@ -38,6 +39,7 @@ class LvglNowPlayingView:
         track_title, artist, progress, state_label, is_playing = self.screen._track_snapshot()
         footer = self.screen.get_footer_text(is_playing=is_playing, state_label=state_label)
         context = self.screen.context
+        sync_network_status(self.backend.binding, context)
 
         self.backend.binding.now_playing_sync(
             title_text=track_title,

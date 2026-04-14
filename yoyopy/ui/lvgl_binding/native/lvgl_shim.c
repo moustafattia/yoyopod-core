@@ -8,6 +8,8 @@
 #include <time.h>
 
 #define KEY_QUEUE_CAPACITY 32
+#define YOYOPY_POWER_MAX_DOTS 8
+#define YOYOPY_POWER_MAX_ITEMS 5
 
 typedef struct {
     int32_t key;
@@ -15,6 +17,11 @@ typedef struct {
 } yoyopy_key_event_t;
 
 typedef struct {
+    lv_obj_t * signal_bars[4];
+    lv_obj_t * wifi_label;
+    lv_obj_t * gps_ring;
+    lv_obj_t * gps_center;
+    lv_obj_t * gps_tail;
     lv_obj_t * voip_dot;
     lv_obj_t * time_label;
     lv_obj_t * battery_outline;
@@ -22,6 +29,14 @@ typedef struct {
     lv_obj_t * battery_tip;
     lv_obj_t * battery_label;
 } yoyopy_status_bar_t;
+
+typedef struct {
+    int32_t network_enabled;
+    int32_t network_connected;
+    int32_t wifi_connected;
+    int32_t signal_strength;
+    int32_t gps_has_fix;
+} yoyopy_status_bar_state_t;
 
 static const uint32_t YOYOPY_THEME_BACKGROUND_RGB = 0x2A2D35;
 static const uint32_t YOYOPY_THEME_SURFACE_RGB = 0x31343C;
@@ -37,6 +52,8 @@ static const uint32_t YOYOPY_THEME_ERROR_RGB = 0xFF675D;
 static const uint32_t YOYOPY_THEME_NEUTRAL_RGB = 0x9CA3AF;
 static const uint32_t YOYOPY_MODE_LISTEN_RGB = 0x00FF88;
 static const uint32_t YOYOPY_MODE_TALK_RGB = 0x00D4FF;
+static const int YOYOPY_STATUS_SIGNAL_BAR_HEIGHTS[4] = {4, 7, 10, 13};
+static yoyopy_status_bar_state_t g_status_bar_state = {0, 0, 0, 0, 0};
 
 typedef struct {
     int built;
@@ -197,9 +214,9 @@ typedef struct {
     lv_obj_t * icon_halo;
     lv_obj_t * icon_label;
     lv_obj_t * title_label;
-    lv_obj_t * item_panels[4];
-    lv_obj_t * item_titles[4];
-    lv_obj_t * dots[3];
+    lv_obj_t * item_panels[YOYOPY_POWER_MAX_ITEMS];
+    lv_obj_t * item_titles[YOYOPY_POWER_MAX_ITEMS];
+    lv_obj_t * dots[YOYOPY_POWER_MAX_DOTS];
     lv_obj_t * footer_label;
 } yoyopy_power_scene_t;
 
@@ -680,6 +697,9 @@ static const char * yoyopy_symbol_for_empty_icon(const char * icon_key) {
     if(strcmp(icon_key, "battery") == 0) {
         return LV_SYMBOL_POWER;
     }
+    if(strcmp(icon_key, "signal") == 0) {
+        return LV_SYMBOL_WIFI;
+    }
     if(strcmp(icon_key, "care") == 0) {
         return LV_SYMBOL_SETTINGS;
     }
@@ -735,10 +755,17 @@ static lv_color_t yoyopy_color_for_kind(int32_t color_kind, uint32_t accent_rgb)
     return yoyopy_color_u24(accent_rgb);
 }
 
-#define YOYOPY_STATUS_DOT_X 18
-#define YOYOPY_STATUS_DOT_Y 15
-#define YOYOPY_STATUS_TIME_X 38
-#define YOYOPY_STATUS_TIME_Y 9
+#define YOYOPY_STATUS_LEFT_INSET 16
+#define YOYOPY_STATUS_ICON_BOTTOM_Y 20
+#define YOYOPY_STATUS_TIME_Y 8
+#define YOYOPY_STATUS_TIME_WIDTH 64
+#define YOYOPY_STATUS_CLUSTER_GAP 6
+#define YOYOPY_STATUS_SIGNAL_BAR_WIDTH 3
+#define YOYOPY_STATUS_SIGNAL_BAR_GAP 1
+#define YOYOPY_STATUS_WIFI_WIDTH 12
+#define YOYOPY_STATUS_GPS_WIDTH 8
+#define YOYOPY_STATUS_GPS_HEIGHT 12
+#define YOYOPY_STATUS_VOIP_SIZE 6
 #define YOYOPY_STATUS_BATTERY_X 172
 #define YOYOPY_STATUS_BATTERY_Y 11
 #define YOYOPY_STATUS_BATTERY_TIP_X 186
@@ -774,20 +801,165 @@ static void yoyopy_apply_footer_label(lv_obj_t * label, const char * text, lv_co
     lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, YOYOPY_FOOTER_OFFSET_Y);
 }
 
+static void yoyopy_apply_signal_bars(
+    yoyopy_status_bar_t * bar,
+    int32_t network_enabled,
+    int32_t network_connected,
+    int32_t signal_strength,
+    int32_t start_x
+) {
+    lv_color_t active_color = yoyopy_color_u24(
+        network_connected ? YOYOPY_THEME_SUCCESS_RGB : YOYOPY_THEME_MUTED_RGB
+    );
+    lv_color_t inactive_color = yoyopy_color_u24(0x3C3F46);
+
+    for(int index = 0; index < 4; index++) {
+        lv_obj_t * signal_bar = bar->signal_bars[index];
+        if(signal_bar == NULL) {
+            continue;
+        }
+
+        if(!network_enabled) {
+            lv_obj_add_flag(signal_bar, LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+
+        int height = YOYOPY_STATUS_SIGNAL_BAR_HEIGHTS[index];
+        lv_obj_set_size(signal_bar, YOYOPY_STATUS_SIGNAL_BAR_WIDTH, height);
+        lv_obj_set_pos(
+            signal_bar,
+            start_x + (index * (YOYOPY_STATUS_SIGNAL_BAR_WIDTH + YOYOPY_STATUS_SIGNAL_BAR_GAP)),
+            YOYOPY_STATUS_ICON_BOTTOM_Y - height + 1
+        );
+        lv_obj_set_style_bg_color(
+            signal_bar,
+            index < signal_strength ? active_color : inactive_color,
+            0
+        );
+        lv_obj_clear_flag(signal_bar, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static int32_t yoyopy_status_top_for_height(int32_t height) {
+    return YOYOPY_STATUS_ICON_BOTTOM_Y - height + 1;
+}
+
+static int32_t yoyopy_apply_wifi_icon(
+    yoyopy_status_bar_t * bar,
+    int32_t wifi_connected,
+    int32_t start_x
+) {
+    if(bar->wifi_label == NULL) {
+        return start_x;
+    }
+
+    if(!wifi_connected) {
+        lv_obj_add_flag(bar->wifi_label, LV_OBJ_FLAG_HIDDEN);
+        return start_x;
+    }
+
+    lv_obj_clear_flag(bar->wifi_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_update_layout(bar->wifi_label);
+    int32_t label_height = lv_obj_get_height(bar->wifi_label);
+    if(label_height <= 0) {
+        label_height = 10;
+    }
+    lv_obj_set_pos(
+        bar->wifi_label,
+        start_x,
+        yoyopy_status_top_for_height(label_height)
+    );
+    lv_obj_set_style_text_color(bar->wifi_label, yoyopy_color_u24(YOYOPY_THEME_SUCCESS_RGB), 0);
+    return start_x + YOYOPY_STATUS_WIFI_WIDTH + YOYOPY_STATUS_CLUSTER_GAP;
+}
+
+static int32_t yoyopy_apply_gps_icon(
+    yoyopy_status_bar_t * bar,
+    int32_t network_enabled,
+    int32_t gps_has_fix,
+    int32_t start_x
+) {
+    if(bar->gps_ring == NULL || bar->gps_center == NULL || bar->gps_tail == NULL) {
+        return start_x;
+    }
+
+    if(!network_enabled) {
+        lv_obj_add_flag(bar->gps_ring, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(bar->gps_center, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(bar->gps_tail, LV_OBJ_FLAG_HIDDEN);
+        return start_x;
+    }
+
+    lv_color_t color = yoyopy_color_u24(gps_has_fix ? YOYOPY_THEME_SUCCESS_RGB : YOYOPY_THEME_MUTED_RGB);
+    int32_t icon_top = yoyopy_status_top_for_height(YOYOPY_STATUS_GPS_HEIGHT);
+    lv_obj_set_pos(bar->gps_ring, start_x, icon_top);
+    lv_obj_set_pos(bar->gps_center, start_x + 3, icon_top + 3);
+    lv_obj_set_pos(bar->gps_tail, start_x + 3, icon_top + 7);
+    lv_obj_set_style_border_color(bar->gps_ring, color, 0);
+    lv_obj_set_style_bg_color(bar->gps_center, color, 0);
+    lv_obj_set_style_bg_color(bar->gps_tail, color, 0);
+    lv_obj_clear_flag(bar->gps_ring, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(bar->gps_center, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(bar->gps_tail, LV_OBJ_FLAG_HIDDEN);
+    return start_x + YOYOPY_STATUS_GPS_WIDTH + YOYOPY_STATUS_CLUSTER_GAP;
+}
+
 static void yoyopy_status_bar_build(lv_obj_t * parent, yoyopy_status_bar_t * bar, int show_time) {
     memset(bar, 0, sizeof(*bar));
 
+    for(int index = 0; index < 4; index++) {
+        bar->signal_bars[index] = lv_obj_create(parent);
+        lv_obj_remove_style_all(bar->signal_bars[index]);
+        lv_obj_set_style_bg_opa(bar->signal_bars[index], LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(bar->signal_bars[index], 1, 0);
+        lv_obj_add_flag(bar->signal_bars[index], LV_OBJ_FLAG_HIDDEN);
+    }
+
+    bar->wifi_label = lv_label_create(parent);
+    lv_label_set_text(bar->wifi_label, LV_SYMBOL_WIFI);
+    lv_obj_set_width(bar->wifi_label, YOYOPY_STATUS_WIFI_WIDTH);
+    lv_label_set_long_mode(bar->wifi_label, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_set_style_text_font(bar->wifi_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_align(bar->wifi_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(bar->wifi_label, yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB), 0);
+    lv_obj_add_flag(bar->wifi_label, LV_OBJ_FLAG_HIDDEN);
+
+    bar->gps_ring = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar->gps_ring);
+    lv_obj_set_size(bar->gps_ring, 8, 8);
+    lv_obj_set_style_radius(bar->gps_ring, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(bar->gps_ring, 1, 0);
+    lv_obj_set_style_bg_opa(bar->gps_ring, LV_OPA_TRANSP, 0);
+    lv_obj_add_flag(bar->gps_ring, LV_OBJ_FLAG_HIDDEN);
+
+    bar->gps_center = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar->gps_center);
+    lv_obj_set_size(bar->gps_center, 2, 2);
+    lv_obj_set_style_radius(bar->gps_center, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(bar->gps_center, LV_OPA_COVER, 0);
+    lv_obj_add_flag(bar->gps_center, LV_OBJ_FLAG_HIDDEN);
+
+    bar->gps_tail = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar->gps_tail);
+    lv_obj_set_size(bar->gps_tail, 2, 5);
+    lv_obj_set_style_radius(bar->gps_tail, 1, 0);
+    lv_obj_set_style_bg_opa(bar->gps_tail, LV_OPA_COVER, 0);
+    lv_obj_add_flag(bar->gps_tail, LV_OBJ_FLAG_HIDDEN);
+
     bar->voip_dot = lv_obj_create(parent);
     lv_obj_remove_style_all(bar->voip_dot);
-    lv_obj_set_size(bar->voip_dot, 8, 8);
+    lv_obj_set_size(bar->voip_dot, YOYOPY_STATUS_VOIP_SIZE, YOYOPY_STATUS_VOIP_SIZE);
     lv_obj_set_style_radius(bar->voip_dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_pos(bar->voip_dot, YOYOPY_STATUS_DOT_X, YOYOPY_STATUS_DOT_Y);
+    lv_obj_set_style_bg_opa(bar->voip_dot, LV_OPA_COVER, 0);
 
     if(show_time) {
         bar->time_label = lv_label_create(parent);
-        lv_obj_set_pos(bar->time_label, YOYOPY_STATUS_TIME_X, YOYOPY_STATUS_TIME_Y);
+        lv_obj_set_width(bar->time_label, YOYOPY_STATUS_TIME_WIDTH);
+        lv_label_set_long_mode(bar->time_label, LV_LABEL_LONG_MODE_CLIP);
         lv_obj_set_style_text_font(bar->time_label, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_align(bar->time_label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_color(bar->time_label, yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB), 0);
+        lv_obj_align(bar->time_label, LV_ALIGN_TOP_MID, 0, YOYOPY_STATUS_TIME_Y);
     }
 
     bar->battery_outline = lv_obj_create(parent);
@@ -827,10 +999,34 @@ static void yoyopy_status_bar_sync(
     int32_t charging,
     int32_t power_available
 ) {
+    int32_t network_enabled = g_status_bar_state.network_enabled;
+    int32_t network_connected = g_status_bar_state.network_connected;
+    int32_t wifi_connected = g_status_bar_state.wifi_connected;
+    int32_t signal_strength = g_status_bar_state.signal_strength;
+    int32_t gps_has_fix = g_status_bar_state.gps_has_fix;
+    int32_t cursor_x = YOYOPY_STATUS_LEFT_INSET;
+
+    yoyopy_apply_signal_bars(bar, network_enabled, network_connected, signal_strength, cursor_x);
+    if(network_enabled) {
+        cursor_x +=
+            (4 * YOYOPY_STATUS_SIGNAL_BAR_WIDTH) +
+            (3 * YOYOPY_STATUS_SIGNAL_BAR_GAP) +
+            YOYOPY_STATUS_CLUSTER_GAP;
+    }
+    cursor_x = yoyopy_apply_wifi_icon(bar, wifi_connected, cursor_x);
+    cursor_x = yoyopy_apply_gps_icon(bar, network_enabled, gps_has_fix, cursor_x);
+    if(bar->voip_dot != NULL) {
+        lv_obj_set_pos(
+            bar->voip_dot,
+            cursor_x,
+            yoyopy_status_top_for_height(YOYOPY_STATUS_VOIP_SIZE)
+        );
+    }
     yoyopy_apply_voip_dot(bar->voip_dot, voip_state);
 
     if(bar->time_label != NULL) {
         lv_label_set_text(bar->time_label, yoyopy_time_or_default(time_text));
+        lv_obj_align(bar->time_label, LV_ALIGN_TOP_MID, 0, YOYOPY_STATUS_TIME_Y);
         lv_obj_clear_flag(bar->time_label, LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -855,6 +1051,27 @@ static void yoyopy_status_bar_sync(
         charging,
         power_available
     );
+}
+
+int yoyopy_lvgl_set_status_bar_state(
+    int32_t network_enabled,
+    int32_t network_connected,
+    int32_t wifi_connected,
+    int32_t signal_strength,
+    int32_t gps_has_fix
+) {
+    g_status_bar_state.network_enabled = network_enabled ? 1 : 0;
+    g_status_bar_state.network_connected = network_connected ? 1 : 0;
+    g_status_bar_state.wifi_connected = wifi_connected ? 1 : 0;
+    if(signal_strength < 0) {
+        signal_strength = 0;
+    }
+    if(signal_strength > 4) {
+        signal_strength = 4;
+    }
+    g_status_bar_state.signal_strength = signal_strength;
+    g_status_bar_state.gps_has_fix = gps_has_fix ? 1 : 0;
+    return 0;
 }
 
 int yoyopy_lvgl_hub_build(void) {
@@ -2910,16 +3127,16 @@ int yoyopy_lvgl_power_build(void) {
     lv_obj_set_style_text_font(g_power_scene.title_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_align(g_power_scene.title_label, LV_TEXT_ALIGN_CENTER, 0);
 
-    for(int index = 0; index < 4; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_ITEMS; ++index) {
         g_power_scene.item_panels[index] = lv_obj_create(g_power_scene.screen);
-        lv_obj_set_size(g_power_scene.item_panels[index], 208, 24);
-        lv_obj_set_pos(g_power_scene.item_panels[index], 16, 126 + (index * 28));
-        lv_obj_set_style_radius(g_power_scene.item_panels[index], 12, 0);
+        lv_obj_set_size(g_power_scene.item_panels[index], 208, 18);
+        lv_obj_set_pos(g_power_scene.item_panels[index], 16, 126 + (index * 22));
+        lv_obj_set_style_radius(g_power_scene.item_panels[index], 10, 0);
         lv_obj_set_style_border_width(g_power_scene.item_panels[index], 0, 0);
         lv_obj_set_style_pad_left(g_power_scene.item_panels[index], 12, 0);
         lv_obj_set_style_pad_right(g_power_scene.item_panels[index], 12, 0);
-        lv_obj_set_style_pad_top(g_power_scene.item_panels[index], 4, 0);
-        lv_obj_set_style_pad_bottom(g_power_scene.item_panels[index], 4, 0);
+        lv_obj_set_style_pad_top(g_power_scene.item_panels[index], 2, 0);
+        lv_obj_set_style_pad_bottom(g_power_scene.item_panels[index], 2, 0);
         lv_obj_set_style_shadow_width(g_power_scene.item_panels[index], 0, 0);
         lv_obj_set_style_outline_width(g_power_scene.item_panels[index], 0, 0);
         lv_obj_set_scrollbar_mode(g_power_scene.item_panels[index], LV_SCROLLBAR_MODE_OFF);
@@ -2932,7 +3149,7 @@ int yoyopy_lvgl_power_build(void) {
         lv_obj_center(g_power_scene.item_titles[index]);
     }
 
-    for(int index = 0; index < 3; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_DOTS; ++index) {
         g_power_scene.dots[index] = lv_obj_create(g_power_scene.screen);
         lv_obj_remove_style_all(g_power_scene.dots[index]);
         lv_obj_set_style_bg_opa(g_power_scene.dots[index], LV_OPA_COVER, 0);
@@ -2955,6 +3172,7 @@ int yoyopy_lvgl_power_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * item_4,
     int32_t item_count,
     int32_t current_page_index,
     int32_t total_pages,
@@ -2975,7 +3193,9 @@ int yoyopy_lvgl_power_sync(
     const lv_color_t accent = yoyopy_color_u24(accent_rgb);
     const lv_color_t accent_dim = yoyopy_mix_u24(accent_rgb, YOYOPY_THEME_BACKGROUND_RGB, 65);
     const lv_color_t muted = yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB);
-    const char * rows[4] = {item_0, item_1, item_2, item_3};
+    const char * rows[YOYOPY_POWER_MAX_ITEMS] = {item_0, item_1, item_2, item_3, item_4};
+
+    (void)page_text;
 
     lv_obj_set_style_bg_color(g_power_scene.screen, background, 0);
     lv_obj_set_style_bg_opa(g_power_scene.screen, LV_OPA_COVER, 0);
@@ -2997,7 +3217,7 @@ int yoyopy_lvgl_power_sync(
     lv_label_set_text(g_power_scene.title_label, title_text != NULL ? title_text : "Setup");
     lv_obj_set_style_text_color(g_power_scene.title_label, ink, 0);
 
-    for(int index = 0; index < 4; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_ITEMS; ++index) {
         if(index < item_count && rows[index] != NULL && rows[index][0] != '\0') {
             lv_obj_clear_flag(g_power_scene.item_panels[index], LV_OBJ_FLAG_HIDDEN);
             lv_obj_set_style_bg_color(g_power_scene.item_panels[index], row_fill, 0);
@@ -3013,13 +3233,18 @@ int yoyopy_lvgl_power_sync(
     if(total_pages < 0) {
         total_pages = 0;
     }
-    if(total_pages > 3) {
-        total_pages = 3;
+    if(total_pages > YOYOPY_POWER_MAX_DOTS) {
+        total_pages = YOYOPY_POWER_MAX_DOTS;
     }
-    if(current_page_index < 0) {
+    if(total_pages > 0) {
+        current_page_index = current_page_index % total_pages;
+        if(current_page_index < 0) {
+            current_page_index += total_pages;
+        }
+    } else if(current_page_index < 0) {
         current_page_index = 0;
     }
-    for(int index = 0; index < 3; ++index) {
+    for(int index = 0; index < YOYOPY_POWER_MAX_DOTS; ++index) {
         if(index >= total_pages) {
             lv_obj_add_flag(g_power_scene.dots[index], LV_OBJ_FLAG_HIDDEN);
             continue;

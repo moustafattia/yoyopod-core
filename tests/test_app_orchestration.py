@@ -682,7 +682,9 @@ def test_manager_recovery_schedules_music_reconnect_off_main_thread() -> None:
     app.music_backend = FakeRecoveringMusicBackend([False, True])
     scheduled_attempts: list[float] = []
 
-    app._start_music_recovery_worker = lambda recovery_now: scheduled_attempts.append(recovery_now)
+    app.recovery_service.start_music_recovery_worker = (
+        lambda recovery_now: scheduled_attempts.append(recovery_now)
+    )
 
     app._attempt_manager_recovery(now=0.0)
 
@@ -700,7 +702,9 @@ def test_recovery_service_schedules_music_reconnect_off_main_thread() -> None:
     app.music_backend = FakeRecoveringMusicBackend([False, True])
     scheduled_attempts: list[float] = []
 
-    app._start_music_recovery_worker = lambda recovery_now: scheduled_attempts.append(recovery_now)
+    app.recovery_service.start_music_recovery_worker = (
+        lambda recovery_now: scheduled_attempts.append(recovery_now)
+    )
 
     app.recovery_service.attempt_manager_recovery(now=0.0)
 

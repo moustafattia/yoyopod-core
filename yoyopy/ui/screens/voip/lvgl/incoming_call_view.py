@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import TALK
 
 if TYPE_CHECKING:
@@ -37,6 +38,7 @@ class LvglIncomingCallView:
 
         footer = "Tap = Answer | Hold = Decline" if self.screen.is_one_button_mode() else "A answer | B reject"
         context = self.screen.context
+        sync_network_status(self.backend.binding, context)
 
         self.backend.binding.incoming_call_sync(
             caller_name=self.screen.caller_name or "Unknown",

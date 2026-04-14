@@ -1,4 +1,4 @@
-"""Boot and composition helpers for ``YoyoPodApp``."""
+"""Boot-time composition helpers for the first runtime extraction pass."""
 
 from __future__ import annotations
 
@@ -62,30 +62,30 @@ class RuntimeBootService:
     def setup(self) -> bool:
         """Initialize all components and register callbacks."""
         try:
-            if not self.app._load_configuration():
+            if not self.load_configuration():
                 logger.error("Failed to load configuration")
                 return False
 
-            if not self.app._init_core_components():
+            if not self.init_core_components():
                 logger.error("Failed to initialize core components")
                 return False
 
-            if not self.app._init_managers():
+            if not self.init_managers():
                 logger.error("Failed to initialize managers")
                 return False
 
-            if not self.app._setup_screens():
+            if not self.setup_screens():
                 logger.error("Failed to setup screens")
                 return False
 
-            self.app._ensure_coordinators()
+            self.ensure_coordinators()
             assert self.app.coordinator_runtime is not None
             self.app.coordinator_runtime.set_ui_state(self.app._ui_state, trigger="initial_screen")
-            self.app._setup_event_subscriptions()
-            self.app._setup_voip_callbacks()
-            self.app._setup_music_callbacks()
-            self.app._register_power_shutdown_hooks()
-            self.app._poll_power_status(force=True, now=time.monotonic())
+            self.setup_event_subscriptions()
+            self.setup_voip_callbacks()
+            self.setup_music_callbacks()
+            self.app.shutdown_service.register_power_shutdown_hooks()
+            self.app.recovery_service.poll_power_status(force=True, now=time.monotonic())
 
             logger.info("YoyoPod setup complete")
             return True
@@ -116,8 +116,10 @@ class RuntimeBootService:
                 logger.info("Using default application configuration")
 
             self.app.auto_resume_after_call = self.app.app_settings.audio.auto_resume_after_call
-            self.app._screen_timeout_seconds = self.app._resolve_screen_timeout_seconds()
-            self.app._active_brightness = self.app._resolve_active_brightness()
+            self.app._screen_timeout_seconds = (
+                self.app.screen_power_service.resolve_screen_timeout_seconds()
+            )
+            self.app._active_brightness = self.app.screen_power_service.resolve_active_brightness()
             logger.info(f"  Auto-resume after call: {self.app.auto_resume_after_call}")
             logger.info(f"  Screen timeout: {self.app._screen_timeout_seconds:.1f}s")
             logger.info(f"  Active brightness: {self.app._active_brightness:.2f}")
@@ -185,7 +187,7 @@ class RuntimeBootService:
                 font_size=16,
             )
             display.update()
-            self.app._configure_screen_power(initial_now=time.monotonic())
+            self.app.screen_power_service.configure_screen_power(initial_now=time.monotonic())
 
             logger.info("  - AppContext")
             self.app.context = AppContext()
@@ -210,8 +212,8 @@ class RuntimeBootService:
                     speaker_device_id=speaker_device_id,
                     capture_device_id=capture_device_id,
                 )
-                self.app._refresh_talk_summary()
-            self.app._update_screen_runtime_metrics(time.monotonic())
+                self.refresh_talk_summary()
+            self.app.screen_power_service.update_screen_runtime_metrics(time.monotonic())
 
             logger.info("  - Orchestration Models")
             self.app.music_fsm = MusicFSM()
@@ -226,10 +228,14 @@ class RuntimeBootService:
             )
             if self.app.input_manager:
                 self.app.context.interaction_profile = self.app.input_manager.interaction_profile
-                self.app.input_manager.on_activity(self.app._queue_user_activity_event)
+                self.app.input_manager.on_activity(
+                    self.app.screen_power_service.queue_user_activity_event
+                )
                 if self.app._lvgl_backend is not None:
                     self.app._lvgl_input_bridge = LvglInputBridge(self.app._lvgl_backend)
-                    self.app.input_manager.on_activity(self.app._queue_lvgl_input_action)
+                    self.app.input_manager.on_activity(
+                        self.app.runtime_loop.queue_lvgl_input_action
+                    )
                 self.app.input_manager.start()
                 logger.info("    Input system initialized")
             else:
@@ -237,7 +243,7 @@ class RuntimeBootService:
 
             logger.info("  - ScreenManager")
             action_scheduler = (
-                self.app._queue_main_thread_callback
+                self.app.runtime_loop.queue_main_thread_callback
                 if getattr(display, "backend_kind", "pil") == "lvgl"
                 else None
             )
@@ -344,17 +350,25 @@ class RuntimeBootService:
             if self.app.network_manager.config.enabled and not self.app.simulate:
                 try:
                     self.app.network_manager.start()
-                    state = self.app.network_manager.modem_state
-                    if state.signal and self.app.context:
-                        self.app.context.update_network_status(
-                            signal_bars=state.signal.bars,
-                            connection_type="4g" if self.app.network_manager.is_online else "none",
-                            connected=self.app.network_manager.is_online,
-                        )
+                    self.app._sync_network_context_from_manager()
                 except Exception as exc:
                     logger.error("Network manager start failed: {}", exc)
+                    if self.app.context is not None:
+                        self.app.context.update_network_status(
+                            network_enabled=self.app.network_manager.config.enabled,
+                            connection_type="none",
+                            connected=False,
+                            gps_has_fix=False,
+                        )
             else:
                 logger.info("    Network module disabled in config")
+                if self.app.context is not None:
+                    self.app.context.update_network_status(
+                        network_enabled=self.app.network_manager.config.enabled,
+                        connection_type="none",
+                        connected=False,
+                        gps_has_fix=False,
+                    )
 
             return True
         except Exception:
@@ -599,9 +613,9 @@ class RuntimeBootService:
             )
             logger.info("    - Navigation: home, menu")
 
-            initial_screen = self.app._get_initial_screen_name()
+            initial_screen = self.get_initial_screen_name()
             screen_manager.push_screen(initial_screen)
-            self.app._ui_state = self.app._get_initial_ui_state()
+            self.app._ui_state = self.get_initial_ui_state()
             logger.info(f"  Initial route resolved to {initial_screen}")
             logger.info(f"  Initial screen confirmed as {initial_screen}")
             logger.info("  Initial screen set")
@@ -620,13 +634,13 @@ class RuntimeBootService:
 
     def get_initial_screen_name(self) -> str:
         """Return the root screen for the active interaction profile."""
-        if self.app._get_interaction_profile() == InteractionProfile.ONE_BUTTON:
+        if self.get_interaction_profile() == InteractionProfile.ONE_BUTTON:
             return "hub"
         return "menu"
 
     def get_initial_ui_state(self) -> AppRuntimeState:
         """Return the base runtime state for the active interaction profile."""
-        if self.app._get_interaction_profile() == InteractionProfile.ONE_BUTTON:
+        if self.get_interaction_profile() == InteractionProfile.ONE_BUTTON:
             return AppRuntimeState.HUB
         return AppRuntimeState.MENU
 
@@ -638,7 +652,7 @@ class RuntimeBootService:
             logger.warning("  VoIPManager not available, skipping callbacks")
             return
 
-        self.app._ensure_coordinators()
+        self.ensure_coordinators()
         assert self.app.call_coordinator is not None
         self.app.voip_manager.on_incoming_call(self.app.call_coordinator.publish_incoming_call)
         self.app.voip_manager.on_call_state_change(
@@ -656,7 +670,7 @@ class RuntimeBootService:
             self.app._handle_voice_note_activity_changed
         )
         self.app.voip_manager.on_message_failure(self.app._handle_voice_note_failure)
-        self.app._refresh_talk_summary()
+        self.refresh_talk_summary()
         self.app._sync_active_voice_note_context()
         logger.info("  VoIP callbacks registered")
 
@@ -668,7 +682,7 @@ class RuntimeBootService:
             logger.warning("  MusicBackend not available, skipping callbacks")
             return
 
-        self.app._ensure_coordinators()
+        self.ensure_coordinators()
         assert self.app.playback_coordinator is not None
         self.app.music_backend.on_track_change(self.app.playback_coordinator.publish_track_change)
         self.app.music_backend.on_playback_state_change(
@@ -683,7 +697,7 @@ class RuntimeBootService:
     def setup_event_subscriptions(self) -> None:
         """Bind extracted coordinators to the event bus."""
         logger.info("Setting up event subscriptions...")
-        self.app._ensure_coordinators()
+        self.ensure_coordinators()
         assert self.app.call_coordinator is not None
         assert self.app.playback_coordinator is not None
         assert self.app.power_coordinator is not None

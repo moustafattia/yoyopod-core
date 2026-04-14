@@ -33,6 +33,7 @@ def _run(command: list[str], cwd: Path | None = None) -> None:
 # LVGL helpers (inlined from scripts/lvgl_build.py)
 # ---------------------------------------------------------------------------
 
+
 def _has_valid_lvgl_source(source_dir: Path) -> bool:
     required_paths = (
         source_dir / "CMakeLists.txt",
@@ -83,6 +84,7 @@ def _build_lvgl(native_dir: Path, source_dir: Path, build_dir: Path) -> None:
 # Liblinphone helpers (inlined from scripts/liblinphone_build.py)
 # ---------------------------------------------------------------------------
 
+
 def _build_liblinphone(native_dir: Path, build_dir: Path) -> None:
     build_dir.mkdir(parents=True, exist_ok=True)
     _run(
@@ -102,6 +104,7 @@ def _build_liblinphone(native_dir: Path, build_dir: Path) -> None:
 # Commands
 # ---------------------------------------------------------------------------
 
+
 @build_app.command("lvgl")
 def build_lvgl(
     source_dir: Annotated[
@@ -119,7 +122,11 @@ def build_lvgl(
 ) -> None:
     """Build the pinned LVGL shim for the current platform."""
     native_dir = _REPO_ROOT / "yoyopy" / "ui" / "lvgl_binding" / "native"
-    resolved_source = source_dir if source_dir is not None else _REPO_ROOT / ".cache" / "lvgl" / f"lvgl-{LVGL_VERSION}"
+    resolved_source = (
+        source_dir
+        if source_dir is not None
+        else _REPO_ROOT / ".cache" / "lvgl" / f"lvgl-{LVGL_VERSION}"
+    )
     resolved_build = build_dir if build_dir is not None else native_dir / "build"
 
     if not skip_fetch:

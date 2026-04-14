@@ -37,7 +37,7 @@ class ShutdownLifecycleService:
             execute_at=requested_at + max(0.0, event.delay_seconds),
             battery_percent=event.snapshot.battery.level_percent,
         )
-        self.app._wake_screen(requested_at, render_current=False)
+        self.app.screen_power_service.wake_screen(requested_at, render_current=False)
         logger.warning(
             "Critical battery detected; shutdown in {:.1f}s",
             event.delay_seconds,
@@ -53,7 +53,7 @@ class ShutdownLifecycleService:
 
         logger.info(f"Graceful shutdown cancelled ({event.reason})")
         self.app._pending_shutdown = None
-        self.app._set_power_alert(
+        self.app.screen_power_service.set_power_alert(
             title="Power Restored",
             subtitle="Shutdown cancelled",
             color=self.app.display.COLOR_GREEN if self.app.display is not None else (0, 255, 0),
@@ -67,7 +67,7 @@ class ShutdownLifecycleService:
 
         self.app.power_manager.register_shutdown_hook(
             "save_shutdown_state",
-            self.app._save_shutdown_state,
+            self.save_shutdown_state,
         )
         self.app._power_hooks_registered = True
 
@@ -146,8 +146,8 @@ class ShutdownLifecycleService:
         if self.app._shutdown_completed:
             return
 
-        self.app._suppress_watchdog_feeding("pending system poweroff")
-        self.app._render_power_overlay(
+        self.app.recovery_service.suppress_watchdog_feeding("pending system poweroff")
+        self.app.screen_power_service.render_power_overlay(
             "Powering Off",
             "Saving state...",
             self.app.display.COLOR_RED if self.app.display is not None else (255, 0, 0),
@@ -174,9 +174,9 @@ class ShutdownLifecycleService:
         self.app._stopping = True
 
         if disable_watchdog:
-            self.app._disable_watchdog()
+            self.app.recovery_service.disable_watchdog()
 
-        self.app._ensure_coordinators()
+        self.app.boot_service.ensure_coordinators()
         assert self.app.call_coordinator is not None
         self.app.call_coordinator.cleanup()
 
@@ -208,7 +208,7 @@ class ShutdownLifecycleService:
             logger.info("  - Stopping input manager")
             self.app.input_manager.stop()
 
-        pending_actions = self.app._process_pending_main_thread_actions()
+        pending_actions = self.app.runtime_loop.process_pending_main_thread_actions()
         if pending_actions:
             logger.info(f"  - Processed {pending_actions} queued app events during shutdown")
 

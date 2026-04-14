@@ -7,6 +7,7 @@ Thin application shell that composes focused runtime services.
 from __future__ import annotations
 
 import threading
+import time
 from queue import SimpleQueue
 from typing import Any, Callable, Dict, Optional
 
@@ -26,6 +27,11 @@ from yoyopy.coordinators import (
 )
 from yoyopy.event_bus import EventBus
 from yoyopy.events import (
+    NetworkGpsFixEvent,
+    NetworkGpsNoFixEvent,
+    NetworkPppDownEvent,
+    NetworkPppUpEvent,
+    NetworkSignalUpdateEvent,
     RecoveryAttemptCompletedEvent,
     ScreenChangedEvent,
     UserActivityEvent,
@@ -205,6 +211,11 @@ class YoyoPodApp:
             GracefulShutdownCancelled,
             self._handle_graceful_shutdown_cancelled_event,
         )
+        self.event_bus.subscribe(NetworkPppUpEvent, self._handle_network_ppp_up)
+        self.event_bus.subscribe(NetworkSignalUpdateEvent, self._handle_network_signal_update)
+        self.event_bus.subscribe(NetworkGpsFixEvent, self._handle_network_gps_fix)
+        self.event_bus.subscribe(NetworkGpsNoFixEvent, self._handle_network_gps_no_fix)
+        self.event_bus.subscribe(NetworkPppDownEvent, self._handle_network_ppp_down)
 
         logger.info("=" * 60)
         logger.info("YoyoPod Application Initializing")
@@ -355,7 +366,7 @@ class YoyoPodApp:
     def _handle_voice_note_summary_changed(
         self,
         unread_voice_notes: int,
-        latest_voice_note_by_contact: dict[str, dict[str, str]],
+        latest_voice_note_by_contact: dict[str, dict[str, object]],
     ) -> None:
         """Keep Talk voice-note summary state in sync with the VoIP manager."""
         if self.context is None:
@@ -414,8 +425,8 @@ class YoyoPodApp:
     def _queue_main_thread_callback(self, callback: Callable[[], None]) -> None:
         self.runtime_loop.queue_main_thread_callback(callback)
 
-    def _queue_lvgl_input_action(self, action: Any, data: Optional[Any] = None) -> None:
-        self.runtime_loop.queue_lvgl_input_action(action, data)
+    def _queue_lvgl_input_action(self, action: Any, _data: Optional[Any] = None) -> None:
+        self.runtime_loop.queue_lvgl_input_action(action, _data)
 
     def _pump_lvgl_backend(self, now: float | None = None) -> None:
         self.runtime_loop.pump_lvgl_backend(now)
@@ -426,8 +437,8 @@ class YoyoPodApp:
     def _handle_screen_changed_event(self, event: ScreenChangedEvent) -> None:
         self.screen_power_service.handle_screen_changed_event(event)
 
-    def _queue_user_activity_event(self, action: Any, data: Any | None = None) -> None:
-        self.screen_power_service.queue_user_activity_event(action, data)
+    def _queue_user_activity_event(self, action: Any, _data: Any | None = None) -> None:
+        self.screen_power_service.queue_user_activity_event(action, _data)
 
     def _handle_user_activity_event(self, event: UserActivityEvent) -> None:
         self.screen_power_service.handle_user_activity_event(event)
@@ -452,6 +463,95 @@ class YoyoPodApp:
         event: GracefulShutdownCancelled,
     ) -> None:
         self.shutdown_service.handle_graceful_shutdown_cancelled_event(event)
+
+    def _cellular_connection_type(self) -> str:
+        """Return a best-effort cellular connection type for degraded status chrome."""
+        if self.network_manager is None or not self.network_manager.config.enabled:
+            return "none"
+
+        from yoyopy.network.models import ModemPhase
+
+        state = self.network_manager.modem_state
+        if state.phase == ModemPhase.OFF:
+            return "none"
+        return "4g"
+
+    def _sync_network_context_from_manager(self) -> None:
+        """Refresh AppContext network state from the current modem snapshot."""
+        if self.context is None or self.network_manager is None:
+            return
+
+        state = self.network_manager.modem_state
+        signal_bars = state.signal.bars if state.signal is not None else 0
+        self.context.update_network_status(
+            network_enabled=self.network_manager.config.enabled,
+            signal_bars=signal_bars,
+            connection_type=self._cellular_connection_type(),
+            connected=self.network_manager.is_online,
+            gps_has_fix=state.gps is not None,
+        )
+
+    def _handle_network_ppp_up(self, event: NetworkPppUpEvent) -> None:
+        """Refresh network connectivity state when PPP comes online."""
+        if self.network_manager is not None:
+            self._sync_network_context_from_manager()
+            return
+        if self.context is not None:
+            self.context.update_network_status(
+                network_enabled=True,
+                connected=True,
+                connection_type=event.connection_type,
+            )
+
+    def _handle_network_signal_update(self, event: NetworkSignalUpdateEvent) -> None:
+        """Refresh signal bars when the modem reports new telemetry."""
+        if self.network_manager is not None:
+            self._sync_network_context_from_manager()
+            return
+        if self.context is not None:
+            connection_type = self.context.connection_type
+            if connection_type == "none":
+                connection_type = "4g"
+            self.context.update_network_status(
+                network_enabled=True,
+                signal_bars=event.bars,
+                connection_type=connection_type,
+            )
+
+    def _handle_network_gps_fix(self, event: NetworkGpsFixEvent) -> None:
+        """Update GPS fix state in AppContext."""
+        if self.network_manager is not None:
+            self._sync_network_context_from_manager()
+            return
+        if self.context is not None:
+            connection_type = self.context.connection_type
+            if connection_type == "none":
+                connection_type = "4g"
+            self.context.update_network_status(
+                network_enabled=True,
+                connection_type=connection_type,
+                gps_has_fix=True,
+            )
+
+    def _handle_network_gps_no_fix(self, _event: NetworkGpsNoFixEvent) -> None:
+        """Clear GPS fix state when a query completes without coordinates."""
+        if self.network_manager is not None:
+            self._sync_network_context_from_manager()
+            return
+        if self.context is not None:
+            self.context.update_network_status(gps_has_fix=False)
+
+    def _handle_network_ppp_down(self, _event: NetworkPppDownEvent) -> None:
+        """Reset network state in AppContext when PPP drops."""
+        if self.network_manager is not None:
+            self._sync_network_context_from_manager()
+            return
+        if self.context is not None:
+            self.context.update_network_status(
+                network_enabled=True,
+                connected=False,
+                gps_has_fix=False,
+            )
 
     def _register_power_shutdown_hooks(self) -> None:
         self.shutdown_service.register_power_shutdown_hooks()
@@ -617,8 +717,6 @@ class YoyoPodApp:
         """Return the current application status."""
         pending_shutdown_in_seconds = None
         if self._pending_shutdown is not None:
-            import time
-
             pending_shutdown_in_seconds = max(
                 0.0,
                 self._pending_shutdown.execute_at - time.monotonic(),

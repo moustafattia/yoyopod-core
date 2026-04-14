@@ -55,19 +55,31 @@ class NetworkManager:
 
         state = self.backend.get_state()
         if state.phase == ModemPhase.REGISTERED:
-            self._publish(NetworkModemReadyEvent(
-                carrier=state.carrier,
-                network_type=state.network_type,
-            ))
-            self._publish(NetworkRegisteredEvent(
-                carrier=state.carrier,
-                network_type=state.network_type,
-            ))
+            self._publish(
+                NetworkModemReadyEvent(
+                    carrier=state.carrier,
+                    network_type=state.network_type,
+                )
+            )
+            self._publish(
+                NetworkRegisteredEvent(
+                    carrier=state.carrier,
+                    network_type=state.network_type,
+                )
+            )
             if state.signal:
-                self._publish(NetworkSignalUpdateEvent(
-                    bars=state.signal.bars,
-                    csq=state.signal.csq,
-                ))
+                self._publish(
+                    NetworkSignalUpdateEvent(
+                        bars=state.signal.bars,
+                        csq=state.signal.csq,
+                    )
+                )
+
+            if self.config.gps_enabled:
+                try:
+                    self.query_gps()
+                except Exception as exc:
+                    logger.debug("Initial GPS query failed: {}", exc)
 
             if self.backend.start_ppp():
                 self._publish(NetworkPppUpEvent(connection_type="4g"))
@@ -97,16 +109,20 @@ class NetworkManager:
 
     def query_gps(self) -> GpsCoordinate | None:
         """Query GPS coordinates (may briefly interrupt PPP)."""
-        from yoyopy.events import NetworkGpsFixEvent
+        from yoyopy.events import NetworkGpsFixEvent, NetworkGpsNoFixEvent
 
         coord = self.backend.query_gps()
         if coord is not None:
-            self._publish(NetworkGpsFixEvent(
-                lat=coord.lat,
-                lng=coord.lng,
-                altitude=coord.altitude,
-                speed=coord.speed,
-            ))
+            self._publish(
+                NetworkGpsFixEvent(
+                    lat=coord.lat,
+                    lng=coord.lng,
+                    altitude=coord.altitude,
+                    speed=coord.speed,
+                )
+            )
+        else:
+            self._publish(NetworkGpsNoFixEvent(reason="no_fix"))
         return coord
 
     def _publish(self, event: object) -> None:

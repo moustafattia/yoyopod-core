@@ -7,7 +7,6 @@ from pathlib import Path
 
 from loguru import logger
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

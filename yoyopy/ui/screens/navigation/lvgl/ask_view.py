@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import ASK
 
 if TYPE_CHECKING:
@@ -32,6 +33,7 @@ class LvglAskView:
             return
 
         context = self.screen.context
+        sync_network_status(self.backend.binding, context)
         title_text, subtitle_text, footer_text, icon_key = self.screen.current_view_model()
         self.backend.binding.ask_sync(
             icon_key=icon_key,

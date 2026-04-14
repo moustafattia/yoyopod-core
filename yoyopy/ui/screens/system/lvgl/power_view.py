@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+from yoyopy.ui.screens.lvgl_status import sync_network_status
 from yoyopy.ui.screens.theme import SETUP
 
 if TYPE_CHECKING:
@@ -33,21 +34,26 @@ class LvglPowerView:
 
         snapshot = self.screen._get_snapshot()
         status = self.screen._get_status()
-        pages = self.screen.build_pages(snapshot=snapshot, status=status)
+        pages = self.screen._build_pages_for_display(snapshot=snapshot, status=status)
         if not pages:
             return
 
         self.screen.page_index %= len(pages)
         active_page = pages[self.screen.page_index]
+        context = self.screen.context
+        sync_network_status(self.backend.binding, context)
 
-        # Page picker (Power/Time/Care/Voice) without showing page contents.
-        if not getattr(self.screen, "in_detail", True):
-            items: list[str] = []
-            for index, page in enumerate(pages[:4]):
+        picker_mode = not self.screen.is_one_button_mode() and not getattr(
+            self.screen,
+            "in_detail",
+            False,
+        )
+        if picker_mode:
+            items = []
+            for index, page in self.screen._visible_picker_pages(pages, max_items=5):
                 prefix = "> " if index == self.screen.page_index else ""
                 items.append(f"{prefix}{page.title}")
 
-            context = self.screen.context
             self.backend.binding.power_sync(
                 title_text="Setup",
                 page_text=None,
@@ -64,23 +70,13 @@ class LvglPowerView:
             )
             return
 
-        rows = list(active_page.rows)
-        selected_row = max(0, min(self.screen.selected_row, max(0, len(rows) - 1))) if rows else 0
-
-        # LVGL power scene only supports 4 visible rows. For interactive pages,
-        # scroll so the selected row remains visible.
-        start_row = 0
-        if active_page.interactive and rows:
-            max_visible = min(4, len(rows))
-            start_row = max(0, min(selected_row - (max_visible // 2), len(rows) - max_visible))
-
-        visible_rows = rows[start_row : start_row + 4]
-        items: list[str] = []
-        for offset, (label, value) in enumerate(visible_rows):
-            absolute_index = start_row + offset
-            prefix = "> " if active_page.interactive and absolute_index == selected_row else ""
-            items.append(f"{prefix}{label}: {value}")
-        context = self.screen.context
+        visible_rows, visible_selected_index = self.screen._visible_rows_for_page(active_page)
+        items = []
+        for index, (label, value) in enumerate(visible_rows):
+            row_text = f"{label}: {value}"
+            if visible_selected_index is not None and index == visible_selected_index:
+                row_text = f"> {row_text}"
+            items.append(row_text)
 
         self.backend.binding.power_sync(
             title_text=active_page.title,

@@ -157,6 +157,8 @@ class AppContext:
         self.signal_strength: int = 4  # 0-4 bars
         self.is_connected: bool = False
         self.connection_type: str = "none"  # wifi, 4g, none
+        self.network_enabled: bool = False
+        self.gps_has_fix: bool = False
         self.missed_calls: int = 0
         self.recent_calls: List[str] = []
         self.unread_voice_notes: int = 0
@@ -403,17 +405,23 @@ class AppContext:
     def update_network_status(
         self,
         *,
+        network_enabled: bool | None = None,
         signal_bars: int | None = None,
         connection_type: str | None = None,
         connected: bool | None = None,
+        gps_has_fix: bool | None = None,
     ) -> None:
         """Update cached network telemetry from the modem backend."""
+        if network_enabled is not None:
+            self.network_enabled = network_enabled
         if signal_bars is not None:
             self.signal_strength = max(0, min(4, signal_bars))
         if connection_type is not None:
             self.connection_type = connection_type
         if connected is not None:
             self.is_connected = connected
+        if gps_has_fix is not None:
+            self.gps_has_fix = gps_has_fix
 
     def update_screen_runtime(
         self,

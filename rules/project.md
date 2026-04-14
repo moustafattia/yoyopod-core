@@ -18,9 +18,11 @@ python yoyopod.py --simulate
 uv run pytest -q
 uv run pytest -q tests/test_fsm_runtime.py
 
-# Code quality
-uv run black .
-uv run ruff check .
+# Repo-owned code quality gate
+uv run python scripts/quality.py gate
+
+# Full quality debt audit
+uv run python scripts/quality.py audit
 ```
 
 ## Configuration

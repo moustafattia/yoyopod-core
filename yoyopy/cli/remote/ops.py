@@ -27,6 +27,7 @@ from yoyopy.cli.common import REPO_ROOT
 
 DEPLOY_CONFIG_PATH = REPO_ROOT / "deploy" / "pi-deploy.yaml"
 LOCAL_DEPLOY_CONFIG_PATH = REPO_ROOT / "deploy" / "pi-deploy.local.yaml"
+DEFAULT_PI_PROJECT_DIR = "~/YoyoPod_Core"
 
 
 @dataclass
@@ -52,7 +53,7 @@ class PiDeployConfig:
 
     host: str = ""
     user: str = ""
-    project_dir: str = "~/yoyo-py"
+    project_dir: str = DEFAULT_PI_PROJECT_DIR
     branch: str = "main"
     venv: str = ".venv"
     start_cmd: str = "python yoyopod.py"
@@ -80,6 +81,7 @@ class PiDeployConfig:
 # Config loading
 # ---------------------------------------------------------------------------
 
+
 def load_yaml_mapping(path: Path) -> dict[str, object]:
     """Load one YAML mapping from disk."""
     with open(path, "r", encoding="utf-8") as handle:
@@ -99,36 +101,44 @@ def merge_pi_deploy_layers(*layers: dict[str, object]) -> dict[str, object]:
     return merged
 
 
+def _as_string_tuple(value: object, *, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Normalize one YAML sequence-like value into a tuple of non-empty strings."""
+
+    if isinstance(value, str):
+        candidates: Sequence[object] = (value,)
+    elif isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        candidates = value
+    else:
+        return default
+
+    normalized = tuple(str(item).strip() for item in candidates if str(item).strip())
+    return normalized or default
+
+
 def parse_pi_deploy_config(data: dict[str, object]) -> PiDeployConfig:
     """Normalize raw YAML data into a deploy config object."""
     return PiDeployConfig(
         host=str(data.get("host", "")).strip(),
         user=str(data.get("user", "")).strip(),
         project_dir=str(
-            data.get("project_dir", data.get("remote_dir", "~/yoyo-py"))
+            data.get("project_dir", data.get("remote_dir", DEFAULT_PI_PROJECT_DIR))
         ).strip()
-        or "~/yoyo-py",
+        or DEFAULT_PI_PROJECT_DIR,
         branch=str(data.get("branch", "main")).strip() or "main",
         venv=str(data.get("venv", ".venv")).strip() or ".venv",
-        start_cmd=str(data.get("start_cmd", "python yoyopod.py")).strip()
-        or "python yoyopod.py",
-        kill_processes=tuple(
-            str(process).strip()
-            for process in data.get("kill_processes", ("python", "linphonec"))
-            if str(process).strip()
-        )
-        or ("python", "linphonec"),
+        start_cmd=str(data.get("start_cmd", "python yoyopod.py")).strip() or "python yoyopod.py",
+        kill_processes=_as_string_tuple(
+            data.get("kill_processes", ("python", "linphonec")),
+            default=("python", "linphonec"),
+        ),
         log_file=str(data["log_file"]).strip(),
         error_log_file=str(data["error_log_file"]).strip(),
         pid_file=str(data["pid_file"]).strip(),
         startup_marker=str(data["startup_marker"]).strip(),
-        screenshot_path=str(
-            data.get("screenshot_path", "/tmp/yoyopod_screenshot.png")
-        ).strip()
+        screenshot_path=str(data.get("screenshot_path", "/tmp/yoyopod_screenshot.png")).strip()
         or "/tmp/yoyopod_screenshot.png",
-        rsync_exclude=tuple(
-            str(pattern)
-            for pattern in data.get(
+        rsync_exclude=_as_string_tuple(
+            data.get(
                 "rsync_exclude",
                 (
                     ".git/",
@@ -142,7 +152,19 @@ def parse_pi_deploy_config(data: dict[str, object]) -> PiDeployConfig:
                     "node_modules/",
                     "*.egg-info/",
                 ),
-            )
+            ),
+            default=(
+                ".git/",
+                ".cache/",
+                "__pycache__/",
+                "*.pyc",
+                ".venv/",
+                "build/",
+                "logs/",
+                "models/",
+                "node_modules/",
+                "*.egg-info/",
+            ),
         ),
     )
 
@@ -189,6 +211,7 @@ def pi_deploy_config_to_dict(config: PiDeployConfig) -> dict[str, object]:
 # SSH and subprocess helpers
 # ---------------------------------------------------------------------------
 
+
 def shell_quote(value: str) -> str:
     """Shell-escape one literal value for the remote command string."""
     return shlex.quote(value)
@@ -211,9 +234,7 @@ def build_ssh_command(
     tty: bool = False,
 ) -> list[str]:
     """Build one SSH command targeting the Raspberry Pi."""
-    wrapped_command = (
-        f"cd {quote_remote_project_dir(config.project_dir)} && {remote_command}"
-    )
+    wrapped_command = f"cd {quote_remote_project_dir(config.project_dir)} && {remote_command}"
     ssh_command = ["ssh"]
     if tty:
         ssh_command.append("-t")
@@ -308,6 +329,7 @@ def _resolve_remote_config(
 # Startup verification and native shim helpers
 # ---------------------------------------------------------------------------
 
+
 def build_startup_verification_command(
     deploy_config: PiDeployConfig | None = None,
     *,
@@ -327,19 +349,19 @@ def build_startup_verification_command(
                 "done"
             ),
             f"test -f {pid_file}",
-            f'pid="$(tr -d \'\\n\' < {pid_file})"',
+            f"pid=\"$(tr -d '\\n' < {pid_file})\"",
             'test -n "$pid"',
             'kill -0 "$pid"',
             (
                 f"for _ in $(seq 1 {attempts}); do "
                 f"if test -f {log_file} && "
-                f"grep -F {startup_marker} {log_file} | tail -n 1 | grep -F \"pid=$pid\" >/dev/null; then "
+                f'grep -F {startup_marker} {log_file} | tail -n 1 | grep -F "pid=$pid" >/dev/null; then '
                 "break; "
                 "fi; "
                 "sleep 1; "
                 "done"
             ),
-            f"grep -F {startup_marker} {log_file} | tail -n 1 | grep -F \"pid=$pid\"",
+            f'grep -F {startup_marker} {log_file} | tail -n 1 | grep -F "pid=$pid"',
         ]
     )
 
@@ -410,9 +432,7 @@ def build_restart_command(deploy_config: PiDeployConfig) -> str:
         f"rm -f {pid_file}",
     ]
     for process_name in deploy_config.kill_processes:
-        cleanup_commands.append(
-            f"killall -9 {shell_quote(process_name)} >/dev/null 2>&1 || true"
-        )
+        cleanup_commands.append(f"killall -9 {shell_quote(process_name)} >/dev/null 2>&1 || true")
 
     cleanup_sequence = "; ".join(cleanup_commands)
     manual_restart = (
@@ -441,6 +461,7 @@ def build_restart_command(deploy_config: PiDeployConfig) -> str:
 # ---------------------------------------------------------------------------
 # Rsync / archive sync helpers
 # ---------------------------------------------------------------------------
+
 
 def resolve_local_executable(program: str) -> str | None:
     """Resolve one local executable, including common Windows install paths."""
@@ -661,6 +682,10 @@ def run_rsync_deploy(
     """Rsync the local working tree to the Pi and optionally restart the app."""
     rsync_binary = resolve_local_executable("rsync")
     if should_use_direct_rsync(rsync_binary):
+        if rsync_binary is None:
+            raise SystemExit(
+                "Direct rsync requested, but the local rsync binary could not be resolved."
+            )
         exit_code = run_local(
             build_rsync_command(config, deploy_config, executable=rsync_binary),
             "rsync",
@@ -732,6 +757,7 @@ def run_rsync_deploy(
 # Command builders
 # ---------------------------------------------------------------------------
 
+
 def build_status_command(deploy_config: PiDeployConfig | None = None) -> str:
     """Create the remote status command."""
     deploy = deploy_config or load_pi_deploy_config()
@@ -746,7 +772,7 @@ def build_status_command(deploy_config: PiDeployConfig | None = None) -> str:
             "pgrep -af mpv || true",
             "echo",
             "echo '== YoyoPod Service ==' ",
-            "systemctl is-active \"yoyopod@$(id -un).service\" || true",
+            'systemctl is-active "yoyopod@$(id -un).service" || true',
             "echo",
             "echo '== PiSugar Server ==' ",
             "systemctl is-active pisugar-server || true",
@@ -792,7 +818,7 @@ def build_smoke_command(
     with_lvgl_soak: bool = False,
     verbose: bool = False,
     music_timeout: int = 5,
-    voip_timeout: float = 10.0,
+    voip_timeout: float = 90.0,
 ) -> str:
     """Create the remote smoke-validation command."""
     parts = ["uv run yoyoctl pi smoke"]
@@ -810,7 +836,7 @@ def build_smoke_command(
         parts.append("--verbose")
     if music_timeout != 5:
         parts.extend(["--music-timeout", str(music_timeout)])
-    if voip_timeout != 10.0:
+    if voip_timeout != 90.0:
         parts.extend(["--voip-timeout", str(voip_timeout)])
     return " ".join(parts)
 
@@ -844,11 +870,20 @@ def build_local_preflight_commands() -> list[tuple[str, list[str]]]:
 # Typer commands
 # ---------------------------------------------------------------------------
 
+
 def status(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
 ) -> None:
     """Show remote repo, music backend, and process status."""
     config = _resolve_remote_config(host, user, project_dir, branch)
@@ -860,11 +895,21 @@ def status(
 
 
 def sync(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    skip_uv_sync: Annotated[bool, typer.Option("--skip-uv-sync", help="Skip `uv sync --extra dev` after pulling.")] = False,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    skip_uv_sync: Annotated[
+        bool, typer.Option("--skip-uv-sync", help="Skip `uv sync --extra dev` after pulling.")
+    ] = False,
 ) -> None:
     """Fetch, checkout, pull, and optionally run uv sync on the Raspberry Pi."""
     config = _resolve_remote_config(host, user, project_dir, branch)
@@ -875,18 +920,45 @@ def sync(
 
 
 def smoke(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    with_power: Annotated[bool, typer.Option("--with-power", help="Include PiSugar power checks.")] = False,
-    with_rtc: Annotated[bool, typer.Option("--with-rtc", help="Include PiSugar RTC checks.")] = False,
-    with_music: Annotated[bool, typer.Option("--with-music", help="Include music-backend startup checks.")] = False,
-    with_voip: Annotated[bool, typer.Option("--with-voip", help="Include SIP registration checks.")] = False,
-    with_lvgl_soak: Annotated[bool, typer.Option("--with-lvgl-soak", help="Include a short LVGL transition and sleep/wake soak.")] = False,
-    verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose smoke-script logging.")] = False,
-    music_timeout: Annotated[int, typer.Option("--music-timeout", help="Music-backend startup timeout in seconds.")] = 5,
-    voip_timeout: Annotated[float, typer.Option("--voip-timeout", help="VoIP registration timeout in seconds.")] = 10.0,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    with_power: Annotated[
+        bool, typer.Option("--with-power", help="Include PiSugar power checks.")
+    ] = False,
+    with_rtc: Annotated[
+        bool, typer.Option("--with-rtc", help="Include PiSugar RTC checks.")
+    ] = False,
+    with_music: Annotated[
+        bool, typer.Option("--with-music", help="Include music-backend startup checks.")
+    ] = False,
+    with_voip: Annotated[
+        bool, typer.Option("--with-voip", help="Include SIP registration checks.")
+    ] = False,
+    with_lvgl_soak: Annotated[
+        bool,
+        typer.Option(
+            "--with-lvgl-soak", help="Include a short LVGL transition and sleep/wake soak."
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="Enable verbose smoke-script logging.")
+    ] = False,
+    music_timeout: Annotated[
+        int, typer.Option("--music-timeout", help="Music-backend startup timeout in seconds.")
+    ] = 5,
+    voip_timeout: Annotated[
+        float, typer.Option("--voip-timeout", help="VoIP registration timeout in seconds.")
+    ] = 90.0,
 ) -> None:
     """Run the Raspberry Pi smoke validator remotely."""
     config = _resolve_remote_config(host, user, project_dir, branch)
@@ -909,21 +981,68 @@ def smoke(
 
 
 def preflight(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    skip_local: Annotated[bool, typer.Option("--skip-local", help="Skip local compile/test verification before remote work.")] = False,
-    skip_sync: Annotated[bool, typer.Option("--skip-sync", help="Skip the remote git pull and dependency sync step.")] = False,
-    skip_uv_sync: Annotated[bool, typer.Option("--skip-uv-sync", help="Skip `uv sync --extra dev` during the remote sync step.")] = False,
-    with_power: Annotated[bool, typer.Option("--with-power", help="Include PiSugar power checks in the remote smoke pass.")] = False,
-    with_rtc: Annotated[bool, typer.Option("--with-rtc", help="Include PiSugar RTC checks in the remote smoke pass.")] = False,
-    with_music: Annotated[bool, typer.Option("--with-music", help="Include music-backend startup checks in the remote smoke pass.")] = False,
-    with_voip: Annotated[bool, typer.Option("--with-voip", help="Include SIP registration checks in the remote smoke pass.")] = False,
-    with_lvgl_soak: Annotated[bool, typer.Option("--with-lvgl-soak", help="Include the LVGL soak helper in the remote smoke pass.")] = False,
-    verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose smoke-script logging.")] = False,
-    music_timeout: Annotated[int, typer.Option("--music-timeout", help="Music-backend startup timeout in seconds.")] = 5,
-    voip_timeout: Annotated[float, typer.Option("--voip-timeout", help="VoIP registration timeout in seconds.")] = 10.0,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    skip_local: Annotated[
+        bool,
+        typer.Option(
+            "--skip-local", help="Skip local compile/test verification before remote work."
+        ),
+    ] = False,
+    skip_sync: Annotated[
+        bool, typer.Option("--skip-sync", help="Skip the remote git pull and dependency sync step.")
+    ] = False,
+    skip_uv_sync: Annotated[
+        bool,
+        typer.Option(
+            "--skip-uv-sync", help="Skip `uv sync --extra dev` during the remote sync step."
+        ),
+    ] = False,
+    with_power: Annotated[
+        bool,
+        typer.Option("--with-power", help="Include PiSugar power checks in the remote smoke pass."),
+    ] = False,
+    with_rtc: Annotated[
+        bool,
+        typer.Option("--with-rtc", help="Include PiSugar RTC checks in the remote smoke pass."),
+    ] = False,
+    with_music: Annotated[
+        bool,
+        typer.Option(
+            "--with-music", help="Include music-backend startup checks in the remote smoke pass."
+        ),
+    ] = False,
+    with_voip: Annotated[
+        bool,
+        typer.Option(
+            "--with-voip", help="Include SIP registration checks in the remote smoke pass."
+        ),
+    ] = False,
+    with_lvgl_soak: Annotated[
+        bool,
+        typer.Option(
+            "--with-lvgl-soak", help="Include the LVGL soak helper in the remote smoke pass."
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="Enable verbose smoke-script logging.")
+    ] = False,
+    music_timeout: Annotated[
+        int, typer.Option("--music-timeout", help="Music-backend startup timeout in seconds.")
+    ] = 5,
+    voip_timeout: Annotated[
+        float, typer.Option("--voip-timeout", help="VoIP registration timeout in seconds.")
+    ] = 90.0,
 ) -> None:
     """Run local checks, sync the Pi, and execute the Pi smoke pass."""
     config = _resolve_remote_config(host, user, project_dir, branch)
@@ -961,10 +1080,18 @@ def preflight(
 
 
 def restart(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
 ) -> None:
     """Restart the yoyopod app on the Pi."""
@@ -977,14 +1104,26 @@ def restart(
 
 
 def logs(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
     lines: Annotated[int, typer.Option("--lines", help="Number of log lines to tail.")] = 50,
     follow: Annotated[bool, typer.Option("--follow", "-f", help="Follow log output.")] = False,
-    errors: Annotated[bool, typer.Option("--errors", help="Tail the error log instead of the main log.")] = False,
-    filter: Annotated[Optional[str], typer.Option("--filter", help="Grep filter to apply to log output.")] = None,
+    errors: Annotated[
+        bool, typer.Option("--errors", help="Tail the error log instead of the main log.")
+    ] = False,
+    filter: Annotated[
+        Optional[str], typer.Option("--filter", help="Grep filter to apply to log output.")
+    ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
 ) -> None:
     """Tail yoyopod logs on the Pi."""
@@ -1003,12 +1142,27 @@ def logs(
 
 
 def screenshot(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    output: Annotated[str, typer.Option("--output", help="Local output file path.")] = "screenshot.png",
-    readback: Annotated[bool, typer.Option("--readback", help="Use LVGL readback (SIGUSR1) instead of shadow path (SIGUSR2).")] = False,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    output: Annotated[
+        str, typer.Option("--output", help="Local output file path.")
+    ] = "screenshot.png",
+    readback: Annotated[
+        bool,
+        typer.Option(
+            "--readback", help="Use LVGL readback (SIGUSR1) instead of shadow path (SIGUSR2)."
+        ),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
 ) -> None:
     """Capture a screenshot from the Pi display."""
@@ -1022,11 +1176,21 @@ def screenshot(
 
 
 def rsync(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    skip_restart: Annotated[bool, typer.Option("--skip-restart", help="Skip restart after sync.")] = False,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    skip_restart: Annotated[
+        bool, typer.Option("--skip-restart", help="Skip restart after sync.")
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
 ) -> None:
     """Rsync the local working tree to the Pi (no git commit needed)."""
@@ -1039,15 +1203,33 @@ def rsync(
 
 
 def whisplay(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    duration_seconds: Annotated[float, typer.Option("--duration-seconds", help="Session duration in seconds.")] = 30.0,
-    debounce_ms: Annotated[Optional[int], typer.Option("--debounce-ms", help="Debounce threshold in ms.")] = None,
-    double_tap_ms: Annotated[Optional[int], typer.Option("--double-tap-ms", help="Double-tap window in ms.")] = None,
-    long_hold_ms: Annotated[Optional[int], typer.Option("--long-hold-ms", help="Long-hold threshold in ms.")] = None,
-    no_display: Annotated[bool, typer.Option("--no-display", help="Disable display rendering.")] = False,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    duration_seconds: Annotated[
+        float, typer.Option("--duration-seconds", help="Session duration in seconds.")
+    ] = 30.0,
+    debounce_ms: Annotated[
+        Optional[int], typer.Option("--debounce-ms", help="Debounce threshold in ms.")
+    ] = None,
+    double_tap_ms: Annotated[
+        Optional[int], typer.Option("--double-tap-ms", help="Double-tap window in ms.")
+    ] = None,
+    long_hold_ms: Annotated[
+        Optional[int], typer.Option("--long-hold-ms", help="Long-hold threshold in ms.")
+    ] = None,
+    no_display: Annotated[
+        bool, typer.Option("--no-display", help="Disable display rendering.")
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
 ) -> None:
     """Run the Whisplay gesture-tuning helper remotely."""
@@ -1067,13 +1249,28 @@ def whisplay(
 
 
 def rtc(
-    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
-    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
-    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
-    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
-    action: Annotated[str, typer.Argument(help="RTC action: status, sync-to, sync-from, set-alarm, disable-alarm.")] = "status",
-    time: Annotated[Optional[str], typer.Option("--time", help="Alarm time in ISO 8601 format (for set-alarm).")] = None,
-    repeat_mask: Annotated[int, typer.Option("--repeat-mask", help="Repeat bitmask (default: every day).")] = 127,
+    host: Annotated[
+        str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")
+    ] = "",
+    user: Annotated[
+        str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")
+    ] = "",
+    project_dir: Annotated[
+        str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")
+    ] = "",
+    branch: Annotated[
+        str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")
+    ] = "",
+    action: Annotated[
+        str,
+        typer.Argument(help="RTC action: status, sync-to, sync-from, set-alarm, disable-alarm."),
+    ] = "status",
+    time: Annotated[
+        Optional[str], typer.Option("--time", help="Alarm time in ISO 8601 format (for set-alarm).")
+    ] = None,
+    repeat_mask: Annotated[
+        int, typer.Option("--repeat-mask", help="Repeat bitmask (default: every day).")
+    ] = 127,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
 ) -> None:
     """Inspect or control PiSugar RTC state remotely."""
@@ -1094,6 +1291,7 @@ def rtc(
 # Compat builder functions (argparse.Namespace-based, used by tests and legacy
 # callers; these mirror the old scripts/pi_remote.py builder API)
 # ---------------------------------------------------------------------------
+
 
 def build_logs_command(
     args: argparse.Namespace,
@@ -1171,7 +1369,7 @@ def build_parser(deploy_config: PiDeployConfig) -> argparse.ArgumentParser:
     parser.add_argument(
         "--project-dir",
         default=os.getenv("YOYOPOD_PI_PROJECT_DIR", deploy_config.project_dir),
-        help="Project directory on the Raspberry Pi (default: ~/yoyo-py)",
+        help=f"Project directory on the Raspberry Pi (default: {DEFAULT_PI_PROJECT_DIR})",
     )
     parser.add_argument(
         "--branch",
@@ -1313,6 +1511,7 @@ def run_screenshot(
     args: argparse.Namespace,
 ) -> int:
     """Capture a screenshot from the remote app and copy it locally."""
+    wait_seconds = 20
     pid_file = shell_quote(deploy_config.pid_file)
     screenshot_path = shell_quote(deploy_config.screenshot_path)
 
@@ -1350,7 +1549,7 @@ def run_screenshot(
     verify_result = run_remote_capture(
         config,
         (
-            "for _ in $(seq 1 10); do "
+            f"for _ in $(seq 1 {wait_seconds}); do "
             f"test -f {screenshot_path} && echo READY && exit 0; "
             "sleep 1; "
             "done; "

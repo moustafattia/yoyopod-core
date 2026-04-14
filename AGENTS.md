@@ -6,6 +6,23 @@
 
 ---
 
+## Guidance Hierarchy
+
+Use the repo guidance in this order:
+
+1. Current code in `yoyopy/`
+2. [`README.md`](README.md) and [`docs/README.md`](docs/README.md)
+3. `rules/` for project constraints and architecture/style rules
+4. `AGENTS.md` for current runtime status and agent workflow
+5. `skills/` for task-specific operational playbooks
+6. `.claude/` and `.agents/` as tool-facing overlays and mirrors
+
+Canonical locations:
+- `skills/` is the canonical skill source
+- `.claude/skills/` and `.agents/skills/` are tool-facing mirrors
+- current runtime docs beat older plan docs when they disagree
+- `docs/archive/` is historical context only
+
 ## Project Rules
 
 Follow all instructions in the `rules/` directory:
@@ -20,7 +37,7 @@ Follow all instructions in the `rules/` directory:
 
 ## Pi Deployment Skills
 
-Workflow instructions for deploying and debugging on Raspberry Pi are in `skills/`:
+Workflow instructions for deploying and debugging on Raspberry Pi are in canonical files under `skills/`:
 
 | Skill | File | Purpose |
 |---|---|---|
@@ -398,4 +415,4 @@ The current codebase is in a good place to focus on product behavior instead of 
 - `docs/RPI_SMOKE_VALIDATION.md`
 - `docs/PI_DEV_WORKFLOW.md`
 - `docs/archive/`
-- Project repository: `https://github.com/moustafattia/yoyo-py`
+- Project repository: `https://github.com/moustafattia/YoyoPod_Core`
