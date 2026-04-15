@@ -67,8 +67,7 @@ For Whisplay UI work, the standard loop is:
 
 1. Validate locally:
    ```bash
-   python -m compileall yoyopy tests
-   uv run pytest -q
+   uv run python scripts/quality.py ci
    ```
    For iterative UI work, run the most relevant focused tests if the full suite is unnecessary.
 2. Commit and push the branch you want to validate:

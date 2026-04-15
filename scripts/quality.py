@@ -104,6 +104,18 @@ def build_gate_steps(config: QualityConfig) -> tuple[QualityStep, ...]:
     )
 
 
+def build_ci_steps(config: QualityConfig) -> tuple[QualityStep, ...]:
+    """Build the local command that mirrors current CI expectations."""
+
+    return (
+        *build_gate_steps(config),
+        QualityStep(
+            label="pytest -q (CI test suite)",
+            command=_python_module_command("pytest", "-q"),
+        ),
+    )
+
+
 def build_audit_steps(config: QualityConfig) -> tuple[QualityStep, ...]:
     """Build the non-gating full-repo audit commands."""
 
@@ -170,6 +182,10 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run repo-owned quality commands for YoyoPod Core."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser(
+        "ci",
+        help="Run the local command that mirrors CI: staged gate plus pytest.",
+    )
     subparsers.add_parser("gate", help="Run the staged CI-gated workflow checks.")
     subparsers.add_parser("audit", help="Run the non-gating full-repo quality audit.")
     subparsers.add_parser("targets", help="Print the tracked gate and audit target sets.")
@@ -182,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = load_quality_config()
 
+    if args.command == "ci":
+        return run_steps(build_ci_steps(config))
     if args.command == "gate":
         return run_steps(build_gate_steps(config))
     if args.command == "audit":

@@ -1,14 +1,23 @@
 # Quality Gates
 
-This repo now owns one executable quality contract instead of relying on tribal knowledge:
+This repo now owns one obvious local command that mirrors current CI expectations:
 
 ```bash
-uv run python scripts/quality.py gate
+uv run python scripts/quality.py ci
 ```
 
-CI runs that exact command.
+That command runs:
 
-## Gated now
+- the staged quality gate: `uv run python scripts/quality.py gate`
+- the Python test suite: `uv run pytest -q`
+
+CI currently runs those same two steps in separate jobs.
+
+## Local CI mirror
+
+Use `ci` as the default local before-PR command when you want the same gate-plus-tests contract CI expects.
+
+## Staged gate
 
 The staged gate currently covers the developer-workflow surface tracked in `[tool.yoyopod_quality]` inside `pyproject.toml`:
 

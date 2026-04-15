@@ -12,10 +12,10 @@ Run these anywhere:
 
 ```bash
 uv sync --extra dev
-uv run pytest -q
+uv run python scripts/quality.py ci
 ```
 
-This covers the pure-Python and simulation-mode regression suite.
+This mirrors the same staged gate plus pure-Python regression suite CI expects.
 
 ### 2. Default dev-machine-to-board validation
 
@@ -186,7 +186,7 @@ Use this when you want a focused battery, charging, RTC, shutdown-threshold, and
 ## Suggested Order On Hardware
 
 1. `uv sync --extra dev`
-2. `uv run pytest -q`
+2. `uv run python scripts/quality.py ci`
 3. `git push`
 4. `git rev-parse HEAD`
 5. `yoyoctl remote validate --branch <branch> --sha <commit> --with-music --with-voip`

@@ -15,6 +15,9 @@ uv run yoyoctl setup verify-host
 python yoyopod.py
 python yoyopod.py --simulate
 
+# Local CI mirror
+uv run python scripts/quality.py ci
+
 # Tests
 uv run pytest -q
 uv run pytest -q tests/test_fsm_runtime.py

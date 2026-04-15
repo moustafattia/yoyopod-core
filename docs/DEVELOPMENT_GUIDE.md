@@ -123,9 +123,13 @@ python demos/demo_runtime_state.py --simulate
 Local validation:
 
 ```bash
+uv run python scripts/quality.py ci
+```
+
+Optional extra syntax/import smoke for broad tree changes:
+
+```bash
 python -m compileall yoyopy tests demos scripts
-uv run python scripts/quality.py gate
-uv run pytest -q
 ```
 
 Full quality audit of the current repo debt:

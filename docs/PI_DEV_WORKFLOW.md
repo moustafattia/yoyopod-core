@@ -234,7 +234,7 @@ If you use it, say clearly that the board is running a dirty-tree override inste
 
 1. Run local checks as needed:
    ```bash
-   uv run pytest -q
+   uv run python scripts/quality.py ci
    ```
 2. Commit the intended change.
 3. Push the branch.
@@ -250,7 +250,7 @@ If you use it, say clearly that the board is running a dirty-tree override inste
 
 ## Release / Pre-Merge Checklist
 
-- local branch is green with `uv run pytest -q`
+- local branch is green with `uv run python scripts/quality.py ci`
 - branch is pushed and reviewed
 - `yoyoctl remote validate --branch <branch> --sha <commit> --with-music --with-voip --with-lvgl-soak` passes
 - the app starts cleanly and stays running for manual hardware testing

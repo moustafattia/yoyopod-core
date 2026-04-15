@@ -42,8 +42,7 @@ python yoyopod.py --simulate
 Core validation loop:
 
 ```bash
-uv run python scripts/quality.py gate
-uv run pytest -q
+uv run python scripts/quality.py ci
 ```
 
 Full quality debt audit:
@@ -115,8 +114,7 @@ When updating docs:
 At minimum, run:
 
 ```bash
-uv run python scripts/quality.py gate
-uv run pytest -q
+uv run python scripts/quality.py ci
 ```
 
 Then add any focused commands relevant to your area, for example:

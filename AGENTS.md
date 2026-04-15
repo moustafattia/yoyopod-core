@@ -73,7 +73,7 @@ When asked to deploy, sync, restart, check status, view logs, or take a screensh
 - Whisplay now runs on the LVGL rendering path in production under `yoyopy/ui/lvgl_binding/`.
 - Production local music now runs through the app-managed mpv backend under `yoyopy/audio/music/`.
 - Production VoIP now runs through Liblinphone under `yoyopy/voip/liblinphone_binding/` and `yoyopy/voip/backend.py`.
-- CI validates the Python test suite with `uv sync --extra dev` and `uv run pytest -q`.
+- CI validates the staged quality gate plus Python test suite; the local mirror is `uv run python scripts/quality.py ci`.
 - Raspberry Pi validation has a defined path through `yoyoctl pi smoke` and `yoyoctl remote`.
 
 This file should reflect the repo as it exists on `main`. Older milestone notes are useful for history, but they are not the source of truth anymore.
@@ -272,8 +272,7 @@ uv sync --extra dev
 ### Validate Locally
 
 ```bash
-python -m compileall yoyopy tests demos
-uv run pytest -q
+uv run python scripts/quality.py ci
 ```
 
 ### Run The Production App
