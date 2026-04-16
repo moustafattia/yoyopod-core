@@ -27,3 +27,16 @@ def test_parser_accepts_ci_command() -> None:
     args = parser.parse_args(["ci"])
 
     assert args.command == "ci"
+
+
+def test_gate_steps_expand_directory_targets_into_python_files() -> None:
+    config = QUALITY["load_quality_config"]()
+
+    gate_steps = QUALITY["build_gate_steps"](config)
+    black_steps = [step for step in gate_steps if step.label == "black --check (workflow surface)"]
+    black_targets = [Path(step.command[-1]) for step in black_steps]
+
+    assert black_targets
+    assert Path("src/yoyopod/cli/remote") not in black_targets
+    assert Path("src/yoyopod/cli/remote/navigation.py") in black_targets
+    assert all(target.suffix == ".py" for target in black_targets)

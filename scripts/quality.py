@@ -85,21 +85,55 @@ def _python_module_command(module: str, *args: str) -> tuple[str, ...]:
     return (sys.executable, "-m", module, *args)
 
 
+def _expand_python_paths(paths: tuple[str, ...]) -> tuple[str, ...]:
+    """Expand tracked directory targets into stable Python file lists."""
+
+    expanded_paths: list[str] = []
+    for raw_path in paths:
+        candidate = REPO_ROOT / raw_path
+        if candidate.is_dir():
+            expanded_paths.extend(
+                str(path.relative_to(REPO_ROOT))
+                for path in sorted(candidate.rglob("*.py"))
+                if "__pycache__" not in path.parts
+            )
+            continue
+        expanded_paths.append(raw_path)
+    return tuple(expanded_paths)
+
+
+def _build_black_steps(label: str, paths: tuple[str, ...]) -> tuple[QualityStep, ...]:
+    """Run Black one tracked file at a time to keep gate progress bounded."""
+
+    expanded_paths = _expand_python_paths(paths)
+    return tuple(
+        QualityStep(
+            label=label,
+            command=_python_module_command("black", "--check", path),
+        )
+        for path in expanded_paths
+    )
+
+
 def build_gate_steps(config: QualityConfig) -> tuple[QualityStep, ...]:
     """Build the staged, CI-gated workflow checks."""
 
     return (
-        QualityStep(
-            label="black --check (workflow surface)",
-            command=_python_module_command("black", "--check", *config.gate_format_paths),
-        ),
+        *_build_black_steps("black --check (workflow surface)", config.gate_format_paths),
         QualityStep(
             label="ruff check (workflow surface)",
-            command=_python_module_command("ruff", "check", *config.gate_lint_paths),
+            command=_python_module_command(
+                "ruff",
+                "check",
+                *_expand_python_paths(config.gate_lint_paths),
+            ),
         ),
         QualityStep(
             label="mypy (workflow surface)",
-            command=_python_module_command("mypy", *config.gate_type_paths),
+            command=_python_module_command(
+                "mypy",
+                *_expand_python_paths(config.gate_type_paths),
+            ),
         ),
     )
 
