@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from yoyopod.config import ConfigManager
+from yoyopod.network import NetworkManager
 from yoyopod.people import PeopleDirectory
 
 
@@ -110,6 +111,68 @@ def test_voice_config_composes_domain_policy_with_device_owned_selectors(tmp_pat
     assert manager.get_voice_settings().assistant.tts_backend == "dummy-tts"
     assert manager.get_voice_settings().audio.speaker_device_id == "plughw:CARD=SE,DEV=0"
     assert manager.get_voice_settings().audio.capture_device_id == "plughw:CARD=SE,DEV=1"
+
+
+def test_network_config_composes_domain_owned_cellular_settings(tmp_path: Path) -> None:
+    """Network should load from its canonical domain-owned config file."""
+
+    config_dir = tmp_path / "config"
+    _write_yaml(
+        config_dir,
+        "network/cellular.yaml",
+        {
+            "network": {
+                "enabled": True,
+                "serial_port": "/dev/ttyAMA0",
+                "apn": "internet",
+                "ppp_timeout": 45,
+            }
+        },
+    )
+
+    manager = ConfigManager(config_dir=str(config_dir))
+    network_manager = NetworkManager.from_config_manager(manager)
+
+    assert manager.network_config_loaded is True
+    assert not hasattr(manager.get_app_settings(), "network")
+    assert manager.get_network_settings().serial_port == "/dev/ttyAMA0"
+    assert manager.get_runtime_settings().network.apn == "internet"
+    assert network_manager.config.ppp_timeout == 45
+
+
+def test_network_board_overlay_uses_domain_relative_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Board overlays should mirror the canonical network config path."""
+
+    config_dir = tmp_path / "config"
+    _write_yaml(
+        config_dir,
+        "network/cellular.yaml",
+        {
+            "network": {
+                "enabled": False,
+                "gps_enabled": False,
+            }
+        },
+    )
+    _write_yaml(
+        config_dir,
+        "boards/rpi-zero-2w/network/cellular.yaml",
+        {
+            "network": {
+                "enabled": True,
+                "gps_enabled": True,
+            }
+        },
+    )
+    monkeypatch.setenv("YOYOPOD_CONFIG_BOARD", "rpi-zero-2w")
+
+    manager = ConfigManager(config_dir=str(config_dir))
+
+    assert manager.get_network_settings().enabled is True
+    assert manager.get_network_settings().gps_enabled is True
 
 
 def test_people_directory_bootstraps_mutable_contacts_from_seed(tmp_path: Path) -> None:

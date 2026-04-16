@@ -1,0 +1,5 @@
+# Raspberry Pi Zero 2W board overrides.
+
+network:
+  enabled: true
+  gps_enabled: true

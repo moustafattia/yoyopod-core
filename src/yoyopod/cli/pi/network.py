@@ -8,12 +8,16 @@ import typer
 
 from yoyopod.cli.common import configure_logging, resolve_config_dir
 
-network_app = typer.Typer(name="network", help="SIM7600 modem and GPS commands.", no_args_is_help=True)
+network_app = typer.Typer(
+    name="network", help="SIM7600 modem and GPS commands.", no_args_is_help=True
+)
 
 
 @network_app.command()
 def probe(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Check if the SIM7600 modem responds to AT commands."""
@@ -28,7 +32,7 @@ def probe(
     manager = NetworkManager.from_config_manager(config_manager)
 
     if not manager.config.enabled:
-        logger.error("network module disabled in config/app/core.yaml")
+        logger.error("network module disabled in config/network/cellular.yaml")
         raise typer.Exit(code=1)
 
     from yoyopod.network.transport import SerialTransport, TransportError
@@ -56,7 +60,9 @@ def probe(
 
 @network_app.command()
 def status(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Show modem status: signal, carrier, registration, PPP state."""
@@ -72,7 +78,7 @@ def status(
     manager = NetworkManager.from_config_manager(config_manager)
 
     if not manager.config.enabled:
-        logger.error("network module disabled in config/app/core.yaml")
+        logger.error("network module disabled in config/network/cellular.yaml")
         raise typer.Exit(code=1)
 
     backend = Sim7600Backend(manager.config)
@@ -104,7 +110,9 @@ def status(
 
 @network_app.command()
 def gps(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Query current GPS coordinates."""
@@ -120,7 +128,7 @@ def gps(
     manager = NetworkManager.from_config_manager(config_manager)
 
     if not manager.config.enabled:
-        logger.error("network module disabled in config/app/core.yaml")
+        logger.error("network module disabled in config/network/cellular.yaml")
         raise typer.Exit(code=1)
 
     backend = Sim7600Backend(manager.config)

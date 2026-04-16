@@ -4,6 +4,7 @@ from yoyopod.config.manager import ConfigManager, load_composed_app_settings
 from yoyopod.config.models import (
     AppPowerConfig,
     CommunicationConfig,
+    NetworkConfig,
     PeopleDirectoryConfig,
     VoiceConfig,
     YoyoPodConfig,
@@ -15,6 +16,7 @@ from yoyopod.config.models import (
 __all__ = [
     "ConfigManager",
     "CommunicationConfig",
+    "NetworkConfig",
     "AppPowerConfig",
     "PeopleDirectoryConfig",
     "VoiceConfig",

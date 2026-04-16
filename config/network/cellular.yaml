@@ -1,0 +1,10 @@
+# Network-owned cellular modem policy and transport settings.
+
+network:
+  enabled: false
+  serial_port: /dev/ttyUSB2
+  ppp_port: /dev/ttyUSB3
+  baud_rate: 115200
+  apn: ""
+  gps_enabled: true
+  ppp_timeout: 30

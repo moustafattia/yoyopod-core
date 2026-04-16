@@ -315,3 +315,44 @@ def test_install_traceback_dump_handlers_registers_faulthandler_chain(
 
     assert unregister_calls == [signal.SIGUSR1, signal.SIGUSR2]
     assert dump_stream.closed is True
+
+
+def test_main_setup_failure_mentions_network_config_file(monkeypatch) -> None:
+    """Startup guidance should mention the canonical network config file."""
+
+    error_logs: list[tuple[object, ...]] = []
+    stop_calls: list[str] = []
+    fake_log = SimpleNamespace(
+        info=lambda *args: None,
+        error=lambda *args: error_logs.append(args),
+        warning=lambda *args: None,
+    )
+
+    class FakeApp:
+        app_settings = None
+
+        def __init__(self, *, config_dir: str, simulate: bool) -> None:
+            assert config_dir == "config"
+            assert simulate is False
+
+        def setup(self) -> bool:
+            return False
+
+        def stop(self) -> None:
+            stop_calls.append("stop")
+
+    monkeypatch.setattr(
+        main_module,
+        "configure_logger",
+        lambda: SimpleNamespace(pid_file="/tmp/yoyopod.pid", error_log_file="/tmp/errors.log"),
+    )
+    monkeypatch.setattr(main_module, "get_subsystem_logger", lambda _name: fake_log)
+    monkeypatch.setattr(main_module, "write_pid_file", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "log_startup", lambda **_kwargs: None)
+    monkeypatch.setattr(main_module, "log_shutdown", lambda **_kwargs: None)
+    monkeypatch.setattr(main_module, "remove_pid_file", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "YoyoPodApp", FakeApp)
+
+    assert main_module.main() == 1
+    assert stop_calls == ["stop"]
+    assert ("  - config/network/cellular.yaml exists",) in error_logs

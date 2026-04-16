@@ -10,6 +10,7 @@ from loguru import logger
 from yoyopod.config.layers import resolve_config_board, resolve_config_layers
 from yoyopod.config.models import (
     CommunicationConfig,
+    NetworkConfig,
     PeopleDirectoryConfig,
     VoiceConfig,
     YoyoPodConfig,
@@ -27,6 +28,7 @@ from yoyopod.config.storage import (
 APP_CORE_CONFIG = Path("app/core.yaml")
 AUDIO_MUSIC_CONFIG = Path("audio/music.yaml")
 DEVICE_HARDWARE_CONFIG = Path("device/hardware.yaml")
+NETWORK_CELLULAR_CONFIG = Path("network/cellular.yaml")
 VOICE_ASSISTANT_CONFIG = Path("voice/assistant.yaml")
 COMMUNICATION_CALLING_CONFIG = Path("communication/calling.yaml")
 COMMUNICATION_MESSAGING_CONFIG = Path("communication/messaging.yaml")
@@ -93,6 +95,11 @@ class ConfigManager:
             self.config_board,
             DEVICE_HARDWARE_CONFIG,
         )
+        self.network_cellular_layers = resolve_config_layers(
+            self.config_dir,
+            self.config_board,
+            NETWORK_CELLULAR_CONFIG,
+        )
         self.voice_assistant_layers = resolve_config_layers(
             self.config_dir,
             self.config_board,
@@ -117,23 +124,27 @@ class ConfigManager:
 
         self.app_config_file = self.app_core_layers[-1]
         self.device_hardware_file = self.device_hardware_layers[-1]
+        self.network_cellular_file = self.network_cellular_layers[-1]
         self.voice_assistant_file = self.voice_assistant_layers[-1]
         self.communication_calling_file = self.communication_calling_layers[-1]
         self.communication_messaging_file = self.communication_messaging_layers[-1]
         self.people_directory_file = self.people_directory_layers[-1]
 
         self.app_settings = YoyoPodConfig()
+        self.network_settings = NetworkConfig()
         self.voice_settings = VoiceConfig()
         self.communication_settings = CommunicationConfig()
         self.people_settings = PeopleDirectoryConfig()
         self.runtime_settings = YoyoPodRuntimeConfig()
 
         self.app_config: dict[str, Any] = config_to_dict(self.app_settings)
+        self.network_config: dict[str, Any] = config_to_dict(self.network_settings)
         self.voice_config: dict[str, Any] = config_to_dict(self.voice_settings)
         self.communication_config: dict[str, Any] = config_to_dict(self.communication_settings)
         self.runtime_config: dict[str, Any] = config_to_dict(self.runtime_settings)
 
         self.app_config_loaded = False
+        self.network_config_loaded = False
         self.voice_config_loaded = False
         self.communication_config_loaded = False
         self.communication_secrets_loaded = False
@@ -146,6 +157,7 @@ class ConfigManager:
         )
 
         self.load_app_config()
+        self.load_network_config()
         self.load_voice_config()
         self.load_communication_config()
         self.load_people_config()
@@ -156,6 +168,7 @@ class ConfigManager:
 
         self.runtime_settings = YoyoPodRuntimeConfig(
             app=self.app_settings,
+            network=self.network_settings,
             voice=self.voice_settings,
             communication=self.communication_settings,
             people=self.people_settings,
@@ -318,6 +331,32 @@ class ConfigManager:
             self._refresh_runtime_settings()
             return False
 
+    def load_network_config(self) -> bool:
+        """Load the typed network config from domain-owned cellular layers."""
+
+        self.network_config_loaded = _config_loaded(self.network_cellular_layers)
+        try:
+            payload = load_yaml_layers(self.network_cellular_layers)
+            self.network_settings = build_config_model(
+                NetworkConfig, payload.get("network", payload)
+            )
+            self.network_config = config_to_dict(self.network_settings)
+            self._refresh_runtime_settings()
+
+            if self.network_config_loaded:
+                logger.info("Network configuration loaded successfully")
+            else:
+                logger.warning("No authored network config found; using typed defaults")
+
+            return self.network_config_loaded
+        except Exception:
+            logger.exception("Error loading network config")
+            self.network_settings = NetworkConfig()
+            self.network_config = config_to_dict(self.network_settings)
+            self.network_config_loaded = False
+            self._refresh_runtime_settings()
+            return False
+
     def load_communication_config(self) -> bool:
         """Load the typed communication config from calling/messaging/device/secrets files."""
 
@@ -405,6 +444,11 @@ class ConfigManager:
 
         return self.voice_settings
 
+    def get_network_settings(self) -> NetworkConfig:
+        """Return the composed typed network settings."""
+
+        return self.network_settings
+
     def get_communication_settings(self) -> CommunicationConfig:
         """Return the composed typed communication settings."""
 
@@ -445,7 +489,9 @@ class ConfigManager:
         value = (device_id or "").strip()
         if "\n" in value or "\r" in value:
             raise ValueError("Invalid ALSA device id (contains newline)")
-        if not self._save_device_hardware_layer_patch({"voice_audio": {"capture_device_id": value}}):
+        if not self._save_device_hardware_layer_patch(
+            {"voice_audio": {"capture_device_id": value}}
+        ):
             return False
         self.voice_settings.audio.capture_device_id = value
         self.voice_config.setdefault("audio", {})["capture_device_id"] = value
@@ -458,7 +504,9 @@ class ConfigManager:
         value = (device_id or "").strip()
         if "\n" in value or "\r" in value:
             raise ValueError("Invalid ALSA device id (contains newline)")
-        if not self._save_device_hardware_layer_patch({"voice_audio": {"speaker_device_id": value}}):
+        if not self._save_device_hardware_layer_patch(
+            {"voice_audio": {"speaker_device_id": value}}
+        ):
             return False
         self.voice_settings.audio.speaker_device_id = value
         self.voice_config.setdefault("audio", {})["speaker_device_id"] = value
@@ -576,6 +624,7 @@ class ConfigManager:
 
         logger.info("Reloading configuration...")
         self.load_app_config()
+        self.load_network_config()
         self.load_voice_config()
         self.load_communication_config()
         self.load_people_config()

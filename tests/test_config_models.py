@@ -218,6 +218,7 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     assert config_dict["display"]["hardware"] == "whisplay"
     assert config_dict["display"]["whisplay_renderer"] == "lvgl"
     assert config_dict["display"]["lvgl_buffer_lines"] == 24
+    assert "network" not in config_dict
     assert "voice" not in config_dict
     assert config_dict["logging"]["file"] == "/var/log/yoyopod.log"
     assert config_dict["diagnostics"]["responsiveness_watchdog_enabled"] is True
@@ -241,7 +242,9 @@ def test_config_manager_keeps_typed_communication_audio_settings(tmp_path, monke
 def test_config_manager_keeps_liblinphone_factory_config_path(tmp_path, monkeypatch) -> None:
     """Communication config should expose the Liblinphone factory config path with env override support."""
 
-    monkeypatch.setenv("YOYOPOD_LIBLINPHONE_FACTORY_CONFIG", "config/custom_liblinphone_factory.conf")
+    monkeypatch.setenv(
+        "YOYOPOD_LIBLINPHONE_FACTORY_CONFIG", "config/custom_liblinphone_factory.conf"
+    )
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
 
@@ -255,7 +258,9 @@ def test_config_manager_keeps_liblinphone_factory_config_path(tmp_path, monkeypa
 def test_config_manager_exposes_lime_server_url(tmp_path, monkeypatch) -> None:
     """Communication config should expose the configured LIME/X3DH server URL."""
 
-    monkeypatch.setenv("YOYOPOD_LIME_SERVER_URL", "https://lime.example.com/lime-server/lime-server.php")
+    monkeypatch.setenv(
+        "YOYOPOD_LIME_SERVER_URL", "https://lime.example.com/lime-server/lime-server.php"
+    )
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
 

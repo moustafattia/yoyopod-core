@@ -37,14 +37,6 @@ display:
   rotation: 0
   backlight_timeout_seconds: 60
 
-network:
-  enabled: false
-  serial_port: /dev/ttyUSB2
-  ppp_port: /dev/ttyUSB3
-  baud_rate: 115200
-  apn: ""
-  gps_enabled: true
-
 communication_audio:
   preferred_codec: "opus"
   echo_cancellation: true

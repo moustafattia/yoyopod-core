@@ -86,6 +86,7 @@ Tracked config files live under `config/`:
 - `config/app/core.yaml`
 - `config/audio/music.yaml`
 - `config/device/hardware.yaml`
+- `config/network/cellular.yaml`
 - `config/voice/assistant.yaml`
 - `config/communication/calling.yaml`
 - `config/communication/messaging.yaml`
@@ -101,7 +102,9 @@ Key settings:
 - `config/audio/music.yaml`
   - `audio.music_dir`, `audio.mpv_*`, `audio.alsa_device`, `audio.default_volume`
 - `config/device/hardware.yaml`
-  - `input.*`, `display.*`, `power.*`, `network.*`, `communication_audio.*`, `voice_audio.*`
+  - `input.*`, `display.*`, `power.*`, `communication_audio.*`, `voice_audio.*`
+- `config/network/cellular.yaml`
+  - `network.*` cellular modem enablement, ports, APN, GPS, and PPP timeout
 - `config/voice/assistant.yaml`
   - `assistant.*` local voice commands, STT, TTS, and prompt policy
 - `config/communication/calling.yaml`

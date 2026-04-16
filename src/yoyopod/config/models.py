@@ -326,8 +326,8 @@ class PimoroniGpioInputConfig:
 
 
 @dataclass(slots=True)
-class AppNetworkConfig:
-    """4G cellular modem settings."""
+class NetworkConfig:
+    """4G cellular modem settings owned by the network domain."""
 
     enabled: bool = config_value(default=False, env="YOYOPOD_NETWORK_ENABLED")
     serial_port: str = config_value(default="/dev/ttyUSB2", env="YOYOPOD_MODEM_PORT")
@@ -422,7 +422,6 @@ class YoyoPodConfig:
     display: AppDisplayConfig = config_value(default_factory=AppDisplayConfig)
     logging: AppLoggingConfig = config_value(default_factory=AppLoggingConfig)
     diagnostics: AppDiagnosticsConfig = config_value(default_factory=AppDiagnosticsConfig)
-    network: AppNetworkConfig = config_value(default_factory=AppNetworkConfig)
 
 
 @dataclass(slots=True)
@@ -547,7 +546,9 @@ class CommunicationConfig:
     """Composed communication domain config built from calling/messaging/device/secret layers."""
 
     calling: CommunicationCallingConfig = config_value(default_factory=CommunicationCallingConfig)
-    messaging: CommunicationMessagingConfig = config_value(default_factory=CommunicationMessagingConfig)
+    messaging: CommunicationMessagingConfig = config_value(
+        default_factory=CommunicationMessagingConfig
+    )
     audio: CommunicationAudioConfig = config_value(default_factory=CommunicationAudioConfig)
     integrations: CommunicationIntegrationsConfig = config_value(
         default_factory=CommunicationIntegrationsConfig
@@ -582,6 +583,7 @@ class YoyoPodRuntimeConfig:
     """One typed runtime model composed from the canonical authored config topology."""
 
     app: YoyoPodConfig = config_value(default_factory=YoyoPodConfig)
+    network: NetworkConfig = config_value(default_factory=NetworkConfig)
     voice: VoiceConfig = config_value(default_factory=VoiceConfig)
     communication: CommunicationConfig = config_value(default_factory=CommunicationConfig)
     people: PeopleDirectoryConfig = config_value(default_factory=PeopleDirectoryConfig)

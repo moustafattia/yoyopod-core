@@ -13,7 +13,7 @@ from yoyopod.network.ppp import PppProcess
 from yoyopod.network.transport import SerialTransport
 
 if TYPE_CHECKING:
-    from yoyopod.config.models import AppNetworkConfig
+    from yoyopod.config.models import NetworkConfig
 
 
 class NetworkBackend(Protocol):
@@ -26,7 +26,7 @@ class NetworkBackend(Protocol):
 class Sim7600Backend:
     """SIM7600G-H modem backend over UART."""
 
-    def __init__(self, config: "AppNetworkConfig") -> None:
+    def __init__(self, config: "NetworkConfig") -> None:
         self._config = config
         self._transport = SerialTransport(
             port=config.serial_port,

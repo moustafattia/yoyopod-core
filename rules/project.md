@@ -48,9 +48,11 @@ artifact deeply, or cover every board/modem-specific edge.
 ## Configuration
 
 Tracked authored config lives under `config/`:
-- `app/core.yaml` -- app shell, UI, voice, logging, diagnostics
+- `app/core.yaml` -- app shell, UI, logging, diagnostics
 - `audio/music.yaml` -- local music and mpv settings
-- `device/hardware.yaml` -- shared hardware truth for display, input, power, network, and communication audio
+- `device/hardware.yaml` -- shared hardware truth for display, input, power, communication audio, and voice audio
+- `network/cellular.yaml` -- cellular modem policy and transport settings
+- `voice/assistant.yaml` -- local voice policy and assistant defaults
 - `communication/calling.yaml` -- non-secret SIP identity and calling policy
 - `communication/messaging.yaml` -- messaging policy and communication runtime storage paths
 - `communication/calling.secrets.example.yaml` -- tracked example for the gitignored secrets file

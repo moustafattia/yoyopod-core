@@ -23,7 +23,9 @@ Tracked authored config lives under `config/` and is split by ownership:
 - `config/audio/music.yaml`
   - local music policy and mpv settings
 - `config/device/hardware.yaml`
-  - shared hardware truth: `input`, `display`, `power`, `network`, `communication_audio`, `voice_audio`
+  - shared hardware truth: `input`, `display`, `power`, `communication_audio`, `voice_audio`
+- `config/network/cellular.yaml`
+  - cellular modem policy and transport settings
 - `config/voice/assistant.yaml`
   - local voice policy and assistant defaults
 - `config/communication/calling.yaml`
@@ -71,6 +73,7 @@ Examples:
 
 - `config/boards/rpi-zero-2w/audio/music.yaml`
 - `config/boards/rpi-zero-2w/device/hardware.yaml`
+- `config/boards/rpi-zero-2w/network/cellular.yaml`
 - `config/boards/radxa-cubie-a7z/audio/music.yaml`
 - `config/boards/radxa-cubie-a7z/device/hardware.yaml`
 
@@ -89,6 +92,9 @@ Current exemplar package homes:
 
 - `src/yoyopod/device/`
   - device-owned helpers shared across domains
+- `src/yoyopod/network/`
+  - cellular modem lifecycle, transport, PPP, and GPS behavior
+  - `__init__.py` is the app-facing seam
 - `src/yoyopod/communication/`
   - `calling/`
   - `messaging/`
@@ -105,6 +111,7 @@ Current exemplar package homes:
 
 The app layer should import from domain seams such as:
 
+- `yoyopod.network`
 - `yoyopod.communication`
 - `yoyopod.people`
 
@@ -134,6 +141,16 @@ The voice migration adds the next reusable slice:
 - device listing and label helpers under `src/yoyopod/device/`
 - voice runtime and services consuming `ConfigManager.get_voice_settings()`
   instead of reading app-shell config directly
+
+## Network Migration Pattern
+
+The network migration follows the same cutover shape:
+
+- network policy under `config/network/cellular.yaml`
+- `ConfigManager.get_network_settings()` as the typed runtime seam
+- `src/yoyopod/network/` as the domain-owned package home
+- app/runtime composition depending on `NetworkManager.from_config_manager()`
+  instead of reading network state from app-shell config
 
 ## Template For Future Migrations
 

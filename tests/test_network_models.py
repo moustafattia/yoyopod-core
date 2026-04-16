@@ -46,6 +46,7 @@ from yoyopod.events import (
     NetworkGpsFixEvent,
 )
 from yoyopod.app_context import AppContext
+from yoyopod.network import NetworkConfig
 
 
 def test_network_events_are_frozen():
@@ -70,28 +71,28 @@ def test_app_context_update_network_status():
     assert ctx.is_connected is True
 
 
-from yoyopod.config.models import YoyoPodConfig, build_config_model
+from yoyopod.config.models import build_config_model
 
 
 def test_network_config_defaults():
     """NetworkConfig should be disabled by default with sane defaults."""
-    config = build_config_model(YoyoPodConfig, {})
-    assert config.network.enabled is False
-    assert config.network.serial_port == "/dev/ttyUSB2"
-    assert config.network.ppp_port == "/dev/ttyUSB3"
-    assert config.network.baud_rate == 115200
-    assert config.network.apn == ""
-    assert config.network.gps_enabled is True
-    assert config.network.ppp_timeout == 30
+    config = build_config_model(NetworkConfig, {})
+    assert config.enabled is False
+    assert config.serial_port == "/dev/ttyUSB2"
+    assert config.ppp_port == "/dev/ttyUSB3"
+    assert config.baud_rate == 115200
+    assert config.apn == ""
+    assert config.gps_enabled is True
+    assert config.ppp_timeout == 30
 
 
 def test_network_config_from_yaml_data():
     """NetworkConfig should load from YAML data."""
-    data = {"network": {"enabled": True, "apn": "internet", "serial_port": "/dev/ttyAMA0"}}
-    config = build_config_model(YoyoPodConfig, data)
-    assert config.network.enabled is True
-    assert config.network.apn == "internet"
-    assert config.network.serial_port == "/dev/ttyAMA0"
+    data = {"enabled": True, "apn": "internet", "serial_port": "/dev/ttyAMA0"}
+    config = build_config_model(NetworkConfig, data)
+    assert config.enabled is True
+    assert config.apn == "internet"
+    assert config.serial_port == "/dev/ttyAMA0"
 
 
 def test_app_context_update_network_status_with_gps():

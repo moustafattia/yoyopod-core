@@ -11,7 +11,7 @@ from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState
 
 if TYPE_CHECKING:
     from yoyopod.config import ConfigManager
-    from yoyopod.config.models import AppNetworkConfig
+    from yoyopod.config.models import NetworkConfig
     from yoyopod.event_bus import EventBus
 
 
@@ -20,7 +20,7 @@ class NetworkManager:
 
     def __init__(
         self,
-        config: "AppNetworkConfig",
+        config: "NetworkConfig",
         backend: object | None = None,
         event_bus: "EventBus | None" = None,
     ) -> None:
@@ -32,8 +32,8 @@ class NetworkManager:
     def from_config_manager(
         cls, config_manager: "ConfigManager", event_bus: "EventBus | None" = None
     ) -> "NetworkManager":
-        """Build a network manager from the typed app configuration."""
-        config = config_manager.get_app_settings().network
+        """Build a network manager from the typed network configuration."""
+        config = config_manager.get_network_settings()
         return cls(config=config, event_bus=event_bus)
 
     def start(self) -> None:

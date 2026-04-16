@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from yoyopod.config.models import AppNetworkConfig, build_config_model
+import yaml
+
+from yoyopod.config import ConfigManager
+from yoyopod.config.models import build_config_model
 from yoyopod.event_bus import EventBus
 from yoyopod.events import NetworkGpsFixEvent, NetworkGpsNoFixEvent, NetworkPppUpEvent
-from yoyopod.network.manager import NetworkManager
+from yoyopod.network import NetworkConfig, NetworkManager
 from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
 
 
@@ -61,7 +64,7 @@ class FakeBackend:
 
 def test_manager_start_full_sequence():
     """start() should open, init, and start PPP."""
-    config = build_config_model(AppNetworkConfig, {"enabled": True, "apn": "internet"})
+    config = build_config_model(NetworkConfig, {"enabled": True, "apn": "internet"})
     backend = FakeBackend()
     bus = EventBus()
     manager = NetworkManager(config=config, backend=backend, event_bus=bus)
@@ -75,7 +78,7 @@ def test_manager_start_full_sequence():
 
 def test_manager_stop():
     """stop() should close the backend."""
-    config = build_config_model(AppNetworkConfig, {"enabled": True, "apn": "internet"})
+    config = build_config_model(NetworkConfig, {"enabled": True, "apn": "internet"})
     backend = FakeBackend()
     bus = EventBus()
     manager = NetworkManager(config=config, backend=backend, event_bus=bus)
@@ -88,7 +91,7 @@ def test_manager_stop():
 
 def test_manager_publishes_ppp_up():
     """start() should publish NetworkPppUpEvent on the bus."""
-    config = build_config_model(AppNetworkConfig, {"enabled": True, "apn": "internet"})
+    config = build_config_model(NetworkConfig, {"enabled": True, "apn": "internet"})
     backend = FakeBackend()
     bus = EventBus()
     events_seen: list[object] = []
@@ -103,7 +106,7 @@ def test_manager_publishes_ppp_up():
 
 def test_manager_is_online():
     """is_online should reflect backend PPP state."""
-    config = build_config_model(AppNetworkConfig, {"enabled": True, "apn": "internet"})
+    config = build_config_model(NetworkConfig, {"enabled": True, "apn": "internet"})
     backend = FakeBackend()
     bus = EventBus()
     manager = NetworkManager(config=config, backend=backend, event_bus=bus)
@@ -119,7 +122,7 @@ def test_manager_warms_gps_fix_on_start_when_enabled():
     """start() should query GPS once so Setup can show cached coordinates promptly."""
 
     config = build_config_model(
-        AppNetworkConfig,
+        NetworkConfig,
         {"enabled": True, "apn": "internet", "gps_enabled": True},
     )
     backend = FakeBackend()
@@ -141,7 +144,7 @@ def test_manager_publishes_no_fix_and_clears_cached_gps_state() -> None:
     """query_gps() should clear stale coordinates and publish a no-fix event."""
 
     config = build_config_model(
-        AppNetworkConfig,
+        NetworkConfig,
         {"enabled": True, "apn": "internet", "gps_enabled": True},
     )
     backend = FakeBackend()
@@ -158,3 +161,32 @@ def test_manager_publishes_no_fix_and_clears_cached_gps_state() -> None:
     assert backend.state.gps is None
     assert len(no_fix_events) == 1
     assert isinstance(no_fix_events[0], NetworkGpsNoFixEvent)
+
+
+def test_manager_from_config_manager_uses_domain_owned_network_settings(tmp_path) -> None:
+    """from_config_manager() should read the canonical network domain file."""
+
+    config_dir = tmp_path / "config"
+    network_file = config_dir / "network" / "cellular.yaml"
+    network_file.parent.mkdir(parents=True, exist_ok=True)
+    network_file.write_text(
+        yaml.safe_dump(
+            {
+                "network": {
+                    "enabled": True,
+                    "apn": "iot.example",
+                    "ppp_timeout": 45,
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    config_manager = ConfigManager(config_dir=str(config_dir))
+
+    manager = NetworkManager.from_config_manager(config_manager)
+
+    assert manager.config.enabled is True
+    assert manager.config.apn == "iot.example"
+    assert manager.config.ppp_timeout == 45
