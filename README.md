@@ -15,13 +15,20 @@ Supported display/input modes:
 
 ## Quick Start
 
+Local-only contributor path:
+
 ```bash
 uv run yoyoctl setup host
 uv run yoyoctl setup verify-host
 python yoyopod.py --simulate
 uv run python scripts/quality.py ci
-yoyoctl pi validate smoke
-yoyoctl pi validate navigation --with-playback
+```
+
+If you plan to validate on a Raspberry Pi or use GitHub CLI helpers, verify those host prerequisites explicitly before you need them:
+
+```bash
+uv run yoyoctl setup verify-host --with-remote-tools
+uv run yoyoctl setup verify-host --with-github
 ```
 
 For the full setup, validation, and Pi workflow, start with:

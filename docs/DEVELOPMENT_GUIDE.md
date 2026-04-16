@@ -29,6 +29,21 @@ uv run yoyoctl setup verify-host
 These commands define the baseline executable setup contract. They do not yet
 cover non-apt assets like Vosk models or every board/modem-specific setup edge.
 
+If you plan to use the remote Pi workflow from your dev machine, verify the
+extra host tools explicitly:
+
+```bash
+uv run yoyoctl setup verify-host --with-remote-tools
+```
+
+If you plan to use GitHub CLI helpers for branch or PR work, verify that too:
+
+```bash
+uv run yoyoctl setup verify-host --with-github
+```
+
+Combine both flags when you need both surfaces.
+
 ## System Dependencies
 
 The current repo-owned setup contract lives in [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md).
@@ -55,14 +70,14 @@ Feature-gated extras are documented there too, including:
 Example:
 
 ```bash
-uv run yoyoctl setup pi
-uv run yoyoctl setup verify-pi
+uv run yoyoctl setup pi --with-pisugar
+uv run yoyoctl setup verify-pi --with-pisugar
 ```
 
 Treat those commands as the baseline package/build verifier, not proof that all
 feature assets and hardware-specific setup are complete.
 
-For PiSugar-based hardware, make sure `pisugar-server` is installed and running too.
+Add `--with-voice` and/or `--with-network` when the target uses the TTS or modem paths. For PiSugar-based hardware, `--with-pisugar` is what makes `pisugar-server` part of the verified contract.
 
 ## Configuration
 
@@ -123,13 +138,18 @@ python demos/demo_runtime_state.py --simulate
 Local validation:
 
 ```bash
+uv run python scripts/quality.py gate
+uv run pytest -q
 uv run python scripts/quality.py ci
 ```
+
+CI currently runs `uv run python scripts/quality.py gate` plus `uv run pytest -q`.
+Use `uv run python scripts/quality.py ci` as the local wrapper when you want both in one command.
 
 Optional extra syntax/import smoke for broad tree changes:
 
 ```bash
-python -m compileall yoyopod tests demos scripts
+python -m compileall src/yoyopod tests demos scripts
 ```
 
 Full quality audit of the current repo debt:
@@ -157,9 +177,11 @@ yoyoctl pi validate stability
 Preferred remote helper:
 
 ```bash
+uv run yoyoctl setup verify-host --with-remote-tools
+yoyoctl remote config edit
+uv run yoyoctl remote setup --with-pisugar
+uv run yoyoctl remote verify-setup --with-pisugar
 yoyoctl remote config show
-uv run yoyoctl remote setup
-uv run yoyoctl remote verify-setup
 yoyoctl remote status
 git branch --show-current
 git rev-parse HEAD
@@ -173,6 +195,7 @@ yoyoctl remote logs --lines 200
 
 That remote flow mirrors the same baseline contract. You still need feature-specific
 follow-through for assets like Vosk models and for unusual board/modem bringup.
+Add `--with-voice` and/or `--with-network` to the setup commands when the target depends on those paths.
 
 The detailed deploy and validation flows live in:
 

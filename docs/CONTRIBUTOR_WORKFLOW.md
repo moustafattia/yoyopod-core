@@ -31,6 +31,15 @@ This is the baseline executable setup contract.
 
 It is not the same thing as complete setup ownership. Feature-specific assets and unusual hardware edges can still need extra follow-through.
 
+Before you start a workflow that depends on more than local simulation and CI-safe checks, verify the extra host prerequisites explicitly:
+
+```bash
+uv run yoyoctl setup verify-host --with-remote-tools
+uv run yoyoctl setup verify-host --with-github
+```
+
+Use `--with-remote-tools --with-github` together when you plan to both validate on a Raspberry Pi over SSH and use GitHub CLI helpers for branch or PR work.
+
 ## Fast local loop
 
 Simulation run:
@@ -42,6 +51,8 @@ python yoyopod.py --simulate
 Core validation loop:
 
 ```bash
+uv run python scripts/quality.py gate
+uv run pytest -q
 uv run python scripts/quality.py ci
 ```
 
@@ -51,7 +62,8 @@ Full quality debt audit:
 uv run python scripts/quality.py audit
 ```
 
-Use `gate` for the tracked workflow surface that CI enforces now.
+CI currently runs `uv run python scripts/quality.py gate` plus `uv run pytest -q`.
+Use `uv run python scripts/quality.py ci` as the local wrapper when you want both in one command.
 Use `audit` when you want to see the broader repo debt without pretending it is all gated yet.
 
 ## Choose the right doc path for the work
@@ -84,16 +96,16 @@ Read:
 Baseline commands:
 
 ```bash
-uv run yoyoctl setup pi
-uv run yoyoctl setup verify-pi
-yoyoctl pi validate deploy
-yoyoctl pi validate smoke
-uv run yoyoctl remote setup
-uv run yoyoctl remote verify-setup
+uv run yoyoctl setup verify-host --with-remote-tools
+yoyoctl remote config edit
+uv run yoyoctl remote setup --with-pisugar
+uv run yoyoctl remote verify-setup --with-pisugar
+yoyoctl remote validate --branch <branch> --sha <commit> --with-music --with-voip
 ```
 
-These are the canonical baseline commands.
-They do not yet fully solve non-apt assets, every board/modem bringup edge, or deep native-health validation.
+These are the canonical contributor-path commands.
+Add `--with-voice` and/or `--with-network` when the target needs the TTS or modem paths.
+For direct on-Pi validation commands such as `yoyoctl pi validate smoke`, use [`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md).
 
 ### Docs and contributor guidance work
 
@@ -113,16 +125,19 @@ When updating docs:
 
 ## Before opening a PR
 
-At minimum, run:
+At minimum, run the same validation commands CI enforces today:
 
 ```bash
-uv run python scripts/quality.py ci
+uv run python scripts/quality.py gate
+uv run pytest -q
 ```
+
+`uv run python scripts/quality.py ci` is the local convenience wrapper for those same two steps.
 
 Then add any focused commands relevant to your area, for example:
 
 ```bash
-python -m compileall yoyopod tests demos scripts
+python -m compileall src/yoyopod tests demos scripts
 uv run pytest -q tests/test_app_orchestration.py
 uv run pytest -q tests/test_setup_cli.py tests/test_pi_remote.py tests/test_cli.py
 ```

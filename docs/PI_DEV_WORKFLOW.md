@@ -29,6 +29,18 @@ Do not normalize ad hoc per-branch checkout directories on the board.
 
 Make sure your dev machine can SSH into the Raspberry Pi with an alias or reachable host name.
 
+Before the first `yoyoctl remote validate`, verify the host prerequisites that the remote workflow depends on:
+
+```bash
+uv run yoyoctl setup verify-host --with-remote-tools
+```
+
+If you also use GitHub CLI helpers for branch or PR work, verify that separately:
+
+```bash
+uv run yoyoctl setup verify-host --with-github
+```
+
 The repo-tracked deploy contract lives in `deploy/pi-deploy.yaml`.
 
 - keep `host` and `user` blank there
@@ -39,6 +51,15 @@ The repo-tracked deploy contract lives in `deploy/pi-deploy.yaml`.
 ```bash
 yoyoctl remote config edit
 ```
+
+Bootstrap and verify the target with flags that match the hardware and feature paths you actually expect:
+
+```bash
+uv run yoyoctl remote setup --with-pisugar
+uv run yoyoctl remote verify-setup --with-pisugar
+```
+
+Add `--with-voice` and/or `--with-network` when the target needs the TTS or modem paths. `--with-pisugar` is the normal Whisplay and PiSugar path because it pulls in the `pisugar-server` package and service check.
 
 Examples:
 
