@@ -1027,6 +1027,35 @@ def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None
     assert app.menu_screen.render_calls == render_calls_before + 1
 
 
+def test_status_exposes_input_and_responsiveness_markers() -> None:
+    """Diagnostics status should distinguish raw input liveness from handled input."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+
+    app.note_input_activity(SimpleNamespace(value="select"))
+    _publish_from_worker(app, UserActivityEvent(action_name="select"))
+
+    assert app.event_bus.drain() == 1
+
+    app.record_responsiveness_capture(
+        captured_at=time.monotonic(),
+        reason="coordinator_stall_after_input",
+        suspected_scope="input_to_runtime_handoff",
+        summary="test capture",
+        artifacts={"snapshot": "/tmp/test.json"},
+    )
+
+    status = app.get_status()
+
+    assert status["input_activity_age_seconds"] is not None
+    assert status["last_input_action"] == "select"
+    assert status["handled_input_activity_age_seconds"] is not None
+    assert status["last_handled_input_action"] == "select"
+    assert status["responsiveness_last_capture_reason"] == "coordinator_stall_after_input"
+    assert status["responsiveness_last_capture_scope"] == "input_to_runtime_handoff"
+    assert status["responsiveness_last_capture_artifacts"] == {"snapshot": "/tmp/test.json"}
+
+
 def test_raw_user_activity_wakes_screen_without_rerendering_current_pil_screen() -> None:
     """Raw button activity should wake the screen without flashing the current view."""
 

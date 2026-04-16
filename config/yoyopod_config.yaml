@@ -105,6 +105,15 @@ logging:
   backtrace: true
   diagnose: true
 
+# Investigation-only diagnostics
+diagnostics:
+  responsiveness_watchdog_enabled: false              # Opt-in loop-stall evidence capture for Pi investigations
+  responsiveness_watchdog_poll_interval_seconds: 1.0  # Background watchdog cadence
+  responsiveness_stall_threshold_seconds: 5.0         # Emit evidence when the app loop stops advancing this long
+  responsiveness_capture_cooldown_seconds: 30.0      # Do not recapture repeatedly while a single stall persists
+  responsiveness_recent_input_window_seconds: 3.0    # Treat very recent input as evidence the input side is still alive
+  responsiveness_capture_dir: "logs/responsiveness"  # JSON + traceback artifacts for automatic captures
+
 # 4G Cellular Network Settings
 network:
   enabled: false

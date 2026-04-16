@@ -181,6 +181,10 @@ class YoyoPodApp:
         self._stopping = False
         self._app_started_at = 0.0
         self._last_user_activity_at = 0.0
+        self._last_input_activity_at = 0.0
+        self._last_input_activity_action_name: str | None = None
+        self._last_input_handled_at = 0.0
+        self._last_input_handled_action_name: str | None = None
         self._screen_on_started_at: float | None = 0.0
         self._screen_on_accumulated_seconds = 0.0
         self._screen_timeout_seconds = 0.0
@@ -194,6 +198,11 @@ class YoyoPodApp:
         self._lvgl_input_bridge: Optional[LvglInputBridge] = None
         self._last_lvgl_pump_at = 0.0
         self._last_loop_heartbeat_at = 0.0
+        self._last_responsiveness_capture_at = 0.0
+        self._last_responsiveness_capture_reason: str | None = None
+        self._last_responsiveness_capture_scope: str | None = None
+        self._last_responsiveness_capture_summary: str | None = None
+        self._last_responsiveness_capture_artifacts: dict[str, str] = {}
         self._next_voip_iterate_at = 0.0
         self._voip_iterate_interval_seconds = 0.02
 
@@ -618,6 +627,29 @@ class YoyoPodApp:
         """Marshal screen-state sync work onto the coordinator thread."""
         self.event_bus.publish(ScreenChangedEvent(screen_name=screen_name))
 
+    def note_input_activity(self, action: object, _data: Any | None = None) -> None:
+        """Record raw or semantic input activity before the coordinator drains it."""
+
+        self._last_input_activity_at = time.monotonic()
+        self._last_input_activity_action_name = getattr(action, "value", None)
+
+    def record_responsiveness_capture(
+        self,
+        *,
+        captured_at: float,
+        reason: str,
+        suspected_scope: str,
+        summary: str,
+        artifacts: dict[str, str] | None = None,
+    ) -> None:
+        """Persist the latest automatic hang-evidence capture metadata."""
+
+        self._last_responsiveness_capture_at = captured_at
+        self._last_responsiveness_capture_reason = reason
+        self._last_responsiveness_capture_scope = suspected_scope
+        self._last_responsiveness_capture_summary = summary
+        self._last_responsiveness_capture_artifacts = dict(artifacts or {})
+
     def _sync_screen_changed(self, screen_name: str | None) -> None:
         """Keep the derived base UI state aligned with the active screen."""
         self._ensure_coordinators()
@@ -761,8 +793,23 @@ class YoyoPodApp:
             "screen_stack_depth": (
                 len(self.screen_manager.screen_stack) if self.screen_manager is not None else 0
             ),
+            "input_manager_running": (
+                self.input_manager.running if self.input_manager is not None else False
+            ),
             "pending_main_thread_callbacks": _queue_depth(self._pending_main_thread_callbacks),
             "pending_event_bus_events": self.event_bus.pending_count(),
+            "input_activity_age_seconds": (
+                max(0.0, monotonic_now - self._last_input_activity_at)
+                if self._last_input_activity_at > 0.0
+                else None
+            ),
+            "last_input_action": self._last_input_activity_action_name,
+            "handled_input_activity_age_seconds": (
+                max(0.0, monotonic_now - self._last_input_handled_at)
+                if self._last_input_handled_at > 0.0
+                else None
+            ),
+            "last_handled_input_action": self._last_input_handled_action_name,
             "battery_percent": self.context.battery_percent if self.context else None,
             "battery_charging": self.context.battery_charging if self.context else None,
             "external_power": self.context.external_power if self.context else None,
@@ -848,6 +895,23 @@ class YoyoPodApp:
                 self.power_manager.config.watchdog_feed_interval_seconds
                 if self.power_manager is not None
                 else None
+            ),
+            "responsiveness_watchdog_enabled": bool(
+                getattr(getattr(self.app_settings, "diagnostics", None), "responsiveness_watchdog_enabled", False)
+            ),
+            "responsiveness_capture_dir": (
+                getattr(getattr(self.app_settings, "diagnostics", None), "responsiveness_capture_dir", None)
+            ),
+            "responsiveness_last_capture_age_seconds": (
+                max(0.0, monotonic_now - self._last_responsiveness_capture_at)
+                if self._last_responsiveness_capture_at > 0.0
+                else None
+            ),
+            "responsiveness_last_capture_reason": self._last_responsiveness_capture_reason,
+            "responsiveness_last_capture_scope": self._last_responsiveness_capture_scope,
+            "responsiveness_last_capture_summary": self._last_responsiveness_capture_summary,
+            "responsiveness_last_capture_artifacts": dict(
+                self._last_responsiveness_capture_artifacts
             ),
             **self.runtime_loop.timing_snapshot(now=monotonic_now),
         }

@@ -74,6 +74,12 @@ def test_app_config_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> Non
     assert settings.logging.enqueue is False
     assert settings.logging.backtrace is True
     assert settings.logging.diagnose is True
+    assert settings.diagnostics.responsiveness_watchdog_enabled is False
+    assert settings.diagnostics.responsiveness_watchdog_poll_interval_seconds == 1.0
+    assert settings.diagnostics.responsiveness_stall_threshold_seconds == 5.0
+    assert settings.diagnostics.responsiveness_capture_cooldown_seconds == 30.0
+    assert settings.diagnostics.responsiveness_recent_input_window_seconds == 3.0
+    assert settings.diagnostics.responsiveness_capture_dir == "logs/responsiveness"
 
 
 def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) -> None:
@@ -125,6 +131,9 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     monkeypatch.setenv("YOYOPOD_ERROR_LOG_FILE", "/var/log/yoyopod_errors.log")
     monkeypatch.setenv("YOYOPOD_PID_FILE", "/run/yoyopod.pid")
     monkeypatch.setenv("YOYOPOD_LOG_ENQUEUE", "true")
+    monkeypatch.setenv("YOYOPOD_RESPONSIVENESS_WATCHDOG_ENABLED", "true")
+    monkeypatch.setenv("YOYOPOD_RESPONSIVENESS_STALL_THRESHOLD_SECONDS", "8.0")
+    monkeypatch.setenv("YOYOPOD_RESPONSIVENESS_CAPTURE_DIR", "/tmp/yoyopod-watchdog")
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
     settings = config_manager.get_app_settings()
@@ -160,6 +169,9 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     assert settings.logging.error_file == "/var/log/yoyopod_errors.log"
     assert settings.logging.pid_file == "/run/yoyopod.pid"
     assert settings.logging.enqueue is True
+    assert settings.diagnostics.responsiveness_watchdog_enabled is True
+    assert settings.diagnostics.responsiveness_stall_threshold_seconds == 8.0
+    assert settings.diagnostics.responsiveness_capture_dir == "/tmp/yoyopod-watchdog"
     assert config_dict["audio"]["music_dir"] == "/srv/music"
     assert config_dict["audio"]["mpv_socket"] == "/tmp/test-mpv.sock"
     assert "listen_sources" not in config_dict["audio"]
@@ -170,6 +182,7 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     assert config_dict["voice"]["screen_read_enabled"] is True
     assert config_dict["voice"]["vosk_model_path"] == "/srv/models/vosk-small"
     assert config_dict["logging"]["file"] == "/var/log/yoyopod.log"
+    assert config_dict["diagnostics"]["responsiveness_watchdog_enabled"] is True
 
 
 def test_config_manager_keeps_typed_voip_audio_settings(tmp_path, monkeypatch) -> None:

@@ -201,6 +201,72 @@ def test_log_signal_snapshot_serializes_runtime_state() -> None:
     assert payload["status"]["recent_calls"][0]["when"] == "2026-04-15T23:59:00+00:00"
 
 
+def test_capture_responsiveness_watchdog_evidence_writes_artifacts(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Automatic watchdog captures should write a JSON snapshot and traceback artifact."""
+
+    logs: list[tuple[object, ...]] = []
+    fake_log = SimpleNamespace(
+        error=lambda *args: logs.append(args),
+        warning=lambda *args: logs.append(args),
+    )
+    capture_dir = tmp_path / "captures"
+    recorded: list[dict[str, object]] = []
+
+    class App:
+        app_settings = SimpleNamespace(
+            diagnostics=SimpleNamespace(responsiveness_capture_dir=str(capture_dir))
+        )
+
+        def record_responsiveness_capture(self, **kwargs) -> None:
+            recorded.append(kwargs)
+
+    monkeypatch.setattr(
+        main_module.faulthandler,
+        "dump_traceback",
+        lambda *, file, all_threads: file.write(
+            f"TRACEBACK all_threads={all_threads}\n"
+        ),
+    )
+
+    decision = main_module.ResponsivenessWatchdogDecision(
+        reason="coordinator_stall_after_input",
+        suspected_scope="input_to_runtime_handoff",
+        summary="input kept moving but the coordinator stalled",
+    )
+    status = {
+        "state": "menu",
+        "current_screen": "menu",
+        "loop_heartbeat_age_seconds": 6.0,
+        "input_activity_age_seconds": 0.4,
+        "handled_input_activity_age_seconds": 6.2,
+    }
+
+    main_module._capture_responsiveness_watchdog_evidence(
+        app=App(),
+        app_log=fake_log,
+        error_log_path=tmp_path / "yoyopod_errors.log",
+        decision=decision,
+        status=status,
+    )
+
+    snapshot_files = sorted(capture_dir.glob("*.json"))
+    traceback_files = sorted(capture_dir.glob("*.traceback.txt"))
+
+    assert len(snapshot_files) == 1
+    assert len(traceback_files) == 1
+    snapshot_payload = json.loads(snapshot_files[0].read_text(encoding="utf-8"))
+    assert snapshot_payload["source"] == "responsiveness_watchdog"
+    assert snapshot_payload["reason"] == "coordinator_stall_after_input"
+    assert snapshot_payload["status"]["loop_heartbeat_age_seconds"] == 6.0
+    assert "TRACEBACK all_threads=True" in traceback_files[0].read_text(encoding="utf-8")
+    assert recorded[0]["reason"] == "coordinator_stall_after_input"
+    assert recorded[0]["artifacts"]["snapshot"] == str(snapshot_files[0])
+    assert logs[-1][0] == "Responsiveness watchdog captured evidence: {}"
+
+
 def test_install_traceback_dump_handlers_registers_faulthandler_chain(
     monkeypatch,
     tmp_path,

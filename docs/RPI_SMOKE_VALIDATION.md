@@ -128,6 +128,8 @@ When the full app is running, the coordinator-thread timing signals land in
 - `Coordinator blocking span` names the specific runtime step that blocked long enough to threaten keep-alive cadence or UI responsiveness.
 - `Runtime iteration slow` means the total loop iteration stayed on the coordinator thread too long even if the exact hot span was not obvious from a single callback.
 - Freeze snapshots also include `runtime_blocking_span_name`, `runtime_blocking_span_seconds`, and `runtime_blocking_span_age_seconds` so a `SIGUSR1` dump can tell you whether the last blocking span is still fresh or already stale.
+- When `diagnostics.responsiveness_watchdog_enabled=true`, the app also writes automatic evidence bundles under `logs/responsiveness/` once the loop heartbeat stops advancing past the configured threshold.
+- Those bundles include `input_activity_age_seconds` and `handled_input_activity_age_seconds` so you can tell whether input was still arriving while the coordinator/UI side stopped responding.
 
 ### Incoming call debug drill
 

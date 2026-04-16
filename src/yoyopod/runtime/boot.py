@@ -233,6 +233,7 @@ class RuntimeBootService:
             )
             if self.app.input_manager:
                 self.app.context.interaction_profile = self.app.input_manager.interaction_profile
+                self.app.input_manager.on_activity(self.app.note_input_activity)
                 self.app.input_manager.on_activity(
                     self.app.screen_power_service.queue_user_activity_event
                 )

@@ -387,6 +387,36 @@ class AppLoggingConfig:
 
 
 @dataclass(slots=True)
+class AppDiagnosticsConfig:
+    """Investigation-only runtime diagnostics for target-hardware runs."""
+
+    responsiveness_watchdog_enabled: bool = config_value(
+        default=False,
+        env="YOYOPOD_RESPONSIVENESS_WATCHDOG_ENABLED",
+    )
+    responsiveness_watchdog_poll_interval_seconds: float = config_value(
+        default=1.0,
+        env="YOYOPOD_RESPONSIVENESS_WATCHDOG_POLL_INTERVAL_SECONDS",
+    )
+    responsiveness_stall_threshold_seconds: float = config_value(
+        default=5.0,
+        env="YOYOPOD_RESPONSIVENESS_STALL_THRESHOLD_SECONDS",
+    )
+    responsiveness_capture_cooldown_seconds: float = config_value(
+        default=30.0,
+        env="YOYOPOD_RESPONSIVENESS_CAPTURE_COOLDOWN_SECONDS",
+    )
+    responsiveness_recent_input_window_seconds: float = config_value(
+        default=3.0,
+        env="YOYOPOD_RESPONSIVENESS_RECENT_INPUT_WINDOW_SECONDS",
+    )
+    responsiveness_capture_dir: str = config_value(
+        default="logs/responsiveness",
+        env="YOYOPOD_RESPONSIVENESS_CAPTURE_DIR",
+    )
+
+
+@dataclass(slots=True)
 class YoyoPodConfig:
     """Root application configuration model loaded from yoyopod_config.yaml."""
 
@@ -399,6 +429,7 @@ class YoyoPodConfig:
     power: AppPowerConfig = config_value(default_factory=AppPowerConfig)
     display: AppDisplayConfig = config_value(default_factory=AppDisplayConfig)
     logging: AppLoggingConfig = config_value(default_factory=AppLoggingConfig)
+    diagnostics: AppDiagnosticsConfig = config_value(default_factory=AppDiagnosticsConfig)
     network: AppNetworkConfig = config_value(default_factory=AppNetworkConfig)
 
 

@@ -214,6 +214,37 @@ yoyoctl remote screenshot
 That uses `SIGUSR2`, which captures the same traceback + runtime evidence but prefers the legacy
 shadow-first screenshot path.
 
+### Automatic responsiveness watchdog
+
+For validation runs where you want the app to capture evidence on its own, enable the
+opt-in responsiveness watchdog in `config/yoyopod_config.yaml` or via env vars:
+
+```yaml
+diagnostics:
+  responsiveness_watchdog_enabled: true
+  responsiveness_stall_threshold_seconds: 5.0
+```
+
+What it does:
+
+- watches `loop_heartbeat_age_seconds` in the running app status
+- captures one evidence bundle when the coordinator loop stops advancing past the threshold
+- writes:
+  - `logs/responsiveness/<timestamp>-<reason>.json`
+  - `logs/responsiveness/<timestamp>-<reason>.traceback.txt`
+- logs one summary line to `logs/yoyopod_errors.log` pointing at those artifacts
+
+How to interpret the extra status markers in the JSON bundle:
+
+- `input_activity_age_seconds`: raw or semantic input activity seen by the input side
+- `handled_input_activity_age_seconds`: last input activity the coordinator actually drained
+- `last_input_action` / `last_handled_input_action`: the latest action names on each side
+
+If `input_activity_age_seconds` is fresh but `handled_input_activity_age_seconds` is stale, the
+input side is still alive and the stall is likely between input delivery and the coordinator/UI
+thread. If both are stale and `loop_heartbeat_age_seconds` is also stale, treat it as a broader
+runtime stall.
+
 ### Production systemd service
 
 ```bash
