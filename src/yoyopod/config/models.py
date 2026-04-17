@@ -139,6 +139,7 @@ class AppMetadataConfig:
     name: str = "YoyoPod"
     version: str = "1.0.0"
     simulate: bool = config_value(default=False, env="YOYOPOD_SIMULATE")
+    device_id: str = config_value(default="", env="YOYOPOD_DEVICE_ID")
 
 
 @dataclass(slots=True)
@@ -599,6 +600,36 @@ class VoiceConfig:
 
 
 @dataclass(slots=True)
+class BackendTelemetryConfig:
+    """MQTT broker settings for sending device telemetry to the backend."""
+
+    mqtt_broker_host: str = config_value(
+        default="",
+        env="YOYOPOD_MQTT_BROKER_HOST",
+    )
+    mqtt_broker_port: int = config_value(
+        default=1883,
+        env="YOYOPOD_MQTT_BROKER_PORT",
+    )
+    mqtt_use_tls: bool = config_value(
+        default=False,
+        env="YOYOPOD_MQTT_USE_TLS",
+    )
+    mqtt_username: str = config_value(
+        default="",
+        env="YOYOPOD_MQTT_USERNAME",
+    )
+    mqtt_password: str = config_value(
+        default="",
+        env="YOYOPOD_MQTT_PASSWORD",
+    )
+    battery_report_interval_seconds: int = config_value(
+        default=60,
+        env="YOYOPOD_BATTERY_REPORT_INTERVAL",
+    )
+
+
+@dataclass(slots=True)
 class YoyoPodRuntimeConfig:
     """One typed runtime model composed from the canonical authored config topology."""
 
@@ -609,3 +640,4 @@ class YoyoPodRuntimeConfig:
     voice: VoiceConfig = config_value(default_factory=VoiceConfig)
     communication: CommunicationConfig = config_value(default_factory=CommunicationConfig)
     people: PeopleDirectoryConfig = config_value(default_factory=PeopleDirectoryConfig)
+    backend: BackendTelemetryConfig = config_value(default_factory=BackendTelemetryConfig)

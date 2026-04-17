@@ -85,6 +85,7 @@ from yoyopod.ui.screens import (
     TalkContactScreen,
     VoiceNoteScreen,
 )
+from yoyopod.cloud import TelemetryManager
 from yoyopod.communication import CallHistoryStore, VoIPManager
 
 
@@ -166,6 +167,9 @@ class YoyoPodApp:
         self.auto_resume_after_call = True
         self._voip_registered = False
         self._ui_state = AppRuntimeState.IDLE
+
+        # Telemetry
+        self.telemetry_manager: Optional[TelemetryManager] = None
 
         # Extracted coordinators
         self.coordinator_runtime: Optional[CoordinatorRuntime] = None

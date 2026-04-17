@@ -9,6 +9,7 @@ from loguru import logger
 
 from yoyopod.config.layers import resolve_config_board, resolve_config_layers
 from yoyopod.config.models import (
+    BackendTelemetryConfig,
     CommunicationConfig,
     MediaConfig,
     NetworkConfig,
@@ -37,6 +38,7 @@ COMMUNICATION_CALLING_CONFIG = Path("communication/calling.yaml")
 COMMUNICATION_MESSAGING_CONFIG = Path("communication/messaging.yaml")
 COMMUNICATION_SECRETS_CONFIG = Path("communication/calling.secrets.yaml")
 PEOPLE_DIRECTORY_CONFIG = Path("people/directory.yaml")
+BACKEND_TELEMETRY_CONFIG = Path("cloud/backend.yaml")
 _SECRET_KEYS = ("sip_password", "sip_password_ha1")
 
 
@@ -127,6 +129,11 @@ class ConfigManager:
             self.config_board,
             PEOPLE_DIRECTORY_CONFIG,
         )
+        self.backend_telemetry_layers = resolve_config_layers(
+            self.config_dir,
+            self.config_board,
+            BACKEND_TELEMETRY_CONFIG,
+        )
         self.communication_secrets_file = self.config_dir / COMMUNICATION_SECRETS_CONFIG
 
         self.app_config_file = self.app_core_layers[-1]
@@ -138,6 +145,7 @@ class ConfigManager:
         self.communication_calling_file = self.communication_calling_layers[-1]
         self.communication_messaging_file = self.communication_messaging_layers[-1]
         self.people_directory_file = self.people_directory_layers[-1]
+        self.backend_telemetry_file = self.backend_telemetry_layers[-1]
 
         self.app_settings = YoyoPodConfig()
         self.media_settings = MediaConfig()
@@ -146,6 +154,7 @@ class ConfigManager:
         self.voice_settings = VoiceConfig()
         self.communication_settings = CommunicationConfig()
         self.people_settings = PeopleDirectoryConfig()
+        self.backend_settings = BackendTelemetryConfig()
         self.runtime_settings = YoyoPodRuntimeConfig()
 
         self.app_config: dict[str, Any] = config_to_dict(self.app_settings)
@@ -164,6 +173,7 @@ class ConfigManager:
         self.communication_config_loaded = False
         self.communication_secrets_loaded = False
         self.people_config_loaded = False
+        self.backend_config_loaded = False
 
         logger.info(
             "ConfigManager initialized (config_dir={}, config_board={})",
@@ -178,6 +188,7 @@ class ConfigManager:
         self.load_voice_config()
         self.load_communication_config()
         self.load_people_config()
+        self.load_backend_config()
         self._refresh_runtime_settings()
 
     def _refresh_runtime_settings(self) -> None:
@@ -191,6 +202,7 @@ class ConfigManager:
             voice=self.voice_settings,
             communication=self.communication_settings,
             people=self.people_settings,
+            backend=self.backend_settings,
         )
         self.runtime_config = config_to_dict(self.runtime_settings)
 
@@ -515,6 +527,35 @@ class ConfigManager:
             self.people_config_loaded = False
             self._refresh_runtime_settings()
             return False
+
+    def load_backend_config(self) -> bool:
+        """Load backend telemetry config (MQTT broker settings)."""
+
+        self.backend_config_loaded = _config_loaded(self.backend_telemetry_layers)
+        try:
+            payload = load_yaml_layers(self.backend_telemetry_layers)
+            self.backend_settings = build_config_model(
+                BackendTelemetryConfig, payload.get("backend", payload)
+            )
+            self._refresh_runtime_settings()
+
+            if self.backend_config_loaded:
+                logger.info("Backend telemetry configuration loaded successfully")
+            else:
+                logger.info("No backend telemetry config found; MQTT telemetry disabled")
+
+            return self.backend_config_loaded
+        except Exception:
+            logger.exception("Error loading backend telemetry config")
+            self.backend_settings = BackendTelemetryConfig()
+            self.backend_config_loaded = False
+            self._refresh_runtime_settings()
+            return False
+
+    def get_backend_settings(self) -> BackendTelemetryConfig:
+        """Return the typed backend telemetry settings."""
+
+        return self.backend_settings
 
     def get_app_settings(self) -> YoyoPodConfig:
         """Return the composed typed app settings."""

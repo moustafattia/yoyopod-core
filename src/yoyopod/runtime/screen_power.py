@@ -127,6 +127,12 @@ class ScreenPowerService:
             self.app._lvgl_backend.force_refresh()
 
         self.update_screen_runtime_metrics(now)
+
+        # Publish a heartbeat so the backend learns the device is online again
+        # without waiting for the next scheduled battery report.
+        if self.app.telemetry_manager is not None:
+            self.app.telemetry_manager.publish_heartbeat()
+
         logger.debug("Screen woke from inactivity")
 
     def sleep_screen(self, now: float) -> None:

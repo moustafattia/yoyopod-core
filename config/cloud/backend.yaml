@@ -1,0 +1,7 @@
+backend:
+  mqtt_broker_host: "yoyopod.moraouf.net"
+  mqtt_broker_port: 1883
+  mqtt_use_tls: false
+  mqtt_username: ""
+  mqtt_password: ""
+  battery_report_interval_seconds: 60
