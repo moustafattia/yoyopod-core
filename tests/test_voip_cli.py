@@ -1,0 +1,273 @@
+"""Tests for the focused VoIP reliability drill commands."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+pytest.importorskip("typer")
+
+from typer.testing import CliRunner
+
+from yoyopod.cli.pi import voip as voip_cli
+from yoyopod.communication.models import CallState, RegistrationState
+
+runner = CliRunner()
+
+
+class FakeClock:
+    """Deterministic clock for time-driven drill loops."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def time(self) -> float:
+        return 1_700_000_000.0 + self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += max(0.0, seconds)
+
+
+class FakeVoIPManager:
+    """Small manager double that can schedule registration and call transitions."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        self.clock = clock
+        self.config = SimpleNamespace(
+            iterate_interval_ms=100,
+            sip_server="sip.example.com",
+            sip_identity="sip:alice@example.com",
+        )
+        self.running = False
+        self.registered = False
+        self.registration_state = RegistrationState.NONE
+        self.call_state = CallState.IDLE
+        self._registration_callbacks: list[object] = []
+        self._call_state_callbacks: list[object] = []
+        self._scheduled: list[tuple[float, object]] = []
+        self.call_connected_at: float | None = None
+
+    def schedule_registration(self, delay_seconds: float, state: RegistrationState) -> None:
+        self._scheduled.append((self.clock.now + delay_seconds, ("registration", state)))
+
+    def schedule_call_state(self, delay_seconds: float, state: CallState) -> None:
+        self._scheduled.append((self.clock.now + delay_seconds, ("call", state)))
+
+    def on_registration_change(self, callback) -> None:
+        self._registration_callbacks.append(callback)
+
+    def on_call_state_change(self, callback) -> None:
+        self._call_state_callbacks.append(callback)
+
+    def start(self) -> bool:
+        self.running = True
+        return True
+
+    def stop(self) -> None:
+        self.running = False
+
+    def iterate(self) -> int:
+        drained = 0
+        due = [item for item in self._scheduled if item[0] <= self.clock.now]
+        self._scheduled = [item for item in self._scheduled if item[0] > self.clock.now]
+        for _at, payload in sorted(due, key=lambda item: item[0]):
+            drained += 1
+            kind, state = payload
+            if kind == "registration":
+                self._set_registration(state)
+            else:
+                self._set_call_state(state)
+        return drained
+
+    def get_status(self) -> dict[str, object]:
+        return {
+            "running": self.running,
+            "registered": self.registered,
+            "registration_state": self.registration_state.value,
+            "call_state": self.call_state.value,
+        }
+
+    def get_iterate_metrics(self) -> object | None:
+        return SimpleNamespace(
+            native_duration_seconds=0.01,
+            event_drain_duration_seconds=0.0,
+            total_duration_seconds=0.01,
+            drained_events=0,
+        )
+
+    def make_call(self, sip_address: str, contact_name: str | None = None) -> bool:
+        self._set_call_state(CallState.OUTGOING_RINGING)
+        self.schedule_call_state(0.2, CallState.CONNECTED)
+        return True
+
+    def hangup(self) -> bool:
+        self.schedule_call_state(0.1, CallState.END)
+        return True
+
+    def get_call_duration(self) -> int:
+        if self.call_connected_at is None:
+            return 0
+        return int(max(0.0, self.clock.now - self.call_connected_at))
+
+    def _set_registration(self, state: RegistrationState) -> None:
+        self.registration_state = state
+        self.registered = state == RegistrationState.OK
+        for callback in self._registration_callbacks:
+            callback(state)
+
+    def _set_call_state(self, state: CallState) -> None:
+        self.call_state = state
+        if (
+            state in {CallState.CONNECTED, CallState.STREAMS_RUNNING}
+            and self.call_connected_at is None
+        ):
+            self.call_connected_at = self.clock.now
+        if state in {CallState.END, CallState.RELEASED, CallState.IDLE, CallState.ERROR}:
+            self.call_connected_at = None
+        for callback in self._call_state_callbacks:
+            callback(state)
+
+
+def _patch_clock(monkeypatch: pytest.MonkeyPatch, clock: FakeClock) -> None:
+    monkeypatch.setattr(voip_cli.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(voip_cli.time, "time", clock.time)
+    monkeypatch.setattr(voip_cli.time, "sleep", clock.sleep)
+
+
+def _load_summary(artifacts_dir: Path) -> dict[str, object]:
+    run_dir = next(artifacts_dir.iterdir())
+    return json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+
+
+def test_registration_stability_writes_pass_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The registration drill should pass and persist a summary when SIP stays stable."""
+
+    clock = FakeClock()
+    manager = FakeVoIPManager(clock)
+    manager.schedule_registration(0.2, RegistrationState.OK)
+    _patch_clock(monkeypatch, clock)
+    monkeypatch.setattr(voip_cli, "_build_voip_manager", lambda _config_dir: manager)
+
+    result = runner.invoke(
+        voip_cli.voip_app,
+        [
+            "registration-stability",
+            "--registration-timeout",
+            "1",
+            "--hold-seconds",
+            "1",
+            "--sample-interval",
+            "0.5",
+            "--artifacts-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    summary = _load_summary(tmp_path)
+    assert summary["status"] == "pass"
+    assert summary["registration_states"] == ["ok"]
+    assert summary["extras"]["hold_seconds"] == 1.0
+
+
+def test_reconnect_drill_fails_when_registration_never_recovers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The reconnect drill should fail honestly when the network comes back but SIP does not."""
+
+    clock = FakeClock()
+    manager = FakeVoIPManager(clock)
+    manager.schedule_registration(0.1, RegistrationState.OK)
+    _patch_clock(monkeypatch, clock)
+    monkeypatch.setattr(voip_cli, "_build_voip_manager", lambda _config_dir: manager)
+
+    def fake_hook(*, recorder, phase: str, command: str) -> bool:
+        if phase == "drop":
+            manager.schedule_registration(0.1, RegistrationState.FAILED)
+        recorder.record_command(
+            phase=phase,
+            command=command,
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+        return True
+
+    monkeypatch.setattr(voip_cli, "_run_shell_hook", fake_hook)
+
+    result = runner.invoke(
+        voip_cli.voip_app,
+        [
+            "reconnect-drill",
+            "--registration-timeout",
+            "1",
+            "--disconnect-seconds",
+            "0.4",
+            "--drop-detect-timeout",
+            "0.5",
+            "--recovery-timeout",
+            "0.5",
+            "--drop-command",
+            "drop-net",
+            "--restore-command",
+            "restore-net",
+            "--artifacts-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    summary = _load_summary(tmp_path)
+    assert summary["status"] == "fail"
+    assert "did not recover" in summary["reason"]
+    assert summary["extras"]["drop_state"] == "failed"
+
+
+def test_call_soak_writes_pass_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The call soak should pass when the call connects and remains up for the soak window."""
+
+    clock = FakeClock()
+    manager = FakeVoIPManager(clock)
+    manager.schedule_registration(0.1, RegistrationState.OK)
+    _patch_clock(monkeypatch, clock)
+    monkeypatch.setattr(voip_cli, "_build_voip_manager", lambda _config_dir: manager)
+
+    result = runner.invoke(
+        voip_cli.voip_app,
+        [
+            "call-soak",
+            "--target",
+            "sip:echo@example.com",
+            "--registration-timeout",
+            "1",
+            "--connect-timeout",
+            "1",
+            "--soak-seconds",
+            "1",
+            "--hangup-timeout",
+            "0.5",
+            "--sample-interval",
+            "0.5",
+            "--artifacts-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    summary = _load_summary(tmp_path)
+    assert summary["status"] == "pass"
+    assert summary["metadata"]["target"] == "sip:echo@example.com"
+    assert summary["extras"]["cleanup"] == "hangup_clean"

@@ -84,7 +84,7 @@ What each command checks:
 - `deploy`: deploy contract files, tracked runtime config, runtime path parents, and app entrypoints without launching the app
 - `smoke`: target environment, display initialization on real hardware, matching input adapter construction and start/stop, plus optional PiSugar power and RTC checks
 - `music`: mpv music-backend startup using the composed `config/app|audio|device` topology
-- `voip`: Liblinphone startup and SIP registration using `config/communication/calling.yaml` plus local secrets/env
+- `voip`: quick Liblinphone startup and SIP registration smoke using `config/communication/calling.yaml` plus local secrets/env
 - `navigation`: repeatable one-button routed navigation with explicit idle dwells, click-driven transitions, optional playlist/shuffle playback, and a final sleep/wake pass
 - `stability`: repeated LVGL transition plus sleep/wake recovery on the active app path
 
@@ -122,6 +122,75 @@ yoyoctl pi voip check
 ```
 
 Use this when you want a registration-only pass with detailed logs.
+
+### VoIP reliability drills
+
+These are the deeper real-hardware VoIP checks. They intentionally stay as a few focused commands instead of one giant wrapper, and each run writes a timestamped artifact bundle under `logs/voip-validation/` by default:
+
+- `summary.json` — pass/fail, timings, final status, and the exact thresholds used
+- `timeline.jsonl` — state changes, periodic status samples, and any network drop/restore hook results
+
+Use them after `yoyoctl pi validate voip` passes, not instead of it.
+
+#### Registration stability
+
+```bash
+yoyoctl pi voip registration-stability
+yoyoctl pi voip registration-stability --hold-seconds 120
+```
+
+What it proves:
+
+- SIP registration reached `ok`
+- SIP registration stayed `ok` for the requested hold window instead of flapping immediately after startup
+
+Fail the run if registration never reaches `ok` or if it leaves `ok` during the hold.
+
+#### Reconnect drill
+
+```bash
+yoyoctl pi voip reconnect-drill
+yoyoctl pi voip reconnect-drill --disconnect-seconds 12
+```
+
+If you can automate the outage on the Pi, keep it explicit:
+
+```bash
+yoyoctl pi voip reconnect-drill \
+  --drop-command "nmcli networking off" \
+  --restore-command "nmcli networking on"
+```
+
+What it proves:
+
+- the manager reached `ok` before the outage
+- registration actually left `ok` during the wobble or temporary loss
+- registration returned to `ok` within the recovery timeout
+
+Fail the run if the drill never sees registration leave `ok` or if recovery does not happen. That usually means the outage was too mild to prove reconnect behavior, or the backend failed to recover honestly.
+
+#### Call soak
+
+```bash
+yoyoctl pi voip call-soak --target sip:echo@example.com
+yoyoctl pi voip call-soak --target sip:echo@example.com --soak-seconds 900
+```
+
+Use a target that will actually answer, such as an echo bot or a second endpoint you control.
+
+What it proves:
+
+- registration reached `ok`
+- the outbound call connected
+- the call stayed in a connected media state for the requested soak duration
+
+Fail the run if the call never connects, if registration drops during the soak, or if the call leaves the connected media states before the soak finishes.
+
+#### Reading the artifacts
+
+- A passing reconnect drill should show an initial `registration=ok`, a later non-`ok` registration event during the outage, and then a final return to `registration=ok`.
+- A passing call soak should show the expected connect transition followed by periodic connected samples for the full soak duration.
+- If a run fails, compare `summary.json` across runs first. It makes timing drift, last seen state, and the exact failure point obvious without reading the whole timeline.
 
 When the full app is running, the coordinator-thread timing signals land in
 `logs/yoyopod.log` and through `yoyoctl remote logs --follow`.
@@ -244,6 +313,9 @@ Only use it when:
 - `input` fails: check the matching display adapter initialized correctly first
 - `music` fails: verify `mpv` is installed, the configured socket path is writable, and the provision target under `test_music_target_dir` is writable when deterministic seeding is enabled
 - `voip` fails: verify the Liblinphone shim build, `config/communication/integrations/liblinphone_factory.conf`, SIP credentials, network reachability, and audio device configuration
+- `registration-stability` fails: compare `logs/voip-validation/*/summary.json` across runs and look for whether startup never reached `ok` or whether `ok` flapped during the hold window
+- `reconnect-drill` fails: check whether the run ever recorded a non-`ok` registration state, whether the outage lasted long enough to force a drop, and whether recovery returned before the timeout
+- `call-soak` fails: check whether the target endpoint actually answered, whether registration stayed `ok`, and which non-connected call state ended the soak
 - `navigation` fails: rerun `yoyoctl pi validate navigation --verbose` or `yoyoctl remote navigation-soak --verbose` and inspect which expected screen or playback transition stalled
 - `stability` fails: rerun `yoyoctl pi validate stability --verbose` or `yoyoctl pi lvgl soak` for a deeper LVGL-only pass
 - `validate` fails before launch: check whether the branch was actually pushed and whether the Pi checkout is reachable over SSH
