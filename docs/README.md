@@ -48,6 +48,7 @@ Plan docs are useful, but they are not automatically the current implementation 
 - [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md), top-level runtime topology plus startup/bootstrap flow
 - [`CANONICAL_STRUCTURE.md`](CANONICAL_STRUCTURE.md), canonical config topology and domain package ownership
 - [`RUNTIME_EVENT_FLOW.md`](RUNTIME_EVENT_FLOW.md), current event pipeline and coordinator ownership
+- [`VOICE_STT_MODEL_LIFECYCLE.md`](VOICE_STT_MODEL_LIFECYCLE.md), offline Vosk retention policy and measured footprint
 - [`DISPLAY_HAL_ARCHITECTURE.md`](DISPLAY_HAL_ARCHITECTURE.md), display abstraction and adapters
 - [`INPUT_HAL_ARCHITECTURE.md`](INPUT_HAL_ARCHITECTURE.md), semantic input model and adapters
 - [`POWER_MODULE.md`](POWER_MODULE.md), power, battery, RTC, watchdog

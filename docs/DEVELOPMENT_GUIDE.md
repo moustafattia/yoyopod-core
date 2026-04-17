@@ -111,7 +111,9 @@ Key settings:
 - `config/network/cellular.yaml`
   - `network.*` cellular modem enablement, ports, APN, GPS, and PPP timeout
 - `config/voice/assistant.yaml`
-  - `assistant.*` local voice commands, STT, TTS, and prompt policy
+  - `assistant.*` local voice commands, STT, TTS, prompt policy, and Vosk model retention
+  - the checked-in `models/vosk-model-small-en-us` footprint is about 68 MB on disk in this repo, so keeping the model loaded trades lower repeated-command latency for a persistent RAM tax on small boards
+  - set `assistant.vosk_model_keep_loaded: false` when tighter memory bounds matter more than warm-command latency
 - `config/communication/calling.yaml`
   - SIP identity, transport, STUN, call policy, call-history path
 - `config/communication/messaging.yaml`

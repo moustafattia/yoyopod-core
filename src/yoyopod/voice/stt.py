@@ -76,7 +76,11 @@ class VoskSpeechToTextBackend:
         from vosk import Model
 
         model_path = str(self._resolve_model_path(settings))
+        if not settings.vosk_model_keep_loaded:
+            self._model_cache.clear()
+            return Model(model_path)
         if model_path not in self._model_cache:
+            self._model_cache.clear()
             self._model_cache[model_path] = Model(model_path)
         return self._model_cache[model_path]
 

@@ -7,7 +7,9 @@ import math
 import struct
 from pathlib import Path
 import subprocess
+import sys
 import threading
+import types
 
 from yoyopod.voice import (
     AlsaOutputPlayer,
@@ -29,6 +31,7 @@ class FakeSttBackend:
 
     def __init__(self) -> None:
         self.calls: list[tuple[Path, VoiceSettings]] = []
+        self.clear_cache_calls = 0
 
     def is_available(self, settings: VoiceSettings) -> bool:
         return settings.stt_enabled
@@ -36,6 +39,9 @@ class FakeSttBackend:
     def transcribe(self, audio_path: Path, settings: VoiceSettings) -> VoiceTranscript:
         self.calls.append((audio_path, settings))
         return VoiceTranscript(text="call mom", confidence=0.91)
+
+    def clear_cache(self) -> None:
+        self.clear_cache_calls += 1
 
 
 class FakeTtsBackend:
@@ -124,6 +130,17 @@ def test_voice_service_uses_injected_backends() -> None:
     assert command.contact_name == "mom"
     assert spoken is True
     assert tts_backend.calls == [("Calling mom", settings)]
+
+
+def test_voice_service_release_resources_clears_stt_backend_cache() -> None:
+    """Replacing a voice service should clear any backend-owned STT cache."""
+
+    stt_backend = FakeSttBackend()
+    service = VoiceService(settings=VoiceSettings(), stt_backend=stt_backend)
+
+    service.release_resources()
+
+    assert stt_backend.clear_cache_calls == 1
 
 
 def test_voice_capture_request_defaults_to_short_local_capture() -> None:
@@ -539,3 +556,74 @@ def test_vosk_backend_can_clear_cached_models() -> None:
     backend.clear_cache()
 
     assert backend._model_cache == {}
+
+
+def test_vosk_backend_replaces_stale_cached_model_when_path_changes(tmp_path) -> None:
+    """Retained-model mode should cap the cache to one loaded model path."""
+
+    load_calls: list[str] = []
+
+    class FakeModel:
+        def __init__(self, model_path: str) -> None:
+            load_calls.append(model_path)
+
+    original_vosk = sys.modules.get("vosk")
+    vosk_module = types.ModuleType("vosk")
+    vosk_module.Model = FakeModel
+    sys.modules["vosk"] = vosk_module
+    try:
+        backend = VoskSpeechToTextBackend()
+        first_path = str(tmp_path / "model-a")
+        second_path = str(tmp_path / "model-b")
+
+        first_model = backend._load_model(VoiceSettings(vosk_model_path=first_path))
+        second_model = backend._load_model(VoiceSettings(vosk_model_path=second_path))
+    finally:
+        if original_vosk is None:
+            sys.modules.pop("vosk", None)
+        else:
+            sys.modules["vosk"] = original_vosk
+
+    assert load_calls == [first_path, second_path]
+    assert list(backend._model_cache) == [second_path]
+    assert backend._model_cache[second_path] is second_model
+    assert first_model is not second_model
+
+
+def test_vosk_backend_can_disable_model_retention(tmp_path) -> None:
+    """Best-effort low-memory mode should avoid retaining a loaded model reference."""
+
+    load_calls: list[str] = []
+
+    class FakeModel:
+        def __init__(self, model_path: str) -> None:
+            load_calls.append(model_path)
+
+    original_vosk = sys.modules.get("vosk")
+    vosk_module = types.ModuleType("vosk")
+    vosk_module.Model = FakeModel
+    sys.modules["vosk"] = vosk_module
+    try:
+        backend = VoskSpeechToTextBackend()
+        model_path = str(tmp_path / "model-a")
+        first_model = backend._load_model(
+            VoiceSettings(
+                vosk_model_path=model_path,
+                vosk_model_keep_loaded=False,
+            )
+        )
+        second_model = backend._load_model(
+            VoiceSettings(
+                vosk_model_path=model_path,
+                vosk_model_keep_loaded=False,
+            )
+        )
+    finally:
+        if original_vosk is None:
+            sys.modules.pop("vosk", None)
+        else:
+            sys.modules["vosk"] = original_vosk
+
+    assert load_calls == [model_path, model_path]
+    assert backend._model_cache == {}
+    assert first_model is not second_model

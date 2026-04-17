@@ -9,6 +9,7 @@ assistant:
   stt_backend: "vosk"
   tts_backend: "espeak-ng"
   vosk_model_path: "models/vosk-model-small-en-us"
+  vosk_model_keep_loaded: true
   record_seconds: 4
   sample_rate_hz: 16000
   tts_rate_wpm: 155

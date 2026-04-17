@@ -153,6 +153,11 @@ class VoiceSettingsResolver:
             stt_backend=assistant_cfg.stt_backend,
             tts_backend=assistant_cfg.tts_backend,
             vosk_model_path=assistant_cfg.vosk_model_path,
+            vosk_model_keep_loaded=getattr(
+                assistant_cfg,
+                "vosk_model_keep_loaded",
+                defaults.vosk_model_keep_loaded,
+            ),
             speaker_device_id=speaker_device_id,
             capture_device_id=capture_device_id,
             sample_rate_hz=assistant_cfg.sample_rate_hz,
@@ -581,7 +586,11 @@ class VoiceRuntimeCoordinator:
         settings = self._settings_resolver.current()
         if self._voice_service_factory is not None:
             return self._voice_service_factory(settings)
-        if self._cached_voice_service is None or self._cached_voice_service.settings != settings:
+        if self._cached_voice_service is None:
+            self._cached_voice_service = VoiceService(settings=settings)
+            return self._cached_voice_service
+        if self._cached_voice_service.settings != settings:
+            self._cached_voice_service.release_resources()
             self._cached_voice_service = VoiceService(settings=settings)
         return self._cached_voice_service
 

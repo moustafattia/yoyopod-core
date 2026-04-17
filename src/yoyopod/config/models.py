@@ -224,6 +224,10 @@ class VoiceAssistantConfig:
         default="models/vosk-model-small-en-us",
         env="YOYOPOD_VOSK_MODEL_PATH",
     )
+    vosk_model_keep_loaded: bool = config_value(
+        default=True,
+        env="YOYOPOD_VOSK_MODEL_KEEP_LOADED",
+    )
     record_seconds: int = config_value(default=4, env="YOYOPOD_VOICE_RECORD_SECONDS")
     sample_rate_hz: int = config_value(default=16000, env="YOYOPOD_VOICE_SAMPLE_RATE_HZ")
     tts_rate_wpm: int = config_value(default=155, env="YOYOPOD_TTS_RATE_WPM")
