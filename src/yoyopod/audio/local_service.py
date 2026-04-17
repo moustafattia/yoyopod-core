@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 from collections import deque
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from yoyopod.audio.history import RecentTrackEntry, RecentTrackHistoryStore
 from yoyopod.audio.music.backend import MusicBackend
 from yoyopod.audio.music.models import Playlist, Track
 
-AUDIO_EXTENSIONS = ("*.mp3", "*.flac", "*.ogg", "*.wav", "*.m4a", "*.opus")
+AUDIO_EXTENSIONS = (".mp3", ".flac", ".ogg", ".wav", ".m4a", ".opus")
 LEGACY_PLAYLIST_SCHEMES = ("m3u:",)
 LEGACY_TRACK_SCHEMES = ("local:", "file:")
 LEGACY_LIBRARY_ROOTS = ("file:", "local:directory")
@@ -79,11 +80,7 @@ class LocalMusicService:
         if self.music_dir.is_dir():
             playlists: list[Playlist] = []
             for p in sorted(self.music_dir.glob("**/*.m3u")):
-                try:
-                    lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-                    track_count = sum(1 for ln in lines if ln.strip() and not ln.startswith("#"))
-                except OSError:
-                    track_count = 0
+                track_count = self._count_playlist_tracks(p) if fetch_track_counts else 0
                 playlists.append(Playlist(uri=str(p), name=p.stem, track_count=track_count))
             return playlists
 
@@ -173,15 +170,22 @@ class LocalMusicService:
     def _collect_local_track_uris(self) -> list[str]:
         """Scan the music directory for audio files."""
         tracks: list[str] = []
-        seen: set[str] = set()
 
         if self.music_dir.is_dir():
+            tracks_by_extension: dict[str, list[str]] = {ext: [] for ext in AUDIO_EXTENSIONS}
+
+            # Keep the previous extension bucket ordering without paying for one
+            # recursive filesystem glob per extension.
+            for root, dirnames, filenames in os.walk(self.music_dir):
+                dirnames.sort()
+                for filename in sorted(filenames):
+                    ext = Path(filename).suffix.lower()
+                    if ext not in tracks_by_extension:
+                        continue
+                    tracks_by_extension[ext].append(str(Path(root) / filename))
+
             for ext in AUDIO_EXTENSIONS:
-                for p in self.music_dir.glob(f"**/{ext}"):
-                    s = str(p)
-                    if s not in seen:
-                        seen.add(s)
-                        tracks.append(s)
+                tracks.extend(tracks_by_extension[ext])
             if tracks:
                 return tracks
 
@@ -221,3 +225,11 @@ class LocalMusicService:
                 return tracks
 
         return tracks
+
+    def _count_playlist_tracks(self, path: Path) -> int:
+        """Return the number of playable entries declared in one M3U file."""
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return 0
+        return sum(1 for line in lines if line.strip() and not line.startswith("#"))

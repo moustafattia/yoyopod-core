@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+import yoyopod.audio.local_service as local_service_module
 from yoyopod.audio import LocalMusicService, MockMusicBackend, RecentTrackHistoryStore, Track
 from yoyopod.coordinators.playback import PlaybackCoordinator
 
@@ -29,7 +32,9 @@ class StubScreenCoordinator:
         self.now_playing_refreshes += 1
 
 
-def test_local_music_service_scans_playlists_and_loads_local_only(tmp_path: Path) -> None:
+def test_local_music_service_scans_playlists_with_track_counts_and_loads_local_only(
+    tmp_path: Path,
+) -> None:
     music_dir = tmp_path / "Music"
     music_dir.mkdir()
     playlist_path = music_dir / "local-mix.m3u"
@@ -39,13 +44,35 @@ def test_local_music_service_scans_playlists_and_loads_local_only(tmp_path: Path
     backend.start()
     service = LocalMusicService(backend, music_dir=music_dir)
 
-    playlists = service.list_playlists()
+    playlists = service.list_playlists(fetch_track_counts=True)
 
     assert [playlist.name for playlist in playlists] == ["local-mix"]
     assert playlists[0].track_count == 2
     assert service.load_playlist(str(playlist_path)) is True
     assert backend.commands[-1] == f"load_playlist:{playlist_path}"
     assert service.load_playlist(str(tmp_path / "outside.m3u")) is False
+
+
+def test_local_music_service_skips_playlist_track_counts_when_not_requested(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    music_dir = tmp_path / "Music"
+    music_dir.mkdir()
+    playlist_path = music_dir / "local-mix.m3u"
+    playlist_path.write_text("#EXTM3U\ntrack-a.mp3\ntrack-b.mp3\n", encoding="utf-8")
+
+    service = LocalMusicService(None, music_dir=music_dir)
+
+    def _fail_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        raise AssertionError(f"unexpected playlist file read for {self}")
+
+    monkeypatch.setattr(Path, "read_text", _fail_read_text)
+
+    playlists = service.list_playlists(fetch_track_counts=False)
+
+    assert [playlist.name for playlist in playlists] == ["local-mix"]
+    assert playlists[0].track_count == 0
 
 
 def test_recent_track_history_store_deduplicates_and_persists(tmp_path: Path) -> None:
@@ -77,6 +104,40 @@ def test_local_music_service_shuffle_collects_local_tracks_and_starts_playback(t
 
     assert service.shuffle_all() is True
     assert backend.commands[-1] == "load_tracks:2"
+
+
+def test_local_music_service_collects_tracks_with_single_library_walk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    music_dir = tmp_path / "Music"
+    albums_dir = music_dir / "Albums"
+    singles_dir = music_dir / "Singles"
+    albums_dir.mkdir(parents=True)
+    singles_dir.mkdir()
+    (albums_dir / "bravo.flac").write_bytes(b"b")
+    (singles_dir / "alpha.mp3").write_bytes(b"a")
+    (singles_dir / "ignore.txt").write_text("skip", encoding="utf-8")
+    (music_dir / "charlie.opus").write_bytes(b"c")
+
+    service = LocalMusicService(None, music_dir=music_dir)
+    walk_calls: list[Path] = []
+    original_walk = local_service_module.os.walk
+
+    def _counting_walk(root: Path, *args: object, **kwargs: object):
+        walk_calls.append(root)
+        yield from original_walk(root, *args, **kwargs)
+
+    monkeypatch.setattr(local_service_module.os, "walk", _counting_walk)
+
+    track_uris = service._collect_local_track_uris()
+
+    assert walk_calls == [music_dir]
+    assert track_uris == [
+        str(singles_dir / "alpha.mp3"),
+        str(albums_dir / "bravo.flac"),
+        str(music_dir / "charlie.opus"),
+    ]
 
 
 def test_playback_coordinator_records_recent_local_tracks(tmp_path: Path) -> None:
