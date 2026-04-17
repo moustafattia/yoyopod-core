@@ -79,3 +79,10 @@ class VoiceService:
         """Speak text using the configured TTS backend."""
 
         return self.tts_backend.speak(text, self.settings)
+
+    def release_resources(self) -> None:
+        """Drop backend-owned caches when this service is being replaced."""
+
+        clear_cache = getattr(self.stt_backend, "clear_cache", None)
+        if callable(clear_cache):
+            clear_cache()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from types import SimpleNamespace
@@ -27,6 +28,27 @@ class _FakeContact:
 class _FakeConfigManager:
     def __init__(self, contacts: list[_FakeContact]) -> None:
         self._contacts = contacts
+        self._voice_settings = SimpleNamespace(
+            assistant=SimpleNamespace(
+                commands_enabled=True,
+                ai_requests_enabled=True,
+                screen_read_enabled=False,
+                stt_enabled=True,
+                tts_enabled=True,
+                stt_backend="dummy-stt",
+                tts_backend="dummy-tts",
+                vosk_model_path="models/custom-model",
+                vosk_model_keep_loaded=False,
+                sample_rate_hz=22050,
+                record_seconds=6,
+                tts_rate_wpm=180,
+                tts_voice="en-us",
+            ),
+            audio=SimpleNamespace(
+                speaker_device_id="",
+                capture_device_id="",
+            )
+        )
 
     def get_contacts(self) -> list[_FakeContact]:
         return list(self._contacts)
@@ -41,26 +63,7 @@ class _FakeConfigManager:
         return 61
 
     def get_voice_settings(self):
-        return SimpleNamespace(
-            assistant=SimpleNamespace(
-                commands_enabled=True,
-                ai_requests_enabled=True,
-                screen_read_enabled=False,
-                stt_enabled=True,
-                tts_enabled=True,
-                stt_backend="dummy-stt",
-                tts_backend="dummy-tts",
-                vosk_model_path="models/custom-model",
-                sample_rate_hz=22050,
-                record_seconds=6,
-                tts_rate_wpm=180,
-                tts_voice="en-us",
-            ),
-            audio=SimpleNamespace(
-                speaker_device_id="",
-                capture_device_id="",
-            )
-        )
+        return self._voice_settings
 
 
 class _FakeVoipManager:
@@ -88,6 +91,7 @@ class _FakeVoiceService:
         self.transcript = transcript
         self.capture_calls = 0
         self.speak_calls: list[str] = []
+        self.release_calls = 0
 
     def capture_available(self) -> bool:
         return True
@@ -115,6 +119,9 @@ class _FakeVoiceService:
     def speak(self, text: str) -> bool:
         self.speak_calls.append(text)
         return True
+
+    def release_resources(self) -> None:
+        self.release_calls += 1
 
 
 class _NoAudioVoiceService(_FakeVoiceService):
@@ -262,3 +269,39 @@ def test_voice_runtime_coordinator_ptt_no_audio_resolves_to_no_speech() -> None:
     assert context.voice.interaction.phase == "reply"
     assert context.voice.interaction.headline == "No Speech"
     assert context.voice.interaction.capture_in_flight is False
+
+
+def test_voice_runtime_coordinator_releases_cached_service_when_settings_change(monkeypatch) -> None:
+    """Replacing the cached service should drop backend-owned resources explicitly."""
+
+    current_settings = VoiceSettings(vosk_model_keep_loaded=True)
+    created_services: list[object] = []
+
+    class _TrackingVoiceService:
+        def __init__(self, *, settings: VoiceSettings) -> None:
+            self.settings = settings
+            self.released = False
+            created_services.append(self)
+
+        def release_resources(self) -> None:
+            self.released = True
+
+    monkeypatch.setattr("yoyopod.runtime.voice.VoiceService", _TrackingVoiceService)
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: current_settings,
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+    )
+
+    first = coordinator._voice_service()
+    current_settings = replace(current_settings, vosk_model_keep_loaded=False)
+    second = coordinator._voice_service()
+
+    assert len(created_services) == 2
+    assert first is created_services[0]
+    assert second is created_services[1]
+    assert created_services[0].released is True
+    assert created_services[1].released is False

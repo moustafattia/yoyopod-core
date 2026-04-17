@@ -302,6 +302,7 @@ class _FakeConfigManager:
                 stt_backend="dummy-stt",
                 tts_backend="dummy-tts",
                 vosk_model_path="models/custom-model",
+                vosk_model_keep_loaded=False,
                 sample_rate_hz=22050,
                 record_seconds=6,
                 tts_rate_wpm=180,
@@ -325,6 +326,7 @@ class _FakeConfigManagerWithSpeaker(_FakeConfigManager):
                 stt_backend="dummy-stt",
                 tts_backend="dummy-tts",
                 vosk_model_path="models/custom-model",
+                vosk_model_keep_loaded=False,
                 speaker_device_id="plughw:CARD=wm8960soundcard,DEV=0",
                 capture_device_id="plughw:CARD=wm8960soundcard,DEV=0",
                 sample_rate_hz=22050,
@@ -586,6 +588,7 @@ def test_ask_screen_fallback_settings_keep_configured_voice_defaults() -> None:
     assert settings.stt_backend == "dummy-stt"
     assert settings.tts_backend == "dummy-tts"
     assert settings.vosk_model_path == "models/custom-model"
+    assert settings.vosk_model_keep_loaded is False
     assert settings.capture_device_id is None
     assert settings.sample_rate_hz == 22050
     assert settings.record_seconds == 6

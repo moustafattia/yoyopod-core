@@ -490,6 +490,11 @@ class RuntimeBootService:
                             if voice_cfg is not None
                             else "models/vosk-model-small-en-us"
                         ),
+                        vosk_model_keep_loaded=(
+                            voice_cfg.assistant.vosk_model_keep_loaded
+                            if voice_cfg is not None
+                            else True
+                        ),
                         speaker_device_id=(
                             self.app.context.voice.speaker_device_id
                             if self.app.context is not None
