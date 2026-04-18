@@ -505,16 +505,17 @@ def test_reconnect_drill_fails_when_hook_command_returns_non_zero(
         "0.5",
         "--recovery-timeout",
         "1",
-        option,
-        f"{phase}-net",
-        "--artifacts-dir",
-        str(tmp_path),
     ]
     if phase == "restore":
-        args[args.index("--artifacts-dir"):args.index("--artifacts-dir")] = [
-            "--drop-command",
-            "drop-net",
+        args.extend(["--drop-command", "drop-net"])
+    args.extend(
+        [
+            option,
+            f"{phase}-net",
+            "--artifacts-dir",
+            str(tmp_path),
         ]
+    )
 
     result = runner.invoke(voip_cli.voip_app, args)
 

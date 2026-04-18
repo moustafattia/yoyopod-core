@@ -844,9 +844,7 @@ def reconnect_drill(
                 timeout=drop_detect_timeout,
             )
         else:
-            drop_wait_seconds = (
-                first_drop_wait_seconds if first_drop_wait_seconds is not None else 0.0
-            )
+            drop_wait_seconds = first_drop_wait_seconds
 
         if not drop_observed:
             result = recorder.finalize(
