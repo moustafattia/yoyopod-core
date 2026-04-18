@@ -376,6 +376,23 @@ class RuntimeLoopService:
 
         return max(1, int(self._EVENT_BUS_DRAIN_BUDGET))
 
+    def _pending_work_loop_sleep_seconds(
+        self,
+        *,
+        configured_voip_interval_seconds: float,
+    ) -> float:
+        """Return the coordinator sleep used while generic queue work is backlogged."""
+
+        # Pending-work cadence is intentionally kept at or above 10 ms so the loop
+        # yields between iterations even if the configured VoIP cadence is lowered.
+        return max(
+            0.01,
+            min(
+                configured_voip_interval_seconds,
+                self._PENDING_WORK_LOOP_INTERVAL_SECONDS,
+            ),
+        )
+
     def _drain_pending_main_thread_callbacks(self, limit: int | None = None) -> int:
         """Run queued coordinator-thread callbacks with an optional hard count limit."""
 
@@ -956,9 +973,8 @@ class RuntimeLoopService:
             return _LoopCadenceDecision(
                 mode="latency_sensitive",
                 reason="pending_work",
-                loop_sleep_seconds=min(
-                    configured_voip_interval_seconds,
-                    self._PENDING_WORK_LOOP_INTERVAL_SECONDS,
+                loop_sleep_seconds=self._pending_work_loop_sleep_seconds(
+                    configured_voip_interval_seconds=configured_voip_interval_seconds,
                 ),
                 voip_iterate_interval_seconds=configured_voip_interval_seconds,
             )

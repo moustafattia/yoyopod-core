@@ -1781,6 +1781,31 @@ def test_runtime_loop_pending_work_uses_nonzero_backlog_cadence() -> None:
     assert status["voip_effective_iterate_interval_seconds"] == pytest.approx(0.02)
 
 
+def test_runtime_loop_pending_work_keeps_minimum_nonzero_backlog_cadence() -> None:
+    """Backlog cadence should still yield even when the configured VoIP cadence is tiny."""
+
+    app, _, _ = _build_app_with_power(
+        FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
+    )
+    app.voip_manager = FakeRuntimeLoopVoIPManager()
+    app._voip_iterate_interval_seconds = 0.001
+    app._queue_main_thread_callback(lambda: None)
+
+    sleep_seconds = app.runtime_loop.next_sleep_interval_seconds(
+        monotonic_now=1.0,
+        current_time=1.0,
+        last_screen_update=1.0,
+        screen_update_interval=1.0,
+    )
+
+    status = app.get_status()
+    assert sleep_seconds == pytest.approx(0.01)
+    assert status["runtime_cadence_reason"] == "pending_work"
+    assert status["runtime_target_sleep_seconds"] == pytest.approx(0.01)
+    assert status["runtime_requested_sleep_seconds"] == pytest.approx(0.01)
+    assert status["voip_effective_iterate_interval_seconds"] == pytest.approx(0.01)
+
+
 def test_runtime_loop_budgets_backlog_and_keeps_protected_work_running() -> None:
     """Queue pressure should defer generic work while still advancing VoIP, LVGL, and watchdog."""
 

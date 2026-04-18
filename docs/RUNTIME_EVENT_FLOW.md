@@ -63,6 +63,10 @@ Owns:
 - calling recovery, power-runtime, shutdown, LVGL, and periodic screen refresh work in a stable order
 
 This service is the bridge between queued background work and deterministic main-thread handling.
+Current fairness protections are intentionally local to this service: each coordinator
+iteration drains at most 4 queued callbacks and 8 queued `EventBus` items before it
+continues into protected VoIP, LVGL, watchdog, and power spans, and pending generic
+work keeps the loop on a 10 ms cadence instead of collapsing into a zero-sleep spin.
 
 ### `CoordinatorRuntime`
 
@@ -162,7 +166,13 @@ This means background threads can report state changes without touching UI objec
 - drains explicit queued callbacks from `_pending_main_thread_callbacks`
 - drains queued typed events from `EventBus`
 
-That drain happens inside the main loop before recovery/power refresh side effects finish the iteration.
+Inside `run_iteration()`, that same drain step is fairness-bounded instead of trying to
+empty every queue in one pass: the coordinator processes up to 4 queued callbacks and
+8 queued typed events, records any deferred remainder in runtime diagnostics, and then
+continues with the rest of the iteration. When backlog exists, the next loop wake uses
+the dedicated pending-work cadence (`_PENDING_WORK_LOOP_INTERVAL_SECONDS`, currently
+10 ms) so target hardware keeps yielding between iterations while still revisiting the
+queued work quickly.
 
 ## 4. Event handlers mutate runtime state and UI
 
