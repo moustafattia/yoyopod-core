@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from yoyopod.ui.lvgl_binding import LvglDisplayBackend
+from yoyopod.ui.screens.lvgl_lifecycle import (
+    mark_retained_view_built,
+    mark_retained_view_destroyed,
+    retained_scene_claimed_by,
+)
+from yoyopod.ui.screens.lvgl_scene_keys import LIST_SCENE_KEY
 from yoyopod.ui.screens.lvgl_status import sync_network_status
 from yoyopod.ui.screens.theme import TALK
 
@@ -18,6 +24,7 @@ if TYPE_CHECKING:
 class LvglContactListView:
     """Own the LVGL object lifecycle for ContactListScreen."""
 
+    scene_key: ClassVar[str] = LIST_SCENE_KEY
     screen: "ContactListScreen"
     backend: LvglDisplayBackend
     _built: bool = False
@@ -26,7 +33,7 @@ class LvglContactListView:
         if self._built or self.backend.binding is None:
             return
         self.backend.binding.playlist_build()
-        self._built = True
+        mark_retained_view_built(self)
 
     def sync(self) -> None:
         if not self._built or self.backend.binding is None:
@@ -60,8 +67,11 @@ class LvglContactListView:
     def destroy(self) -> None:
         if not self._built or self.backend.binding is None:
             return
+        if not retained_scene_claimed_by(self):
+            mark_retained_view_destroyed(self)
+            return
         self.backend.binding.playlist_destroy()
-        self._built = False
+        mark_retained_view_destroyed(self)
 
     @staticmethod
     def _battery_percent(context: "AppContext | None") -> int:

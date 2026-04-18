@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from yoyopod.app_context import AppContext
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens import (
+    CallHistoryScreen,
     CallScreen,
     ContactListScreen,
     InCallScreen,
     OutgoingCallScreen,
     PowerScreen,
     TalkContactScreen,
+    VoiceNoteScreen,
 )
 
 
@@ -385,6 +387,39 @@ def test_contact_list_screen_syncs_sorted_contacts_through_lvgl() -> None:
     assert binding.playlist_destroy_calls == 1
 
 
+def test_stale_list_scene_owner_does_not_destroy_reclaimed_native_scene() -> None:
+    """A stale sibling list view must not tear down the current shared list scene."""
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+    context = make_one_button_context()
+    contact_screen = ContactListScreen(
+        display,
+        context,
+        voip_manager=FakeVoipManager(),
+        people_directory=FakeConfigManager([FakeContact("Mama", "sip:mama@example.com", True)]),
+    )
+    history_screen = CallHistoryScreen(
+        display,
+        context,
+        voip_manager=FakeVoipManager(),
+        call_history_store=None,
+    )
+
+    contact_screen.enter()
+    history_screen.enter()
+
+    assert binding.playlist_build_calls == 2
+
+    contact_screen.exit()
+
+    assert binding.playlist_destroy_calls == 0
+
+    history_screen.exit()
+
+    assert binding.playlist_destroy_calls == 1
+
+
 def test_outgoing_call_screen_syncs_current_callee_through_lvgl() -> None:
     """OutgoingCallScreen should send callee and footer state through LVGL."""
 
@@ -488,6 +523,35 @@ def test_voice_note_screen_uses_talk_actions_scene_for_voice_note_states() -> No
     assert payload["icon_keys"] == ["voice_note"]
 
     screen.exit()
+    assert binding.talk_actions_destroy_calls == 1
+
+
+def test_stale_talk_actions_owner_does_not_destroy_reclaimed_native_scene() -> None:
+    """A stale Talk action view must not tear down the retained scene for the new owner."""
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+    context = make_one_button_context()
+    context.set_talk_contact(name="Mama", sip_address="sip:mama@example.com")
+    talk_contact_screen = TalkContactScreen(
+        display,
+        context,
+        voip_manager=FakeVoipManager(),
+    )
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
+    voice_note_screen = VoiceNoteScreen(display, context)
+
+    talk_contact_screen.enter()
+    voice_note_screen.enter()
+
+    assert binding.talk_actions_build_calls == 2
+
+    talk_contact_screen.exit()
+
+    assert binding.talk_actions_destroy_calls == 0
+
+    voice_note_screen.exit()
+
     assert binding.talk_actions_destroy_calls == 1
 
 

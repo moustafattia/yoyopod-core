@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from yoyopod.ui.lvgl_binding import LvglDisplayBackend
+from yoyopod.ui.screens.lvgl_lifecycle import (
+    mark_retained_view_built,
+    mark_retained_view_destroyed,
+    retained_scene_claimed_by,
+)
+from yoyopod.ui.screens.lvgl_scene_keys import LIST_SCENE_KEY
 from yoyopod.ui.screens.lvgl_status import sync_network_status
 from yoyopod.ui.screens.theme import LISTEN
 
@@ -18,6 +24,7 @@ if TYPE_CHECKING:
 class LvglPlaylistView:
     """Own the LVGL object lifecycle for PlaylistScreen."""
 
+    scene_key: ClassVar[str] = LIST_SCENE_KEY
     screen: "PlaylistScreen"
     backend: LvglDisplayBackend
     _built: bool = False
@@ -28,7 +35,7 @@ class LvglPlaylistView:
         if self._built or self.backend.binding is None:
             return
         self.backend.binding.playlist_build()
-        self._built = True
+        mark_retained_view_built(self)
 
     def sync(self) -> None:
         """Push the current playlist controller state into the native scene."""
@@ -81,8 +88,11 @@ class LvglPlaylistView:
 
         if not self._built or self.backend.binding is None:
             return
+        if not retained_scene_claimed_by(self):
+            mark_retained_view_destroyed(self)
+            return
         self.backend.binding.playlist_destroy()
-        self._built = False
+        mark_retained_view_destroyed(self)
 
     def _empty_state_copy(self) -> tuple[str, str]:
         if hasattr(self.screen, "get_empty_state_copy"):
