@@ -277,7 +277,7 @@ class PowerScreen(Screen):
         self.in_detail = False
         if self._actions.refresh_voice_devices is not None:
             self._actions.refresh_voice_devices()
-        self.refresh_prepared_state(force=True, reason="enter")
+        self.refresh_prepared_state(force=True)
         self._ensure_lvgl_view()
 
     def exit(self) -> None:
@@ -624,24 +624,6 @@ class PowerScreen(Screen):
         )
         return pages
 
-    def _build_pages_for_display(
-        self,
-        *,
-        snapshot: Optional["PowerSnapshot"] = None,
-        status: dict[str, object] | None = None,
-        state: PowerScreenState | None = None,
-    ) -> list[PowerPage]:
-        """Return prepared pages for the current display state."""
-
-        resolved_state = state or self._get_state()
-        if snapshot is not None or status is not None:
-            return self.build_pages(
-                snapshot=snapshot,
-                status=status,
-                state=resolved_state,
-            )
-        return self._prepared_pages(state=resolved_state)
-
     def lvgl_payload(self) -> PowerScreenLvglPayload:
         """Return the current Setup LVGL payload without mutating controller state."""
 
@@ -779,10 +761,10 @@ class PowerScreen(Screen):
         return bool(coord)
 
     def _get_state(self) -> PowerScreenState:
-        """Return cached prepared state, hydrating it only when missing."""
+        """Return cached prepared state without hydrating from render-adjacent paths."""
 
         if self._prepared_state is None:
-            return self.refresh_prepared_state(force=True, reason="lazy_load")
+            return PowerScreenState()
         return self._prepared_state
 
     def refresh_prepared_state(
@@ -790,7 +772,6 @@ class PowerScreen(Screen):
         *,
         force: bool = False,
         allow_gps_refresh: bool = False,
-        reason: str = "explicit",
     ) -> PowerScreenState:
         """Refresh and cache prepared Setup state outside render-time code paths."""
 
@@ -810,7 +791,6 @@ class PowerScreen(Screen):
         self.refresh_prepared_state(
             force=True,
             allow_gps_refresh=self._current_page_title() == "GPS",
-            reason="visible_tick",
         )
 
     def _prepared_pages(
@@ -870,13 +850,12 @@ class PowerScreen(Screen):
             return None
         return pages[self._page_index_for(pages)].title
 
-    def _refresh_after_page_change(self, *, reason: str) -> None:
+    def _refresh_after_page_change(self) -> None:
         """Refresh prepared state after explicit user navigation between pages."""
 
         self.refresh_prepared_state(
             force=True,
             allow_gps_refresh=self._current_page_title() == "GPS",
-            reason=reason,
         )
 
     def _get_snapshot(self) -> Optional["PowerSnapshot"]:
@@ -1205,7 +1184,7 @@ class PowerScreen(Screen):
             return
         self.page_index = (self.page_index + 1) % len(pages)
         self.selected_row = 0
-        self._refresh_after_page_change(reason="next_page")
+        self._refresh_after_page_change()
 
     def _previous_page(self) -> None:
         """Return to the previous page with wraparound."""
@@ -1214,7 +1193,7 @@ class PowerScreen(Screen):
             return
         self.page_index = (self.page_index - 1) % len(pages)
         self.selected_row = 0
-        self._refresh_after_page_change(reason="previous_page")
+        self._refresh_after_page_change()
 
     def on_advance(self, data=None) -> None:
         """Single-button tap cycles pages."""

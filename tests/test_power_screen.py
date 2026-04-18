@@ -76,6 +76,7 @@ def test_power_screen_builds_battery_and_runtime_pages() -> None:
                 status_provider=lambda: status,
             ),
         )
+        screen.enter()
 
         pages = screen.build_pages(
             snapshot=screen._get_snapshot(),
@@ -115,6 +116,7 @@ def test_power_screen_formats_unavailable_snapshot() -> None:
                 status_provider=lambda: {},
             ),
         )
+        screen.enter()
 
         pages = screen.build_pages(snapshot=snapshot, status={})
 
@@ -326,10 +328,34 @@ def test_power_screen_reuses_prepared_pages_until_explicit_refresh() -> None:
         assert first_payload.total_pages == 4
         assert second_payload.total_pages == 4
 
-        screen.refresh_prepared_state(force=True, reason="test")
+        screen.refresh_prepared_state(force=True)
         refreshed_payload = screen.lvgl_payload()
 
         assert provider.calls == 2
         assert refreshed_payload.total_pages == 6
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_lazy_state_path_returns_default_without_provider_call() -> None:
+    """Cache misses should not hydrate prepared state from render-adjacent getters."""
+
+    class CountingStateProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> PowerScreenState:
+            self.calls += 1
+            return PowerScreenState(network_enabled=True)
+
+    display = Display(simulate=True)
+    try:
+        provider = CountingStateProvider()
+        screen = PowerScreen(display, AppContext(), state_provider=provider)
+
+        state = screen._get_state()
+
+        assert state == PowerScreenState()
+        assert provider.calls == 0
     finally:
         display.cleanup()

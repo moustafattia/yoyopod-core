@@ -72,6 +72,7 @@ def test_network_page_online():
         FakeDisplay(),
         state_provider=build_power_screen_state_provider(network_manager=nm),
     )
+    screen.enter()
     rows = screen._build_network_rows()
     assert ("Status", "Online") in rows
     assert ("Carrier", "Telekom.de") in rows
@@ -86,6 +87,7 @@ def test_network_page_disabled():
         FakeDisplay(),
         state_provider=build_power_screen_state_provider(network_manager=nm),
     )
+    screen.enter()
     rows = screen._build_network_rows()
     assert rows == [("Status", "Disabled")]
 
@@ -93,6 +95,7 @@ def test_network_page_disabled():
 def test_network_page_no_manager():
     """Network page should show Disabled when no network manager."""
     screen = PowerScreen(FakeDisplay())
+    screen.enter()
     rows = screen._build_network_rows()
     assert rows == [("Status", "Disabled")]
 
@@ -105,6 +108,7 @@ def test_gps_page_with_fix():
         FakeDisplay(),
         state_provider=build_power_screen_state_provider(network_manager=nm),
     )
+    screen.enter()
     rows = screen._build_gps_rows()
     assert ("Fix", "Yes") in rows
     assert any("48.8738" in v for _, v in rows)
@@ -118,6 +122,7 @@ def test_gps_page_no_fix():
         FakeDisplay(),
         state_provider=build_power_screen_state_provider(network_manager=nm),
     )
+    screen.enter()
     rows = screen._build_gps_rows()
     assert ("Fix", "Searching") in rows
     assert ("Lat", "--") in rows
@@ -164,7 +169,7 @@ def test_active_gps_page_refreshes_coordinates_via_explicit_state_hook():
     screen.enter()
     screen.page_index = 2
 
-    screen.refresh_prepared_state(force=True, allow_gps_refresh=True, reason="test")
+    screen.refresh_prepared_state(force=True, allow_gps_refresh=True)
     payload = screen.lvgl_payload()
 
     assert nm.query_gps_calls == 1
@@ -179,6 +184,7 @@ def test_build_pages_includes_network_when_enabled():
         FakeDisplay(),
         state_provider=build_power_screen_state_provider(network_manager=nm),
     )
+    screen.enter()
     pages = screen.build_pages()
     titles = [p.title for p in pages]
     assert "Network" in titles
@@ -190,6 +196,7 @@ def test_build_pages_includes_network_when_enabled():
 def test_build_pages_excludes_network_when_disabled():
     """build_pages should omit Network and GPS pages when network is disabled."""
     screen = PowerScreen(FakeDisplay())
+    screen.enter()
     pages = screen.build_pages()
     titles = [p.title for p in pages]
     assert "Network" not in titles
