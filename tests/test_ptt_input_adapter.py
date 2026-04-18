@@ -127,22 +127,52 @@ def test_poll_loop_preserves_double_tap_window_across_debounce(monkeypatch) -> N
     def fake_time() -> float:
         return clock.current
 
-    def fake_sleep(duration: float) -> None:
-        clock.current = round(clock.current + duration, 4)
+    class FakeStopEvent:
+        def is_set(self) -> bool:
+            return clock.current >= 0.8
+
+        def wait(self, timeout: float | None = None) -> bool:
+            step = 0.0005 if timeout is None else max(timeout, 0.0005)
+            clock.current = round(clock.current + step, 4)
+            return False
 
     def fake_button_state() -> bool:
         current = clock.current
         return (0.0 <= current < 0.10) or (0.39 <= current < 0.49)
 
-    monkeypatch.setattr(ptt_button.time, "time", fake_time)
-    monkeypatch.setattr(ptt_button.time, "sleep", fake_sleep)
+    monkeypatch.setattr(ptt_button.time, "monotonic", fake_time)
     adapter._get_button_state = fake_button_state
     adapter.poll_rate = 0.01
-    adapter.stop_event = SimpleNamespace(is_set=lambda: clock.current >= 0.8)
+    adapter.stop_event = FakeStopEvent()
 
     adapter._poll_button()
 
     assert actions == [InputAction.SELECT]
+
+
+def test_idle_poll_loop_waits_on_stop_event_between_samples() -> None:
+    """The one-button adapter should sleep on the stop event while idle."""
+
+    adapter = PTTInputAdapter(simulate=True, enable_navigation=True)
+    waits: list[float] = []
+
+    class FakeStopEvent:
+        def __init__(self) -> None:
+            self._set = False
+
+        def is_set(self) -> bool:
+            return self._set
+
+        def wait(self, timeout: float | None = None) -> bool:
+            waits.append(0.0 if timeout is None else timeout)
+            self._set = True
+            return True
+
+    adapter.stop_event = FakeStopEvent()
+
+    adapter._poll_button()
+
+    assert waits == [adapter.poll_rate]
 
 
 def test_raw_ptt_passthrough_emits_hold_press_and_release_without_back() -> None:

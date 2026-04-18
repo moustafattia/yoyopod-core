@@ -11,6 +11,7 @@ Button mapping matches FourButtonInputAdapter:
 
 from __future__ import annotations
 
+import select
 import time
 from collections import defaultdict
 from enum import Enum
@@ -21,7 +22,14 @@ from loguru import logger
 
 from yoyopod.ui.input.hal import InputAction, InputHAL
 
-from yoyopod.ui.gpiod_compat import HAS_GPIOD, open_chip, request_input
+from yoyopod.ui.gpiod_compat import (
+    HAS_GPIOD,
+    get_event_fd,
+    open_chip,
+    read_edge_events,
+    request_input,
+    request_input_events,
+)
 
 
 class Button(Enum):
@@ -48,6 +56,8 @@ _LONG_PRESS_MAPPING: dict[Button, InputAction] = {
 # Timing constants (seconds)
 _DEBOUNCE_TIME = 0.05
 _LONG_PRESS_TIME = 1.0
+_POLL_INTERVAL = 0.03
+_EDGE_IDLE_WAIT_TIMEOUT = 0.5
 
 
 class GpiodButtonAdapter(InputHAL):
@@ -67,8 +77,11 @@ class GpiodButtonAdapter(InputHAL):
         # GPIO line handles keyed by Button
         self._lines: dict[Button, object] = {}
         self._chips: list[object] = []
+        self._line_event_fds: dict[Button, int] = {}
 
         # Button state tracking
+        self._raw_button_states: dict[Button, bool] = {b: False for b in Button}
+        self._transition_times: dict[Button, Optional[float]] = {b: None for b in Button}
         self._button_states: dict[Button, bool] = {b: False for b in Button}
         self._press_times: dict[Button, Optional[float]] = {b: None for b in Button}
         self._long_fired: dict[Button, bool] = {b: False for b in Button}
@@ -112,7 +125,7 @@ class GpiodButtonAdapter(InputHAL):
             try:
                 chip = open_chip(chip_name)
                 self._chips.append(chip)
-                line = request_input(chip, line_offset, f"pimoroni-btn-{button.value}")
+                line = self._request_line(chip, line_offset, button)
                 self._lines[button] = line
                 logger.debug(
                     "Button {} on {}:{}", button.value, chip_name, line_offset
@@ -125,6 +138,31 @@ class GpiodButtonAdapter(InputHAL):
         logger.info(
             "GpiodButtonAdapter: {} of 4 buttons acquired", len(self._lines)
         )
+
+    def _request_line(self, chip: object, line_offset: int, button: Button) -> object:
+        """Request one GPIO line, preferring both-edge events when supported."""
+        consumer = f"pimoroni-btn-{button.value}"
+
+        try:
+            line = request_input_events(chip, line_offset, consumer)
+        except Exception as exc:
+            logger.debug(
+                "Falling back to polled GPIO input for button {}: {}",
+                button.value,
+                exc,
+            )
+            return request_input(chip, line_offset, consumer)
+
+        event_fd = get_event_fd(line)
+        if event_fd is None:
+            logger.debug(
+                "GPIO edge events unavailable for button {}; using polling loop",
+                button.value,
+            )
+            return line
+
+        self._line_event_fds[button] = event_fd
+        return line
 
     def start(self) -> None:
         if self.running:
@@ -186,50 +224,149 @@ class GpiodButtonAdapter(InputHAL):
         except Exception:
             return False
 
-    def _poll_loop(self) -> None:
-        """Poll button states at 10ms intervals with debounce and long-press."""
-        while not self._stop_event.is_set():
-            now = time.time()
+    def _observe_raw_state(self, button: Button, current_state: bool, observed_at: float) -> None:
+        """Track raw GPIO edges and start a debounce window when the level changes."""
+        if current_state == self._raw_button_states[button]:
+            return
 
-            for button in Button:
-                if self.simulate and button not in self._lines:
-                    continue
+        self._raw_button_states[button] = current_state
+        self._transition_times[button] = observed_at
 
-                current = self._read_button(button)
-                previous = self._button_states[button]
+    def _advance_button_state(self, button: Button, current_time: float) -> None:
+        """Promote debounced raw state changes into semantic button actions."""
+        transition_started_at = self._transition_times[button]
+        stable_state = self._button_states[button]
+        raw_state = self._raw_button_states[button]
 
-                # Press detected
-                if current and not previous:
-                    time.sleep(_DEBOUNCE_TIME)
-                    current = self._read_button(button)
-                    if current:
-                        self._button_states[button] = True
-                        self._press_times[button] = now
-                        self._long_fired[button] = False
-
-                # Release detected
-                elif not current and previous:
+        if transition_started_at is not None and (current_time - transition_started_at) >= _DEBOUNCE_TIME:
+            self._transition_times[button] = None
+            if raw_state != stable_state:
+                if raw_state:
+                    self._button_states[button] = True
+                    self._press_times[button] = transition_started_at
+                    self._long_fired[button] = False
+                else:
                     self._button_states[button] = False
-                    if (
-                        self._press_times[button] is not None
-                        and not self._long_fired[button]
-                    ):
+                    press_time = self._press_times[button]
+                    if press_time is not None and not self._long_fired[button]:
                         action = _PRESS_MAPPING.get(button)
                         if action:
                             self._fire_action(action, {"button": button.value})
                     self._press_times[button] = None
 
-                # Held — check long press
-                elif current and previous:
-                    pt = self._press_times[button]
-                    if pt is not None and not self._long_fired[button]:
-                        if now - pt >= _LONG_PRESS_TIME:
-                            long_action = _LONG_PRESS_MAPPING.get(button)
-                            if long_action:
-                                self._fire_action(
-                                    long_action,
-                                    {"button": button.value, "long_press": True},
-                                )
-                            self._long_fired[button] = True
+        press_time = self._press_times[button]
+        if self._button_states[button] and press_time is not None and not self._long_fired[button]:
+            if current_time - press_time >= _LONG_PRESS_TIME:
+                long_action = _LONG_PRESS_MAPPING.get(button)
+                if long_action:
+                    self._fire_action(
+                        long_action,
+                        {"button": button.value, "long_press": True},
+                    )
+                self._long_fired[button] = True
 
-            time.sleep(0.01)
+    def _next_poll_timeout(self, current_time: float) -> float:
+        """Return the next timeout for the fallback polling loop."""
+        deadlines = [_POLL_INTERVAL]
+
+        for transition_started_at in self._transition_times.values():
+            if transition_started_at is None:
+                continue
+            deadlines.append(
+                max(0.0, _DEBOUNCE_TIME - (current_time - transition_started_at))
+            )
+
+        for button in Button:
+            press_time = self._press_times[button]
+            if press_time is None or not self._button_states[button] or self._long_fired[button]:
+                continue
+            deadlines.append(
+                max(0.0, _LONG_PRESS_TIME - (current_time - press_time))
+            )
+
+        return min(deadlines)
+
+    def _next_event_timeout(self, current_time: float) -> float:
+        """Return the next timeout for the edge-driven wait loop."""
+        deadlines: list[float] = []
+
+        for transition_started_at in self._transition_times.values():
+            if transition_started_at is None:
+                continue
+            deadlines.append(
+                max(0.0, _DEBOUNCE_TIME - (current_time - transition_started_at))
+            )
+
+        for button in Button:
+            press_time = self._press_times[button]
+            if press_time is None or not self._button_states[button] or self._long_fired[button]:
+                continue
+            deadlines.append(
+                max(0.0, _LONG_PRESS_TIME - (current_time - press_time))
+            )
+
+        if deadlines:
+            return min(deadlines)
+        return _EDGE_IDLE_WAIT_TIMEOUT
+
+    def _poll_line_states(self, current_time: float) -> None:
+        """Update button state using a periodic GPIO read loop."""
+        for button in Button:
+            if self.simulate and button not in self._lines:
+                continue
+            current_state = self._read_button(button)
+            self._observe_raw_state(button, current_state, current_time)
+            self._advance_button_state(button, current_time)
+
+    def _event_wait_loop(self) -> None:
+        """Block on GPIO edge file descriptors so idle threads stay asleep."""
+        fd_to_button = {fd: button for button, fd in self._line_event_fds.items()}
+
+        while not self._stop_event.is_set():
+            current_time = time.monotonic()
+            timeout = self._next_event_timeout(current_time)
+
+            try:
+                ready, _, _ = select.select(list(fd_to_button), [], [], timeout)
+            except OSError as exc:
+                logger.warning("GPIO edge wait failed; falling back to polled reads: {}", exc)
+                self._polling_loop()
+                return
+
+            observed_at = time.monotonic()
+            for fd in ready:
+                button = fd_to_button.get(fd)
+                if button is None:
+                    continue
+                line = self._lines.get(button)
+                if line is None:
+                    continue
+                try:
+                    read_edge_events(line)
+                except Exception as exc:
+                    logger.debug(
+                        "Failed to drain GPIO edge events for button {}: {}",
+                        button.value,
+                        exc,
+                    )
+                    continue
+
+                self._observe_raw_state(button, self._read_button(button), observed_at)
+
+            for button in Button:
+                self._advance_button_state(button, observed_at)
+
+    def _polling_loop(self) -> None:
+        """Fallback polling path for runtimes without GPIO edge waits."""
+        while not self._stop_event.is_set():
+            current_time = time.monotonic()
+            self._poll_line_states(current_time)
+            self._stop_event.wait(self._next_poll_timeout(current_time))
+
+    def _poll_loop(self) -> None:
+        """Dispatch to the lowest-churn GPIO wait loop available on this runtime."""
+        if self._line_event_fds and len(self._line_event_fds) == len(self._lines):
+            self._event_wait_loop()
+            return
+
+        self._polling_loop()
