@@ -11,6 +11,7 @@ from yoyopod.runtime_state import VoiceState
 from yoyopod.ui.display import Display
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.system.power import (
+    _VOICE_PAGE_SIGNATURE_FIELDS,
     PowerScreen,
     PowerScreenState,
     build_power_screen_actions,
@@ -339,25 +340,79 @@ def test_power_screen_reuses_prepared_pages_until_explicit_refresh() -> None:
         display.cleanup()
 
 
-def test_power_screen_voice_state_schema_changes_require_signature_review() -> None:
-    """VoiceState schema drift should be caught in tests, not via runtime assertions."""
+def test_power_screen_snapshot_cache_ignores_hidden_snapshot_fields() -> None:
+    """Prepared pages should survive snapshot-only churn that does not affect Setup rows."""
 
-    assert tuple(field_info.name for field_info in fields(VoiceState)) == (
+    class HiddenFieldChurnProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> PowerScreenState:
+            self.calls += 1
+            return PowerScreenState(
+                snapshot=PowerSnapshot(
+                    available=True,
+                    checked_at=datetime(2026, 4, 5, 12, 0, self.calls),
+                    source="battery",
+                    error=None,
+                    device=PowerDeviceInfo(
+                        model="PiSugar 3",
+                        firmware_version=f"v{self.calls}",
+                    ),
+                    battery=BatteryState(
+                        level_percent=55.2,
+                        voltage_volts=3.62,
+                        charging=True,
+                        power_plugged=True,
+                        allow_charging=bool(self.calls % 2),
+                        output_enabled=bool((self.calls + 1) % 2),
+                        temperature_celsius=29.5,
+                    ),
+                    rtc=RTCState(
+                        time=datetime(2026, 4, 5, 13, 30, 0),
+                        alarm_enabled=True,
+                        alarm_time=datetime(2026, 4, 6, 7, 30, 0),
+                        alarm_repeat_mask=self.calls,
+                        adjust_ppm=self.calls,
+                    ),
+                    shutdown=ShutdownState(
+                        safe_shutdown_level_percent=10.0,
+                        safe_shutdown_delay_seconds=15 + self.calls,
+                    ),
+                )
+            )
+
+    display = Display(simulate=True)
+    try:
+        provider = HiddenFieldChurnProvider()
+        screen = PowerScreen(display, AppContext(), state_provider=provider)
+
+        screen.enter()
+        first_pages = screen._prepared_pages()
+
+        screen.refresh_prepared_state(force=True)
+        second_pages = screen._prepared_pages()
+
+        assert provider.calls == 2
+        assert second_pages is first_pages
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_voice_signature_fields_stay_in_sync_with_voice_state() -> None:
+    """Only the voice-signature subset should require review when the schema changes."""
+
+    assert _VOICE_PAGE_SIGNATURE_FIELDS == (
         "commands_enabled",
         "ai_requests_enabled",
         "screen_read_enabled",
-        "stt_enabled",
-        "tts_enabled",
-        "mic_muted",
         "speaker_device_id",
         "capture_device_id",
-        "stt_available",
-        "tts_available",
-        "last_transcript",
-        "last_spoken_text",
-        "last_mode",
+        "mic_muted",
         "output_volume",
-        "interaction",
+    )
+    assert set(_VOICE_PAGE_SIGNATURE_FIELDS).issubset(
+        {field_info.name for field_info in fields(VoiceState)}
     )
 
 

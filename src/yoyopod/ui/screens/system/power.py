@@ -833,14 +833,6 @@ class PowerScreen(Screen):
         self._cached_pages_one_button_mode = one_button_mode
         return self._cached_pages
 
-    def _invalidate_page_cache(self) -> None:
-        """Drop cached page models after local UI state mutations."""
-
-        self._cached_pages = None
-        self._cached_pages_signature = None
-        self._cached_pages_voice_signature = None
-        self._cached_pages_one_button_mode = None
-
     def _voice_page_signature(self) -> tuple[object, ...] | None:
         """Return the voice-facing inputs that affect Setup page content."""
 
@@ -849,6 +841,29 @@ class PowerScreen(Screen):
 
         voice = self.context.voice
         return tuple(getattr(voice, field_name) for field_name in _VOICE_PAGE_SIGNATURE_FIELDS)
+
+    @staticmethod
+    def _snapshot_page_signature(snapshot: "PowerSnapshot | None") -> tuple[object, ...] | None:
+        """Return only the snapshot fields that affect prepared Setup page content."""
+
+        if snapshot is None:
+            return None
+
+        return (
+            snapshot.available,
+            snapshot.error,
+            snapshot.source,
+            snapshot.device.model,
+            snapshot.battery.level_percent,
+            snapshot.battery.charging,
+            snapshot.battery.power_plugged,
+            snapshot.battery.voltage_volts,
+            snapshot.battery.temperature_celsius,
+            snapshot.rtc.time,
+            snapshot.rtc.alarm_enabled,
+            snapshot.rtc.alarm_time,
+            snapshot.shutdown.safe_shutdown_level_percent,
+        )
 
     @staticmethod
     def _page_cache_signature(
@@ -860,7 +875,7 @@ class PowerScreen(Screen):
         """Return the stable inputs used to reuse prepared page models."""
 
         return (
-            state.snapshot,
+            PowerScreen._snapshot_page_signature(state.snapshot),
             tuple(sorted(state.status.items())),
             state.network_enabled,
             state.network_rows,
@@ -1120,19 +1135,16 @@ class PowerScreen(Screen):
         row_index = self.selected_row
         if row_index == 0:
             self.context.configure_voice(commands_enabled=not self.context.voice.commands_enabled)
-            self._invalidate_page_cache()
             return
         if row_index == 1:
             self.context.configure_voice(
                 ai_requests_enabled=not self.context.voice.ai_requests_enabled
             )
-            self._invalidate_page_cache()
             return
         if row_index == 2:
             self.context.configure_voice(
                 screen_read_enabled=not self.context.voice.screen_read_enabled
             )
-            self._invalidate_page_cache()
             return
         if row_index == 3:
             self._cycle_speaker_device(direction)
@@ -1151,7 +1163,6 @@ class PowerScreen(Screen):
         else:
             volume = self.context.voice.output_volume + (5 * direction)
             self.context.set_volume(max(0, min(100, volume)))
-            self._invalidate_page_cache()
             return
         self._sync_context_output_volume(current)
 
@@ -1189,7 +1200,6 @@ class PowerScreen(Screen):
             direction,
         )
         self.context.configure_voice(speaker_device_id=next_device)
-        self._invalidate_page_cache()
         if self._actions.persist_speaker_device is not None:
             self._actions.persist_speaker_device(next_device)
 
@@ -1202,7 +1212,6 @@ class PowerScreen(Screen):
             direction,
         )
         self.context.configure_voice(capture_device_id=next_device)
-        self._invalidate_page_cache()
         if self._actions.persist_capture_device is not None:
             self._actions.persist_capture_device(next_device)
 
@@ -1327,7 +1336,6 @@ class PowerScreen(Screen):
 
         if self.context is not None:
             self.context.set_mic_muted(muted)
-        self._invalidate_page_cache()
         action = self._actions.mute if muted else self._actions.unmute
         if action is not None:
             action()
@@ -1338,4 +1346,3 @@ class PowerScreen(Screen):
         if volume is None or self.context is None:
             return
         self.context.cache_output_volume(volume)
-        self._invalidate_page_cache()
