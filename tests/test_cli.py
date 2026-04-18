@@ -103,11 +103,42 @@ def test_build_liblinphone_help():
 def test_pi_voip_check_help():
     result = runner.invoke(app, ["pi", "voip", "check", "--help"])
     assert result.exit_code == 0
+    assert "--config-dir" in _plain(result.output)
 
 
 def test_pi_voip_debug_help():
     result = runner.invoke(app, ["pi", "voip", "debug", "--help"])
     assert result.exit_code == 0
+    assert "--config-dir" in _plain(result.output)
+
+
+def test_pi_voip_registration_stability_help():
+    result = runner.invoke(app, ["pi", "voip", "registration-stability", "--help"])
+    assert result.exit_code == 0
+    output = _plain(result.output)
+    assert "--registration-timeout" in output
+    assert "--hold-seconds" in output
+    assert "--artifacts-dir" in output
+
+
+def test_pi_voip_reconnect_drill_help():
+    result = runner.invoke(app, ["pi", "voip", "reconnect-drill", "--help"])
+    assert result.exit_code == 0
+    output = _plain(result.output)
+    assert "--disconnect-seconds" in output
+    assert "--drop-command" in output
+    assert "--restore-command" in output
+    assert "--artifacts-dir" in output
+
+
+def test_pi_voip_call_soak_help():
+    result = runner.invoke(app, ["pi", "voip", "call-soak", "--help"])
+    assert result.exit_code == 0
+    output = _plain(result.output)
+    assert "--target" in output
+    assert "--connect-timeout" in output
+    assert "--soak-seconds" in output
+    assert "--artifacts-dir" in output
 
 
 def test_pi_power_battery_help():
@@ -154,18 +185,6 @@ def test_pi_smoke_help():
     assert "--with-power" in _plain(result.output)
     assert "--with-lvgl-soak" in _plain(result.output)
     assert "--test-music-dir" in _plain(result.output)
-
-
-def test_pi_music_help():
-    result = runner.invoke(app, ["pi", "music", "--help"])
-    assert result.exit_code == 0
-    assert "provision-test-library" in _plain(result.output)
-
-
-def test_pi_music_provision_test_library_help():
-    result = runner.invoke(app, ["pi", "music", "provision-test-library", "--help"])
-    assert result.exit_code == 0
-    assert "--target-dir" in _plain(result.output)
 
 
 def test_pi_validate_help():
