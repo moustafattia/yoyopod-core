@@ -1,6 +1,6 @@
 # YoyoPod System Architecture
 
-**Last updated:** 2026-04-14
+**Last updated:** 2026-04-18
 **Status:** Current implementation
 
 This document describes the architecture that exists on `main`.
@@ -311,7 +311,8 @@ needs selected-track state.
 
 The current code still includes a few environment-specific assumptions:
 
-- Whisplay driver path: `/home/tifo/Whisplay/Driver/WhisPlay.py`
+- Whisplay driver path: `/home/raouf/Whisplay/Driver/WhisPlay.py`
+- MQTT transport: device connects over WebSocket (WSS:443) via Cloudflare tunnel to `mqtt-yoyopod.moraouf.net`; Mosquitto listens on port 8083 with WebSocket protocol
 - audio device defaults for Liblinphone and mpv: `ALSA: wm8960-soundcard` / `alsa/default`
 - simulation server defaults to port `5000`
 - call negotiation on the Pi currently depends on the tracked Liblinphone factory config at `config/communication/integrations/liblinphone_factory.conf`

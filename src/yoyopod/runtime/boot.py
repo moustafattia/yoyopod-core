@@ -69,6 +69,7 @@ from yoyopod.ui.screens.voip.voice_note import (
     build_voice_note_actions,
     build_voice_note_state_provider,
 )
+from yoyopod.cloud import CloudManager
 from yoyopod.voice import VoiceSettings
 from yoyopod.communication import CallHistoryStore, VoIPConfig, VoIPManager
 
@@ -277,15 +278,12 @@ class RuntimeBootService:
                 logger.info("    No input hardware available")
 
             logger.info("  - ScreenManager")
-            action_scheduler = (
-                self.app.runtime_loop.queue_main_thread_callback
-                if getattr(display, "backend_kind", "pil") == "lvgl"
-                else None
-            )
             self.app.screen_manager = ScreenManager(
                 display,
                 self.app.input_manager,
-                action_scheduler=action_scheduler,
+                # Screen/input callbacks may originate from worker or polling threads.
+                # Route all UI actions through the runtime loop to keep display I/O serialized.
+                action_scheduler=self.app.runtime_loop.queue_main_thread_callback,
             )
             return True
         except Exception:
@@ -400,6 +398,13 @@ class RuntimeBootService:
                         connected=False,
                         gps_has_fix=False,
                     )
+
+            logger.info("  - CloudManager")
+            self.app.cloud_manager = CloudManager(
+                app=self.app,
+                config_manager=config_manager,
+            )
+            self.app.cloud_manager.prepare_boot()
 
             return True
         except Exception:
@@ -855,6 +860,7 @@ class RuntimeBootService:
             runtime=self.app.coordinator_runtime,
             screen_coordinator=self.app.screen_coordinator,
             context=self.app.context,
+            cloud_manager=self.app.cloud_manager,
         )
         if self.app.screen_manager is not None:
             self.app.screen_manager.on_screen_changed = self.app._handle_screen_changed

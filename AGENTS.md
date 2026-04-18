@@ -1,6 +1,6 @@
 # YoyoPod - Agent Instructions
 
-**Last Updated:** 2026-04-16
+**Last Updated:** 2026-04-18
 **Target Hardware:** Raspberry Pi Zero 2W
 **Project:** iPod-inspired communication, local music, modem, and voice device with a small-screen button UI
 
@@ -69,7 +69,7 @@ When asked to deploy, sync, restart, check status, view logs, or take a screensh
   - screen timeout and usage tracking
   - RTC helpers
   - PiSugar software watchdog support
-- Production Raspberry Pi deployment now has a committed systemd unit template under `deploy/systemd/`.
+- Production Raspberry Pi deployment runs as `yoyopod@raouf.service` (systemd unit template at `deploy/systemd/yoyopod@.service`).
 - Whisplay now runs on the LVGL rendering path in production under `src/yoyopod/ui/lvgl_binding/`.
 - Production local music now runs through the app-managed mpv backend under `src/yoyopod/audio/music/`.
 - Production communication now runs through Liblinphone under `src/yoyopod/communication/integrations/liblinphone_binding/` and `src/yoyopod/communication/calling/backend.py`.
@@ -149,6 +149,9 @@ yoyopod.py / yoyopod.main
      -> PowerManager
         -> PiSugarBackend
         -> PiSugarWatchdog
+     -> CloudManager
+        -> DeviceMqttClient (transport: websockets via Cloudflare)
+        -> cloud config sync, telemetry, remote command handling
      -> NetworkManager
      -> VoiceRuntimeCoordinator
 ```
@@ -236,6 +239,12 @@ Key design points:
 - `src/yoyopod/cli/pi/` - on-Pi hardware and diagnostic commands
 - `src/yoyopod/cli/remote/` - SSH-based remote Pi operations
 
+### Cloud Integration
+
+- `src/yoyopod/cloud/manager.py` — CloudManager: provisioning, HTTPS auth/refresh, config polling, MQTT telemetry
+- `src/yoyopod/cloud/mqtt_client.py` — DeviceMqttClient with configurable transport (tcp/websockets)
+- `config/cloud/backend.yaml` — MQTT broker host, port, TLS, transport, REST API base URL
+
 ### Configuration
 
 - `config/app/core.yaml`
@@ -279,6 +288,7 @@ Useful env overrides:
 - `YOYOPOD_PI_HOST`
 - `YOYOPOD_PI_PROJECT_DIR`
 - `YOYOPOD_PI_BRANCH`
+- `YOYOPOD_CLOUD_MQTT_TRANSPORT` (websockets/tcp, default tcp)
 
 ---
 

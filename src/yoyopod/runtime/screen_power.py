@@ -127,6 +127,12 @@ class ScreenPowerService:
             self.app._lvgl_backend.force_refresh()
 
         self.update_screen_runtime_metrics(now)
+
+        if self.app.cloud_manager is not None:
+            # Wake both the config-poll path and MQTT liveness path on screen wake.
+            self.app.cloud_manager.request_immediate_poll()
+            self.app.cloud_manager.publish_heartbeat()
+
         logger.debug("Screen woke from inactivity")
 
     def sleep_screen(self, now: float) -> None:

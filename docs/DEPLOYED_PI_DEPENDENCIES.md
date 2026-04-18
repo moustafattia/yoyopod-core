@@ -1,6 +1,6 @@
 # Deployed Pi Dependency Snapshot
 
-**Last Verified:** 2026-04-10  
+**Last Verified:** 2026-04-18  
 **Target Device:** `rpi-zero`  
 **SSH User:** `tifo`
 
@@ -10,7 +10,7 @@ This document is a live deployment snapshot of the Raspberry Pi environment curr
 
 These services were running when this snapshot was taken:
 
-- `yoyopod@tifo.service`
+- `yoyopod@raouf.service`
 - `pisugar-server.service`
 
 What that means in practice:
@@ -36,7 +36,7 @@ No separate Mopidy process or music daemon is part of the stack anymore.
 
 - `python3`
 - `uv`
-- YoyoPod virtual environment under `/home/tifo/YoyoPod_Core/.venv`
+- YoyoPod virtual environment under `/home/raouf/yoyo-py/.venv`
 
 ### Music playback
 
@@ -162,10 +162,40 @@ Current product direction is local-first music via `mpv`, not a general music-se
 
 At the time of capture:
 
-- `yoyopod@tifo.service` was healthy
+- `yoyopod@raouf.service` was healthy
 - `pisugar-server.service` was healthy
 - memory usage was approximately `231 MB / 416 MB`
 - YoyoPod had one long-lived `python3` process and one long-lived `mpv` child
+
+
+## Cloud Integration Dependencies
+
+### Cloudflare Tunnel
+
+The backend is exposed through a Cloudflare tunnel (token-based, managed via  systemd service). The MQTT broker WebSocket endpoint is routed through Cloudflare:
+
+- Cloudflare route:  → 
+- Mosquitto listens on port 8083 with WebSocket protocol enabled
+
+### Mosquitto MQTT Broker
+
+Mosquitto runs as a snap service on the host machine with two listeners:
+
+- Port 1883: plain TCP (LAN access)
+- Port 8083: WebSocket (routed via Cloudflare tunnel for Pi access over the internet)
+
+Config at: 
+
+### Pi MQTT Transport
+
+The Pi connects to the MQTT broker using WebSocket transport over WSS:443 via Cloudflare. Config in :
+
+- 
+- 
+- 
+- 
+
+Env override: 
 
 ## Source Of Truth For This Snapshot
 
