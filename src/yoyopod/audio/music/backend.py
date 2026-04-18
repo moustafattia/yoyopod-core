@@ -277,7 +277,7 @@ class MpvBackend:
         event_name = event.get("event", "")
 
         if event_name == "file-loaded":
-            self._update_time_position_cache(0, force=True)
+            self._reset_time_position_cache_for_new_file()
             with self._state_lock:
                 needs_track_prime = self._cached_path is None
             if needs_track_prime:
@@ -400,8 +400,15 @@ class MpvBackend:
                 >= self._TIME_POSITION_CACHE_MIN_INTERVAL_SECONDS
             ):
                 self._cached_time_position_ms = position_ms
-                self._last_time_position_cache_update = now
-                self._last_time_position_stale_log_at = None
+            self._last_time_position_cache_update = now
+            self._last_time_position_stale_log_at = None
+
+    def _reset_time_position_cache_for_new_file(self) -> None:
+        """Reset progress to zero without pretending a real sample arrived."""
+        with self._state_lock:
+            self._cached_time_position_ms = 0
+            self._last_time_position_cache_update = None
+            self._last_time_position_stale_log_at = None
 
     def _touch_time_position_cache(self) -> None:
         """Extend the stale deadline after state changes without a new sample."""

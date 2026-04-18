@@ -695,6 +695,33 @@ def test_mpv_backend_get_time_position_falls_back_to_sync_read_until_cached() ->
     assert backend._last_time_position_cache_update is None
 
 
+def test_mpv_backend_file_loaded_reset_keeps_sync_fallback_available() -> None:
+    class FakeIpc:
+        connected = True
+
+        def __init__(self) -> None:
+            self.time_pos_reads = [12.5]
+
+        def send_command(self, args: list[object]) -> dict[str, object]:
+            assert args == ["get_property", "time-pos"]
+            return {"error": "success", "data": self.time_pos_reads.pop(0)}
+
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
+    backend = MpvBackend(MusicConfig())
+    backend._connected = True
+    backend._ipc = FakeIpc()
+    backend._process = FakeProcess()
+    backend._cached_path = "/music/degraded-startup.ogg"
+
+    backend._handle_mpv_event({"event": "file-loaded"})
+
+    assert backend.get_time_position() == 12500
+    assert backend._last_time_position_cache_update is None
+
+
 def test_mpv_backend_get_time_position_returns_zero_when_disconnected() -> None:
     class FakeIpc:
         connected = False
