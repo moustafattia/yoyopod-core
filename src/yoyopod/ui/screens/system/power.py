@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, fields
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -47,7 +47,7 @@ class PowerScreenState:
     """Prepared power/setup state consumed by the Setup screen."""
 
     snapshot: "PowerSnapshot | None" = None
-    status: dict[str, object] = field(default_factory=dict)
+    status: tuple[tuple[str, object], ...] = ()
     network_enabled: bool = False
     network_rows: tuple[tuple[str, str], ...] = ()
     gps_rows: tuple[tuple[str, str], ...] = ()
@@ -80,6 +80,34 @@ class PowerScreenLvglPayload:
     items: tuple[str, ...]
     current_page_index: int
     total_pages: int
+
+
+_VOICE_PAGE_SIGNATURE_FIELDS = (
+    "commands_enabled",
+    "ai_requests_enabled",
+    "screen_read_enabled",
+    "speaker_device_id",
+    "capture_device_id",
+    "mic_muted",
+    "output_volume",
+)
+_VOICE_STATE_FIELD_NAMES = (
+    "commands_enabled",
+    "ai_requests_enabled",
+    "screen_read_enabled",
+    "stt_enabled",
+    "tts_enabled",
+    "mic_muted",
+    "speaker_device_id",
+    "capture_device_id",
+    "stt_available",
+    "tts_available",
+    "last_transcript",
+    "last_spoken_text",
+    "last_mode",
+    "output_volume",
+    "interaction",
+)
 
 
 def _build_network_rows_from_manager(network_manager: object | None) -> list[tuple[str, str]]:
@@ -185,7 +213,7 @@ def build_power_screen_state_provider(
 
         return PowerScreenState(
             snapshot=snapshot,
-            status=status,
+            status=tuple(sorted(status.items())),
             network_enabled=bool(
                 network_manager is not None and getattr(network_manager.config, "enabled", False)
             ),
@@ -597,7 +625,7 @@ class PowerScreen(Screen):
         """Build compact setup pages for rendering and tests."""
         resolved_state = state or self._get_state()
         resolved_snapshot = snapshot if snapshot is not None else resolved_state.snapshot
-        resolved_status = status if status is not None else resolved_state.status
+        resolved_status = status if status is not None else dict(resolved_state.status)
         battery_rows = self._build_battery_rows(snapshot=resolved_snapshot)
         runtime_rows = self._build_runtime_rows(
             snapshot=resolved_snapshot,
@@ -832,15 +860,11 @@ class PowerScreen(Screen):
             return None
 
         voice = self.context.voice
-        return (
-            voice.commands_enabled,
-            voice.ai_requests_enabled,
-            voice.screen_read_enabled,
-            voice.speaker_device_id,
-            voice.capture_device_id,
-            voice.mic_muted,
-            voice.output_volume,
+        voice_field_names = tuple(field_info.name for field_info in fields(type(voice)))
+        assert voice_field_names == _VOICE_STATE_FIELD_NAMES, (
+            "VoiceState field list changed; revisit PowerScreen voice cache signature."
         )
+        return tuple(getattr(voice, field_name) for field_name in _VOICE_PAGE_SIGNATURE_FIELDS)
 
     def _current_page_title(self) -> str | None:
         """Return the currently selected Setup page title from prepared pages."""
