@@ -102,6 +102,7 @@ class RuntimeLoopService:
         self._last_runtime_loop_gap_seconds = 0.0
         self._last_runtime_iteration_duration_seconds = 0.0
         self._last_voip_iterate_started_at = 0.0
+        self._last_voip_timing_sample_id = 0
         self._last_voip_schedule_delay_seconds = 0.0
         self._last_voip_iterate_duration_seconds = 0.0
         self._last_voip_native_events = 0
@@ -188,6 +189,96 @@ class RuntimeLoopService:
             ),
         )
 
+    def _voip_background_iterate_enabled(self) -> bool:
+        """Return whether the active VoIP manager owns a dedicated iterate worker."""
+
+        return bool(
+            self.app.voip_manager is not None
+            and getattr(self.app.voip_manager, "background_iterate_enabled", False)
+        )
+
+    def _sync_background_voip_timing_sample(self) -> None:
+        """Pull the latest background iterate sample into runtime timing snapshots."""
+
+        if self.app.voip_manager is None:
+            return
+
+        get_snapshot = getattr(self.app.voip_manager, "get_iterate_timing_snapshot", None)
+        if not callable(get_snapshot):
+            return
+
+        snapshot = get_snapshot()
+        if snapshot is None:
+            return
+
+        last_started_at = max(0.0, float(getattr(snapshot, "last_started_at", 0.0) or 0.0))
+        if last_started_at > 0.0:
+            self._last_voip_iterate_started_at = last_started_at
+
+        sample_id = max(0, int(getattr(snapshot, "sample_id", 0) or 0))
+        if sample_id <= 0 or sample_id == self._last_voip_timing_sample_id:
+            return
+
+        self._last_voip_timing_sample_id = sample_id
+        self._last_voip_schedule_delay_seconds = max(
+            0.0,
+            float(getattr(snapshot, "schedule_delay_seconds", 0.0) or 0.0),
+        )
+        self._last_voip_iterate_duration_seconds = max(
+            0.0,
+            float(getattr(snapshot, "total_duration_seconds", 0.0) or 0.0),
+        )
+        self._last_voip_native_events = max(0, int(getattr(snapshot, "drained_events", 0) or 0))
+        self._last_voip_native_iterate_duration_seconds = max(
+            0.0,
+            float(getattr(snapshot, "native_duration_seconds", 0.0) or 0.0),
+        )
+        self._last_voip_event_drain_duration_seconds = max(
+            0.0,
+            float(getattr(snapshot, "event_drain_duration_seconds", 0.0) or 0.0),
+        )
+
+        delayed = (
+            self._last_voip_schedule_delay_seconds >= self._voip_schedule_delay_warning_seconds()
+        )
+        slow = self._last_voip_iterate_duration_seconds >= self._voip_iterate_warning_seconds()
+        self._record_voip_timing_sample(
+            monotonic_now=max(
+                last_started_at,
+                float(getattr(snapshot, "last_completed_at", last_started_at) or last_started_at),
+            ),
+            schedule_delay_seconds=self._last_voip_schedule_delay_seconds,
+            iterate_duration_seconds=self._last_voip_iterate_duration_seconds,
+            native_iterate_duration_seconds=self._last_voip_native_iterate_duration_seconds,
+            event_drain_duration_seconds=self._last_voip_event_drain_duration_seconds,
+            drained_events=self._last_voip_native_events,
+            delayed=delayed,
+            slow=slow,
+        )
+
+        if delayed or slow:
+            voip_logger.warning(
+                "VoIP iterate timing drift: "
+                "schedule_delay_ms={:.1f} iterate_ms={:.1f} "
+                "interval_ms={:.1f} configured_interval_ms={:.1f} "
+                "native_iterate_ms={:.1f} event_drain_ms={:.1f} "
+                "native_events={} cadence_mode={} cadence_reason={} "
+                "pending_callbacks={} pending_events={} screen={} state={}",
+                self._last_voip_schedule_delay_seconds * 1000.0,
+                self._last_voip_iterate_duration_seconds * 1000.0,
+                self._effective_voip_iterate_interval_seconds() * 1000.0,
+                self.app._voip_iterate_interval_seconds * 1000.0,
+                self._last_voip_native_iterate_duration_seconds * 1000.0,
+                self._last_voip_event_drain_duration_seconds * 1000.0,
+                self._last_voip_native_events,
+                self._current_cadence_mode,
+                self._current_cadence_reason,
+                _queue_depth(self.app._pending_main_thread_callbacks),
+                self.app.event_bus.pending_count(),
+                self._current_screen_name(),
+                self._runtime_state_name(),
+            )
+
     def process_pending_main_thread_actions(self, limit: Optional[int] = None) -> int:
         """Drain queued typed events scheduled by worker threads."""
         started_at = time.monotonic()
@@ -246,8 +337,18 @@ class RuntimeLoopService:
         )
 
     def iterate_voip_backend_if_due(self, now: float | None = None) -> None:
-        """Advance the Liblinphone core on the coordinator thread at its configured cadence."""
+        """Advance or observe VoIP keep-alive work without stalling the coordinator thread."""
         if self.app.voip_manager is None or not self.app.voip_manager.running:
+            return
+
+        if self._voip_background_iterate_enabled():
+            ensure_running = getattr(self.app.voip_manager, "ensure_background_iterate_running", None)
+            if callable(ensure_running):
+                ensure_running()
+            poll_housekeeping = getattr(self.app.voip_manager, "poll_housekeeping", None)
+            if callable(poll_housekeeping):
+                poll_housekeeping()
+            self._sync_background_voip_timing_sample()
             return
 
         monotonic_now = time.monotonic() if now is None else now
@@ -342,7 +443,11 @@ class RuntimeLoopService:
 
         sleep_seconds = max(0.0, cadence.loop_sleep_seconds)
         deadlines = [sleep_seconds]
-        if self.app.voip_manager is not None and self.app.voip_manager.running:
+        if (
+            self.app.voip_manager is not None
+            and self.app.voip_manager.running
+            and not self._voip_background_iterate_enabled()
+        ):
             if self.app._next_voip_iterate_at <= 0.0:
                 deadlines.append(self._effective_voip_iterate_interval_seconds())
             else:
@@ -745,10 +850,27 @@ class RuntimeLoopService:
             self.app.voip_manager is not None
             and self.app.voip_manager.running
         ):
-            self.app._next_voip_iterate_at = self._next_voip_due_at_for_cadence(
-                monotonic_now=monotonic_now,
-                iterate_interval_seconds=decision.voip_iterate_interval_seconds,
-            )
+            if self._voip_background_iterate_enabled():
+                ensure_running = getattr(
+                    self.app.voip_manager,
+                    "ensure_background_iterate_running",
+                    None,
+                )
+                if callable(ensure_running):
+                    ensure_running()
+                set_interval = getattr(
+                    self.app.voip_manager,
+                    "set_iterate_interval_seconds",
+                    None,
+                )
+                if callable(set_interval):
+                    set_interval(decision.voip_iterate_interval_seconds)
+                self.app._next_voip_iterate_at = 0.0
+            else:
+                self.app._next_voip_iterate_at = self._next_voip_due_at_for_cadence(
+                    monotonic_now=monotonic_now,
+                    iterate_interval_seconds=decision.voip_iterate_interval_seconds,
+                )
 
         if not changed:
             return

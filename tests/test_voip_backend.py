@@ -6,6 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Callable
 
 import pytest
 from cffi import FFI
@@ -467,6 +468,32 @@ def test_voip_manager_times_out_stuck_voice_note_send() -> None:
     assert manager.get_active_voice_note().send_state == "failed"
     assert manager.get_active_voice_note().status_text == "Send timed out"
     assert drained_events == 0
+
+
+def test_voip_manager_queues_backend_events_back_to_main_thread(tmp_path: Path) -> None:
+    """App-mode VoIP events should be marshaled back through the main-thread scheduler."""
+
+    backend = MockVoIPBackend()
+    config = build_config()
+    config.message_store_dir = str(tmp_path / "messages")
+    config.voice_note_store_dir = str(tmp_path / "voice_notes")
+    queued_callbacks: list[Callable[[], None]] = []
+    manager = VoIPManager(
+        config,
+        backend=backend,
+        event_scheduler=queued_callbacks.append,
+        background_iterate_enabled=True,
+    )
+
+    backend.emit(CallStateChanged(state=CallState.CONNECTED))
+
+    assert manager.background_iterate_enabled is True
+    assert manager.call_state == CallState.IDLE
+    assert len(queued_callbacks) == 1
+
+    queued_callbacks.pop()()
+
+    assert manager.call_state == CallState.CONNECTED
 
 
 def test_voip_manager_surfaces_voice_note_failure_reason() -> None:

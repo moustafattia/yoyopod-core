@@ -212,16 +212,52 @@ class FakeRuntimeLoopVoIPManager:
         native_events: int = 0,
         native_iterate_seconds: float = 0.0,
         event_drain_seconds: float = 0.0,
+        background_iterate_enabled: bool = False,
+        sample_id: int = 0,
+        schedule_delay_seconds: float = 0.0,
+        total_duration_seconds: float | None = None,
+        last_started_at: float = 0.0,
+        last_completed_at: float = 0.0,
     ) -> None:
         self.running = True
+        self.background_iterate_enabled = background_iterate_enabled
         self.iterate_calls = 0
+        self.ensure_background_iterate_running_calls = 0
+        self.housekeeping_calls = 0
+        self.interval_updates: list[float] = []
         self.native_events = native_events
         self.native_iterate_seconds = native_iterate_seconds
         self.event_drain_seconds = event_drain_seconds
+        self._iterate_timing_snapshot = SimpleNamespace(
+            sample_id=sample_id,
+            last_started_at=last_started_at,
+            last_completed_at=last_completed_at,
+            schedule_delay_seconds=schedule_delay_seconds,
+            total_duration_seconds=(
+                native_iterate_seconds + event_drain_seconds
+                if total_duration_seconds is None
+                else total_duration_seconds
+            ),
+            native_duration_seconds=native_iterate_seconds,
+            event_drain_duration_seconds=event_drain_seconds,
+            drained_events=native_events,
+            interval_seconds=0.0,
+            in_flight=False,
+        )
 
     def iterate(self) -> int:
         self.iterate_calls += 1
         return self.native_events
+
+    def ensure_background_iterate_running(self) -> None:
+        self.ensure_background_iterate_running_calls += 1
+
+    def set_iterate_interval_seconds(self, interval_seconds: float) -> None:
+        self.interval_updates.append(interval_seconds)
+        self._iterate_timing_snapshot.interval_seconds = interval_seconds
+
+    def poll_housekeeping(self) -> None:
+        self.housekeeping_calls += 1
 
     def get_iterate_metrics(self) -> object:
         return SimpleNamespace(
@@ -230,6 +266,11 @@ class FakeRuntimeLoopVoIPManager:
             total_duration_seconds=self.native_iterate_seconds + self.event_drain_seconds,
             drained_events=self.native_events,
         )
+
+    def get_iterate_timing_snapshot(self) -> object | None:
+        if not self.background_iterate_enabled:
+            return None
+        return self._iterate_timing_snapshot
 
 
 class FakePowerManager:
@@ -1703,6 +1744,53 @@ def test_runtime_loop_keeps_fast_cadence_during_call_states() -> None:
     assert status["runtime_cadence_mode"] == "latency_sensitive"
     assert status["runtime_cadence_reason"] == "call_or_connecting_state"
     assert status["voip_effective_iterate_interval_seconds"] == pytest.approx(0.02)
+
+
+def test_runtime_loop_offloads_voip_iterate_to_background_manager() -> None:
+    """App-mode VoIP cadence should no longer call the backend iterate on the coordinator."""
+
+    app, _, _ = _build_app_with_power(
+        FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
+    )
+    voip_manager = FakeRuntimeLoopVoIPManager(
+        background_iterate_enabled=True,
+        native_events=2,
+        native_iterate_seconds=0.003,
+        event_drain_seconds=0.001,
+        sample_id=1,
+        schedule_delay_seconds=0.004,
+        last_started_at=0.96,
+        last_completed_at=0.964,
+    )
+    app.voip_manager = voip_manager
+    app._voip_iterate_interval_seconds = 0.02
+
+    sleep_seconds = app.runtime_loop.next_sleep_interval_seconds(
+        monotonic_now=1.0,
+        current_time=1.0,
+        last_screen_update=1.0,
+        screen_update_interval=1.0,
+    )
+    updated_at = app.runtime_loop.run_iteration(
+        monotonic_now=1.0,
+        current_time=1.0,
+        last_screen_update=0.0,
+        screen_update_interval=10.0,
+    )
+
+    status = app.get_status()
+    assert sleep_seconds == pytest.approx(0.05)
+    assert updated_at == 0.0
+    assert voip_manager.iterate_calls == 0
+    assert voip_manager.ensure_background_iterate_running_calls >= 1
+    assert voip_manager.housekeeping_calls == 1
+    assert voip_manager.interval_updates[-1] == pytest.approx(0.05)
+    assert status["voip_schedule_delay_seconds"] == pytest.approx(0.004)
+    assert status["voip_iterate_duration_seconds"] == pytest.approx(0.004)
+    assert status["voip_native_iterate_duration_seconds"] == pytest.approx(0.003)
+    assert status["voip_event_drain_duration_seconds"] == pytest.approx(0.001)
+    assert status["voip_iterate_native_events"] == 2
+    assert status["voip_iterate_age_seconds"] is not None
 
 
 def test_runtime_loop_logs_voip_timing_drift_and_exposes_snapshot(
