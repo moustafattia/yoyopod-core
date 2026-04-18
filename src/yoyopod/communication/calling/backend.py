@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -123,6 +124,7 @@ class LiblinphoneBackend:
         self.running = False
         self.event_callbacks: list[Callable[[VoIPEvent], None]] = []
         self._last_iterate_metrics: VoIPIterateMetrics | None = None
+        self._binding_lock = threading.Lock()
 
     def on_event(self, callback: Callable[[VoIPEvent], None]) -> None:
         self.event_callbacks.append(callback)
@@ -140,50 +142,51 @@ class LiblinphoneBackend:
             conference_factory_uri = self.config.effective_conference_factory_uri()
             file_transfer_server_url = self.config.effective_file_transfer_server_url()
             lime_server_url = self.config.effective_lime_server_url()
-            self.binding.init()
-            self._configure_alsa_capture_path()
-            if not self.config.conference_factory_uri and conference_factory_uri:
-                logger.info(
-                    "Using inferred conference factory {} for hosted account {}",
-                    conference_factory_uri,
-                    self.config.sip_server,
+            with self._binding_lock:
+                self.binding.init()
+                self._configure_alsa_capture_path()
+                if not self.config.conference_factory_uri and conference_factory_uri:
+                    logger.info(
+                        "Using inferred conference factory {} for hosted account {}",
+                        conference_factory_uri,
+                        self.config.sip_server,
+                    )
+                if not self.config.file_transfer_server_url and file_transfer_server_url:
+                    logger.info(
+                        "Using inferred file-transfer server {} for hosted account {}",
+                        file_transfer_server_url,
+                        self.config.sip_server,
+                    )
+                if not self.config.lime_server_url and lime_server_url:
+                    logger.info(
+                        "Using inferred LIME server {} for hosted account {}",
+                        lime_server_url,
+                        self.config.sip_server,
+                    )
+                self.binding.start(
+                    sip_server=self.config.sip_server,
+                    sip_username=self.config.sip_username,
+                    sip_password=self.config.sip_password,
+                    sip_password_ha1=self.config.sip_password_ha1,
+                    sip_identity=self.config.sip_identity,
+                    factory_config_path=factory_config_path,
+                    transport=self.config.transport,
+                    stun_server=self.config.stun_server,
+                    conference_factory_uri=conference_factory_uri,
+                    file_transfer_server_url=file_transfer_server_url,
+                    lime_server_url=lime_server_url,
+                    auto_download_incoming_voice_recordings=(
+                        self.config.auto_download_incoming_voice_recordings
+                    ),
+                    playback_device_id=self.config.playback_dev_id,
+                    ringer_device_id=self.config.ringer_dev_id,
+                    capture_device_id=self.config.capture_dev_id,
+                    media_device_id=self.config.media_dev_id,
+                    echo_cancellation=True,
+                    mic_gain=self._linphone_software_mic_gain(),
+                    output_volume=self.config.output_volume,
+                    voice_note_store_dir=self.config.voice_note_store_dir,
                 )
-            if not self.config.file_transfer_server_url and file_transfer_server_url:
-                logger.info(
-                    "Using inferred file-transfer server {} for hosted account {}",
-                    file_transfer_server_url,
-                    self.config.sip_server,
-                )
-            if not self.config.lime_server_url and lime_server_url:
-                logger.info(
-                    "Using inferred LIME server {} for hosted account {}",
-                    lime_server_url,
-                    self.config.sip_server,
-                )
-            self.binding.start(
-                sip_server=self.config.sip_server,
-                sip_username=self.config.sip_username,
-                sip_password=self.config.sip_password,
-                sip_password_ha1=self.config.sip_password_ha1,
-                sip_identity=self.config.sip_identity,
-                factory_config_path=factory_config_path,
-                transport=self.config.transport,
-                stun_server=self.config.stun_server,
-                conference_factory_uri=conference_factory_uri,
-                file_transfer_server_url=file_transfer_server_url,
-                lime_server_url=lime_server_url,
-                auto_download_incoming_voice_recordings=(
-                    self.config.auto_download_incoming_voice_recordings
-                ),
-                playback_device_id=self.config.playback_dev_id,
-                ringer_device_id=self.config.ringer_dev_id,
-                capture_device_id=self.config.capture_dev_id,
-                media_device_id=self.config.media_dev_id,
-                echo_cancellation=True,
-                mic_gain=self._linphone_software_mic_gain(),
-                output_volume=self.config.output_volume,
-                voice_note_store_dir=self.config.voice_note_store_dir,
-            )
             self.running = True
             logger.info("Liblinphone backend started successfully")
             return True
@@ -214,9 +217,11 @@ class LiblinphoneBackend:
             return
 
         try:
-            self.binding.stop()
+            with self._binding_lock:
+                self.binding.stop()
         finally:
-            self.binding.shutdown()
+            with self._binding_lock:
+                self.binding.shutdown()
             self.running = False
 
     def get_iterate_metrics(self) -> VoIPIterateMetrics | None:
@@ -232,16 +237,21 @@ class LiblinphoneBackend:
         started_at = time.monotonic()
         native_duration_seconds = 0.0
         event_drain_started_at = started_at
+        native_events: list[LiblinphoneNativeEvent] = []
         try:
             native_started_at = time.monotonic()
-            self.binding.iterate()
-            native_duration_seconds = max(0.0, time.monotonic() - native_started_at)
-            event_drain_started_at = time.monotonic()
-            while True:
-                event = self.binding.poll_event()
-                if event is None:
-                    break
-                drained_events += 1
+            with self._binding_lock:
+                self.binding.iterate()
+                native_duration_seconds = max(0.0, time.monotonic() - native_started_at)
+                event_drain_started_at = time.monotonic()
+                while True:
+                    event = self.binding.poll_event()
+                    if event is None:
+                        break
+                    native_events.append(event)
+
+            drained_events = len(native_events)
+            for event in native_events:
                 self._emit_native_event(event)
         except Exception as exc:
             logger.error("Liblinphone iterate failed: {}", exc)
@@ -260,46 +270,72 @@ class LiblinphoneBackend:
         return drained_events
 
     def make_call(self, sip_address: str) -> bool:
-        return self._call_binding(lambda: self.binding.make_call(sip_address))
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(lambda: binding.make_call(sip_address))
 
     def answer_call(self) -> bool:
-        return self._call_binding(self.binding.answer_call)
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(binding.answer_call)
 
     def reject_call(self) -> bool:
-        return self._call_binding(self.binding.reject_call)
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(binding.reject_call)
 
     def hangup(self) -> bool:
-        return self._call_binding(self.binding.hangup)
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(binding.hangup)
 
     def mute(self) -> bool:
-        return self._call_binding(lambda: self.binding.set_muted(True))
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(lambda: binding.set_muted(True))
 
     def unmute(self) -> bool:
-        return self._call_binding(lambda: self.binding.set_muted(False))
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(lambda: binding.set_muted(False))
 
     def send_text_message(self, sip_address: str, text: str) -> str | None:
         if not self.running or self.binding is None:
             return None
         try:
-            return self.binding.send_text_message(sip_address, text)
+            with self._binding_lock:
+                return self.binding.send_text_message(sip_address, text)
         except Exception as exc:
             logger.error("Failed to send text message to {}: {}", sip_address, exc)
             return None
 
     def start_voice_note_recording(self, file_path: str) -> bool:
-        return self._call_binding(lambda: self.binding.start_voice_recording(file_path))
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(lambda: binding.start_voice_recording(file_path))
 
     def stop_voice_note_recording(self) -> int | None:
         if not self.running or self.binding is None:
             return None
         try:
-            return self.binding.stop_voice_recording()
+            with self._binding_lock:
+                return self.binding.stop_voice_recording()
         except Exception as exc:
             logger.error("Failed to stop voice-note recording: {}", exc)
             return None
 
     def cancel_voice_note_recording(self) -> bool:
-        return self._call_binding(self.binding.cancel_voice_recording)
+        binding = self.binding
+        if binding is None:
+            return False
+        return self._call_binding(binding.cancel_voice_recording)
 
     def send_voice_note(
         self,
@@ -312,12 +348,13 @@ class LiblinphoneBackend:
         if not self.running or self.binding is None:
             return None
         try:
-            return self.binding.send_voice_note(
-                sip_address,
-                file_path=file_path,
-                duration_ms=duration_ms,
-                mime_type=mime_type,
-            )
+            with self._binding_lock:
+                return self.binding.send_voice_note(
+                    sip_address,
+                    file_path=file_path,
+                    duration_ms=duration_ms,
+                    mime_type=mime_type,
+                )
         except Exception as exc:
             logger.error("Failed to send voice note to {}: {}", sip_address, exc)
             return None
@@ -327,7 +364,8 @@ class LiblinphoneBackend:
             logger.error("Cannot execute VoIP operation: Liblinphone backend not running")
             return False
         try:
-            operation()
+            with self._binding_lock:
+                operation()
             return True
         except Exception as exc:
             logger.error("Liblinphone operation failed: {}", exc)

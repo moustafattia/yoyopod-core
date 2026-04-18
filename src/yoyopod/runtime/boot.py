@@ -324,6 +324,8 @@ class RuntimeBootService:
             self.app.voip_manager = VoIPManager(
                 voip_config,
                 people_directory=self.app.people_directory,
+                event_scheduler=self.app._queue_main_thread_callback,
+                background_iterate_enabled=True,
             )
             self.app._voip_iterate_interval_seconds = max(
                 0.01,
