@@ -91,6 +91,8 @@ _VOICE_PAGE_SIGNATURE_FIELDS = (
     "mic_muted",
     "output_volume",
 )
+
+
 def _build_network_rows_from_manager(network_manager: object | None) -> list[tuple[str, str]]:
     """Build the cellular network status rows from a backend-facing manager."""
 

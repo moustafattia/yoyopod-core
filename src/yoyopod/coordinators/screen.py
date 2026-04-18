@@ -72,7 +72,7 @@ class ScreenCoordinator:
         if current_screen is None:
             return
 
-        current_screen.render()
+        self.runtime.screen_manager.refresh_current_screen()
         logger.debug("  -> Current screen refreshed")
 
     def refresh_now_playing_screen(self) -> None:

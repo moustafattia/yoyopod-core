@@ -46,9 +46,12 @@ class RenderableScreen(Protocol):
     """Small screen surface used by orchestration test doubles."""
 
     render_calls: int
+    refresh_for_visible_tick_calls: int
     route_name: str | None
 
     def render(self) -> None: ...
+
+    def refresh_for_visible_tick(self) -> None: ...
 
 
 class IncomingCallScreenLike(RenderableScreen, Protocol):
@@ -143,6 +146,12 @@ class FakeScreenManager:
 
     def get_current_screen(self) -> RenderableScreen | None:
         return self.current_screen
+
+    def refresh_current_screen(self) -> None:
+        if self.current_screen is None:
+            return
+        self.current_screen.refresh_for_visible_tick()
+        self.current_screen.render()
 
     def _notify_screen_changed(self, route_name: str | None) -> None:
         if self.on_screen_changed is not None:
@@ -1085,6 +1094,19 @@ def test_periodic_power_refresh_only_renders_visible_power_screen() -> None:
 
     screen_manager.push_screen("power")
     app._update_power_screen_if_needed()
+    assert app.power_screen.render_calls == 1
+    assert app.power_screen.refresh_for_visible_tick_calls == 1
+
+
+def test_power_poll_refreshes_visible_power_screen_through_shared_refresh_hook() -> None:
+    """Power snapshot refreshes should reuse the generic visible-screen refresh hook."""
+    app, _, screen_manager = _build_app_with_power(
+        FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
+    )
+    screen_manager.push_screen("power")
+
+    app._poll_power_status(now=0.0, force=True)
+
     assert app.power_screen.render_calls == 1
     assert app.power_screen.refresh_for_visible_tick_calls == 1
 

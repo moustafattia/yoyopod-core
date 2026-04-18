@@ -39,7 +39,7 @@ class ScreenManager:
     def __init__(
         self,
         display: Display,
-        input_manager: Optional['InputManager'] = None,
+        input_manager: Optional["InputManager"] = None,
         router: Optional[ScreenRouter] = None,
         on_screen_changed: Optional[Callable[[Optional[str]], None]] = None,
         action_scheduler: Optional[Callable[[Callable[[], None]], None]] = None,
@@ -186,6 +186,11 @@ class ScreenManager:
         """Re-render the current screen."""
         if self.current_screen:
             started_at = time.monotonic()
+            refresh_for_visible_tick = getattr(
+                self.current_screen, "refresh_for_visible_tick", None
+            )
+            if callable(refresh_for_visible_tick):
+                refresh_for_visible_tick()
             self.current_screen.render()
             self._warn_if_slow(
                 "refresh_current_screen",
@@ -274,11 +279,13 @@ class ScreenManager:
 
         def wrap_with_refresh(action: "InputAction"):
             """Wrap action handler to automatically refresh display after execution."""
+
             def wrapper(data=None):
                 if self.action_scheduler is not None:
                     self.action_scheduler(lambda: dispatch_action(action, data))
                     return
                 dispatch_action(action, data)
+
             return wrapper
 
         for action in InputAction:
