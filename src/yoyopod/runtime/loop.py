@@ -376,22 +376,12 @@ class RuntimeLoopService:
 
         return max(1, int(self._EVENT_BUS_DRAIN_BUDGET))
 
-    def _pending_work_loop_sleep_seconds(
-        self,
-        *,
-        configured_voip_interval_seconds: float,
-    ) -> float:
+    def _pending_work_loop_sleep_seconds(self) -> float:
         """Return the coordinator sleep used while generic queue work is backlogged."""
 
-        # Pending-work cadence is intentionally kept at or above 10 ms so the loop
-        # yields between iterations even if the configured VoIP cadence is lowered.
-        return max(
-            0.01,
-            min(
-                configured_voip_interval_seconds,
-                self._PENDING_WORK_LOOP_INTERVAL_SECONDS,
-            ),
-        )
+        # Pending-work cadence intentionally stays fixed at 10 ms so backlog yields
+        # between iterations instead of tracking the faster VoIP cadence.
+        return self._PENDING_WORK_LOOP_INTERVAL_SECONDS
 
     def _drain_pending_main_thread_callbacks(self, limit: int | None = None) -> int:
         """Run queued coordinator-thread callbacks with an optional hard count limit."""
@@ -421,10 +411,13 @@ class RuntimeLoopService:
     ) -> _MainThreadDrainResult:
         """Capture drain totals and remaining backlog after one coordinator drain."""
 
+        callback_backlog = _queue_depth(self.app._pending_main_thread_callbacks)
+        # Deferred callback count is best-effort: queues without qsize support degrade
+        # to 0 here rather than paying extra coordinator work to derive a stronger estimate.
         return _MainThreadDrainResult(
             callbacks_processed=callbacks_processed,
             events_processed=events_processed,
-            callbacks_deferred=max(0, _queue_depth(self.app._pending_main_thread_callbacks) or 0),
+            callbacks_deferred=max(0, callback_backlog) if callback_backlog is not None else 0,
             events_deferred=max(0, self.app.event_bus.pending_count()),
             callback_budget=callback_budget,
             event_budget=event_budget,
@@ -463,6 +456,8 @@ class RuntimeLoopService:
             return
 
         now = time.monotonic()
+        # One shared throttle window keeps this a coarse health signal instead of a
+        # per-queue alert stream while the coordinator is already under pressure.
         if (
             self._last_drain_budget_log_at > 0.0
             and (now - self._last_drain_budget_log_at) < self._DRAIN_BUDGET_LOG_INTERVAL_SECONDS
@@ -973,9 +968,7 @@ class RuntimeLoopService:
             return _LoopCadenceDecision(
                 mode="latency_sensitive",
                 reason="pending_work",
-                loop_sleep_seconds=self._pending_work_loop_sleep_seconds(
-                    configured_voip_interval_seconds=configured_voip_interval_seconds,
-                ),
+                loop_sleep_seconds=self._pending_work_loop_sleep_seconds(),
                 voip_iterate_interval_seconds=configured_voip_interval_seconds,
             )
 
