@@ -259,8 +259,7 @@ def _build_voip_manager(config_dir: str) -> _VoIPManagerLike:
     from yoyopod.communication.integrations.liblinphone_binding import LiblinphoneBinding
     from yoyopod.config import ConfigManager
 
-    binding = LiblinphoneBinding.try_load()
-    if binding is None:
+    if LiblinphoneBinding.try_load() is None:
         logger.error(
             "Liblinphone shim is unavailable. Build it first with yoyoctl build liblinphone."
         )
@@ -393,7 +392,7 @@ def _hold_call_connected(
         recorder.sample(manager)
         status = manager.get_status()
         if not _status_is_registered(status):
-            return False, f"registration={status.get('registration_state', '')}"
+            return False, f"registration_state={status.get('registration_state', '')}"
         call_state = str(status.get("call_state", ""))
         if call_state not in _CONNECTED_CALL_STATES:
             return False, f"call_state={call_state}"

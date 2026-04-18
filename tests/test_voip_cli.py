@@ -233,6 +233,108 @@ def test_reconnect_drill_fails_when_registration_never_recovers(
     assert summary["extras"]["drop_state"] == "failed"
 
 
+def test_reconnect_drill_recovers_after_temporary_drop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The reconnect drill should pass when registration drops and then recovers."""
+
+    clock = FakeClock()
+    manager = FakeVoIPManager(clock)
+    manager.schedule_registration(0.1, RegistrationState.OK)
+    _patch_clock(monkeypatch, clock)
+    monkeypatch.setattr(voip_cli, "_build_voip_manager", lambda _config_dir: manager)
+
+    def fake_hook(*, recorder, phase: str, command: str) -> bool:
+        if phase == "drop":
+            manager.schedule_registration(0.1, RegistrationState.FAILED)
+        elif phase == "restore":
+            manager.schedule_registration(0.1, RegistrationState.OK)
+        recorder.record_command(
+            phase=phase,
+            command=command,
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+        return True
+
+    monkeypatch.setattr(voip_cli, "_run_shell_hook", fake_hook)
+
+    result = runner.invoke(
+        voip_cli.voip_app,
+        [
+            "reconnect-drill",
+            "--registration-timeout",
+            "1",
+            "--disconnect-seconds",
+            "0.4",
+            "--drop-detect-timeout",
+            "0.5",
+            "--recovery-timeout",
+            "1",
+            "--drop-command",
+            "drop-net",
+            "--restore-command",
+            "restore-net",
+            "--artifacts-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    summary = _load_summary(tmp_path)
+    assert summary["status"] == "pass"
+    assert summary["reason"] == "Registration recovered after the temporary outage"
+    assert summary["extras"]["drop_state"] == "failed"
+    assert summary["registration_states"] == ["ok", "failed", "ok"]
+
+
+@pytest.mark.parametrize(
+    ("schedule_failure", "expected_reason"),
+    [
+        (
+            lambda manager: manager.schedule_registration(0.2, RegistrationState.FAILED),
+            "registration_state=failed",
+        ),
+        (
+            lambda manager: manager.schedule_call_state(0.2, CallState.END),
+            "call_state=end",
+        ),
+    ],
+)
+def test_hold_call_connected_returns_machine_friendly_failure_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    schedule_failure,
+    expected_reason: str,
+) -> None:
+    """The soak helper should report registration and call failures with stable key=value reasons."""
+
+    clock = FakeClock()
+    manager = FakeVoIPManager(clock)
+    manager._set_registration(RegistrationState.OK)
+    manager._set_call_state(CallState.CONNECTED)
+    schedule_failure(manager)
+    _patch_clock(monkeypatch, clock)
+
+    recorder = voip_cli._VoIPDrillRecorder(
+        drill="call-soak",
+        config=manager.config,
+        artifacts_dir=str(tmp_path),
+    )
+    recorder.attach(manager)
+
+    soaked, reason = voip_cli._hold_call_connected(
+        manager,
+        recorder,
+        soak_seconds=1.0,
+    )
+
+    assert soaked is False
+    assert reason == expected_reason
+
+
 def test_call_soak_writes_pass_summary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
