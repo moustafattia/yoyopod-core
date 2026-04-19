@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from enum import IntEnum
+from types import SimpleNamespace
+
 import pytest
 
 from yoyopod.ui.input.hal import InputAction
@@ -263,6 +266,288 @@ def test_read_edge_events_drains_legacy_event_queue(monkeypatch: pytest.MonkeyPa
 
     assert gpiod_compat.read_edge_events(FakeLine()) == [first, second]
     assert select_calls == [([101], 0.0), ([101], 0.0)]
+
+
+def test_request_input_events_supports_official_gpiod_v2_request_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    request_calls: list[tuple[str, dict[int, object]]] = []
+    inactive_token = object()
+    active_token = object()
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeEvent:
+        def __init__(self, line_offset: int) -> None:
+            self.line_offset = line_offset
+
+    class FakeRequest:
+        def __init__(self) -> None:
+            self.values = {7: inactive_token}
+
+        def get_value(self, offset: int) -> object:
+            return self.values[offset]
+
+        def read_edge_events(self) -> list[FakeEvent]:
+            return [FakeEvent(7), FakeEvent(99)]
+
+        def fileno(self) -> int:
+            return 321
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def request_lines(self, *, consumer: str, config: dict[int, object]) -> FakeRequest:
+            request_calls.append((consumer, config))
+            return FakeRequest()
+
+        def close(self) -> None:
+            return None
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=SimpleNamespace(ACTIVE=active_token, INACTIVE=inactive_token),
+        ),
+    )
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    line = gpiod_compat.request_input_events(chip, 7, "yoyopod-btn")
+
+    assert line.get_value() == 0
+    assert gpiod_compat.get_event_fd(line) == 321
+    assert [event.line_offset for event in gpiod_compat.read_edge_events(line)] == [7]
+
+    consumer, config = request_calls[0]
+    assert consumer == "yoyopod-btn"
+    assert config[7].kwargs == {
+        "direction": "input",
+        "bias": "bias-disabled",
+        "edge_detection": "both-edges",
+    }
+
+
+def test_request_output_supports_official_gpiod_v2_request_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    set_calls: list[tuple[int, object]] = []
+    inactive_token = object()
+    active_token = object()
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeRequest:
+        def set_value(self, offset: int, value: object) -> None:
+            set_calls.append((offset, value))
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def request_lines(self, *, consumer: str, config: dict[int, object]) -> FakeRequest:
+            assert consumer == "pimoroni-led-r"
+            assert config[12].kwargs == {
+                "direction": "output",
+                "output_value": active_token,
+            }
+            return FakeRequest()
+
+        def close(self) -> None:
+            return None
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=SimpleNamespace(ACTIVE=active_token, INACTIVE=inactive_token),
+        ),
+    )
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    line = gpiod_compat.request_output(chip, 12, "pimoroni-led-r", default_val=1)
+    line.set_value(0)
+
+    assert set_calls == [(12, inactive_token)]
+
+
+def test_request_output_preserves_falsey_inactive_enum_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    set_calls: list[tuple[int, object]] = []
+
+    class FakeValue(IntEnum):
+        INACTIVE = 0
+        ACTIVE = 1
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeRequest:
+        def set_value(self, offset: int, value: object) -> None:
+            set_calls.append((offset, value))
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def request_lines(self, *, consumer: str, config: dict[int, object]) -> FakeRequest:
+            assert consumer == "pimoroni-led-r"
+            assert config[12].kwargs == {
+                "direction": "output",
+                "output_value": FakeValue.INACTIVE,
+            }
+            return FakeRequest()
+
+        def close(self) -> None:
+            return None
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=FakeValue,
+        ),
+    )
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    line = gpiod_compat.request_output(chip, 12, "pimoroni-led-r", default_val=0)
+    line.set_value(0)
+
+    assert set_calls == [(12, FakeValue.INACTIVE)]
+
+
+def test_request_input_events_does_not_mask_internal_type_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeChip:
+        def request_lines(self, *, consumer: str, config: dict[int, object]) -> object:
+            raise TypeError("internal line request failure")
+
+        def close(self) -> None:
+            return None
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=SimpleNamespace(ACTIVE="active", INACTIVE="inactive"),
+        ),
+    )
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    with pytest.raises(TypeError, match="internal line request failure"):
+        gpiod_compat.request_input_events(chip, 7, "yoyopod-btn")
+
+
+def test_request_input_events_treats_no_keyword_type_error_as_signature_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    request_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeRequest:
+        def __init__(self) -> None:
+            self.values = {7: 0}
+
+        def get_value(self, offset: int) -> int:
+            return self.values[offset]
+
+        def read_edge_events(self) -> list[object]:
+            return []
+
+        def fileno(self) -> int:
+            return 321
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def close(self) -> None:
+            return None
+
+    def fake_request_lines(*args, **kwargs) -> FakeRequest:
+        request_calls.append((args, kwargs))
+        if kwargs:
+            raise TypeError("request_lines() takes no keyword arguments")
+        return FakeRequest()
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        request_lines=fake_request_lines,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=SimpleNamespace(ACTIVE="active", INACTIVE="inactive"),
+        ),
+    )
+
+    def fake_signature(_func: object) -> object:
+        raise ValueError("signature unavailable")
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+    monkeypatch.setattr(gpiod_compat.inspect, "signature", fake_signature)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    line = gpiod_compat.request_input_events(chip, 7, "yoyopod-btn")
+
+    assert line.get_value() == 0
+    config = request_calls[0][1]["config"]
+    assert request_calls == [
+        (("/dev/gpiochip0",), {"consumer": "yoyopod-btn", "config": config}),
+        ((), {"path": "/dev/gpiochip0", "consumer": "yoyopod-btn", "config": config}),
+        (("/dev/gpiochip0", "yoyopod-btn", config), {}),
+    ]
 
 
 def test_event_wait_loop_seeds_initial_pressed_state(monkeypatch: pytest.MonkeyPatch) -> None:
