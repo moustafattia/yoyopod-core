@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections import OrderedDict
 from pathlib import Path
 
 from cffi import FFI
@@ -267,6 +268,7 @@ class LvglBinding:
     SCENE_LIST = 2
     SCENE_FOOTER = 3
     SCENE_CAROUSEL = 4
+    HUB_SYNC_STRING_CACHE_LIMIT = 16
 
     def __init__(self, library_path: Path | None = None) -> None:
         self.ffi = FFI()
@@ -279,6 +281,7 @@ class LvglBinding:
 
         self.lib = self.ffi.dlopen(str(self.library_path))
         self._flush_callback = None
+        self._hub_sync_string_cache: OrderedDict[str, object] = OrderedDict()
         logger.info("Loaded LVGL shim from {}", self.library_path)
 
     @classmethod
@@ -316,6 +319,27 @@ class LvglBinding:
     def _pack_rgb(color: tuple[int, int, int]) -> int:
         red, green, blue = color
         return ((int(red) & 0xFF) << 16) | ((int(green) & 0xFF) << 8) | (int(blue) & 0xFF)
+
+    def _new_char_array(self, value: str) -> object:
+        return self.ffi.new("char[]", value.encode("utf-8"))
+
+    def _get_cached_char_array(
+        self,
+        cache: OrderedDict[str, object],
+        value: str,
+        *,
+        max_entries: int,
+    ) -> object:
+        cached = cache.get(value)
+        if cached is not None:
+            cache.move_to_end(value)
+            return cached
+
+        cached = self._new_char_array(value)
+        cache[value] = cached
+        if len(cache) > max_entries:
+            cache.popitem(last=False)
+        return cached
 
     def init(self) -> None:
         if self.lib.yoyopod_lvgl_init() != 0:
@@ -399,12 +423,28 @@ class LvglBinding:
         charging: bool,
         power_available: bool,
     ) -> None:
-        icon_key_raw = self.ffi.new("char[]", icon_key.encode("utf-8"))
-        title_raw = self.ffi.new("char[]", title.encode("utf-8"))
-        subtitle_raw = self.ffi.new("char[]", subtitle.encode("utf-8"))
-        footer_raw = self.ffi.new("char[]", footer.encode("utf-8"))
+        icon_key_raw = self._get_cached_char_array(
+            self._hub_sync_string_cache,
+            icon_key,
+            max_entries=self.HUB_SYNC_STRING_CACHE_LIMIT,
+        )
+        title_raw = self._get_cached_char_array(
+            self._hub_sync_string_cache,
+            title,
+            max_entries=self.HUB_SYNC_STRING_CACHE_LIMIT,
+        )
+        subtitle_raw = self._get_cached_char_array(
+            self._hub_sync_string_cache,
+            subtitle,
+            max_entries=self.HUB_SYNC_STRING_CACHE_LIMIT,
+        )
+        footer_raw = self._get_cached_char_array(
+            self._hub_sync_string_cache,
+            footer,
+            max_entries=self.HUB_SYNC_STRING_CACHE_LIMIT,
+        )
         if time_text:
-            time_raw = self.ffi.new("char[]", time_text.encode("utf-8"))
+            time_raw = self._new_char_array(time_text)
         else:
             time_raw = self.ffi.NULL
 
