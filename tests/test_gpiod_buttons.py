@@ -482,6 +482,74 @@ def test_request_input_events_does_not_mask_internal_type_error(
         gpiod_compat.request_input_events(chip, 7, "yoyopod-btn")
 
 
+def test_request_input_events_treats_no_keyword_type_error_as_signature_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    request_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeRequest:
+        def __init__(self) -> None:
+            self.values = {7: 0}
+
+        def get_value(self, offset: int) -> int:
+            return self.values[offset]
+
+        def read_edge_events(self) -> list[object]:
+            return []
+
+        def fileno(self) -> int:
+            return 321
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def close(self) -> None:
+            return None
+
+    def fake_request_lines(*args, **kwargs) -> FakeRequest:
+        request_calls.append((args, kwargs))
+        if kwargs:
+            raise TypeError("request_lines() takes no keyword arguments")
+        return FakeRequest()
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        request_lines=fake_request_lines,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=SimpleNamespace(ACTIVE="active", INACTIVE="inactive"),
+        ),
+    )
+
+    def fake_signature(_func: object) -> object:
+        raise ValueError("signature unavailable")
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+    monkeypatch.setattr(gpiod_compat.inspect, "signature", fake_signature)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    line = gpiod_compat.request_input_events(chip, 7, "yoyopod-btn")
+
+    assert line.get_value() == 0
+    config = request_calls[0][1]["config"]
+    assert request_calls == [
+        (("/dev/gpiochip0",), {"consumer": "yoyopod-btn", "config": config}),
+        ((), {"path": "/dev/gpiochip0", "consumer": "yoyopod-btn", "config": config}),
+        (("/dev/gpiochip0", "yoyopod-btn", config), {}),
+    ]
+
+
 def test_event_wait_loop_seeds_initial_pressed_state(monkeypatch: pytest.MonkeyPatch) -> None:
     from yoyopod.ui.input.adapters import gpiod_buttons
     from yoyopod.ui.input.adapters.gpiod_buttons import Button

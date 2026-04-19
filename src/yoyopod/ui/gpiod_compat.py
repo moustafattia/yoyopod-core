@@ -204,7 +204,8 @@ def _call_with_first_supported_signature(
         try:
             return func(*args, **kwargs)
         except TypeError as exc:
-            if "unexpected keyword" not in str(exc) and "positional" not in str(exc):
+            message = str(exc)
+            if "keyword" not in message and "positional" not in message:
                 raise
             signature_errors.append(exc)
 
