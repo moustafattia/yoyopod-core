@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from queue import SimpleQueue
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from loguru import logger
 
@@ -62,31 +62,34 @@ from yoyopod.runtime import (
     ShutdownLifecycleService,
     VoiceRuntimeCoordinator,
 )
-from yoyopod.ui.display import Display
-from yoyopod.ui.input import InputManager, InteractionProfile
-from yoyopod.ui.lvgl_binding import LvglDisplayBackend, LvglInputBridge
-from yoyopod.ui.screens import (
-    AskScreen,
-    CallHistoryScreen,
-    CallScreen,
-    ContactListScreen,
-    HubScreen,
-    HomeScreen,
-    InCallScreen,
-    IncomingCallScreen,
-    ListenScreen,
-    MenuScreen,
-    NowPlayingScreen,
-    OutgoingCallScreen,
-    PlaylistScreen,
-    PowerScreen,
-    RecentTracksScreen,
-    ScreenManager,
-    TalkContactScreen,
-    VoiceNoteScreen,
-)
+from yoyopod.ui.input import InteractionProfile
 from yoyopod.cloud import CloudManager
 from yoyopod.communication import CallHistoryStore, VoIPManager
+
+if TYPE_CHECKING:
+    from yoyopod.ui.display import Display
+    from yoyopod.ui.input import InputManager
+    from yoyopod.ui.lvgl_binding import LvglDisplayBackend, LvglInputBridge
+    from yoyopod.ui.screens import (
+        AskScreen,
+        CallHistoryScreen,
+        CallScreen,
+        ContactListScreen,
+        HubScreen,
+        HomeScreen,
+        InCallScreen,
+        IncomingCallScreen,
+        ListenScreen,
+        MenuScreen,
+        NowPlayingScreen,
+        OutgoingCallScreen,
+        PlaylistScreen,
+        PowerScreen,
+        RecentTracksScreen,
+        ScreenManager,
+        TalkContactScreen,
+        VoiceNoteScreen,
+    )
 
 
 def _queue_depth(queue_obj: object) -> int | None:

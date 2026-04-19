@@ -41,38 +41,7 @@ from yoyopod.ui.display.contracts import (
 )
 from yoyopod.ui.input import InteractionProfile, get_input_manager
 from yoyopod.ui.lvgl_binding import LvglInputBridge
-from yoyopod.ui.screens import (
-    AskScreen,
-    CallHistoryScreen,
-    CallScreen,
-    ContactListScreen,
-    HubScreen,
-    HomeScreen,
-    InCallScreen,
-    IncomingCallScreen,
-    ListenScreen,
-    MenuScreen,
-    NowPlayingScreen,
-    OutgoingCallScreen,
-    PlaylistScreen,
-    PowerScreen,
-    RecentTracksScreen,
-    ScreenManager,
-    TalkContactScreen,
-    VoiceNoteScreen,
-)
-from yoyopod.ui.screens.music.now_playing import (
-    build_now_playing_actions,
-    build_now_playing_state_provider,
-)
-from yoyopod.ui.screens.system.power import (
-    build_power_screen_actions,
-    build_power_screen_state_provider,
-)
-from yoyopod.ui.screens.voip.voice_note import (
-    build_voice_note_actions,
-    build_voice_note_state_provider,
-)
+from yoyopod.ui.screens.manager import ScreenManager
 from yoyopod.cloud import CloudManager
 from yoyopod.voice import VoiceSettings
 from yoyopod.communication import CallHistoryStore, VoIPConfig, VoIPManager
@@ -454,6 +423,36 @@ class RuntimeBootService:
             assert self.app.display is not None
             assert self.app.context is not None
             assert self.app.screen_manager is not None
+            from yoyopod.ui.screens.music.now_playing import (
+                NowPlayingScreen,
+                build_now_playing_actions,
+                build_now_playing_state_provider,
+            )
+            from yoyopod.ui.screens.music.playlist import PlaylistScreen
+            from yoyopod.ui.screens.music.recent import RecentTracksScreen
+            from yoyopod.ui.screens.navigation.ask import AskScreen
+            from yoyopod.ui.screens.navigation.home import HomeScreen
+            from yoyopod.ui.screens.navigation.hub import HubScreen
+            from yoyopod.ui.screens.navigation.listen import ListenScreen
+            from yoyopod.ui.screens.navigation.menu import MenuScreen
+            from yoyopod.ui.screens.system.power import (
+                PowerScreen,
+                build_power_screen_actions,
+                build_power_screen_state_provider,
+            )
+            from yoyopod.ui.screens.voip.call_history import CallHistoryScreen
+            from yoyopod.ui.screens.voip.contact_list import ContactListScreen
+            from yoyopod.ui.screens.voip.in_call import InCallScreen
+            from yoyopod.ui.screens.voip.incoming_call import IncomingCallScreen
+            from yoyopod.ui.screens.voip.outgoing_call import OutgoingCallScreen
+            from yoyopod.ui.screens.voip.quick_call import CallScreen
+            from yoyopod.ui.screens.voip.talk_contact import TalkContactScreen
+            from yoyopod.ui.screens.voip.voice_note import (
+                VoiceNoteScreen,
+                build_voice_note_actions,
+                build_voice_note_state_provider,
+            )
+
             display = self.app.display
             context = self.app.context
             screen_manager = self.app.screen_manager
