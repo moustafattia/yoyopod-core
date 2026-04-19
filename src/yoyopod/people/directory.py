@@ -8,7 +8,12 @@ from loguru import logger
 
 from yoyopod.config.storage import atomic_write_yaml, load_yaml_mapping
 from yoyopod.people.cloud_sync import build_cloud_contact
-from yoyopod.people.models import Contact, contacts_from_mapping, contacts_to_mapping
+from yoyopod.people.models import (
+    Contact,
+    contact_is_callable,
+    contacts_from_mapping,
+    contacts_to_mapping,
+)
 
 
 class PeopleDirectory:
@@ -96,7 +101,9 @@ class PeopleDirectory:
         """Return contacts that can be called on the currently enabled transports."""
 
         return [
-            contact for contact in self.contacts if contact.is_callable(gsm_enabled=gsm_enabled)
+            contact
+            for contact in self.contacts
+            if contact_is_callable(contact, gsm_enabled=gsm_enabled)
         ]
 
     def get_contact_by_name(self, name: str) -> Contact | None:
@@ -177,9 +184,7 @@ class PeopleDirectory:
             for contact in self.contacts
             if contact.sync_origin == "cloud" and contact.sip_address.strip()
         }
-        local_contacts = [
-            contact for contact in self.contacts if contact.sync_origin != "cloud"
-        ]
+        local_contacts = [contact for contact in self.contacts if contact.sync_origin != "cloud"]
 
         merged_cloud_contacts: list[Contact] = []
         updated_speed_dial = {
