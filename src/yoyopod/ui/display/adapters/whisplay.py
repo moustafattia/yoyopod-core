@@ -16,14 +16,16 @@ Author: YoyoPod Team
 Date: 2025-11-30
 """
 
+from __future__ import annotations
+
+from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
 import time
 from types import ModuleType
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from loguru import logger
-from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from yoyopod.ui.display.contracts import (
     WhisplayProductionRenderContractError,
@@ -38,6 +40,20 @@ _RGB565_HIGH_RED_LUT = tuple(value & 0xF8 for value in range(256))
 _RGB565_HIGH_GREEN_LUT = tuple(value >> 5 for value in range(256))
 _RGB565_LOW_GREEN_LUT = tuple((value & 0x1C) << 3 for value in range(256))
 _RGB565_LOW_BLUE_LUT = tuple(value >> 3 for value in range(256))
+
+
+@lru_cache(maxsize=1)
+def _load_pillow_modules() -> tuple[ModuleType, ModuleType, ModuleType, ModuleType]:
+    """Import Pillow lazily so LVGL boot does not pay the PIL startup cost."""
+
+    try:
+        image_module = import_module("PIL.Image")
+        image_chops_module = import_module("PIL.ImageChops")
+        image_draw_module = import_module("PIL.ImageDraw")
+        image_font_module = import_module("PIL.ImageFont")
+    except ImportError as exc:
+        raise RuntimeError("Pillow is required for PIL-backed Whisplay rendering") from exc
+    return image_module, image_chops_module, image_draw_module, image_font_module
 
 
 def _normalize_gpiochip_path(candidate: object) -> object:
@@ -196,8 +212,8 @@ class WhisplayDisplayAdapter(DisplayHAL):
             )
 
         self.simulate = requested_simulation or not HAS_HARDWARE
-        self.buffer: Optional[Image.Image] = None
-        self.draw: Optional[ImageDraw.ImageDraw] = None
+        self.buffer: Any | None = None
+        self.draw: Any | None = None
         self.device = None
         self.lvgl_buffer_lines = max(1, int(lvgl_buffer_lines))
         self.ui_backend = None
@@ -218,8 +234,8 @@ class WhisplayDisplayAdapter(DisplayHAL):
             "partial_flush_total_ms": 0.0,
         }
 
-        # Create PIL drawing buffer
-        self._create_buffer()
+        if self._shadow_buffer_required_at_startup():
+            self._create_buffer()
 
         if not self.simulate:
             try:
@@ -238,6 +254,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
                 logger.info("Falling back to simulation mode")
                 self.simulate = True
                 self.device = None
+                self._ensure_shadow_buffer()
         else:
             logger.info("Whisplay display adapter running in local render-only simulation mode")
 
@@ -265,6 +282,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
                 logger.warning(f"Failed to prepare LVGL backend: {e}")
                 self.ui_backend = None
                 self.renderer = "pil"
+                self._ensure_shadow_buffer()
 
     @staticmethod
     def _raise_production_contract_error(reason: str) -> None:
@@ -291,10 +309,23 @@ class WhisplayDisplayAdapter(DisplayHAL):
             return True
         return not bool(getattr(self.ui_backend, "available", False))
 
+    def _shadow_buffer_required_at_startup(self) -> bool:
+        """Return True when the initial runtime mode needs a PIL shadow buffer."""
+
+        return self.simulate or self.renderer == "pil"
+
+    def _ensure_shadow_buffer(self) -> None:
+        """Allocate the PIL shadow buffer on first use."""
+
+        if self.buffer is not None and self.draw is not None:
+            return
+        self._create_buffer()
+
     def _create_buffer(self) -> None:
         """Create a new PIL drawing buffer."""
-        self.buffer = Image.new("RGB", (self.WIDTH, self.HEIGHT), self.COLOR_BLACK)
-        self.draw = ImageDraw.Draw(self.buffer)
+        image_module, _, image_draw_module, _ = _load_pillow_modules()
+        self.buffer = image_module.new("RGB", (self.WIDTH, self.HEIGHT), self.COLOR_BLACK)
+        self.draw = image_draw_module.Draw(self.buffer)
 
     def _load_font(
         self,
@@ -303,6 +334,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
     ) -> object:
         """Load and cache the requested font once per path/size pair."""
 
+        _, _, _, image_font_module = _load_pillow_modules()
         resolved_path: Path | None = None
         if font_path is not None and font_path.exists():
             resolved_path = font_path
@@ -319,28 +351,29 @@ class WhisplayDisplayAdapter(DisplayHAL):
 
         try:
             if resolved_path is not None:
-                font = ImageFont.truetype(str(resolved_path), font_size)
+                font = image_font_module.truetype(str(resolved_path), font_size)
             else:
-                font = ImageFont.load_default()
+                font = image_font_module.load_default()
         except Exception as e:
             logger.warning("Failed to load font {} at {} px: {}", resolved_path, font_size, e)
             cache_key = ("__pil_default__", font_size)
             cached_font = self._font_cache.get(cache_key)
             if cached_font is not None:
                 return cached_font
-            font = ImageFont.load_default()
+            font = image_font_module.load_default()
 
         self._font_cache[cache_key] = font
         return font
 
     @staticmethod
-    def _rgb565_to_image(width: int, height: int, pixel_data: bytes) -> Image.Image:
+    def _rgb565_to_image(width: int, height: int, pixel_data: bytes) -> Any:
         """Decode big-endian RGB565 bytes into a PIL image."""
 
+        image_module, _, _, _ = _load_pillow_modules()
         swapped = bytearray(len(pixel_data))
         swapped[0::2] = pixel_data[1::2]
         swapped[1::2] = pixel_data[0::2]
-        return Image.frombytes("RGB", (width, height), bytes(swapped), "raw", "BGR;16")
+        return image_module.frombytes("RGB", (width, height), bytes(swapped), "raw", "BGR;16")
 
     def _record_partial_flush_timing(
         self,
@@ -457,19 +490,20 @@ class WhisplayDisplayAdapter(DisplayHAL):
         if self.buffer is None:
             return b""
 
+        image_module, image_chops_module, _, _ = _load_pillow_modules()
         red, green, blue = self.buffer.split()
-        high = ImageChops.add(
+        high = image_chops_module.add(
             red.point(_RGB565_HIGH_RED_LUT),
             green.point(_RGB565_HIGH_GREEN_LUT),
         )
-        low = ImageChops.add(
+        low = image_chops_module.add(
             green.point(_RGB565_LOW_GREEN_LUT),
             blue.point(_RGB565_LOW_BLUE_LUT),
         )
 
         # ``LA`` stores two 8-bit channels interleaved, which matches the
         # adapter's big-endian RGB565 byte contract without a Python pixel loop.
-        return Image.merge("LA", (high, low)).tobytes()
+        return image_module.merge("LA", (high, low)).tobytes()
 
     def _paste_rgb565_region(
         self,
@@ -481,9 +515,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
     ) -> None:
         """Paste an RGB565 region into the PIL buffer for simulation/debugging."""
 
-        if self.buffer is None:
-            return
-
+        self._ensure_shadow_buffer()
         region = self._rgb565_to_image(width, height, pixel_data)
         self.buffer.paste(region, (x, y))
 
@@ -527,6 +559,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         if color is None:
             color = self.COLOR_BLACK
 
+        self._ensure_shadow_buffer()
         self.draw.rectangle([(0, 0), (self.WIDTH, self.HEIGHT)], fill=color)
         logger.debug(f"Whisplay display cleared with color {color}")
 
@@ -543,6 +576,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         if color is None:
             color = self.COLOR_WHITE
 
+        self._ensure_shadow_buffer()
         font = self._load_font(font_size, font_path)
         self.draw.text((x, y), text, fill=color, font=font)
 
@@ -557,6 +591,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         width: int = 1,
     ) -> None:
         """Draw a rectangle."""
+        self._ensure_shadow_buffer()
         self.draw.rectangle([(x1, y1), (x2, y2)], fill=fill, outline=outline, width=width)
 
     def circle(
@@ -569,6 +604,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         width: int = 1,
     ) -> None:
         """Draw a circle."""
+        self._ensure_shadow_buffer()
         bbox = [x - radius, y - radius, x + radius, y + radius]
         self.draw.ellipse(bbox, fill=fill, outline=outline, width=width)
 
@@ -585,6 +621,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         if color is None:
             color = self.COLOR_WHITE
 
+        self._ensure_shadow_buffer()
         self.draw.line([(x1, y1), (x2, y2)], fill=color, width=width)
 
     def image(
@@ -597,10 +634,12 @@ class WhisplayDisplayAdapter(DisplayHAL):
     ) -> None:
         """Draw an image from file."""
         try:
-            img = Image.open(image_path)
+            image_module, _, _, _ = _load_pillow_modules()
+            self._ensure_shadow_buffer()
+            img = image_module.open(image_path)
 
             if width and height:
-                img = img.resize((width, height), Image.Resampling.LANCZOS)
+                img = img.resize((width, height), image_module.Resampling.LANCZOS)
 
             self.buffer.paste(img, (x, y))
         except Exception as e:
@@ -847,6 +886,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
 
     def get_text_size(self, text: str, font_size: int = 16) -> Tuple[int, int]:
         """Calculate rendered text dimensions."""
+        self._ensure_shadow_buffer()
         font = self._load_font(font_size)
 
         bbox = self.draw.textbbox((0, 0), text, font=font)

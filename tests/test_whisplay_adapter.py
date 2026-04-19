@@ -143,6 +143,51 @@ def test_hardware_lvgl_flush_skips_shadow_buffer_sync(monkeypatch) -> None:
     assert mirrored == []
 
 
+def test_hardware_lvgl_defers_shadow_buffer_until_needed(monkeypatch) -> None:
+    """Hardware LVGL should skip allocating the PIL shadow buffer at startup."""
+
+    import yoyopod.ui.display.adapters.whisplay as whisplay_module
+    import yoyopod.ui.lvgl_binding as lvgl_module
+
+    monkeypatch.setattr(whisplay_module, "HAS_HARDWARE", True)
+
+    class Board:
+        def set_backlight(self, _value: int) -> None:
+            return None
+
+        def set_rgb(self, _red: int, _green: int, _blue: int) -> None:
+            return None
+
+        def cleanup(self) -> None:
+            return None
+
+    class Backend:
+        def __init__(self, _adapter, *, buffer_lines: int) -> None:
+            self.available = True
+            self.buffer_lines = buffer_lines
+
+        def cleanup(self) -> None:
+            return None
+
+        def reset(self) -> None:
+            return None
+
+    monkeypatch.setattr(whisplay_module, "WhisPlayBoard", Board, raising=False)
+    monkeypatch.setattr(lvgl_module, "LvglDisplayBackend", Backend)
+
+    adapter = WhisplayDisplayAdapter(
+        simulate=False,
+        renderer="lvgl",
+        enforce_production_contract=False,
+    )
+
+    try:
+        assert adapter.buffer is None
+        assert adapter.draw is None
+    finally:
+        adapter.cleanup()
+
+
 def test_simulated_lvgl_flush_keeps_shadow_buffer_for_debug(monkeypatch) -> None:
     """Simulation still needs the PIL shadow buffer for local inspection."""
 
@@ -162,37 +207,32 @@ def test_simulated_lvgl_flush_keeps_shadow_buffer_for_debug(monkeypatch) -> None
 
 
 def test_shadow_screenshot_forces_one_redraw_into_buffer_when_shadow_sync_is_disabled(
-    monkeypatch,
+    tmp_path,
 ) -> None:
     """Hardware LVGL screenshots should force one redraw into the PIL buffer."""
 
     adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
     adapter.simulate = False
-    mirrored: list[tuple[int, int, int, int, bytes]] = []
-    saved_paths: list[tuple[str, str]] = []
-    adapter.buffer = type(
-        "Buffer",
-        (),
-        {"save": lambda _self, path, fmt: saved_paths.append((path, fmt))},
-    )()
-    monkeypatch.setattr(
-        adapter,
-        "_paste_rgb565_region",
-        lambda x, y, width, height, pixel_data: mirrored.append((x, y, width, height, pixel_data)),
-    )
+    adapter.buffer = None
+    adapter.draw = None
 
     class Backend:
         available = True
         initialized = True
 
         def force_refresh(self) -> None:
-            adapter.draw_rgb565_region(1, 2, 2, 1, b"\x12\x34" * 2)
+            adapter.draw_rgb565_region(1, 2, 2, 1, bytes.fromhex("f80007e0"))
 
     adapter.ui_backend = Backend()
+    screenshot_path = tmp_path / "shadow.png"
 
-    assert adapter.save_screenshot("/tmp/test.png") is True
-    assert mirrored == [(1, 2, 2, 1, b"\x12\x34" * 2)]
-    assert saved_paths == [("/tmp/test.png", "PNG")]
+    assert adapter.save_screenshot(str(screenshot_path)) is True
+    assert adapter.buffer is not None
+
+    with Image.open(screenshot_path) as screenshot:
+        assert screenshot.size == (adapter.WIDTH, adapter.HEIGHT)
+        assert screenshot.getpixel((1, 2)) == (255, 0, 0)
+        assert screenshot.getpixel((2, 2)) == (0, 255, 0)
 
 
 def test_shadow_screenshot_falls_back_to_lvgl_readback_when_force_refresh_is_unavailable(
@@ -289,7 +329,16 @@ def test_whisplay_font_cache_reuses_loaded_fonts(monkeypatch) -> None:
         return original_truetype(path, size, *args, **kwargs)
 
     monkeypatch.setattr(
-        "yoyopod.ui.display.adapters.whisplay.ImageFont.truetype", counting_truetype
+        "yoyopod.ui.display.adapters.whisplay._load_pillow_modules",
+        lambda: (
+            None,
+            None,
+            None,
+            SimpleNamespace(
+                truetype=counting_truetype,
+                load_default=ImageFont.load_default,
+            ),
+        ),
     )
 
     adapter.text("Hello", 4, 4, font_size=16)
