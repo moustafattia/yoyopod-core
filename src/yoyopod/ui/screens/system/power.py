@@ -276,8 +276,6 @@ class PowerScreen(Screen):
         self._prepared_state: PowerScreenState | None = None
         self._cached_pages: list[PowerPage] | None = None
         self._cached_pages_signature: tuple[object, ...] | None = None
-        self._cached_pages_voice_signature: tuple[object, ...] | None = None
-        self._cached_pages_one_button_mode: bool | None = None
 
     def enter(self) -> None:
         """Create the LVGL view when the screen becomes active."""
@@ -832,18 +830,11 @@ class PowerScreen(Screen):
             voice_signature=voice_signature,
             one_button_mode=one_button_mode,
         )
-        if (
-            self._cached_pages is not None
-            and self._cached_pages_signature == cache_signature
-            and self._cached_pages_voice_signature == voice_signature
-            and self._cached_pages_one_button_mode == one_button_mode
-        ):
+        if self._cached_pages is not None and self._cached_pages_signature == cache_signature:
             return self._cached_pages
 
         self._cached_pages = self.build_pages(state=resolved_state)
         self._cached_pages_signature = cache_signature
-        self._cached_pages_voice_signature = voice_signature
-        self._cached_pages_one_button_mode = one_button_mode
         return self._cached_pages
 
     def _voice_page_signature(self) -> tuple[object, ...] | None:
