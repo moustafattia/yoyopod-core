@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, cast
 
 from yoyopod.cli.pi.gallery.fakes import (
     _DemoContact,
@@ -14,8 +16,43 @@ from yoyopod.cli.pi.gallery.fakes import (
     _FakeVoipManager,
 )
 
+if TYPE_CHECKING:
+    from yoyopod.app_context import AppContext
+    from yoyopod.audio import MusicBackend
+    from yoyopod.communication import VoIPManager
+    from yoyopod.power import PowerManager, PowerSnapshot
+    from yoyopod.ui.display import Display
+    from yoyopod.ui.screens.base import Screen
 
-def _build_context() -> object:
+
+@dataclass(frozen=True, slots=True)
+class _GalleryPowerStatus:
+    """Typed gallery status payload consumed by Setup screen runtime rows."""
+
+    app_uptime_seconds: int
+    screen_awake: bool
+    screen_on_seconds: int
+    screen_idle_seconds: int
+    screen_timeout_seconds: int
+    warning_threshold_percent: int
+    critical_shutdown_percent: int
+    shutdown_delay_seconds: int
+    shutdown_pending: bool
+    shutdown_in_seconds: int | None = None
+    watchdog_enabled: bool = True
+    watchdog_active: bool = True
+    watchdog_feed_suppressed: bool = False
+
+    def as_status(self) -> dict[str, object]:
+        """Return the runtime-style status dict expected by PowerScreenState."""
+
+        return asdict(self)
+
+
+_GALLERY_POWER_STATUS_FIELDS = tuple(field.name for field in fields(_GalleryPowerStatus))
+
+
+def _build_context() -> "AppContext":
     """Create one stable one-button app context."""
     from yoyopod.app_context import AppContext
     from yoyopod.audio.music.models import PlaybackQueue, Track
@@ -147,7 +184,7 @@ def _build_call_history_store() -> _FakeCallHistoryStore:
     return _FakeCallHistoryStore(entries)
 
 
-def _build_power_snapshot() -> object:
+def _build_power_snapshot() -> "PowerSnapshot":
     """Return one realistic power snapshot for the Setup pages."""
     from yoyopod.power import BatteryState, PowerDeviceInfo, PowerSnapshot, RTCState, ShutdownState
 
@@ -179,28 +216,29 @@ def _build_power_snapshot() -> object:
 
 def _build_power_status() -> dict[str, object]:
     """Return one realistic runtime/care status payload."""
-    return {
-        "app_uptime_seconds": 3672,
-        "screen_awake": True,
-        "screen_on_seconds": 1240,
-        "screen_idle_seconds": 7,
-        "screen_timeout_seconds": 120,
-        "warning_threshold_percent": 20,
-        "critical_shutdown_percent": 10,
-        "shutdown_delay_seconds": 15,
-        "shutdown_pending": False,
-        "watchdog_enabled": True,
-        "watchdog_active": True,
-        "watchdog_feed_suppressed": False,
-    }
+
+    status = _GalleryPowerStatus(
+        app_uptime_seconds=3672,
+        screen_awake=True,
+        screen_on_seconds=1240,
+        screen_idle_seconds=7,
+        screen_timeout_seconds=120,
+        warning_threshold_percent=20,
+        critical_shutdown_percent=10,
+        shutdown_delay_seconds=15,
+        shutdown_pending=False,
+    ).as_status()
+    if tuple(status) != _GALLERY_POWER_STATUS_FIELDS:
+        raise AssertionError("gallery power status keys drifted from the declared fixture schema")
+    return status
 
 
-def _build_talk_contact_screen(display: object) -> object:
+def _build_talk_contact_screen(display: "Display") -> "Screen":
     """Build the main Talk contact-action screen."""
-    from yoyopod.ui.screens import TalkContactScreen
+    from yoyopod.ui.screens.voip.talk_contact import TalkContactScreen
 
     context = _build_context()
-    context.set_talk_contact(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
+    context.set_talk_contact(name="Mama", sip_address="sip:mama@example.com")
     return TalkContactScreen(
         display,
         context,
@@ -208,16 +246,16 @@ def _build_talk_contact_screen(display: object) -> object:
     )
 
 
-def _build_voice_note_recording_screen(display: object) -> object:
+def _build_voice_note_recording_screen(display: "Display") -> "Screen":
     """Build the voice-note recording state."""
-    from yoyopod.ui.screens import VoiceNoteScreen
     from yoyopod.ui.screens.voip.voice_note import (
+        VoiceNoteScreen,
         build_voice_note_actions,
         build_voice_note_state_provider,
     )
 
     context = _build_context()
-    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
     draft = _DemoVoiceNoteDraft(
         recipient_address="sip:mama@example.com",
         recipient_name="Mama",
@@ -227,27 +265,28 @@ def _build_voice_note_recording_screen(display: object) -> object:
         status_text="Recording...",
     )
     voip_manager = _FakeVoipManager(active_voice_note=draft)
+    typed_voip_manager = cast("VoIPManager", voip_manager)
     return VoiceNoteScreen(
         display,
         context,
         state_provider=build_voice_note_state_provider(
             context=context,
-            voip_manager=voip_manager,
+            voip_manager=typed_voip_manager,
         ),
-        actions=build_voice_note_actions(voip_manager=voip_manager),
+        actions=build_voice_note_actions(voip_manager=typed_voip_manager),
     )
 
 
-def _build_voice_note_review_screen(display: object) -> object:
+def _build_voice_note_review_screen(display: "Display") -> "Screen":
     """Build the voice-note review state."""
-    from yoyopod.ui.screens import VoiceNoteScreen
     from yoyopod.ui.screens.voip.voice_note import (
+        VoiceNoteScreen,
         build_voice_note_actions,
         build_voice_note_state_provider,
     )
 
     context = _build_context()
-    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
     draft = _DemoVoiceNoteDraft(
         recipient_address="sip:mama@example.com",
         recipient_name="Mama",
@@ -257,27 +296,28 @@ def _build_voice_note_review_screen(display: object) -> object:
         status_text="Ready to send",
     )
     voip_manager = _FakeVoipManager(active_voice_note=draft)
+    typed_voip_manager = cast("VoIPManager", voip_manager)
     return VoiceNoteScreen(
         display,
         context,
         state_provider=build_voice_note_state_provider(
             context=context,
-            voip_manager=voip_manager,
+            voip_manager=typed_voip_manager,
         ),
-        actions=build_voice_note_actions(voip_manager=voip_manager),
+        actions=build_voice_note_actions(voip_manager=typed_voip_manager),
     )
 
 
-def _build_voice_note_sent_screen(display: object) -> object:
+def _build_voice_note_sent_screen(display: "Display") -> "Screen":
     """Build the voice-note sent state."""
-    from yoyopod.ui.screens import VoiceNoteScreen
     from yoyopod.ui.screens.voip.voice_note import (
+        VoiceNoteScreen,
         build_voice_note_actions,
         build_voice_note_state_provider,
     )
 
     context = _build_context()
-    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
     draft = _DemoVoiceNoteDraft(
         recipient_address="sip:mama@example.com",
         recipient_name="Mama",
@@ -288,18 +328,19 @@ def _build_voice_note_sent_screen(display: object) -> object:
         message_id="demo-note",
     )
     voip_manager = _FakeVoipManager(active_voice_note=draft)
+    typed_voip_manager = cast("VoIPManager", voip_manager)
     return VoiceNoteScreen(
         display,
         context,
         state_provider=build_voice_note_state_provider(
             context=context,
-            voip_manager=voip_manager,
+            voip_manager=typed_voip_manager,
         ),
-        actions=build_voice_note_actions(voip_manager=voip_manager),
+        actions=build_voice_note_actions(voip_manager=typed_voip_manager),
     )
 
 
-def _build_now_playing_backend(*, playback_state: str) -> object:
+def _build_now_playing_backend(*, playback_state: str) -> "MusicBackend":
     """Return a deterministic backend state for now-playing captures."""
     from yoyopod.audio import MockMusicBackend
     from yoyopod.audio.music.models import Track as PlaybackTrack
@@ -321,11 +362,11 @@ def _build_now_playing_backend(*, playback_state: str) -> object:
     return backend
 
 
-def _build_now_playing_screen(display: object, *, playback_state: str) -> object:
+def _build_now_playing_screen(display: "Display", *, playback_state: str) -> "Screen":
     """Build a now-playing screen wired through the playback facade seam."""
 
-    from yoyopod.ui.screens import NowPlayingScreen
     from yoyopod.ui.screens.music.now_playing import (
+        NowPlayingScreen,
         build_now_playing_actions,
         build_now_playing_state_provider,
     )
@@ -347,25 +388,26 @@ def _build_now_playing_screen(display: object, *, playback_state: str) -> object
 
 
 def _build_power_screen(
-    display: object,
+    display: "Display",
     *,
-    power_snapshot: object,
+    power_snapshot: "PowerSnapshot",
     network_manager: object | None = None,
-) -> object:
+) -> "Screen":
     """Build a Setup screen wired through the prepared power facade seam."""
 
-    from yoyopod.ui.screens import PowerScreen
     from yoyopod.ui.screens.system.power import (
+        PowerScreen,
         build_power_screen_actions,
         build_power_screen_state_provider,
     )
 
     context = _build_context()
+    typed_power_manager = cast("PowerManager", _FakePowerManager(power_snapshot))
     return PowerScreen(
         display,
         context,
         state_provider=build_power_screen_state_provider(
-            power_manager=_FakePowerManager(power_snapshot),
+            power_manager=typed_power_manager,
             network_manager=network_manager,
             status_provider=_build_power_status,
         ),

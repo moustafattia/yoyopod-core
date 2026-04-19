@@ -18,11 +18,17 @@ gallery_app = typer.Typer(
 )
 
 
+_ASK_RESPONSE_HEADLINE = "Volume"
+_ASK_RESPONSE_BODY = "Volume is 75."
+
+
 def _advance_ask_to_response(screen: object) -> None:
-    """Drive AskScreen into its response state for a second capture."""
-    screen.on_select()  # type: ignore[union-attr]
-    screen.on_select()  # type: ignore[union-attr]
-    screen.on_select()  # type: ignore[union-attr]
+    """Set AskScreen into a stable reply state for deterministic captures."""
+
+    set_response = getattr(screen, "_set_response", None)
+    if not callable(set_response):
+        raise TypeError("Ask response capture requires a screen with _set_response(headline, body)")
+    set_response(_ASK_RESPONSE_HEADLINE, _ASK_RESPONSE_BODY)
 
 
 @gallery_app.callback(invoke_without_command=True)

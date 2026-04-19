@@ -3,6 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol, Sequence, cast
+
+if TYPE_CHECKING:
+    from yoyopod.network.models import GpsCoordinate, ModemState
+    from yoyopod.power import PowerSnapshot
+
+
+class _CallHistoryEntryLike(Protocol):
+    """Minimal call-history entry shape used by the gallery fixtures."""
+
+    seen: bool
+    title: str
+
+    @property
+    def is_unseen_missed(self) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,8 +79,8 @@ class _FakeMusicService:
     def __init__(
         self,
         *,
-        playlists: list[_DemoPlaylistSummary],
-        recents: list[object],
+        playlists: Sequence[_DemoPlaylistSummary],
+        recents: Sequence[object],
     ) -> None:
         self.is_available = True
         self._playlists = list(playlists)
@@ -87,7 +102,7 @@ class _FakeMusicService:
 class _FakeCallHistoryStore:
     """Minimal call-history store for the recents screen."""
 
-    def __init__(self, entries: list[object]) -> None:
+    def __init__(self, entries: Sequence[object]) -> None:
         self._entries = list(entries)
 
     def list_recent(self) -> list[object]:
@@ -95,34 +110,45 @@ class _FakeCallHistoryStore:
 
     def mark_all_seen(self) -> None:
         for entry in self._entries:
-            entry.seen = True  # type: ignore[union-attr]
+            typed_entry = cast(_CallHistoryEntryLike, entry)
+            typed_entry.seen = True
 
     def missed_count(self) -> int:
-        return sum(1 for entry in self._entries if entry.is_unseen_missed)  # type: ignore[union-attr]
+        return sum(
+            1 for entry in self._entries if cast(_CallHistoryEntryLike, entry).is_unseen_missed
+        )
 
     def recent_preview(self) -> list[str]:
-        return [entry.title for entry in self._entries[:3]]  # type: ignore[union-attr]
+        return [cast(_CallHistoryEntryLike, entry).title for entry in self._entries[:3]]
 
 
 class _FakePowerManager:
     """Minimal power manager exposing one stable snapshot."""
 
-    def __init__(self, snapshot: object) -> None:
+    def __init__(self, snapshot: "PowerSnapshot") -> None:
         self._snapshot = snapshot
 
-    def get_snapshot(self) -> object:
+    def get_snapshot(self) -> "PowerSnapshot":
         return self._snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeNetworkConfig:
+    """Minimal network-manager config surface used by Setup captures."""
+
+    enabled: bool = True
+    gps_enabled: bool = True
 
 
 class _FakeNetworkManager:
     """Minimal network manager for deterministic Setup captures."""
 
-    def __init__(self, *, gps: object | None = None) -> None:
+    def __init__(self, *, gps: "GpsCoordinate | None" = None) -> None:
         from yoyopod.network.models import ModemPhase, ModemState, SignalInfo
 
-        self.config = type("Config", (), {"enabled": True, "gps_enabled": True})()
+        self.config = _FakeNetworkConfig()
         self._gps = gps
-        self._state = ModemState(
+        self._state: ModemState = ModemState(
             phase=ModemPhase.REGISTERED,
             signal=SignalInfo(csq=20),
             carrier="Telekom.de",
@@ -132,10 +158,10 @@ class _FakeNetworkManager:
         )
 
     @property
-    def modem_state(self) -> object:
+    def modem_state(self) -> "ModemState":
         return self._state
 
-    def query_gps(self) -> object | None:
+    def query_gps(self) -> "GpsCoordinate | None":
         self._state.gps = self._gps
         return self._gps
 

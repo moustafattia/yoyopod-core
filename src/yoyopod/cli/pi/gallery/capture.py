@@ -5,12 +5,12 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable, Protocol, cast
 
 from yoyopod.cli.pi.gallery.fakes import (
+    _FakeNetworkManager,
     _FakePeopleDirectory,
     _FakeVoipManager,
-    _FakeNetworkManager,
 )
 from yoyopod.cli.pi.gallery.fixtures import (
     _build_call_history_store,
@@ -18,13 +18,29 @@ from yoyopod.cli.pi.gallery.fixtures import (
     _build_context,
     _build_music_service,
     _build_now_playing_screen,
-    _build_power_snapshot,
     _build_power_screen,
+    _build_power_snapshot,
     _build_talk_contact_screen,
     _build_voice_note_recording_screen,
     _build_voice_note_review_screen,
     _build_voice_note_sent_screen,
 )
+
+if TYPE_CHECKING:
+    from yoyopod.communication import CallHistoryStore, VoIPManager
+    from yoyopod.audio.local_service import LocalMusicService
+    from yoyopod.people import PeopleDirectory
+    from yoyopod.ui.display import Display
+
+
+class _GalleryScreen(Protocol):
+    """Minimal screen surface required for gallery capture."""
+
+    def enter(self) -> None: ...
+
+    def render(self) -> None: ...
+
+    def exit(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,16 +48,14 @@ class _CaptureSpec:
     """One deterministic screen capture target."""
 
     name: str
-    build_screen: Callable[[], object]
-    prepare: Callable[[object], None] | None = None
+    build_screen: Callable[[], _GalleryScreen]
+    prepare: Callable[[_GalleryScreen], None] | None = None
 
 
-def _pump_display(display: object, duration_seconds: float) -> None:
+def _pump_display(display: "Display", duration_seconds: float) -> None:
     """Let LVGL flush and settle before capturing."""
-    from yoyopod.ui.display import Display
 
-    d: Display = display  # type: ignore[assignment]
-    backend = d.get_ui_backend()
+    backend = display.get_ui_backend()
     if backend is None or not getattr(backend, "initialized", False):
         return
 
@@ -56,25 +70,23 @@ def _pump_display(display: object, duration_seconds: float) -> None:
 
 
 def _capture_screen(
-    display: object,
+    display: "Display",
     spec: _CaptureSpec,
     output_dir: Path,
     *,
     settle_seconds: float,
 ) -> None:
     """Render one screen state and save an LVGL readback."""
-    from yoyopod.ui.display import Display
 
-    d: Display = display  # type: ignore[assignment]
     screen = spec.build_screen()
-    screen.enter()  # type: ignore[union-attr]
+    screen.enter()
     try:
         if spec.prepare is not None:
             spec.prepare(screen)
-        screen.render()  # type: ignore[union-attr]
+        screen.render()
         _pump_display(display, settle_seconds)
 
-        adapter = d.get_adapter()
+        adapter = display.get_adapter()
         save_readback = getattr(adapter, "save_screenshot_readback", None)
         save_shadow = getattr(adapter, "save_screenshot", None)
         if not callable(save_readback):
@@ -95,35 +107,38 @@ def _capture_screen(
             return
         raise RuntimeError(f"failed to save screenshot to {output_path}")
     finally:
-        screen.exit()  # type: ignore[union-attr]
-        backend = d.get_ui_backend()
+        screen.exit()
+        backend = display.get_ui_backend()
         if backend is not None and getattr(backend, "initialized", False):
             backend.clear()
             _pump_display(display, 0.05)
 
 
 def _build_capture_specs(
-    display: object, *, advance_ask_to_response: Callable[[object], None] | None = None
+    display: "Display",
+    *,
+    advance_ask_to_response: Callable[[object], None] | None = None,
 ) -> list[_CaptureSpec]:
     """Build the deterministic gallery sequence."""
-    from yoyopod.ui.screens import (
-        AskScreen,
-        CallHistoryScreen,
-        CallScreen,
-        ContactListScreen,
-        InCallScreen,
-        IncomingCallScreen,
-        ListenScreen,
-        OutgoingCallScreen,
-        PlaylistScreen,
-        RecentTracksScreen,
-    )
+
+    from yoyopod.ui.screens.music.playlist import PlaylistScreen
+    from yoyopod.ui.screens.music.recent import RecentTracksScreen
+    from yoyopod.ui.screens.navigation.ask import AskScreen
+    from yoyopod.ui.screens.navigation.listen import ListenScreen
+    from yoyopod.ui.screens.voip.call_history import CallHistoryScreen
+    from yoyopod.ui.screens.voip.contact_list import ContactListScreen
+    from yoyopod.ui.screens.voip.in_call import InCallScreen
+    from yoyopod.ui.screens.voip.incoming_call import IncomingCallScreen
+    from yoyopod.ui.screens.voip.outgoing_call import OutgoingCallScreen
+    from yoyopod.ui.screens.voip.quick_call import CallScreen
 
     contacts = _build_contacts()
-    people_directory = _FakePeopleDirectory(contacts)
-    music_service = _build_music_service()
-    call_history_store = _build_call_history_store()
+    people_directory = cast("PeopleDirectory", _FakePeopleDirectory(contacts))
+    music_service = cast("LocalMusicService", _build_music_service())
+    call_history_store = cast("CallHistoryStore", _build_call_history_store())
     power_snapshot = _build_power_snapshot()
+    idle_voip_manager = cast("VoIPManager", _FakeVoipManager())
+    ask_prepare = cast(Callable[[_GalleryScreen], None] | None, advance_ask_to_response)
 
     return [
         _CaptureSpec(
@@ -157,7 +172,7 @@ def _build_capture_specs(
             lambda: CallScreen(
                 display,
                 _build_context(),
-                voip_manager=_FakeVoipManager(),
+                voip_manager=idle_voip_manager,
                 people_directory=people_directory,
                 call_history_store=call_history_store,
             ),
@@ -171,7 +186,7 @@ def _build_capture_specs(
             lambda: ContactListScreen(
                 display,
                 _build_context(),
-                voip_manager=_FakeVoipManager(),
+                voip_manager=idle_voip_manager,
                 people_directory=people_directory,
             ),
             prepare=lambda screen: setattr(screen, "selected_index", 1),
@@ -181,7 +196,7 @@ def _build_capture_specs(
             lambda: CallHistoryScreen(
                 display,
                 _build_context(),
-                voip_manager=_FakeVoipManager(),
+                voip_manager=idle_voip_manager,
                 call_history_store=call_history_store,
             ),
             prepare=lambda screen: setattr(screen, "selected_index", 1),
@@ -205,7 +220,7 @@ def _build_capture_specs(
         _CaptureSpec(
             "11_ask_response",
             lambda: AskScreen(display, _build_context()),
-            prepare=advance_ask_to_response,
+            prepare=ask_prepare,
         ),
         _CaptureSpec(
             "12_power",
@@ -235,7 +250,7 @@ def _build_capture_specs(
             lambda: IncomingCallScreen(
                 display,
                 _build_context(),
-                voip_manager=_FakeVoipManager(),
+                voip_manager=idle_voip_manager,
                 caller_address="sip:mama@example.com",
                 caller_name="Mama",
             ),
@@ -245,11 +260,14 @@ def _build_capture_specs(
             lambda: OutgoingCallScreen(
                 display,
                 _build_context(),
-                voip_manager=_FakeVoipManager(
-                    caller_info={
-                        "display_name": "Papa",
-                        "address": "sip:papa@example.com",
-                    }
+                voip_manager=cast(
+                    "VoIPManager",
+                    _FakeVoipManager(
+                        caller_info={
+                            "display_name": "Papa",
+                            "address": "sip:papa@example.com",
+                        }
+                    ),
                 ),
             ),
         ),
@@ -258,10 +276,13 @@ def _build_capture_specs(
             lambda: InCallScreen(
                 display,
                 _build_context(),
-                voip_manager=_FakeVoipManager(
-                    caller_info={"display_name": "Mama"},
-                    duration_seconds=187,
-                    muted=False,
+                voip_manager=cast(
+                    "VoIPManager",
+                    _FakeVoipManager(
+                        caller_info={"display_name": "Mama"},
+                        duration_seconds=187,
+                        muted=False,
+                    ),
                 ),
             ),
         ),
@@ -270,10 +291,13 @@ def _build_capture_specs(
             lambda: InCallScreen(
                 display,
                 _build_context(),
-                voip_manager=_FakeVoipManager(
-                    caller_info={"display_name": "Mama"},
-                    duration_seconds=187,
-                    muted=True,
+                voip_manager=cast(
+                    "VoIPManager",
+                    _FakeVoipManager(
+                        caller_info={"display_name": "Mama"},
+                        duration_seconds=187,
+                        muted=True,
+                    ),
                 ),
             ),
         ),
