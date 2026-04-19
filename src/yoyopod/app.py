@@ -225,9 +225,7 @@ class YoyoPodApp:
         self._main_thread_id = threading.get_ident()
         self.event_bus = EventBus(main_thread_id=self._main_thread_id)
         self._pending_main_thread_callbacks: SimpleQueue[Callable[[], None]] = SimpleQueue()
-        self._pending_safety_main_thread_callbacks: SimpleQueue[Callable[[], None]] = (
-            SimpleQueue()
-        )
+        self._pending_safety_main_thread_callbacks: SimpleQueue[Callable[[], None]] = SimpleQueue()
 
         # Runtime services
         self.screen_power_service = ScreenPowerService(self)
@@ -235,8 +233,8 @@ class YoyoPodApp:
         self.power_runtime = PowerRuntimeService(self)
         self.shutdown_service = ShutdownLifecycleService(self)
         self.runtime_loop = RuntimeLoopService(self)
-        self.boot_service = RuntimeBootService(self)
         self.event_wiring = RuntimeEventWiring(self)
+        self.boot_service = RuntimeBootService(self)
         self.event_wiring.register()
 
         logger.info("=" * 60)
@@ -273,11 +271,8 @@ class YoyoPodApp:
     def _configure_screen_power(self, initial_now: float | None = None) -> None:
         self.screen_power_service.configure_screen_power(initial_now)
 
-    def refresh_talk_summary(self) -> None:
-        self.boot_service.refresh_talk_summary()
-
     def _refresh_talk_summary(self) -> None:
-        self.refresh_talk_summary()
+        self.boot_service.refresh_talk_summary()
 
     def _init_core_components(self) -> bool:
         return self.boot_service.init_core_components()
@@ -480,19 +475,9 @@ class YoyoPodApp:
     ) -> None:
         self.event_wiring.handle_graceful_shutdown_cancelled_event(event)
 
-    def cellular_connection_type(self) -> str:
-        """Return a best-effort cellular connection type for degraded status chrome."""
-        return self.event_wiring.cellular_connection_type()
-
-    def _cellular_connection_type(self) -> str:
-        return self.cellular_connection_type()
-
-    def sync_network_context_from_manager(self) -> None:
+    def _sync_network_context_from_manager(self) -> None:
         """Refresh AppContext network state from the current modem snapshot."""
         self.event_wiring.sync_network_context_from_manager()
-
-    def _sync_network_context_from_manager(self) -> None:
-        self.sync_network_context_from_manager()
 
     def _handle_network_ppp_up(self, event: NetworkPppUpEvent) -> None:
         self.event_wiring.handle_network_ppp_up(event)
@@ -692,7 +677,7 @@ class YoyoPodApp:
         """Clean up and stop the application."""
         self.shutdown_service.stop(disable_watchdog=disable_watchdog)
 
-    def get_status(self, *, refresh_output_volume: bool = False) -> Dict[str, Any]:
+    def get_status(self, *, refresh_output_volume: bool = False) -> dict[str, Any]:
         """Return the current application status."""
         monotonic_now = time.monotonic()
         pending_shutdown_in_seconds = None

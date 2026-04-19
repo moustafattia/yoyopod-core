@@ -104,7 +104,7 @@ class RuntimeBootService:
             self.ensure_coordinators()
             assert self.app.coordinator_runtime is not None
             self.app.coordinator_runtime.set_ui_state(self.app._ui_state, trigger="initial_screen")
-            self.setup_event_subscriptions()
+            self.bind_coordinator_events()
             self.setup_voip_callbacks()
             self.setup_music_callbacks()
             self.app.shutdown_service.register_power_shutdown_hooks()
@@ -120,10 +120,10 @@ class RuntimeBootService:
         return self._config_boot.load_configuration()
 
     def resolve_screen_timeout_seconds(self) -> float:
-        return self._config_boot.resolve_screen_timeout_seconds()
+        return self.app.screen_power_service.resolve_screen_timeout_seconds()
 
     def resolve_active_brightness(self) -> float:
-        return self._config_boot.resolve_active_brightness()
+        return self.app.screen_power_service.resolve_active_brightness()
 
     def init_core_components(self) -> bool:
         return self._components_boot.init_core_components()
@@ -152,8 +152,12 @@ class RuntimeBootService:
     def setup_music_callbacks(self) -> None:
         self._wiring_boot.setup_music_callbacks()
 
+    def bind_coordinator_events(self) -> None:
+        self._wiring_boot.bind_coordinator_events()
+
     def setup_event_subscriptions(self) -> None:
-        self._wiring_boot.setup_event_subscriptions()
+        """Backward-compatible alias for coordinator event binding."""
+        self.bind_coordinator_events()
 
     def ensure_coordinators(self) -> None:
         self._wiring_boot.ensure_coordinators()

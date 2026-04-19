@@ -73,7 +73,7 @@ class RuntimeEventWiring:
     def handle_voice_note_activity_changed(self, *_args: Any) -> None:
         """Refresh active draft state after a message or delivery update."""
         self.sync_active_voice_note_context()
-        self.app.refresh_talk_summary()
+        self.app._refresh_talk_summary()
         self.refresh_talk_related_screen()
 
     def handle_voice_note_failure(self, *_args: Any) -> None:

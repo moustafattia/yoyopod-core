@@ -30,14 +30,6 @@ class ConfigBoot:
         self.recent_track_history_store_cls = recent_track_history_store_cls
         self.audio_device_catalog_cls = audio_device_catalog_cls
 
-    def resolve_screen_timeout_seconds(self) -> float:
-        """Resolve configured screen timeout with fallback defaults."""
-        return self.app.screen_power_service.resolve_screen_timeout_seconds()
-
-    def resolve_active_brightness(self) -> float:
-        """Resolve configured active brightness with fallback defaults."""
-        return self.app.screen_power_service.resolve_active_brightness()
-
     def load_configuration(self) -> bool:
         """Load YoyoPod configuration."""
         self.logger.info("Loading configuration...")
@@ -74,8 +66,10 @@ class ConfigBoot:
                 self.app.auto_resume_after_call = (
                     self.app.media_settings.music.auto_resume_after_call
                 )
-            self.app._screen_timeout_seconds = self.resolve_screen_timeout_seconds()
-            self.app._active_brightness = self.resolve_active_brightness()
+            self.app._screen_timeout_seconds = (
+                self.app.screen_power_service.resolve_screen_timeout_seconds()
+            )
+            self.app._active_brightness = self.app.screen_power_service.resolve_active_brightness()
             self.logger.info(f"  Auto-resume after call: {self.app.auto_resume_after_call}")
             self.logger.info(f"  Screen timeout: {self.app._screen_timeout_seconds:.1f}s")
             self.logger.info(f"  Active brightness: {self.app._active_brightness:.2f}")

@@ -58,18 +58,14 @@ class WiringBoot:
         self.app.voip_manager.on_availability_change(
             self.app.call_coordinator.publish_availability_change
         )
-        self.app.voip_manager.on_message_summary_change(
-            self.app.event_wiring.handle_voice_note_summary_changed
-        )
-        self.app.voip_manager.on_message_received(
-            self.app.event_wiring.handle_voice_note_activity_changed
-        )
+        self.app.voip_manager.on_message_summary_change(self.app._handle_voice_note_summary_changed)
+        self.app.voip_manager.on_message_received(self.app._handle_voice_note_activity_changed)
         self.app.voip_manager.on_message_delivery_change(
-            self.app.event_wiring.handle_voice_note_activity_changed
+            self.app._handle_voice_note_activity_changed
         )
-        self.app.voip_manager.on_message_failure(self.app.event_wiring.handle_voice_note_failure)
+        self.app.voip_manager.on_message_failure(self.app._handle_voice_note_failure)
         self.refresh_talk_summary()
-        self.app.event_wiring.sync_active_voice_note_context()
+        self.app._sync_active_voice_note_context()
         self.logger.info("  VoIP callbacks registered")
 
     def setup_music_callbacks(self) -> None:
@@ -92,8 +88,8 @@ class WiringBoot:
         )
         self.logger.info("  Music callbacks registered")
 
-    def setup_event_subscriptions(self) -> None:
-        """Bind extracted coordinators to the event bus."""
+    def bind_coordinator_events(self) -> None:
+        """Bind coordinator-level event handlers to the EventBus."""
         self.logger.info("Setting up event subscriptions...")
         self.ensure_coordinators()
         assert self.app.call_coordinator is not None
@@ -103,6 +99,10 @@ class WiringBoot:
         self.app.playback_coordinator.bind(self.app.event_bus)
         self.app.power_coordinator.bind(self.app.event_bus)
         self.logger.info("  Event subscriptions registered")
+
+    def setup_event_subscriptions(self) -> None:
+        """Backward-compatible alias for coordinator event binding."""
+        self.bind_coordinator_events()
 
     def ensure_coordinators(self) -> None:
         """Build coordinator helpers around the initialized runtime."""
