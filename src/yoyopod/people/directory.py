@@ -8,7 +8,12 @@ from loguru import logger
 
 from yoyopod.config.storage import atomic_write_yaml, load_yaml_mapping
 from yoyopod.people.cloud_sync import build_cloud_contact
-from yoyopod.people.models import Contact, contacts_from_mapping, contacts_to_mapping
+from yoyopod.people.models import (
+    Contact,
+    contact_is_callable,
+    contacts_from_mapping,
+    contacts_to_mapping,
+)
 
 
 class PeopleDirectory:
@@ -96,7 +101,9 @@ class PeopleDirectory:
         """Return contacts that can be called on the currently enabled transports."""
 
         return [
-            contact for contact in self.contacts if contact.is_callable(gsm_enabled=gsm_enabled)
+            contact
+            for contact in self.contacts
+            if contact_is_callable(contact, gsm_enabled=gsm_enabled)
         ]
 
     def get_local_contacts(self) -> list[Contact]:
@@ -210,6 +217,18 @@ class PeopleDirectory:
             merged_cloud_identities.add(self._contact_identity(contact))
 
             quick_dial = entry.get("quick_dial")
+            if isinstance(quick_dial, bool):
+                quick_dial = None
+            elif isinstance(quick_dial, str):
+                try:
+                    quick_dial = int(quick_dial.strip())
+                except ValueError:
+                    logger.warning(
+                        "Skipping invalid cloud quick_dial {!r} for contact {}",
+                        quick_dial,
+                        contact.name,
+                    )
+                    quick_dial = None
             if isinstance(quick_dial, int) and 1 <= quick_dial <= 9:
                 route, address = contact.preferred_call_target(gsm_enabled=False)
                 if route == "sip" and address:

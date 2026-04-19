@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 from loguru import logger
 
+from yoyopod.people.models import contact_is_callable
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
@@ -99,7 +100,15 @@ class ContactListScreen(Screen):
     def load_contacts(self) -> None:
         """Load contacts from the people directory."""
         if self.people_directory:
-            contacts = self.people_directory.get_callable_contacts(gsm_enabled=False)
+            callable_contacts = getattr(self.people_directory, "get_callable_contacts", None)
+            if callable(callable_contacts):
+                contacts = callable_contacts(gsm_enabled=False)
+            else:
+                contacts = [
+                    contact
+                    for contact in self.people_directory.get_contacts()
+                    if contact_is_callable(contact, gsm_enabled=False)
+                ]
             favorites = [contact for contact in contacts if contact.favorite]
             others = [contact for contact in contacts if not contact.favorite]
             self.contacts = favorites + others

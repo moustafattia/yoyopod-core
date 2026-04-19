@@ -37,17 +37,40 @@ class Contact:
     ) -> tuple[str | None, str]:
         """Return the active call route and address for this contact."""
 
-        if self.sip_address.strip():
-            return "sip", self.sip_address.strip()
-        if gsm_enabled and self.phone_number.strip():
-            return "gsm", self.phone_number.strip()
-        return None, ""
+        return resolve_contact_call_target(self, gsm_enabled=gsm_enabled)
 
     def is_callable(self, *, gsm_enabled: bool = False) -> bool:
         """Return whether this contact can be called on the active device."""
 
-        route, _ = self.preferred_call_target(gsm_enabled=gsm_enabled)
-        return bool(route)
+        return contact_is_callable(self, gsm_enabled=gsm_enabled)
+
+
+def resolve_contact_call_target(
+    contact: object,
+    *,
+    gsm_enabled: bool = False,
+) -> tuple[str | None, str]:
+    """Return the active call route for any contact-like object."""
+
+    if not bool(getattr(contact, "can_call", True)):
+        return None, ""
+
+    sip_address = str(getattr(contact, "sip_address", "")).strip()
+    if sip_address:
+        return "sip", sip_address
+
+    phone_number = str(getattr(contact, "phone_number", "")).strip()
+    if gsm_enabled and phone_number:
+        return "gsm", phone_number
+
+    return None, ""
+
+
+def contact_is_callable(contact: object, *, gsm_enabled: bool = False) -> bool:
+    """Return whether any contact-like object is callable on the active device."""
+
+    route, _ = resolve_contact_call_target(contact, gsm_enabled=gsm_enabled)
+    return bool(route)
 
 
 def contacts_from_mapping(data: dict[str, Any]) -> tuple[list[Contact], dict[int, str]]:
@@ -82,27 +105,32 @@ def contacts_to_mapping(
 ) -> dict[str, Any]:
     """Serialize contacts and speed dial into a YAML-friendly mapping."""
 
-    serialized_contacts: list[dict[str, Any]] = []
-    for contact in contacts:
-        entry = {
-            "name": contact.name,
-            "sip_address": contact.sip_address,
-            "favorite": contact.favorite,
-            "notes": contact.notes,
-        }
-        if contact.phone_number:
-            entry["phone_number"] = contact.phone_number
-        if contact.contact_id:
-            entry["contact_id"] = contact.contact_id
-        if contact.sync_origin != "local":
-            entry["sync_origin"] = contact.sync_origin
-        if not contact.can_call:
-            entry["can_call"] = contact.can_call
-        if not contact.can_receive:
-            entry["can_receive"] = contact.can_receive
-        serialized_contacts.append(entry)
-
     return {
-        "contacts": serialized_contacts,
+        "contacts": [_contact_to_mapping(contact) for contact in contacts],
         "speed_dial": speed_dial,
     }
+
+
+def _contact_to_mapping(contact: Contact) -> dict[str, Any]:
+    """Serialize one contact without emitting default-only fields."""
+
+    mapping: dict[str, Any] = {"name": contact.name}
+
+    if contact.sip_address:
+        mapping["sip_address"] = contact.sip_address
+    if contact.phone_number:
+        mapping["phone_number"] = contact.phone_number
+    if contact.favorite:
+        mapping["favorite"] = True
+    if contact.notes:
+        mapping["notes"] = contact.notes
+    if contact.contact_id:
+        mapping["contact_id"] = contact.contact_id
+    if contact.sync_origin != "local":
+        mapping["sync_origin"] = contact.sync_origin
+    if not contact.can_call:
+        mapping["can_call"] = False
+    if not contact.can_receive:
+        mapping["can_receive"] = False
+
+    return mapping

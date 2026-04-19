@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Callable
 
 from loguru import logger
 
+from yoyopod.people.models import resolve_contact_call_target
 from yoyopod.runtime_state import VoiceInteractionState
 from yoyopod.voice import VoiceCaptureRequest, VoiceCommandIntent, VoiceService, VoiceSettings
 from yoyopod.voice.commands import match_voice_command
@@ -116,7 +117,9 @@ class VoiceSettingsResolver:
                         )
 
             if capture_device_id is None:
-                capture_device_id = getattr(self._config_manager, "get_capture_device_id", lambda: None)()
+                capture_device_id = getattr(
+                    self._config_manager, "get_capture_device_id", lambda: None
+                )()
             if speaker_device_id is None:
                 speaker_device_id = getattr(
                     self._config_manager,
@@ -206,7 +209,9 @@ class VoiceCommandExecutor:
 
         normalized = transcript.strip()
         if not normalized:
-            return VoiceCommandOutcome("No Speech", "I did not catch a command.", should_speak=False)
+            return VoiceCommandOutcome(
+                "No Speech", "I did not catch a command.", should_speak=False
+            )
 
         if self._context is not None:
             self._context.record_voice_transcript(normalized, mode="voice_commands")
@@ -272,7 +277,7 @@ class VoiceCommandExecutor:
         if contact is None:
             return VoiceCommandOutcome("No Match", f"I could not find {spoken_name}.")
 
-        route, address = contact.preferred_call_target(gsm_enabled=False)
+        route, address = resolve_contact_call_target(contact, gsm_enabled=False)
         if route != "sip" or not address:
             return VoiceCommandOutcome(
                 "Not Ready",
