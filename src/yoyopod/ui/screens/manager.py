@@ -59,6 +59,7 @@ class ScreenManager:
         self.router = router or ScreenRouter()
         self.on_screen_changed = on_screen_changed
         self.action_scheduler = action_scheduler
+        self._navigation_refresh_pending = False
 
         logger.info("ScreenManager initialized")
 
@@ -97,7 +98,7 @@ class ScreenManager:
         self.current_screen = self.screens[screen_name]
         self.current_screen.enter()
         self._connect_buttons()
-        self.refresh_current_screen()
+        self._refresh_after_navigation()
         self._notify_screen_changed()
 
         logger.info(f"Pushed screen: {screen_name} (stack depth: {len(self.screen_stack)})")
@@ -129,7 +130,7 @@ class ScreenManager:
         self.current_screen = self.screen_stack.pop()
         self.current_screen.enter()
         self._connect_buttons()
-        self.refresh_current_screen()
+        self._refresh_after_navigation()
         self._notify_screen_changed()
 
         logger.info(f"Popped screen (stack depth: {len(self.screen_stack)})")
@@ -162,7 +163,7 @@ class ScreenManager:
         self.current_screen = self.screens[screen_name]
         self.current_screen.enter()
         self._connect_buttons()
-        self.refresh_current_screen()
+        self._refresh_after_navigation()
         self._notify_screen_changed()
 
         logger.info(f"Replaced screen with: {screen_name}")
@@ -184,6 +185,7 @@ class ScreenManager:
 
     def refresh_current_screen(self) -> None:
         """Re-render the current screen."""
+        self._navigation_refresh_pending = False
         if self.current_screen:
             started_at = time.monotonic()
             refresh_for_visible_tick = getattr(
@@ -199,12 +201,26 @@ class ScreenManager:
                 detail=f"screen={self.current_screen.route_name or self.current_screen.name}",
             )
 
+    def flush_pending_navigation_refresh(self) -> bool:
+        """Render one deferred LVGL navigation refresh when present."""
+        if not self._navigation_refresh_pending:
+            return False
+        self.refresh_current_screen()
+        return True
+
     def _notify_screen_changed(self) -> None:
         """Notify listeners when the active screen changes."""
         if self.on_screen_changed is None:
             return
         route_name = self.current_screen.route_name if self.current_screen else None
         self.on_screen_changed(route_name)
+
+    def _refresh_after_navigation(self) -> None:
+        """Refresh immediately or defer to the LVGL pump after a navigation change."""
+        if getattr(self.display, "backend_kind", "pil") == "lvgl":
+            self._navigation_refresh_pending = self.current_screen is not None
+            return
+        self.refresh_current_screen()
 
     def apply_navigation_request(
         self,

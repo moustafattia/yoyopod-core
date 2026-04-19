@@ -554,6 +554,15 @@ class RuntimeLoopService:
             delta_ms = int(max(0.0, monotonic_now - self.app._last_lvgl_pump_at) * 1000.0)
         self.app._last_lvgl_pump_at = monotonic_now
 
+        screen_manager = self.app.screen_manager
+        flush_pending_navigation_refresh = (
+            getattr(screen_manager, "flush_pending_navigation_refresh", None)
+            if screen_manager is not None
+            else None
+        )
+        if callable(flush_pending_navigation_refresh):
+            flush_pending_navigation_refresh()
+
         if self.app._lvgl_input_bridge is not None:
             self.app._lvgl_input_bridge.process_pending()
         self.app._lvgl_backend.pump(delta_ms)

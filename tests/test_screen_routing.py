@@ -12,6 +12,7 @@ from typing import Callable
 import pytest
 
 from yoyopod.app_context import AppContext
+from yoyopod.runtime.loop import RuntimeLoopService
 from yoyopod.ui.display import Display
 from yoyopod.ui.input import InputAction, InputManager
 from yoyopod.ui.screens import (
@@ -56,6 +57,34 @@ class HookAwareStubScreen(Screen):
     def refresh_for_visible_tick(self) -> None:
         """Count visible-tick refreshes before render."""
         self.refresh_for_visible_tick_calls += 1
+
+
+class FakeLvglPumpBackend:
+    """Minimal LVGL backend double for runtime-pump tests."""
+
+    def __init__(self) -> None:
+        self.initialized = True
+        self.pump_calls: list[int] = []
+
+    def pump(self, delta_ms: int) -> None:
+        self.pump_calls.append(delta_ms)
+
+
+class FakeLvglPumpApp:
+    """Small app double that exposes only the LVGL pump dependencies."""
+
+    def __init__(self, *, screen_manager: ScreenManager, backend: FakeLvglPumpBackend) -> None:
+        self.screen_manager = screen_manager
+        self._lvgl_backend = backend
+        self._lvgl_input_bridge = None
+        self._last_lvgl_pump_at = 0.0
+        self._voip_iterate_interval_seconds = 0.02
+        self.coordinator_runtime = None
+        self._ui_state = "idle"
+        self.event_bus = SimpleNamespace(pending_count=lambda: 0)
+
+    def _pending_main_thread_callback_count(self) -> int:
+        return 0
 
 
 @pytest.fixture
@@ -218,6 +247,68 @@ def test_screen_manager_routes_visible_screen_renders_through_refresh_hook(
 
     assert power.render_calls == 2
     assert power.refresh_for_visible_tick_calls == 2
+
+
+def test_lvgl_navigation_refresh_waits_for_runtime_pump() -> None:
+    """LVGL-backed navigation should defer its first visible render to the pump phase."""
+
+    display = SimpleNamespace(backend_kind="lvgl")
+    screen_manager = ScreenManager(display, input_manager=None)
+    power = HookAwareStubScreen(display, AppContext())
+
+    screen_manager.register_screen("power", power)
+    screen_manager.replace_screen("power")
+
+    assert power.render_calls == 0
+    assert power.refresh_for_visible_tick_calls == 0
+
+    backend = FakeLvglPumpBackend()
+    runtime_loop = RuntimeLoopService(
+        FakeLvglPumpApp(screen_manager=screen_manager, backend=backend)
+    )
+
+    runtime_loop.pump_lvgl_backend(now=10.0)
+
+    assert power.render_calls == 1
+    assert power.refresh_for_visible_tick_calls == 1
+    assert backend.pump_calls == [0]
+
+
+def test_lvgl_navigation_burst_coalesces_to_one_render_on_runtime_pump() -> None:
+    """Repeated LVGL navigation before the next pump should render only the final screen once."""
+
+    display = SimpleNamespace(backend_kind="lvgl")
+    screen_manager = ScreenManager(display, input_manager=None)
+    home = HookAwareStubScreen(display, AppContext())
+    other = HookAwareStubScreen(display, AppContext())
+
+    screen_manager.register_screen("home", home)
+    screen_manager.register_screen("other", other)
+    screen_manager.replace_screen("home")
+
+    backend = FakeLvglPumpBackend()
+    runtime_loop = RuntimeLoopService(
+        FakeLvglPumpApp(screen_manager=screen_manager, backend=backend)
+    )
+
+    runtime_loop.pump_lvgl_backend(now=10.0)
+    assert home.render_calls == 1
+    assert other.render_calls == 0
+
+    screen_manager.push_screen("other")
+    screen_manager.pop_screen()
+
+    assert home.render_calls == 1
+    assert other.render_calls == 0
+
+    runtime_loop.pump_lvgl_backend(now=10.1)
+
+    assert home.render_calls == 2
+    assert home.refresh_for_visible_tick_calls == 2
+    assert other.render_calls == 0
+    assert len(backend.pump_calls) == 2
+    assert backend.pump_calls[0] == 0
+    assert backend.pump_calls[1] > 0
 
 
 def test_screen_manager_routes_whisplay_hub_cards_through_stack(display: Display) -> None:
