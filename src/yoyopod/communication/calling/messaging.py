@@ -9,7 +9,7 @@ from typing import Callable
 
 from loguru import logger
 
-from yoyopod.communication.calling.backend import VoIPBackend
+from yoyopod.communication.calling.backend_protocol import VoIPBackend
 from yoyopod.communication.messaging import VoIPMessageStore
 from yoyopod.communication.models import (
     MessageDeliveryChanged,

@@ -282,10 +282,11 @@ def test_liblinphone_backend_records_native_iterate_timings(monkeypatch) -> None
     monotonic_values = iter([10.0, 10.0, 10.18, 10.18, 10.29, 10.31])
 
     monkeypatch.setattr(
-        "yoyopod.communication.calling.backend.time.monotonic", lambda: next(monotonic_values)
+        "yoyopod.communication.calling.liblinphone_backend.time.monotonic",
+        lambda: next(monotonic_values),
     )
     monkeypatch.setattr(
-        "yoyopod.communication.calling.backend.logger.warning",
+        "yoyopod.communication.calling.liblinphone_backend.logger.warning",
         lambda *args: warnings.append(args),
     )
 
@@ -319,7 +320,9 @@ def test_liblinphone_backend_uses_shared_output_volume_and_capture_only_alsa(mon
         commands.append(command)
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr("yoyopod.communication.calling.backend.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "yoyopod.communication.calling.liblinphone_backend.subprocess.run", fake_run
+    )
 
     binding = FakeBinding()
     config = build_config()
@@ -353,7 +356,9 @@ def test_liblinphone_backend_matches_wm8960_card_from_capture_device(monkeypatch
         commands.append(command)
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr("yoyopod.communication.calling.backend.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "yoyopod.communication.calling.liblinphone_backend.subprocess.run", fake_run
+    )
 
     backend = LiblinphoneBackend(build_config(), binding=FakeBinding())
 
