@@ -394,6 +394,14 @@ def _wait_for(predicate, *, timeout_seconds: float = 1.0) -> None:
     raise AssertionError("Timed out waiting for async condition")
 
 
+def _complete_power_refresh(app: YoyoPodApp) -> None:
+    """Drain one queued async power-refresh completion for the test app."""
+
+    _wait_for(lambda: (app.get_status()["pending_main_thread_callbacks"] or 0) > 0)
+    app._process_pending_main_thread_actions()
+    assert app.get_status()["power_refresh_in_flight"] is False
+
+
 def _navigate_from_worker(screen_manager: FakeScreenManager, screen_name: str) -> None:
     worker = threading.Thread(target=lambda: screen_manager.push_screen(screen_name))
     worker.start()
@@ -1174,6 +1182,7 @@ def test_power_poll_updates_context_runtime_and_visible_screen() -> None:
 
     app._poll_power_status(now=0.0, force=True)
 
+    _wait_for(lambda: app.power_manager.refresh_calls == 1)
     assert app.power_manager.refresh_calls == 1
     assert app.context.battery_percent == 55
     assert app.context.battery_charging is True
@@ -1228,6 +1237,7 @@ def test_power_poll_honors_interval_and_tracks_unavailable_backend() -> None:
     )
 
     app._poll_power_status(now=0.0, force=True)
+    _complete_power_refresh(app)
     app._poll_power_status(now=10.0)
     app._poll_power_status(now=30.0)
     _wait_for(lambda: (app.get_status()["pending_main_thread_callbacks"] or 0) > 0)
@@ -1275,6 +1285,66 @@ def test_periodic_power_poll_runs_off_the_coordinator_thread() -> None:
     assert app.context.battery_percent == 48
     assert app.menu_screen.render_calls == 1
     assert app.get_status()["power_refresh_in_flight"] is False
+
+
+def test_forced_power_poll_uses_cached_snapshot_without_waiting_for_refresh() -> None:
+    """Forced polls should publish the cached snapshot immediately, then refresh off-thread."""
+
+    refresh_started = threading.Event()
+    refresh_release = threading.Event()
+    cached_snapshot = _power_snapshot(
+        available=True,
+        battery_percent=41.0,
+        charging=False,
+        power_plugged=False,
+    )
+    refreshed_snapshot = _power_snapshot(
+        available=True,
+        battery_percent=52.0,
+        charging=True,
+        power_plugged=True,
+    )
+
+    class BlockingForcePollPowerManager(FakePowerManager):
+        def __init__(self) -> None:
+            super().__init__([refreshed_snapshot])
+            self.cached_snapshot = cached_snapshot
+
+        def get_snapshot(self, refresh: bool = False) -> PowerSnapshot:
+            if not refresh and self.refresh_calls == 0:
+                return self.cached_snapshot
+            return super().get_snapshot(refresh=refresh)
+
+        def refresh(self) -> PowerSnapshot:
+            refresh_started.set()
+            refresh_release.wait(timeout=1.0)
+            return super().refresh()
+
+    app, _, _ = _build_app(playback_state="stopped")
+    app.power_manager = BlockingForcePollPowerManager()
+
+    started_at = time.monotonic()
+    app._poll_power_status(now=0.0, force=True)
+    elapsed_seconds = time.monotonic() - started_at
+
+    assert elapsed_seconds < 0.1
+    assert app.context.battery_percent == 41
+    assert app.context.battery_charging is False
+    assert app.context.external_power is False
+    assert app.coordinator_runtime.power_snapshot is cached_snapshot
+    assert app.menu_screen.render_calls == 1
+    assert refresh_started.wait(timeout=1.0) is True
+    assert app.get_status()["power_refresh_in_flight"] is True
+
+    refresh_release.set()
+    _complete_power_refresh(app)
+
+    assert app.power_manager.refresh_calls == 1
+    assert app.context.battery_percent == 52
+    assert app.context.battery_charging is True
+    assert app.context.external_power is True
+    assert app.coordinator_runtime.power_snapshot is refreshed_snapshot
+    assert app.menu_screen.render_calls == 2
 
 
 def test_screen_timeout_turns_backlight_off_after_inactivity() -> None:
@@ -1571,7 +1641,9 @@ def test_power_restore_cancels_pending_shutdown() -> None:
     app._poll_power_status(now=0.0, force=True)
     assert app._pending_shutdown is not None
 
+    _complete_power_refresh(app)
     app._poll_power_status(now=30.0, force=True)
+    _complete_power_refresh(app)
 
     assert app._pending_shutdown is None
     assert app._power_alert is not None
@@ -1753,6 +1825,43 @@ def test_watchdog_feed_runs_off_the_coordinator_thread() -> None:
     assert power_manager.feed_watchdog_calls == 1
     assert app.get_status()["watchdog_active"] is True
     assert app.get_status()["watchdog_feed_in_flight"] is False
+
+
+def test_watchdog_start_does_not_wait_for_in_flight_power_refresh() -> None:
+    """Enabling the watchdog should not block behind the PiSugar refresh worker."""
+
+    refresh_started = threading.Event()
+    refresh_release = threading.Event()
+
+    class BlockingRefreshPowerManager(FakePowerManager):
+        def refresh(self) -> PowerSnapshot:
+            refresh_started.set()
+            refresh_release.wait(timeout=1.0)
+            return super().refresh()
+
+    power_manager = BlockingRefreshPowerManager(
+        [_power_snapshot(available=True, battery_percent=60.0)],
+        watchdog_enabled=True,
+        watchdog_timeout_seconds=60,
+        watchdog_feed_interval_seconds=10.0,
+    )
+    app, _, _ = _build_app_with_power(power_manager)
+    app.simulate = False
+
+    app._poll_power_status(now=0.0)
+    assert refresh_started.wait(timeout=1.0) is True
+    assert app.get_status()["power_refresh_in_flight"] is True
+
+    started_at = time.monotonic()
+    app._start_watchdog(now=0.0)
+    elapsed_seconds = time.monotonic() - started_at
+
+    assert elapsed_seconds < 0.1
+    assert power_manager.enable_watchdog_calls == 1
+    assert app.get_status()["watchdog_active"] is True
+
+    refresh_release.set()
+    _complete_power_refresh(app)
 
 
 def test_intentional_stop_disables_watchdog() -> None:

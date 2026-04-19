@@ -22,6 +22,7 @@ class PowerRuntimeService:
     def __init__(self, app: "YoyoPodApp") -> None:
         self.app = app
         self._power_io_lock = threading.Lock()
+        self._watchdog_io_lock = threading.Lock()
 
     def poll_status(self, now: float | None = None, force: bool = False) -> None:
         """Refresh PiSugar power telemetry without stalling the coordinator loop."""
@@ -36,9 +37,14 @@ class PowerRuntimeService:
         self.app._next_power_poll_at = poll_now + interval
 
         if force:
-            snapshot = self._refresh_snapshot()
-            self._complete_refresh(snapshot=snapshot)
+            self._publish_snapshot(snapshot=self.app.power_manager.get_snapshot())
+            self._start_power_refresh_worker()
             return
+
+        self._start_power_refresh_worker()
+
+    def _start_power_refresh_worker(self) -> None:
+        """Schedule one background refresh when no worker is already running."""
 
         if self.app._power_refresh_in_flight:
             return
@@ -79,6 +85,11 @@ class PowerRuntimeService:
         """Publish one completed power refresh back onto the coordinator thread."""
 
         self.app._power_refresh_in_flight = False
+        self._publish_snapshot(snapshot=snapshot)
+
+    def _publish_snapshot(self, *, snapshot: "PowerSnapshot") -> None:
+        """Publish one power snapshot onto the coordinator thread."""
+
         self.app.boot_service.ensure_coordinators()
         assert self.app.power_coordinator is not None
         self.app.power_coordinator.publish_snapshot(snapshot)
@@ -108,7 +119,7 @@ class PowerRuntimeService:
                 timeout_seconds,
             )
 
-        with self._power_io_lock:
+        with self._watchdog_io_lock:
             enabled = self.app.power_manager.enable_watchdog()
         if not enabled:
             logger.warning("Power watchdog could not be enabled")
@@ -156,7 +167,7 @@ class PowerRuntimeService:
                 float(power_manager.config.watchdog_feed_interval_seconds),
             )
             started_at = time.monotonic()
-            with self._power_io_lock:
+            with self._watchdog_io_lock:
                 success = power_manager.feed_watchdog()
             duration_seconds = max(0.0, time.monotonic() - started_at)
             if duration_seconds >= self._SLOW_WATCHDOG_FEED_WARNING_SECONDS:
@@ -201,7 +212,7 @@ class PowerRuntimeService:
 
         disabled = False
         if self.app.power_manager is not None:
-            with self._power_io_lock:
+            with self._watchdog_io_lock:
                 disabled = self.app.power_manager.disable_watchdog()
         if disabled:
             logger.info("Power watchdog disabled for intentional stop")
