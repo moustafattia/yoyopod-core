@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
 
 import yoyopod.runtime.boot as boot_module
@@ -201,12 +202,18 @@ def test_init_core_components_refuses_whisplay_when_lvgl_backend_does_not_start(
             return self._adapter
 
     fake_input_manager = _FakeInputManager()
+    logged_exceptions = []
 
     monkeypatch.setattr(boot_module, "Display", _FakeWhisplayDisplay)
     monkeypatch.setattr(
         boot_module,
         "get_input_manager",
         lambda **_kwargs: fake_input_manager,
+    )
+    monkeypatch.setattr(
+        boot_module.logger,
+        "exception",
+        lambda *_args, **_kwargs: logged_exceptions.append(sys.exc_info()[1]),
     )
 
     app = _FakeApp(scheduler=object())
@@ -215,5 +222,7 @@ def test_init_core_components_refuses_whisplay_when_lvgl_backend_does_not_start(
     app.app_settings.display.whisplay_renderer = "lvgl"
 
     assert RuntimeBootService(app).init_core_components() is False
+    assert len(logged_exceptions) == 1
+    assert isinstance(logged_exceptions[0], boot_module.WhisplayProductionRenderContractError)
     assert app.input_manager is None
     assert fake_input_manager.started is False

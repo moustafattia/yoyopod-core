@@ -183,7 +183,13 @@ class RuntimeBootService:
             )
 
     def _whisplay_production_contract_required(self, *, requested_renderer: str) -> bool:
-        """Return True when this boot must refuse non-LVGL Whisplay fallback."""
+        """Return True for the narrow post-construction LVGL-init failure case.
+
+        The adapter already rejects the common production-contract failures during
+        construction. This helper only covers the remaining case where Whisplay
+        adapter creation succeeded but LVGL backend initialization still returns
+        False and would otherwise leave startup on the PIL path.
+        """
 
         if self.app.simulate:
             return False
