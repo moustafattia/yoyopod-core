@@ -7,7 +7,7 @@ from typing import Optional, Sequence
 
 import typer
 
-from yoyopod.cli.remote.config import PiDeployConfig, RemoteConfig, resolve_remote_config
+from yoyopod.cli.remote.config import RemoteConfig, resolve_remote_config
 from yoyopod.cli.remote.transport import (
     run_local,
     run_remote,
@@ -25,6 +25,11 @@ from .commands import (
 )
 
 
+def _resolve_run_local_capture():
+    """Resolve the package-level local capture helper for legacy monkeypatch seams."""
+    return import_module("yoyopod.cli.remote.ops").run_local_capture
+
+
 def _resolve_remote_config(
     host: str,
     user: str,
@@ -36,12 +41,11 @@ def _resolve_remote_config(
     return resolve_remote_config(host, user, project_dir, branch)
 
 
-def _capture_local_git(command: Sequence[str], *, action: str) -> str:
+def _capture_local_git(command: Sequence[str], *, action: str, run_local_capture_fn=None) -> str:
     """Run one local git command and return its trimmed stdout."""
-    # Patch this symbol via the legacy module path:
-    # ``yoyoopod.cli.remote.ops.run_local_capture``.
-    run_local_capture = import_module("yoyopod.cli.remote.ops").run_local_capture
-    completed = run_local_capture(command)
+    # Default through the package path so ``yoyopod.cli.remote.ops.run_local_capture``
+    # remains the single monkeypatch target for legacy tests and callers.
+    completed = (run_local_capture_fn or _resolve_run_local_capture())(command)
     if completed.returncode != 0:
         details = completed.stderr.strip() or completed.stdout.strip() or "unknown git failure"
         raise SystemExit(f"Failed to {action}: {details}")
@@ -54,9 +58,11 @@ def resolve_local_validation_target(
     sha: str | None,
 ) -> tuple[str, str]:
     """Resolve the branch/SHA pair for committed on-board validation."""
+    run_local_capture_fn = _resolve_run_local_capture()
     status_output = _capture_local_git(
         ["git", "status", "--short"],
         action="check the local git status",
+        run_local_capture_fn=run_local_capture_fn,
     )
     if status_output:
         raise SystemExit(
@@ -67,6 +73,7 @@ def resolve_local_validation_target(
     current_branch = _capture_local_git(
         ["git", "branch", "--show-current"],
         action="resolve the current branch",
+        run_local_capture_fn=run_local_capture_fn,
     )
     resolved_branch = branch.strip() or current_branch
     if not resolved_branch:
@@ -75,8 +82,7 @@ def resolve_local_validation_target(
             "Pass `--branch <name>` when validating from a detached HEAD."
         )
 
-    run_local_capture = import_module("yoyopod.cli.remote.ops").run_local_capture
-    remote_branch_lookup = run_local_capture(
+    remote_branch_lookup = run_local_capture_fn(
         ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{resolved_branch}"]
     )
     if remote_branch_lookup.returncode != 0 or not remote_branch_lookup.stdout.strip():
@@ -89,11 +95,13 @@ def resolve_local_validation_target(
         resolved_sha = _capture_local_git(
             ["git", "rev-parse", "--verify", f"{sha}^{{commit}}"],
             action=f"resolve commit {sha}",
+            run_local_capture_fn=run_local_capture_fn,
         )
     elif current_branch == resolved_branch:
         resolved_sha = _capture_local_git(
             ["git", "rev-parse", "HEAD"],
             action="resolve HEAD",
+            run_local_capture_fn=run_local_capture_fn,
         )
     else:
         resolved_sha = remote_branch_head
@@ -128,15 +136,13 @@ def remote_validate(
     lines: int = 20,
 ) -> None:
     """Validate a committed branch/SHA on the Pi, then leave the app running."""
+    from yoyopod.cli.remote.config import load_pi_deploy_config
+
     resolved_branch, resolved_sha = resolve_local_validation_target(branch=branch, sha=sha)
     config = _resolve_remote_config(host, user, project_dir, resolved_branch)
     validate_config(config)
-    deploy_config = PiDeployConfig.model_validate({}) if False else None
+    deploy_config = load_pi_deploy_config()
     resolved_test_music_dir = test_music_dir
-    if not deploy_config:
-        from yoyopod.cli.remote.config import load_pi_deploy_config
-
-        deploy_config = load_pi_deploy_config()
 
     sync_exit_code = run_remote(
         config,

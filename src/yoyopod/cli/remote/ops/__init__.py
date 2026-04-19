@@ -7,6 +7,8 @@ monolithic ``ops.py`` module while moving implementation into
 
 from __future__ import annotations
 
+# Re-export these module objects so legacy monkeypatch paths like
+# ``yoyopod.cli.remote.ops.subprocess.run`` continue to work.
 import shutil
 import subprocess
 import sys
@@ -78,7 +80,7 @@ def run_screenshot(
 ) -> int:
     """Capture a screenshot from the remote app and copy it locally.
 
-    This wrapper keeps monkeypatching on ``yoyoopod.cli.remote.ops`` working for
+    This wrapper keeps monkeypatching on ``yoyopod.cli.remote.ops`` working for
     both ``run_remote_capture`` and ``subprocess.run``.
     """
 

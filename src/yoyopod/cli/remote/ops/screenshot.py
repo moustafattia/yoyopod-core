@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import shlex
+import subprocess
 from pathlib import Path
 from typing import Annotated
 
@@ -15,7 +16,7 @@ from yoyopod.cli.remote.transport import run_remote_capture, validate_config
 from .validation import _resolve_remote_config
 
 
-def _run_screenshot(
+def run_screenshot(
     config: RemoteConfig,
     deploy_config: PiDeployConfig,
     args: argparse.Namespace,
@@ -125,33 +126,10 @@ def screenshot(
         deploy_config,
         args,
         run_remote_capture_fn=run_remote_capture,
-        subprocess_run_fn=None,
+        subprocess_run_fn=subprocess.run,
     )
     if rc != 0:
         raise typer.Exit(code=rc)
-
-
-def run_screenshot(
-    config: RemoteConfig,
-    deploy_config: PiDeployConfig,
-    args: argparse.Namespace,
-    run_remote_capture_fn=None,
-    subprocess_run_fn=None,
-) -> int:
-    """Capture a screenshot from the remote app and copy it locally."""
-    if run_remote_capture_fn is None:
-        run_remote_capture_fn = run_remote_capture
-    if subprocess_run_fn is None:
-        import subprocess
-
-        subprocess_run_fn = subprocess.run
-    return _run_screenshot(
-        config,
-        deploy_config,
-        args,
-        run_remote_capture_fn=run_remote_capture_fn,
-        subprocess_run_fn=subprocess_run_fn,
-    )
 
 
 __all__ = [
