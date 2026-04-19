@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class HubSceneMixin:
     """Bindings for the hub scene."""
 
-    def hub_build(self) -> None:
+    def hub_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_hub_build())
 
     def hub_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         icon_key: str,
         title: str,
@@ -67,5 +72,5 @@ class HubSceneMixin:
             )
         )
 
-    def hub_destroy(self) -> None:
+    def hub_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_hub_destroy()

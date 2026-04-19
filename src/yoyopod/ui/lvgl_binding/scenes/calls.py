@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class CallsSceneMixin:
     """Bindings for incoming/outgoing/in-call scenes."""
 
-    def incoming_call_build(self) -> None:
+    def incoming_call_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_incoming_call_build())
 
     def incoming_call_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         caller_name: str,
         caller_address: str,
@@ -38,14 +43,14 @@ class CallsSceneMixin:
             )
         )
 
-    def incoming_call_destroy(self) -> None:
+    def incoming_call_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_incoming_call_destroy()
 
-    def outgoing_call_build(self) -> None:
+    def outgoing_call_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_outgoing_call_build())
 
     def outgoing_call_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         callee_name: str,
         callee_address: str,
@@ -72,14 +77,14 @@ class CallsSceneMixin:
             )
         )
 
-    def outgoing_call_destroy(self) -> None:
+    def outgoing_call_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_outgoing_call_destroy()
 
-    def in_call_build(self) -> None:
+    def in_call_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_in_call_build())
 
     def in_call_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         caller_name: str,
         duration_text: str,
@@ -111,5 +116,5 @@ class CallsSceneMixin:
             )
         )
 
-    def in_call_destroy(self) -> None:
+    def in_call_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_in_call_destroy()

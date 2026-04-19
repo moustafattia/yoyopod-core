@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class NowPlayingSceneMixin:
     """Bindings for now-playing transport scene."""
 
-    def now_playing_build(self) -> None:
+    def now_playing_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_now_playing_build())
 
     def now_playing_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         title_text: str,
         artist_text: str,
@@ -43,5 +48,5 @@ class NowPlayingSceneMixin:
             )
         )
 
-    def now_playing_destroy(self) -> None:
+    def now_playing_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_now_playing_destroy()

@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class TalkSceneMixin:
     """Bindings for Talk scene and actions."""
 
-    def talk_build(self) -> None:
+    def talk_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_talk_build())
 
     def talk_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         title_text: str,
         icon_key: str | None,
@@ -43,14 +48,14 @@ class TalkSceneMixin:
             )
         )
 
-    def talk_destroy(self) -> None:
+    def talk_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_talk_destroy()
 
-    def talk_actions_build(self) -> None:
+    def talk_actions_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_talk_actions_build())
 
     def talk_actions_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         contact_name: str,
         title_text: str | None,
@@ -113,5 +118,5 @@ class TalkSceneMixin:
             )
         )
 
-    def talk_actions_destroy(self) -> None:
+    def talk_actions_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_talk_actions_destroy()

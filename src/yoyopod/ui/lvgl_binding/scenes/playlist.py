@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class PlaylistSceneMixin:
     """Bindings for playlist browsing scenes."""
 
-    def playlist_build(self) -> None:
+    def playlist_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_playlist_build())
 
     def playlist_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         title_text: str,
         page_text: str | None,
@@ -111,5 +116,5 @@ class PlaylistSceneMixin:
             )
         )
 
-    def playlist_destroy(self) -> None:
+    def playlist_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_playlist_destroy()

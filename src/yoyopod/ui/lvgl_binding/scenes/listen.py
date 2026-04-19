@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class ListenSceneMixin:
     """Bindings for the listen/list scene."""
 
-    def listen_build(self) -> None:
+    def listen_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_listen_build())
 
     def listen_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         page_text: str | None,
         footer: str,
@@ -83,5 +88,5 @@ class ListenSceneMixin:
             )
         )
 
-    def listen_destroy(self) -> None:
+    def listen_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_listen_destroy()

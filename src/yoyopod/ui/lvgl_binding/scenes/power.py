@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class PowerSceneMixin:
     """Bindings for the power/settings scene."""
 
-    def power_build(self) -> None:
+    def power_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_power_build())
 
     def power_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         title_text: str,
         page_text: str | None,
@@ -62,5 +67,5 @@ class PowerSceneMixin:
             )
         )
 
-    def power_destroy(self) -> None:
+    def power_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_power_destroy()

@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from . import _LvglBindingHost
+
 
 class AskSceneMixin:
     """Bindings for the Ask scene."""
 
-    def ask_build(self) -> None:
+    def ask_build(self: _LvglBindingHost) -> None:
         self._raise_if_error(self.lib.yoyopod_lvgl_ask_build())
 
     def ask_sync(
-        self,
+        self: _LvglBindingHost,
         *,
         icon_key: str,
         title_text: str,
@@ -40,5 +45,5 @@ class AskSceneMixin:
             )
         )
 
-    def ask_destroy(self) -> None:
+    def ask_destroy(self: _LvglBindingHost) -> None:
         self.lib.yoyopod_lvgl_ask_destroy()
