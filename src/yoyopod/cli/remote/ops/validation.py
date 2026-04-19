@@ -142,7 +142,7 @@ def remote_validate(
     config = _resolve_remote_config(host, user, project_dir, resolved_branch)
     validate_config(config)
     deploy_config = load_pi_deploy_config()
-    resolved_test_music_dir = test_music_dir
+    resolved_test_music_dir = test_music_dir or deploy_config.test_music_target_dir
 
     sync_exit_code = run_remote(
         config,

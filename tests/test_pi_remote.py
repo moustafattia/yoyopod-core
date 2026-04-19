@@ -32,6 +32,7 @@ from yoyopod.cli.remote.ops import (
     quote_remote_project_dir,
     resolve_local_executable,
     resolve_local_validation_target,
+    remote_validate,
     run_screenshot,
     should_use_direct_rsync,
     sync_path_is_excluded,
@@ -574,6 +575,41 @@ def test_resolve_local_validation_target_rejects_dirty_worktree(monkeypatch) -> 
 
     with pytest.raises(SystemExit, match="Commit and push before `yoyoctl remote validate`"):
         resolve_local_validation_target(branch="", sha=None)
+
+
+def test_remote_validate_uses_deploy_config_test_music_dir_by_default(monkeypatch) -> None:
+    """Validate should fall back to the deploy-config test music path when omitted."""
+
+    import importlib
+
+    commands: list[str] = []
+    remote_config_module = importlib.import_module("yoyopod.cli.remote.config")
+
+    monkeypatch.setattr(
+        "yoyopod.cli.remote.ops.validation.resolve_local_validation_target",
+        lambda *, branch, sha: ("main", "abc1234567890abc1234567890abc1234567890"),
+    )
+    monkeypatch.setattr(
+        "yoyopod.cli.remote.ops.validation._resolve_remote_config",
+        lambda host, user, project_dir, branch: RemoteConfig(
+            host="rpi-zero",
+            user="pi",
+            project_dir=DEFAULT_PROJECT_DIR,
+            branch=branch,
+        ),
+    )
+    monkeypatch.setattr("yoyopod.cli.remote.ops.validation.validate_config", lambda _config: None)
+    monkeypatch.setattr(remote_config_module, "load_pi_deploy_config", lambda: DEPLOY_CONFIG)
+    monkeypatch.setattr(
+        "yoyopod.cli.remote.ops.validation.run_remote",
+        lambda _config, command: commands.append(command) or 0,
+    )
+
+    remote_validate(with_music=True, test_music_dir="")
+
+    assert len(commands) == 5
+    assert "uv run yoyoctl pi validate music" in commands[2]
+    assert shlex.quote(DEPLOY_CONFIG.test_music_target_dir) in commands[2]
 
 
 def test_build_lvgl_soak_command_supports_cycles_and_sleep_toggle() -> None:
