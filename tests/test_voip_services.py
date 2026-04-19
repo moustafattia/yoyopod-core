@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import time
 from pathlib import Path
 
-from yoyopod.communication.calling.backend import MockVoIPBackend
+from yoyopod.communication.calling.mock_backend import MockVoIPBackend
 from yoyopod.communication.calling.messaging import MessagingService
 from yoyopod.communication.calling.voice_notes import VoiceNoteService
 from yoyopod.communication.messaging import VoIPMessageStore
@@ -46,6 +48,39 @@ def lookup_contact_name(sip_address: str | None) -> str:
     if sip_address == "sip:mom@example.com":
         return "Mom"
     return "Unknown"
+
+
+def test_calling_package_reexports_iterate_metrics() -> None:
+    """The calling package should expose iterate metrics without backend imports."""
+
+    from yoyopod.communication.calling import VoIPIterateMetrics
+
+    assert VoIPIterateMetrics().drained_events == 0
+
+
+def test_backend_compat_shim_imports_mock_without_liblinphone() -> None:
+    """Mock-only imports should not pull in the production Liblinphone backend."""
+
+    repo_root = Path(__file__).resolve().parents[1]
+    script = """
+import importlib
+import sys
+
+module = importlib.import_module("yoyopod.communication.calling.backend")
+assert "yoyopod.communication.calling.liblinphone_backend" not in sys.modules
+assert module.MockVoIPBackend.__name__ == "MockVoIPBackend"
+assert "yoyopod.communication.calling.mock_backend" in sys.modules
+assert "yoyopod.communication.calling.liblinphone_backend" not in sys.modules
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_messaging_service_normalizes_rcs_voice_note_envelope(tmp_path: Path) -> None:
