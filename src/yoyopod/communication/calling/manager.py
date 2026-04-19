@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-import subprocess
-import re
 import threading
 import time
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional, cast
+from typing import TYPE_CHECKING, Callable, cast
 
 from loguru import logger
 
 from yoyopod.communication.calling.backend import LiblinphoneBackend, VoIPBackend
+from yoyopod.communication.calling.messaging import MessagingService
+from yoyopod.communication.calling.voice_notes import VoiceNoteDraft, VoiceNoteService
 from yoyopod.communication.messaging import VoIPMessageStore
 from yoyopod.communication.models import (
     BackendStopped,
@@ -21,11 +20,8 @@ from yoyopod.communication.models import (
     CallStateChanged,
     IncomingCallDetected,
     MessageDeliveryChanged,
-    MessageDeliveryState,
     MessageDownloadCompleted,
     MessageFailed,
-    MessageKind,
-    MessageDirection,
     MessageReceived,
     RegistrationState,
     RegistrationStateChanged,
@@ -36,21 +32,6 @@ from yoyopod.communication.models import (
 
 if TYPE_CHECKING:
     from yoyopod.people import PeopleDirectory
-
-
-@dataclass(slots=True)
-class VoiceNoteDraft:
-    """Locally recorded voice-note draft awaiting send or retry."""
-
-    recipient_address: str
-    recipient_name: str
-    file_path: str
-    duration_ms: int = 0
-    mime_type: str = "audio/wav"
-    message_id: str = ""
-    send_state: str = "idle"
-    status_text: str = ""
-    send_started_at: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,10 +50,6 @@ class VoIPIterateSnapshot:
     in_flight: bool = False
 
 
-VOICE_NOTE_SEND_TIMEOUT_SECONDS = 15.0
-VOICE_NOTE_CONTAINER_GAIN_DB = 12.0
-
-
 class VoIPManager:
     """Application-facing VoIP facade over Liblinphone calls and messages."""
 
@@ -80,8 +57,8 @@ class VoIPManager:
         self,
         config: VoIPConfig,
         people_directory: "PeopleDirectory | None" = None,
-        backend: Optional[VoIPBackend] = None,
-        message_store: Optional[VoIPMessageStore] = None,
+        backend: VoIPBackend | None = None,
+        message_store: VoIPMessageStore | None = None,
         event_scheduler: Callable[[Callable[[], None]], None] | None = None,
         background_iterate_enabled: bool = False,
     ) -> None:
@@ -92,26 +69,31 @@ class VoIPManager:
         self.registered = False
         self.registration_state = RegistrationState.NONE
         self.call_state = CallState.IDLE
-        self.current_call_id: Optional[str] = None
-        self.caller_address: Optional[str] = None
-        self.caller_name: Optional[str] = None
-        self.call_start_time: Optional[float] = None
+        self.current_call_id: str | None = None
+        self.caller_address: str | None = None
+        self.caller_name: str | None = None
+        self.call_start_time: float | None = None
         self.is_muted = False
         self._pending_terminal_action: str | None = None
         self._message_store = message_store or self._build_message_store()
-        self._active_voice_note: VoiceNoteDraft | None = None
-        self._playback_process: subprocess.Popen | None = None
+        self._messaging_service = MessagingService(
+            config=self.config,
+            backend=self.backend,
+            message_store=self._message_store,
+            lookup_contact_name=self._lookup_contact_name,
+        )
+        self._voice_note_service = VoiceNoteService(
+            config=self.config,
+            backend=self.backend,
+            message_store=self._message_store,
+            lookup_contact_name=self._lookup_contact_name,
+            notify_message_summary_change=self._notify_message_summary_change,
+        )
 
         self.registration_callbacks: list[Callable[[RegistrationState], None]] = []
         self.call_state_callbacks: list[Callable[[CallState], None]] = []
         self.incoming_call_callbacks: list[Callable[[str, str], None]] = []
         self.availability_callbacks: list[Callable[[bool, str, RegistrationState], None]] = []
-        self.message_received_callbacks: list[Callable[[VoIPMessageRecord], None]] = []
-        self.message_delivery_callbacks: list[Callable[[VoIPMessageRecord], None]] = []
-        self.message_failure_callbacks: list[Callable[[str, str], None]] = []
-        self.message_summary_callbacks: list[
-            Callable[[int, dict[str, dict[str, object]]], None]
-        ] = []
         self._event_scheduler = event_scheduler
         self._background_iterate_enabled = bool(background_iterate_enabled and event_scheduler)
         if background_iterate_enabled and event_scheduler is None:
@@ -282,169 +264,45 @@ class VoIPManager:
         return True
 
     def send_text_message(self, sip_address: str, text: str, display_name: str = "") -> bool:
-        message_id = self.backend.send_text_message(sip_address, text)
-        if not message_id:
-            return False
-        self._message_store.upsert(
-            VoIPMessageRecord(
-                id=message_id,
-                peer_sip_address=sip_address,
-                sender_sip_address=self.config.sip_identity,
-                recipient_sip_address=sip_address,
-                kind=MessageKind.TEXT,
-                direction=MessageDirection.OUTGOING,
-                delivery_state=MessageDeliveryState.SENDING,
-                created_at=self._iso_now(),
-                updated_at=self._iso_now(),
-                text=text,
-                display_name=display_name or self._lookup_contact_name(sip_address),
-            )
-        )
-        self._notify_message_summary_change()
-        return True
+        return self._messaging_service.send_text_message(sip_address, text, display_name)
 
     def start_voice_note_recording(self, recipient_address: str, recipient_name: str = "") -> bool:
-        if not recipient_address:
-            logger.error("Cannot start voice-note recording without a recipient address")
-            return False
-
-        self.discard_active_voice_note()
-        voice_note_dir = Path(self.config.voice_note_store_dir)
-        voice_note_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        file_name = f"voice-note-{timestamp}.wav"
-        file_path = str(voice_note_dir / file_name)
-
-        if not self.backend.start_voice_note_recording(file_path):
-            return False
-
-        self._active_voice_note = VoiceNoteDraft(
-            recipient_address=recipient_address,
-            recipient_name=recipient_name or self._lookup_contact_name(recipient_address),
-            file_path=file_path,
-            send_state="recording",
-            status_text="Recording...",
+        return self._voice_note_service.start_voice_note_recording(
+            recipient_address, recipient_name
         )
-        return True
 
     def stop_voice_note_recording(self) -> VoiceNoteDraft | None:
-        if self._active_voice_note is None:
-            return None
-
-        duration_ms = self.backend.stop_voice_note_recording()
-        if duration_ms is None:
-            return None
-
-        self._active_voice_note.duration_ms = duration_ms
-        max_duration_ms = max(1, self.config.voice_note_max_duration_seconds) * 1000
-        if duration_ms > max_duration_ms:
-            self._active_voice_note.send_state = "failed"
-            self._active_voice_note.status_text = "Note too long"
-            return self._active_voice_note
-        self._active_voice_note.send_state = "review"
-        self._active_voice_note.status_text = "Ready to send"
-        return self._active_voice_note
+        return self._voice_note_service.stop_voice_note_recording()
 
     def cancel_voice_note_recording(self) -> bool:
-        success = self.backend.cancel_voice_note_recording()
-        self.discard_active_voice_note()
-        return success
+        return self._voice_note_service.cancel_voice_note_recording()
 
     def send_active_voice_note(self) -> bool:
-        if self._active_voice_note is None:
-            return False
-
-        draft = self._active_voice_note
-        if not self.config.effective_file_transfer_server_url():
-            draft.send_state = "failed"
-            draft.status_text = "Voice notes unavailable"
-            return False
-        draft.send_state = "sending"
-        draft.status_text = "Sending..."
-        draft.send_started_at = time.monotonic()
-        message_id = self.backend.send_voice_note(
-            draft.recipient_address,
-            file_path=draft.file_path,
-            duration_ms=draft.duration_ms,
-            mime_type=draft.mime_type,
-        )
-        if not message_id:
-            draft.send_state = "failed"
-            draft.status_text = "Couldn't send"
-            draft.send_started_at = 0.0
-            return False
-
-        draft.message_id = message_id
-        self._message_store.upsert(
-            VoIPMessageRecord(
-                id=message_id,
-                peer_sip_address=draft.recipient_address,
-                sender_sip_address=self.config.sip_identity,
-                recipient_sip_address=draft.recipient_address,
-                kind=MessageKind.VOICE_NOTE,
-                direction=MessageDirection.OUTGOING,
-                delivery_state=MessageDeliveryState.SENDING,
-                created_at=self._iso_now(),
-                updated_at=self._iso_now(),
-                local_file_path=draft.file_path,
-                mime_type=draft.mime_type,
-                duration_ms=draft.duration_ms,
-                unread=False,
-                display_name=draft.recipient_name,
-            )
-        )
-        self._notify_message_summary_change()
-        return True
+        return self._voice_note_service.send_active_voice_note()
 
     def get_active_voice_note(self) -> VoiceNoteDraft | None:
-        return self._active_voice_note
+        return self._voice_note_service.get_active_voice_note()
 
     def discard_active_voice_note(self) -> None:
-        """Drop the active draft and delete its local file if it exists."""
-
-        draft = self._active_voice_note
-        self._active_voice_note = None
-        if draft is None or not draft.file_path:
-            return
-        try:
-            Path(draft.file_path).unlink(missing_ok=True)
-        except Exception as exc:
-            logger.debug("Failed to remove discarded voice note {}: {}", draft.file_path, exc)
+        self._voice_note_service.discard_active_voice_note()
 
     def latest_voice_note_for_contact(self, sip_address: str) -> VoIPMessageRecord | None:
-        if not sip_address:
-            return None
-        return self._message_store.latest_voice_note_for_contact(sip_address)
+        return self._voice_note_service.latest_voice_note_for_contact(sip_address)
 
     def unread_voice_note_count(self) -> int:
-        return self._message_store.unread_voice_note_count()
+        return self._voice_note_service.unread_voice_note_count()
 
     def latest_voice_note_summary(self) -> dict[str, dict[str, object]]:
-        return self._message_store.latest_voice_note_by_contact()
+        return self._voice_note_service.latest_voice_note_summary()
 
     def mark_voice_notes_seen(self, sip_address: str) -> None:
-        self._message_store.mark_contact_seen(sip_address)
-        self._notify_message_summary_change()
+        self._voice_note_service.mark_voice_notes_seen(sip_address)
 
     def play_latest_voice_note(self, sip_address: str) -> bool:
-        record = self.latest_voice_note_for_contact(sip_address)
-        if record is None or not record.local_file_path:
-            return False
-        return self.play_voice_note(record.local_file_path)
+        return self._voice_note_service.play_latest_voice_note(sip_address)
 
     def play_voice_note(self, file_path: str) -> bool:
-        self._stop_voice_note_playback()
-        try:
-            command = self._build_voice_note_playback_command(file_path)
-            self._playback_process = subprocess.Popen(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            return True
-        except Exception as exc:
-            logger.error("Failed to play voice note {}: {}", file_path, exc)
-            return False
+        return self._voice_note_service.play_voice_note(file_path)
 
     def on_registration_change(self, callback: Callable[[RegistrationState], None]) -> None:
         self.registration_callbacks.append(callback)
@@ -462,19 +320,19 @@ class VoIPManager:
         self.availability_callbacks.append(callback)
 
     def on_message_received(self, callback: Callable[[VoIPMessageRecord], None]) -> None:
-        self.message_received_callbacks.append(callback)
+        self._messaging_service.on_message_received(callback)
 
     def on_message_delivery_change(self, callback: Callable[[VoIPMessageRecord], None]) -> None:
-        self.message_delivery_callbacks.append(callback)
+        self._messaging_service.on_message_delivery_change(callback)
 
     def on_message_failure(self, callback: Callable[[str, str], None]) -> None:
-        self.message_failure_callbacks.append(callback)
+        self._messaging_service.on_message_failure(callback)
 
     def on_message_summary_change(
         self,
         callback: Callable[[int, dict[str, dict[str, object]]], None],
     ) -> None:
-        self.message_summary_callbacks.append(callback)
+        self._messaging_service.on_message_summary_change(callback)
 
     def get_status(self) -> dict:
         return {
@@ -635,167 +493,23 @@ class VoIPManager:
             self._notify_availability_change(False, event.reason or "backend_stopped")
             return
         if isinstance(event, MessageReceived):
-            self._handle_message_received(event.message)
+            self._messaging_service.handle_message_received(event.message)
             return
         if isinstance(event, MessageDeliveryChanged):
-            self._handle_message_delivery_changed(event)
+            # Update the active draft before message callbacks observe the persisted record.
+            self._voice_note_service.handle_message_delivery_changed(event)
+            self._messaging_service.handle_message_delivery_changed(event)
             return
         if isinstance(event, MessageDownloadCompleted):
-            self._handle_message_download_completed(event)
+            self._messaging_service.handle_message_download_completed(event)
             return
         if isinstance(event, MessageFailed):
-            self._handle_message_failed(event)
-
-    def _handle_message_received(self, message: VoIPMessageRecord) -> None:
-        record = self._decorate_message(self._normalize_message_record(message))
-        logger.info(
-            "VoIPManager received message: id={} kind={} direction={} peer={} file={}",
-            record.id,
-            record.kind.value,
-            record.direction.value,
-            record.peer_sip_address,
-            record.local_file_path,
-        )
-        self._message_store.upsert(record)
-        for callback in self.message_received_callbacks:
-            try:
-                callback(record)
-            except Exception as exc:
-                logger.error("Error in message received callback: {}", exc)
-        self._notify_message_summary_change()
-
-    def _handle_message_delivery_changed(self, event: MessageDeliveryChanged) -> None:
-        self._message_store.update_delivery(
-            event.message_id,
-            event.delivery_state,
-            local_file_path=event.local_file_path,
-        )
-        record = self._message_store.get(event.message_id)
-        if record is None:
-            return
-
-        if (
-            self._active_voice_note is not None
-            and self._active_voice_note.message_id == event.message_id
-        ):
-            if event.delivery_state in (MessageDeliveryState.SENT, MessageDeliveryState.DELIVERED):
-                self._active_voice_note.send_state = "sent"
-                self._active_voice_note.status_text = (
-                    "Delivered"
-                    if event.delivery_state == MessageDeliveryState.DELIVERED
-                    else "Sent"
-                )
-                self._active_voice_note.send_started_at = 0.0
-            elif event.delivery_state == MessageDeliveryState.FAILED:
-                self._active_voice_note.send_state = "failed"
-                self._active_voice_note.status_text = event.error or "Couldn't send"
-                self._active_voice_note.send_started_at = 0.0
-
-        for callback in self.message_delivery_callbacks:
-            try:
-                callback(record)
-            except Exception as exc:
-                logger.error("Error in message delivery callback: {}", exc)
-        self._notify_message_summary_change()
-
-    def _handle_message_download_completed(self, event: MessageDownloadCompleted) -> None:
-        record = self._message_store.get(event.message_id)
-        if record is None:
-            logger.warning(
-                "Voice-note download completed for unknown message id={} file={}",
-                event.message_id,
-                event.local_file_path,
-            )
-            return
-        logger.info(
-            "VoIPManager download completed: id={} file={} mime={}",
-            event.message_id,
-            event.local_file_path,
-            event.mime_type,
-        )
-        updated = replace(
-            record,
-            local_file_path=event.local_file_path,
-            mime_type=event.mime_type or record.mime_type,
-            updated_at=self._iso_now(),
-        )
-        self._message_store.upsert(updated)
-        for callback in self.message_delivery_callbacks:
-            try:
-                callback(updated)
-            except Exception as exc:
-                logger.error("Error in message download callback: {}", exc)
-        self._notify_message_summary_change()
-
-    def _handle_message_failed(self, event: MessageFailed) -> None:
-        self._message_store.update_delivery(event.message_id, MessageDeliveryState.FAILED)
-        if (
-            self._active_voice_note is not None
-            and self._active_voice_note.message_id == event.message_id
-        ):
-            self._active_voice_note.send_state = "failed"
-            self._active_voice_note.status_text = event.reason or "Couldn't send"
-            self._active_voice_note.send_started_at = 0.0
-        for callback in self.message_failure_callbacks:
-            try:
-                callback(event.message_id, event.reason)
-            except Exception as exc:
-                logger.error("Error in message failure callback: {}", exc)
-        self._notify_message_summary_change()
-
-    def _normalize_message_record(self, message: VoIPMessageRecord) -> VoIPMessageRecord:
-        if message.kind == MessageKind.VOICE_NOTE:
-            if message.mime_type == "application/vnd.gsma.rcs-ft-http+xml" and message.text:
-                return replace(
-                    message,
-                    mime_type=self._extract_voice_note_payload_mime(message.text) or "audio/wav",
-                    duration_ms=message.duration_ms
-                    or self._extract_voice_note_duration_ms(message.text),
-                    text="",
-                )
-            return message
-
-        if (
-            message.kind == MessageKind.TEXT
-            and message.mime_type == "application/vnd.gsma.rcs-ft-http+xml"
-            and "voice-recording=yes" in message.text
-        ):
-            return replace(
-                message,
-                kind=MessageKind.VOICE_NOTE,
-                mime_type=self._extract_voice_note_payload_mime(message.text) or "audio/wav",
-                duration_ms=message.duration_ms
-                or self._extract_voice_note_duration_ms(message.text),
-                text="",
-            )
-        return message
-
-    def _decorate_message(self, message: VoIPMessageRecord) -> VoIPMessageRecord:
-        display_name = message.display_name or self._lookup_contact_name(message.peer_sip_address)
-        return replace(message, display_name=display_name)
-
-    @staticmethod
-    def _extract_voice_note_payload_mime(xml_text: str) -> str:
-        match = re.search(r"<content-type>([^<]+)</content-type>", xml_text)
-        if not match:
-            return ""
-        return match.group(1).split(";", 1)[0].strip()
-
-    @staticmethod
-    def _extract_voice_note_duration_ms(xml_text: str) -> int:
-        match = re.search(r"<am:playing-length>(\d+)</am:playing-length>", xml_text)
-        if not match:
-            return 0
-        return max(0, int(match.group(1)))
+            # Keep the same ordering as delivery updates for failure callbacks.
+            self._voice_note_service.handle_message_failed(event)
+            self._messaging_service.handle_message_failed(event)
 
     def _notify_message_summary_change(self) -> None:
-        unread = self.unread_voice_note_count()
-        summary = self.latest_voice_note_summary()
-        for callback in self.message_summary_callbacks:
-            try:
-                callback(unread, summary)
-            except Exception as exc:
-                logger.error("Error in message summary callback: {}", exc)
+        self._messaging_service.notify_message_summary_change()
 
     def _handle_incoming_call_event(self, caller_address: str) -> None:
         self.caller_address = caller_address
@@ -843,7 +557,7 @@ class VoIPManager:
             except Exception as exc:
                 logger.error("Error in call state callback: {}", exc)
 
-    def _extract_username(self, sip_address: Optional[str]) -> str:
+    def _extract_username(self, sip_address: str | None) -> str:
         if not sip_address:
             return "Unknown"
         if "@" in sip_address:
@@ -853,7 +567,7 @@ class VoIPManager:
             return username_part
         return sip_address
 
-    def _lookup_contact_name(self, sip_address: Optional[str]) -> str:
+    def _lookup_contact_name(self, sip_address: str | None) -> str:
         if not sip_address:
             return "Unknown"
 
@@ -893,49 +607,11 @@ class VoIPManager:
                 logger.error("Error in availability callback: {}", exc)
 
     def _stop_voice_note_playback(self) -> None:
-        if self._playback_process is None:
-            return
-        try:
-            self._playback_process.terminate()
-            self._playback_process.wait(timeout=1)
-        except Exception:
-            try:
-                self._playback_process.kill()
-            except Exception:
-                pass
-        finally:
-            self._playback_process = None
+        self._voice_note_service.stop_voice_note_playback()
 
     @staticmethod
     def _build_voice_note_playback_command(file_path: str) -> list[str]:
-        suffix = Path(file_path).suffix.lower()
-        if suffix in {".mka", ".mkv", ".ogg", ".opus", ".mp3", ".m4a"}:
-            return [
-                "ffplay",
-                "-nodisp",
-                "-autoexit",
-                "-loglevel",
-                "error",
-                "-af",
-                f"volume={VOICE_NOTE_CONTAINER_GAIN_DB}dB",
-                file_path,
-            ]
-        return ["aplay", "-q", file_path]
+        return VoiceNoteService.build_voice_note_playback_command(file_path)
 
     def _check_active_voice_note_timeout(self) -> None:
-        draft = self._active_voice_note
-        if draft is None or draft.send_state != "sending" or draft.send_started_at <= 0.0:
-            return
-        if (time.monotonic() - draft.send_started_at) < VOICE_NOTE_SEND_TIMEOUT_SECONDS:
-            return
-
-        draft.send_state = "failed"
-        draft.status_text = "Send timed out"
-        draft.send_started_at = 0.0
-        if draft.message_id:
-            self._message_store.update_delivery(draft.message_id, MessageDeliveryState.FAILED)
-        self._notify_message_summary_change()
-
-    @staticmethod
-    def _iso_now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        self._voice_note_service.check_active_voice_note_timeout()
