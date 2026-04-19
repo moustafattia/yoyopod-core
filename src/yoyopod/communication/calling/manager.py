@@ -496,6 +496,7 @@ class VoIPManager:
             self._messaging_service.handle_message_received(event.message)
             return
         if isinstance(event, MessageDeliveryChanged):
+            # Update the active draft before message callbacks observe the persisted record.
             self._voice_note_service.handle_message_delivery_changed(event)
             self._messaging_service.handle_message_delivery_changed(event)
             return
@@ -503,6 +504,7 @@ class VoIPManager:
             self._messaging_service.handle_message_download_completed(event)
             return
         if isinstance(event, MessageFailed):
+            # Keep the same ordering as delivery updates for failure callbacks.
             self._voice_note_service.handle_message_failed(event)
             self._messaging_service.handle_message_failed(event)
 
