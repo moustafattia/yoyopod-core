@@ -790,6 +790,9 @@ class PowerScreen(Screen):
         if not force and self._prepared_state is not None and not gps_refreshed:
             return self._prepared_state
 
+        # Forced visible-tick refreshes intentionally rerun the provider; page caching only skips
+        # the later build_pages work. If provider inputs ever become expensive, memoize them below
+        # this screen layer rather than trying to recover that cost from render-time caching.
         # GPS refresh mutates shared modem state, so a successful query should be followed by a
         # fresh provider read even when we would otherwise keep reusing cached prepared state.
         try:
@@ -801,6 +804,9 @@ class PowerScreen(Screen):
     def refresh_for_visible_tick(self) -> None:
         """Refresh prepared state before a coordinator-driven visible-screen render."""
 
+        # Determine GPS eligibility from the page the user is already viewing before this refresh
+        # starts. Page navigation performs its own explicit refresh, so the pre-refresh page title
+        # still represents the active page when the periodic visible-tick arrives.
         self.refresh_prepared_state(
             force=True,
             allow_gps_refresh=self._current_page_title() == "GPS",
@@ -813,7 +819,12 @@ class PowerScreen(Screen):
     ) -> list[PowerPage]:
         """Return cached page models until prepared state or voice inputs change."""
 
-        resolved_state = state or self._prepared_state or PowerScreenState()
+        if state is not None:
+            resolved_state = state
+        elif self._prepared_state is None:
+            resolved_state = PowerScreenState()
+        else:
+            resolved_state = self._prepared_state
         voice_signature = self._voice_page_signature()
         one_button_mode = self.is_one_button_mode()
         cache_signature = self._page_cache_signature(
