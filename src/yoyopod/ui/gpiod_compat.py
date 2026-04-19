@@ -24,9 +24,212 @@ except ImportError:
     HAS_GPIOD = False
 
 
+class _ChipHandle:
+    """Carry the normalized chip path alongside the runtime chip object."""
+
+    def __init__(self, chip: Any, path: str) -> None:
+        self._chip = chip
+        self._path = path
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._chip, name)
+
+
+class _RequestedLineHandle:
+    """Expose a line-like API over libgpiod v2 multi-line request objects."""
+
+    def __init__(self, request: Any, line_offset: int) -> None:
+        self._request = request
+        self._line_offset = line_offset
+
+    def get_value(self) -> Any:
+        getter = getattr(self._request, "get_value", None)
+        if callable(getter):
+            try:
+                return getter(self._line_offset)
+            except TypeError:
+                return getter()
+
+        getter = getattr(self._request, "get_values", None)
+        if callable(getter):
+            values = getter([self._line_offset])
+            return list(values)[0]
+
+        raise RuntimeError("Requested line does not expose get_value()")
+
+    def set_value(self, value: Any) -> None:
+        setter = getattr(self._request, "set_value", None)
+        if callable(setter):
+            try:
+                setter(self._line_offset, value)
+                return
+            except TypeError:
+                setter(value)
+                return
+
+        setter = getattr(self._request, "set_values", None)
+        if callable(setter):
+            try:
+                setter({self._line_offset: value})
+            except TypeError:
+                setter([value])
+            return
+
+        raise RuntimeError("Requested line does not expose set_value()")
+
+    def release(self) -> None:
+        releaser = getattr(self._request, "release", None)
+        if callable(releaser):
+            releaser()
+            return
+
+        closer = getattr(self._request, "close", None)
+        if callable(closer):
+            closer()
+
+    def read_edge_events(self) -> list[Any]:
+        reader = getattr(self._request, "read_edge_events", None)
+        if not callable(reader):
+            raise RuntimeError("Requested line does not expose edge-event reads")
+
+        events = reader()
+        if events is None:
+            return []
+
+        filtered: list[Any] = []
+        for event in events:
+            event_offset = getattr(event, "line_offset", getattr(event, "offset", None))
+            if event_offset is None or event_offset == self._line_offset:
+                filtered.append(event)
+        return filtered
+
+    @property
+    def fd(self) -> Any:
+        return getattr(self._request, "fd", None)
+
+    def fileno(self) -> Any:
+        fileno = getattr(self._request, "fileno", None)
+        if callable(fileno):
+            return fileno()
+        return self.fd
+
+
 def _is_v1() -> bool:
     """Return True if gpiod is the 1.x API (lowercase ``chip``)."""
     return HAS_GPIOD and hasattr(_gpiod, "chip") and not hasattr(_gpiod, "Chip")
+
+
+def _resolve_gpiod_attr(*paths: str) -> Any:
+    """Resolve the first available dotted attribute path from the gpiod module."""
+    if not HAS_GPIOD:
+        return None
+
+    for path in paths:
+        target = _gpiod
+        resolved = True
+        for part in path.split("."):
+            if not hasattr(target, part):
+                resolved = False
+                break
+            target = getattr(target, part)
+        if resolved:
+            return target
+
+    return None
+
+
+def _supports_v2_requests(chip: Any) -> bool:
+    """Return True when the runtime exposes libgpiod v2 line-request helpers."""
+    raw_chip = getattr(chip, "_chip", chip)
+    return (
+        hasattr(_gpiod, "LineSettings")
+        and (
+            callable(getattr(raw_chip, "request_lines", None))
+            or callable(getattr(_gpiod, "request_lines", None))
+        )
+    )
+
+
+def _make_line_settings(
+    *,
+    direction: Any = None,
+    bias: Any = None,
+    edge_detection: Any = None,
+) -> Any:
+    """Create a libgpiod v2 LineSettings object across minor API variations."""
+    line_settings_cls = getattr(_gpiod, "LineSettings", None)
+    if line_settings_cls is None:
+        raise RuntimeError("gpiod LineSettings is unavailable")
+
+    kwargs = {}
+    if direction is not None:
+        kwargs["direction"] = direction
+    if bias is not None:
+        kwargs["bias"] = bias
+    if edge_detection is not None:
+        kwargs["edge_detection"] = edge_detection
+
+    try:
+        return line_settings_cls(**kwargs)
+    except TypeError:
+        settings = line_settings_cls()
+        for name, value in kwargs.items():
+            setattr(settings, name, value)
+        return settings
+
+
+def _request_v2_line(
+    chip: Any,
+    line_offset: int,
+    consumer: str,
+    *,
+    settings: Any,
+) -> _RequestedLineHandle:
+    """Request one line through libgpiod v2 and wrap it in a line-like proxy."""
+    raw_chip = getattr(chip, "_chip", chip)
+    config = {line_offset: settings}
+
+    request = None
+    request_lines = getattr(raw_chip, "request_lines", None)
+    if callable(request_lines):
+        for kwargs in (
+            {"consumer": consumer, "config": config},
+            {"config": config, "consumer": consumer},
+        ):
+            try:
+                request = request_lines(**kwargs)
+                break
+            except TypeError:
+                continue
+
+    if request is None:
+        request_lines = getattr(_gpiod, "request_lines", None)
+        chip_path = getattr(chip, "_path", None)
+        if not callable(request_lines) or chip_path is None:
+            raise RuntimeError("gpiod v2 request_lines() is unavailable")
+
+        for args, kwargs in (
+            ((chip_path,), {"consumer": consumer, "config": config}),
+            ((), {"path": chip_path, "consumer": consumer, "config": config}),
+            ((chip_path, consumer, config), {}),
+        ):
+            try:
+                request = request_lines(*args, **kwargs)
+                break
+            except TypeError:
+                continue
+
+    if request is None:
+        raise RuntimeError("Failed to request libgpiod v2 line")
+
+    return _RequestedLineHandle(request, line_offset)
+
+
+def _resolve_output_value(raw_value: int) -> Any:
+    """Map 0/1 onto libgpiod v2 output enums when the runtime requires them."""
+    if raw_value:
+        return _resolve_gpiod_attr("line.Value.ACTIVE", "Value.ACTIVE") or raw_value
+    return _resolve_gpiod_attr("line.Value.INACTIVE", "Value.INACTIVE") or raw_value
 
 
 def open_chip(name: str) -> Any:
@@ -39,14 +242,24 @@ def open_chip(name: str) -> Any:
         name = f"/dev/{name}"
 
     if _is_v1():
-        return _gpiod.chip(name)
+        chip = _gpiod.chip(name)
     else:
-        return _gpiod.Chip(name)
+        chip = _gpiod.Chip(name)
+
+    return _ChipHandle(chip, name)
 
 
 def request_output(chip: Any, line_offset: int, consumer: str, default_val: int = 0) -> Any:
     """Request a GPIO line as output."""
-    line = chip.get_line(line_offset)
+    raw_chip = getattr(chip, "_chip", chip)
+    if _supports_v2_requests(chip):
+        direction_output = _resolve_gpiod_attr("line.Direction.OUTPUT", "Direction.OUTPUT")
+        settings = _make_line_settings(direction=direction_output)
+        line = _request_v2_line(chip, line_offset, consumer, settings=settings)
+        line.set_value(_resolve_output_value(default_val))
+        return line
+
+    line = raw_chip.get_line(line_offset)
 
     if _is_v1():
         config = _gpiod.line_request()
@@ -65,7 +278,14 @@ def request_output(chip: Any, line_offset: int, consumer: str, default_val: int 
 
 def request_input(chip: Any, line_offset: int, consumer: str) -> Any:
     """Request a GPIO line as input with bias disabled."""
-    line = chip.get_line(line_offset)
+    raw_chip = getattr(chip, "_chip", chip)
+    if _supports_v2_requests(chip):
+        direction_input = _resolve_gpiod_attr("line.Direction.INPUT", "Direction.INPUT")
+        bias_disabled = _resolve_gpiod_attr("line.Bias.DISABLED", "Bias.DISABLED")
+        settings = _make_line_settings(direction=direction_input, bias=bias_disabled)
+        return _request_v2_line(chip, line_offset, consumer, settings=settings)
+
+    line = raw_chip.get_line(line_offset)
 
     if _is_v1():
         config = _gpiod.line_request()
@@ -88,7 +308,24 @@ def request_input_events(chip: Any, line_offset: int, consumer: str) -> Any:
     if not HAS_GPIOD:
         raise RuntimeError("gpiod module is required but not installed")
 
-    line = chip.get_line(line_offset)
+    raw_chip = getattr(chip, "_chip", chip)
+    if _supports_v2_requests(chip):
+        direction_input = _resolve_gpiod_attr("line.Direction.INPUT", "Direction.INPUT")
+        bias_disabled = _resolve_gpiod_attr("line.Bias.DISABLED", "Bias.DISABLED")
+        both_edges = _resolve_gpiod_attr(
+            "line.Edge.BOTH",
+            "line.Edge.BOTH_EDGES",
+            "Edge.BOTH",
+            "Edge.BOTH_EDGES",
+        )
+        settings = _make_line_settings(
+            direction=direction_input,
+            bias=bias_disabled,
+            edge_detection=both_edges,
+        )
+        return _request_v2_line(chip, line_offset, consumer, settings=settings)
+
+    line = raw_chip.get_line(line_offset)
 
     if _is_v1():
         config = _gpiod.line_request()
@@ -132,6 +369,14 @@ def get_event_fd(line: Any) -> int | None:
             return _normalize_event_fd(getter())
         except Exception as exc:
             logger.debug("Failed to read GPIO event fd: {}", exc)
+            return None
+
+    fileno = getattr(line, "fileno", None)
+    if callable(fileno):
+        try:
+            return _normalize_event_fd(fileno())
+        except Exception as exc:
+            logger.debug("Failed to read GPIO event fileno: {}", exc)
             return None
 
     fd = getattr(line, "fd", None)

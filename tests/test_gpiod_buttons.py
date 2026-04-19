@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from yoyopod.ui.input.hal import InputAction
@@ -263,6 +265,123 @@ def test_read_edge_events_drains_legacy_event_queue(monkeypatch: pytest.MonkeyPa
 
     assert gpiod_compat.read_edge_events(FakeLine()) == [first, second]
     assert select_calls == [([101], 0.0), ([101], 0.0)]
+
+
+def test_request_input_events_supports_official_gpiod_v2_request_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    request_calls: list[tuple[str, dict[int, object]]] = []
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeEvent:
+        def __init__(self, line_offset: int) -> None:
+            self.line_offset = line_offset
+
+    class FakeRequest:
+        def __init__(self) -> None:
+            self.values = {7: 0}
+
+        def get_value(self, offset: int) -> int:
+            return self.values[offset]
+
+        def read_edge_events(self) -> list[FakeEvent]:
+            return [FakeEvent(7), FakeEvent(99)]
+
+        def fileno(self) -> int:
+            return 321
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def request_lines(self, *, consumer: str, config: dict[int, object]) -> FakeRequest:
+            request_calls.append((consumer, config))
+            return FakeRequest()
+
+        def close(self) -> None:
+            return None
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=SimpleNamespace(ACTIVE="active", INACTIVE="inactive"),
+        ),
+    )
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    line = gpiod_compat.request_input_events(chip, 7, "yoyopod-btn")
+
+    assert line.get_value() == 0
+    assert gpiod_compat.get_event_fd(line) == 321
+    assert [event.line_offset for event in gpiod_compat.read_edge_events(line)] == [7]
+
+    consumer, config = request_calls[0]
+    assert consumer == "yoyopod-btn"
+    assert config[7].kwargs == {
+        "direction": "input",
+        "bias": "bias-disabled",
+        "edge_detection": "both-edges",
+    }
+
+
+def test_request_output_supports_official_gpiod_v2_request_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui import gpiod_compat
+
+    set_calls: list[tuple[int, object]] = []
+
+    class FakeLineSettings:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeRequest:
+        def set_value(self, offset: int, value: object) -> None:
+            set_calls.append((offset, value))
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def request_lines(self, *, consumer: str, config: dict[int, object]) -> FakeRequest:
+            assert consumer == "pimoroni-led-r"
+            assert config[12].kwargs == {"direction": "output"}
+            return FakeRequest()
+
+        def close(self) -> None:
+            return None
+
+    fake_gpiod = SimpleNamespace(
+        Chip=lambda _path: FakeChip(),
+        LineSettings=FakeLineSettings,
+        line=SimpleNamespace(
+            Direction=SimpleNamespace(INPUT="input", OUTPUT="output"),
+            Bias=SimpleNamespace(DISABLED="bias-disabled"),
+            Edge=SimpleNamespace(BOTH="both-edges"),
+            Value=SimpleNamespace(ACTIVE="active", INACTIVE="inactive"),
+        ),
+    )
+
+    monkeypatch.setattr(gpiod_compat, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_compat, "_gpiod", fake_gpiod)
+
+    chip = gpiod_compat.open_chip("gpiochip0")
+    line = gpiod_compat.request_output(chip, 12, "pimoroni-led-r", default_val=1)
+    line.set_value("manual")
+
+    assert set_calls == [(12, "active"), (12, "manual")]
 
 
 def test_event_wait_loop_seeds_initial_pressed_state(monkeypatch: pytest.MonkeyPatch) -> None:
