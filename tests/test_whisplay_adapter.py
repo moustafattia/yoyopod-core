@@ -10,8 +10,8 @@ from PIL import Image, ImageDraw, ImageFont
 from yoyopod.ui.display.contracts import WhisplayProductionRenderContractError
 from yoyopod.ui.display.adapters.whisplay import (
     WhisplayDisplayAdapter,
-    _patch_vendor_gpiod_compat,
 )
+from yoyopod.ui.display.adapters.whisplay_gpiod_shim import _patch_vendor_gpiod_compat
 
 
 class FakeDevice:
