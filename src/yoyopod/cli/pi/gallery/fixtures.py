@@ -124,7 +124,7 @@ def _build_contacts() -> list[_DemoContact]:
 
 def _build_music_service() -> _FakeMusicService:
     """Return deterministic local playlist and recents data."""
-    from yoyopod.audio.history import RecentTrackEntry
+    from yoyopod.audio.music import RecentTrackEntry
 
     return _FakeMusicService(
         playlists=[

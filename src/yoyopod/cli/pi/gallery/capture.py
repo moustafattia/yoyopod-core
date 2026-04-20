@@ -28,7 +28,7 @@ from yoyopod.cli.pi.gallery.fixtures import (
 
 if TYPE_CHECKING:
     from yoyopod.communication import CallHistoryStore, VoIPManager
-    from yoyopod.audio.local_service import LocalMusicService
+    from yoyopod.audio.music import LocalMusicService
     from yoyopod.people import PeopleDirectory
     from yoyopod.ui.display import Display
 
