@@ -16,7 +16,14 @@ from typing import TYPE_CHECKING, Annotated, Any, Callable, Protocol
 
 import typer
 
+from yoyopod_cli._pi_validate_helpers import (
+    NavigationSoakError,
+    NavigationSoakReport,
+    run_navigation_idle_soak,
+    run_navigation_soak,
+)
 from yoyopod_cli.common import REPO_ROOT, configure_logging, resolve_config_dir
+from yoyopod_cli.paths import load_pi_paths
 
 if TYPE_CHECKING:
     from yoyopod.audio.test_music import ProvisionedTestMusicLibrary
@@ -105,10 +112,8 @@ def _config_files_check(config_path: Path) -> _CheckResult:
 
 def _deploy_contract_check() -> tuple[_CheckResult, Any | None]:
     """Validate that the tracked deploy contract is readable."""
-    from yoyopod.cli.remote.config import load_pi_deploy_config
-
     try:
-        deploy_config = load_pi_deploy_config()
+        deploy_config = load_pi_paths()
     except Exception as exc:
         return _CheckResult(name="deploy_contract", status="fail", details=str(exc)), None
 
@@ -1775,7 +1780,6 @@ def stability(
 ) -> None:
     """Run a repeated navigation and idle stability pass on the target checkout."""
     from yoyopod.audio.test_music import DEFAULT_TEST_MUSIC_TARGET_DIR
-    from yoyopod.cli.pi.stability import NavigationSoakError, run_navigation_idle_soak
 
     configure_logging(verbose)
     resolved_music_dir = test_music_dir or DEFAULT_TEST_MUSIC_TARGET_DIR
@@ -1861,7 +1865,6 @@ def navigation(
     from loguru import logger
 
     from yoyopod.audio.test_music import DEFAULT_TEST_MUSIC_TARGET_DIR
-    from yoyopod.cli.pi.navigation import run_navigation_soak
 
     configure_logging(verbose)
     resolved_music_dir = test_music_dir or DEFAULT_TEST_MUSIC_TARGET_DIR
@@ -1934,7 +1937,6 @@ def lvgl(
     from loguru import logger
 
     from yoyopod.audio.test_music import DEFAULT_TEST_MUSIC_TARGET_DIR
-    from yoyopod.cli.pi.stability import NavigationSoakError, run_navigation_idle_soak
 
     configure_logging(verbose)
     resolved_music_dir = test_music_dir or DEFAULT_TEST_MUSIC_TARGET_DIR
