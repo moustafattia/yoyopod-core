@@ -7,7 +7,7 @@ from typing import Annotated
 
 import typer
 
-from yoyopod.audio.test_music import (
+from yoyopod.cli.pi.music_fixtures import (
     DEFAULT_TEST_MUSIC_TARGET_DIR,
     provision_test_music_library,
 )

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Iterator
 
 from loguru import logger
 
-from yoyopod.audio.test_music import provision_test_music_library
+from yoyopod.cli.pi.music_fixtures import provision_test_music_library
 from yoyopod.cli.pi.navigation.exercises import _NavigationExercises
 from yoyopod.cli.pi.navigation.pump import _RuntimePump
 from yoyopod.cli.pi.navigation.stats import NavigationSoakFailure, NavigationSoakStats

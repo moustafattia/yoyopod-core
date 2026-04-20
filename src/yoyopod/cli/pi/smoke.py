@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING, Annotated, Any, Optional
 
 import typer
 
-from yoyopod.audio.test_music import DEFAULT_TEST_MUSIC_TARGET_DIR
+from yoyopod.cli.pi.music_fixtures import DEFAULT_TEST_MUSIC_TARGET_DIR
 from yoyopod.cli.common import configure_logging, resolve_config_dir
 
 if TYPE_CHECKING:
-    from yoyopod.audio.test_music import ProvisionedTestMusicLibrary
+    from yoyopod.cli.pi.music_fixtures import ProvisionedTestMusicLibrary
     from yoyopod.config import MediaConfig
 
 smoke_app = typer.Typer(
@@ -266,7 +266,7 @@ def _prepare_music_validation_library(
     test_music_dir: str,
 ) -> ProvisionedTestMusicLibrary | None:
     """Provision the deterministic validation music library and point smoke at it."""
-    from yoyopod.audio.test_music import provision_test_music_library
+    from yoyopod.cli.pi.music_fixtures import provision_test_music_library
 
     if not provision_test_music:
         return None

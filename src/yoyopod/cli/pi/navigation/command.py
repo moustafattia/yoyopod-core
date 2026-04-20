@@ -7,7 +7,7 @@ from typing import Annotated
 import typer
 from loguru import logger
 
-from yoyopod.audio.test_music import DEFAULT_TEST_MUSIC_TARGET_DIR
+from yoyopod.cli.pi.music_fixtures import DEFAULT_TEST_MUSIC_TARGET_DIR
 from yoyopod.cli.common import configure_logging
 from yoyopod.cli.pi.navigation.runner import NavigationSoakRunner
 

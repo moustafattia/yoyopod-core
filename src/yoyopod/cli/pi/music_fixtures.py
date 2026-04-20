@@ -1,4 +1,4 @@
-"""Deterministic test-music library provisioning for Pi-side validation."""
+"""Deterministic validation music provisioning for playback and navigation soaks."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class TestToneSpec:
 
 @dataclass(frozen=True, slots=True)
 class TestPlaylistSpec:
-    """One generated M3U playlist for playback validation."""
+    """One deterministic M3U playlist for playback validation."""
 
     relative_path: str
     title: str

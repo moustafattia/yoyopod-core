@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from yoyopod.audio.test_music import (
+from yoyopod.cli.pi.music_fixtures import (
     TEST_MUSIC_MANIFEST_FILENAME,
     expected_test_music_relative_paths,
     provision_test_music_library,

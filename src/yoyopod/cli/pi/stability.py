@@ -12,7 +12,7 @@ from typing import Iterator
 from loguru import logger
 
 from yoyopod.app import YoyoPodApp
-from yoyopod.audio.test_music import (
+from yoyopod.cli.pi.music_fixtures import (
     DEFAULT_TEST_MUSIC_TARGET_DIR,
     ProvisionedTestMusicLibrary,
     provision_test_music_library,

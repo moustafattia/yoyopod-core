@@ -10,7 +10,7 @@ from typing import Annotated
 
 import typer
 
-from yoyopod.audio.test_music import DEFAULT_TEST_MUSIC_TARGET_DIR
+from yoyopod.cli.pi.music_fixtures import DEFAULT_TEST_MUSIC_TARGET_DIR
 from yoyopod.cli.common import REPO_ROOT, configure_logging, resolve_config_dir
 from yoyopod.cli.pi.lvgl import soak as run_lvgl_soak
 from yoyopod.cli.pi.navigation.command import register_navigation_command

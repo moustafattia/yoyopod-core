@@ -7,7 +7,7 @@ from typing import Annotated
 
 import typer
 
-from yoyopod.audio.test_music import DEFAULT_TEST_MUSIC_TARGET_DIR
+from yoyopod.cli.pi.music_fixtures import DEFAULT_TEST_MUSIC_TARGET_DIR
 from yoyopod.cli.remote.config import load_pi_deploy_config
 from yoyopod.cli.remote.ops import (
     _resolve_remote_config,
