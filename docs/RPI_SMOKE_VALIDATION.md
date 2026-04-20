@@ -296,9 +296,9 @@ Only use it when:
 - `input` fails: check the matching display adapter initialized correctly first
 - `music` fails: verify `mpv` is installed, the configured socket path is writable, and the provision target under `test_music_target_dir` is writable when deterministic seeding is enabled
 - `voip` fails: verify the Liblinphone shim build, `config/communication/integrations/liblinphone_factory.conf`, SIP credentials, network reachability, and audio device configuration
-- `registration-stability` fails: compare `logs/voip-validation/*/summary.json` across runs and look for whether startup never reached `ok` or whether `ok` flapped during the hold window
-- `reconnect-drill` fails: check whether the run ever recorded a non-`ok` registration state, whether the outage lasted long enough to force a drop, and whether recovery returned before the timeout
-- `call-soak` fails: check whether the target endpoint actually answered, whether registration stayed `ok`, and which non-connected call state ended the soak
+- `voip --soak registration` fails: compare `logs/voip-validation/*/summary.json` across runs and look for whether startup never reached `ok` or whether `ok` flapped during the hold window
+- `voip --soak reconnect` fails: check whether the run ever recorded a non-`ok` registration state, whether the outage lasted long enough to force a drop, and whether recovery returned before the timeout
+- `voip --soak call` fails: check whether the target endpoint actually answered, whether registration stayed `ok`, and which non-connected call state ended the soak
 - `navigation` fails: rerun `yoyopod pi validate navigation --verbose` or `yoyopod remote validate --with-navigation --verbose` and inspect which expected screen or playback transition stalled
 - `stability` fails: rerun `yoyopod pi validate stability --verbose` or `yoyopod pi validate lvgl` for a deeper LVGL-only pass
 - `validate` fails before launch: check whether the branch was actually pushed and whether the Pi checkout is reachable over SSH

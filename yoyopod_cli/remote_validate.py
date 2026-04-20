@@ -37,6 +37,8 @@ def _build_validate(
     sha: str = "",
     with_music: bool,
     with_voip: bool,
+    with_power: bool = False,
+    with_rtc: bool = False,
     with_lvgl_soak: bool,
     with_navigation: bool,
 ) -> str:
@@ -60,12 +62,12 @@ def _build_validate(
     else:
         steps.append(f"git reset --hard origin/{br}")
     steps.append(venv_activate_prefix(pi.venv))
-    steps.extend(
-        [
-            "yoyopod pi validate deploy",
-            "yoyopod pi validate smoke",
-        ]
-    )
+    smoke_cmd = "yoyopod pi validate smoke"
+    if with_power:
+        smoke_cmd += " --with-power"
+    if with_rtc:
+        smoke_cmd += " --with-rtc"
+    steps.extend(["yoyopod pi validate deploy", smoke_cmd])
     if with_music:
         steps.append("yoyopod pi validate music")
     if with_voip:
@@ -98,6 +100,8 @@ def validate(
     ),
     with_music: bool = typer.Option(False, "--with-music"),
     with_voip: bool = typer.Option(False, "--with-voip"),
+    with_power: bool = typer.Option(False, "--with-power"),
+    with_rtc: bool = typer.Option(False, "--with-rtc"),
     with_lvgl_soak: bool = typer.Option(False, "--with-lvgl-soak"),
     with_navigation: bool = typer.Option(False, "--with-navigation"),
     verbose: bool = typer.Option(False, "--verbose"),
@@ -111,6 +115,8 @@ def validate(
         sha=sha,
         with_music=with_music,
         with_voip=with_voip,
+        with_power=with_power,
+        with_rtc=with_rtc,
         with_lvgl_soak=with_lvgl_soak,
         with_navigation=with_navigation,
     )

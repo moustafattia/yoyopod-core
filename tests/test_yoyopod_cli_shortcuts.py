@@ -1,7 +1,6 @@
 """Test top-level aliases for hot-path commands."""
-from __future__ import annotations
 
-import typer
+from __future__ import annotations
 from typer.testing import CliRunner
 
 from yoyopod_cli.main import app
@@ -74,3 +73,18 @@ def test_validate_alias_with_flags(monkeypatch) -> None:
     assert len(calls) == 1
     assert "yoyopod pi validate music" in calls[0]
     assert "yoyopod pi validate voip" in calls[0]
+
+
+def test_validate_alias_with_power_and_rtc_flags(monkeypatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "yoyopod_cli.remote_validate.run_remote",
+        lambda conn, cmd, tty=False: (calls.append(cmd), 0)[1],
+    )
+    monkeypatch.setenv("YOYOPOD_PI_HOST", "rpi-zero")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["validate", "--with-power", "--with-rtc"])
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    assert "yoyopod pi validate smoke --with-power --with-rtc" in calls[0]

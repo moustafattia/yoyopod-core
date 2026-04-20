@@ -1,4 +1,5 @@
 """Tests for yoyopod_cli.remote_validate."""
+
 from __future__ import annotations
 
 from typer.testing import CliRunner
@@ -20,18 +21,39 @@ def test_build_preflight_steps_include_git_and_quality() -> None:
 
 
 def test_build_validate_minimal() -> None:
-    shell = _build_validate(branch="main", sha="", with_music=False, with_voip=False, with_lvgl_soak=False, with_navigation=False)
+    shell = _build_validate(
+        branch="main",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
+    )
     assert "git fetch origin" in shell
     assert "git checkout 'main'" in shell or "git checkout main" in shell
     assert "yoyopod pi validate deploy" in shell
     assert "yoyopod pi validate smoke" in shell
+    assert "--with-power" not in shell
+    assert "--with-rtc" not in shell
     assert "voip" not in shell or "yoyopod pi validate voip" not in shell
     assert "lvgl" not in shell
     assert "navigation" not in shell
 
 
 def test_build_validate_all_flags() -> None:
-    shell = _build_validate(branch="main", sha="", with_music=True, with_voip=True, with_lvgl_soak=True, with_navigation=True)
+    shell = _build_validate(
+        branch="main",
+        sha="",
+        with_music=True,
+        with_voip=True,
+        with_power=True,
+        with_rtc=True,
+        with_lvgl_soak=True,
+        with_navigation=True,
+    )
+    assert "yoyopod pi validate smoke --with-power --with-rtc" in shell
     assert "yoyopod pi validate music" in shell
     assert "yoyopod pi validate voip" in shell
     assert "yoyopod pi validate lvgl" in shell
@@ -39,13 +61,31 @@ def test_build_validate_all_flags() -> None:
 
 
 def test_build_validate_only_music() -> None:
-    shell = _build_validate(branch="main", sha="", with_music=True, with_voip=False, with_lvgl_soak=False, with_navigation=False)
+    shell = _build_validate(
+        branch="main",
+        sha="",
+        with_music=True,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
+    )
     assert "yoyopod pi validate music" in shell
     assert "yoyopod pi validate voip" not in shell
 
 
 def test_build_validate_syncs_branch_before_validation_stages() -> None:
-    shell = _build_validate(branch="feature-x", sha="", with_music=False, with_voip=False, with_lvgl_soak=False, with_navigation=False)
+    shell = _build_validate(
+        branch="feature-x",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
+    )
     # Ensure sync steps appear BEFORE the first validate step.
     # shlex.quote leaves safe names unquoted, so search for both forms.
     sync_idx = max(
@@ -59,7 +99,7 @@ def test_build_validate_syncs_branch_before_validation_stages() -> None:
 
 
 def test_preflight_help() -> None:
-    runner = CliRunner(env={'COLUMNS': '200'})
+    runner = CliRunner(env={"COLUMNS": "200"})
     result = runner.invoke(app, ["preflight", "--help"])
     assert result.exit_code == 0
 
@@ -70,18 +110,31 @@ def test_validate_has_all_with_flags() -> None:
     click_cmd = typer.main.get_command(app)
     validate_cmd = click_cmd.commands["validate"]  # type: ignore[attr-defined]
     names = _collect_option_names(validate_cmd)
-    for flag in ("--with-music", "--with-voip", "--with-lvgl-soak", "--with-navigation"):
+    for flag in (
+        "--with-music",
+        "--with-voip",
+        "--with-power",
+        "--with-rtc",
+        "--with-lvgl-soak",
+        "--with-navigation",
+    ):
         assert flag in names
 
 
 # --- Fix 2: venv activation ---
 
+
 def test_build_validate_activates_venv_before_yoyopod_invocations() -> None:
     """Venv activation must appear before first yoyopod invocation."""
     shell = _build_validate(
-        branch="main", sha="",
-        with_music=False, with_voip=False,
-        with_lvgl_soak=False, with_navigation=False,
+        branch="main",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
     )
     activate_idx = shell.find("source")
     yoyopod_idx = shell.find("yoyopod pi validate")
@@ -91,11 +144,17 @@ def test_build_validate_activates_venv_before_yoyopod_invocations() -> None:
 
 # --- Fix 3: SHA pinning ---
 
+
 def test_build_validate_with_sha_pins_and_checks_ancestry() -> None:
     shell = _build_validate(
-        branch="main", sha="abc123def",
-        with_music=False, with_voip=False,
-        with_lvgl_soak=False, with_navigation=False,
+        branch="main",
+        sha="abc123def",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
     )
     # Must use the SHA in git reset --hard
     assert "git reset --hard" in shell
@@ -109,9 +168,14 @@ def test_build_validate_with_sha_pins_and_checks_ancestry() -> None:
 
 def test_build_validate_without_sha_uses_branch_tip() -> None:
     shell = _build_validate(
-        branch="main", sha="",
-        with_music=False, with_voip=False,
-        with_lvgl_soak=False, with_navigation=False,
+        branch="main",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
     )
     assert "git reset --hard origin/" in shell
     assert "merge-base" not in shell

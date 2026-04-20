@@ -199,6 +199,8 @@ def test_remote_validate_help():
     assert result.exit_code == 0
     output = _plain(result.output)
     assert "--with-music" in output
+    assert "--with-power" in output
+    assert "--with-rtc" in output
     assert "--with-navigation" in output
 
 
