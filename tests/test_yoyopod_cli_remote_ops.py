@@ -6,10 +6,12 @@ from typer.testing import CliRunner
 
 from yoyopod_cli.remote_ops import (
     app,
+    _activate_script_path,
     _build_status,
     _build_restart,
     _build_logs_tail,
     _build_sync,
+    _build_startup_verification,
     _build_screenshot_alive_check,
     _build_screenshot_clear,
     _build_screenshot_signal,
@@ -27,11 +29,31 @@ def test_build_status_includes_repo_sha_and_log_tail() -> None:
 
 
 def test_build_restart_uses_configured_processes() -> None:
-    pi = PiPaths(kill_processes=("python", "linphonec"))
+    pi = PiPaths(
+        venv="venv",
+        start_cmd="python yoyopod.py --simulate",
+        kill_processes=("python", "linphonec"),
+    )
     shell = _build_restart(pi)
     assert "python" in shell
     assert "linphonec" in shell
     assert "pkill" in shell
+    assert "systemctl cat" in shell
+    assert "sudo systemctl start" in shell
+    assert "nohup python yoyopod.py --simulate" in shell
+    assert _activate_script_path(pi.venv) in shell
+    assert pi.pid_file in shell
+    assert pi.log_file in shell
+    assert pi.startup_marker in shell
+
+
+def test_build_startup_verification_waits_for_pid_and_marker() -> None:
+    pi = PiPaths()
+    shell = _build_startup_verification(pi, attempts=5)
+    assert "for _ in $(seq 1 5)" in shell
+    assert "pid=\"$(tr -d '\\n' < " in shell
+    assert 'kill -0 "$pid"' in shell
+    assert f"grep -F '{pi.startup_marker}'" in shell or f'grep -F "{pi.startup_marker}"' in shell
 
 
 def test_build_logs_tail_defaults() -> None:
@@ -70,10 +92,15 @@ def test_build_logs_tail_filter_with_apostrophe_uses_posix_escape() -> None:
 def test_build_sync_includes_branch_and_restart() -> None:
     pi = PiPaths()
     shell = _build_sync(pi, branch="main")
-    assert "git fetch origin" in shell
-    assert "git checkout 'main'" in shell or "git checkout main" in shell
+    assert "git fetch --prune origin" in shell
+    assert shell.count("git clean -fd") == 2
+    assert (
+        "git checkout --force -B 'main' 'origin/main'" in shell
+        or "git checkout --force -B main origin/main" in shell
+    )
     # sync ends with a restart pipeline
     assert "pkill" in shell
+    assert "grep -F" in shell
 
 
 def test_status_cli_invokes_run_remote(monkeypatch) -> None:

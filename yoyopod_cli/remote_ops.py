@@ -35,10 +35,60 @@ def _build_status(pi: PiPaths) -> str:
     )
 
 
+def _activate_script_path(venv: str) -> str:
+    """Return the shell path for activating the configured virtualenv."""
+    normalized = venv.rstrip("/")
+    if normalized.endswith("/bin/activate"):
+        return normalized
+    return f"{normalized}/bin/activate"
+
+
+def _build_startup_verification(pi: PiPaths, *, attempts: int = 20) -> str:
+    """Build the shell that waits for the PID file and startup marker."""
+    pid = shell_quote(pi.pid_file)
+    log = shell_quote(pi.log_file)
+    marker = shell_quote(pi.startup_marker)
+    return " && ".join(
+        [
+            (f"for _ in $(seq 1 {attempts}); do " f"test -f {pid} && break; " "sleep 1; " "done"),
+            f"test -f {pid}",
+            f"pid=\"$(tr -d '\\n' < {pid})\"",
+            'test -n "$pid"',
+            'kill -0 "$pid"',
+            (
+                f"for _ in $(seq 1 {attempts}); do "
+                f"if test -f {log} && "
+                f'grep -F {marker} {log} | tail -n 1 | grep -F "pid=$pid" >/dev/null; then '
+                "break; "
+                "fi; "
+                "sleep 1; "
+                "done"
+            ),
+            f'grep -F {marker} {log} | tail -n 1 | grep -F "pid=$pid"',
+        ]
+    )
+
+
 def _build_restart(pi: PiPaths) -> str:
-    """Build the shell that kills the app processes; systemd restarts them."""
-    kills = " ; ".join(f"pkill -f {shell_quote(proc)} || true" for proc in pi.kill_processes)
-    return f"{kills} ; echo 'processes signalled - systemd will respawn'"
+    """Build the shell that restarts the app and waits for startup verification."""
+    pid = shell_quote(pi.pid_file)
+    activate = shell_quote(_activate_script_path(pi.venv))
+    service_name = 'yoyopod@"$(id -un)".service'
+    cleanup_commands = [f"rm -f {pid}"]
+    cleanup_commands.extend(f"pkill -f {shell_quote(proc)} || true" for proc in pi.kill_processes)
+    cleanup = " ; ".join(cleanup_commands)
+    manual_restart = (
+        f"{cleanup} ; " f"source {activate} && (nohup {pi.start_cmd} > /dev/null 2>&1 &)"
+    )
+    managed_restart = (
+        f"if systemctl cat {service_name} >/dev/null 2>&1; then "
+        f"sudo systemctl stop {service_name} >/dev/null 2>&1 || true; "
+        f"{cleanup} ; "
+        f"sudo systemctl start {service_name}; "
+        f"else {manual_restart}; "
+        "fi"
+    )
+    return " && ".join([managed_restart, _build_startup_verification(pi)])
 
 
 def _build_logs_tail(
@@ -61,12 +111,14 @@ def _build_logs_tail(
 
 
 def _build_sync(pi: PiPaths, branch: str) -> str:
-    """Build the shell that fetches + fast-forwards branch and restarts via kill."""
+    """Build the shell that syncs a clean checkout and restarts the app."""
     br = shell_quote(branch)
+    origin_br = shell_quote(f"origin/{branch}")
     return (
-        f"git fetch origin && "
-        f"git checkout {br} && "
-        f"git reset --hard origin/{br} && "
+        f"git fetch --prune origin && "
+        "git clean -fd && "
+        f"git checkout --force -B {br} {origin_br} && "
+        "git clean -fd && "
         f"{_build_restart(pi)}"
     )
 

@@ -41,7 +41,8 @@ def test_deploy_alias_invokes_sync(monkeypatch) -> None:
     result = runner.invoke(app, ["deploy"])
     assert result.exit_code == 0, result.output
     assert len(calls) == 1
-    assert "git fetch origin" in calls[0]
+    assert "git fetch --prune origin" in calls[0]
+    assert "git clean -fd" in calls[0]
 
 
 def test_logs_alias_respects_follow_flag(monkeypatch) -> None:
