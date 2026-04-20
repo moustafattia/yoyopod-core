@@ -36,7 +36,7 @@ Canonical deploy/debug skills
 
 Current runtime summary
 - Entrypoint: `yoyopod.py` -> `yoyopy.main` -> `YoyoPodApp`
-- Main packages: `src/yoyopod/audio/`, `voip/`, `power/`, `ui/`, `coordinators/`
+- Main packages: `src/yoyopod/audio/`, `communication/`, `power/`, `ui/`, `coordinators/`
 - Runtime structure: split `MusicFSM` + `CallFSM`, typed `EventBus`, coordinator-driven app state
 - Production audio: mpv backend under `src/yoyopod/audio/music/`
 - Production VoIP: Liblinphone under `src/yoyopod/communication/integrations/liblinphone_binding/`
