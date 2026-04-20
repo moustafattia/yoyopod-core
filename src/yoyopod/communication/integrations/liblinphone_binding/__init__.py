@@ -1,4 +1,4 @@
-"""CPython binding layer for the native Liblinphone shim."""
+"""Compatibility alias for the relocated Liblinphone binding package."""
 
 from yoyopod.communication.integrations.liblinphone_binding.binding import (
     LiblinphoneBinding,

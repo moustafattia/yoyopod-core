@@ -1,4 +1,4 @@
-"""Compatibility exports for VoIP backend implementations."""
+"""Compatibility exports for callers still importing calling.backend."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any
 from yoyopod.communication.calling.backend_protocol import VoIPBackend, VoIPIterateMetrics
 
 if TYPE_CHECKING:
-    from yoyopod.communication.calling.liblinphone_backend import LiblinphoneBackend
     from yoyopod.communication.calling.mock_backend import MockVoIPBackend
+    from yoyopod.communication.integrations.liblinphone import LiblinphoneBackend
 
 
 _LAZY_EXPORTS = {
-    "LiblinphoneBackend": "yoyopod.communication.calling.liblinphone_backend",
+    "LiblinphoneBackend": "yoyopod.communication.integrations.liblinphone",
     "MockVoIPBackend": "yoyopod.communication.calling.mock_backend",
 }
 

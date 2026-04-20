@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import queue
 import subprocess
 import threading
@@ -33,7 +34,7 @@ from yoyopod.communication import (
     VoIPManager,
     VoIPMessageRecord,
 )
-from yoyopod.communication.integrations.liblinphone_binding import LiblinphoneBinding
+from yoyopod.communication.integrations.liblinphone import LiblinphoneBinding
 
 
 class FakeBinding:
@@ -282,11 +283,11 @@ def test_liblinphone_backend_records_native_iterate_timings(monkeypatch) -> None
     monotonic_values = iter([10.0, 10.0, 10.18, 10.18, 10.29, 10.31])
 
     monkeypatch.setattr(
-        "yoyopod.communication.calling.liblinphone_backend.time.monotonic",
+        "yoyopod.communication.integrations.liblinphone.backend.time.monotonic",
         lambda: next(monotonic_values),
     )
     monkeypatch.setattr(
-        "yoyopod.communication.calling.liblinphone_backend.logger.warning",
+        "yoyopod.communication.integrations.liblinphone.backend.logger.warning",
         lambda *args: warnings.append(args),
     )
 
@@ -321,7 +322,7 @@ def test_liblinphone_backend_uses_shared_output_volume_and_capture_only_alsa(mon
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(
-        "yoyopod.communication.calling.liblinphone_backend.subprocess.run", fake_run
+        "yoyopod.communication.integrations.liblinphone.backend.subprocess.run", fake_run
     )
 
     binding = FakeBinding()
@@ -357,7 +358,7 @@ def test_liblinphone_backend_matches_wm8960_card_from_capture_device(monkeypatch
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(
-        "yoyopod.communication.calling.liblinphone_backend.subprocess.run", fake_run
+        "yoyopod.communication.integrations.liblinphone.backend.subprocess.run", fake_run
     )
 
     backend = LiblinphoneBackend(build_config(), binding=FakeBinding())
@@ -378,6 +379,41 @@ def test_liblinphone_binding_decodes_c_string_arrays() -> None:
     buffer = ffi.new("char[]", b"sip:parent@example.com")
 
     assert binding._decode_c_string(buffer) == "sip:parent@example.com"
+
+
+def test_legacy_liblinphone_backend_module_reexports_backend() -> None:
+    """The old calling.liblinphone_backend path should keep resolving the backend class."""
+
+    legacy_module = importlib.import_module("yoyopod.communication.calling.liblinphone_backend")
+    relocated_module = importlib.import_module("yoyopod.communication.integrations.liblinphone.backend")
+
+    assert legacy_module.LiblinphoneBackend is relocated_module.LiblinphoneBackend
+    assert legacy_module.time is relocated_module.time
+
+
+def test_liblinphone_binding_accepts_legacy_native_build_path(monkeypatch) -> None:
+    """Library discovery should fall back to the legacy build directory during upgrades."""
+
+    binding_module = importlib.import_module("yoyopod.communication.integrations.liblinphone.binding")
+    base_dir = Path(binding_module.__file__).resolve().parent
+    legacy_candidate = (
+        base_dir.parent
+        / "liblinphone_binding"
+        / "native"
+        / "build"
+        / "libyoyopod_liblinphone_shim.so"
+    )
+
+    monkeypatch.delenv("YOYOPOD_LIBLINPHONE_SHIM_PATH", raising=False)
+    monkeypatch.setattr(
+        Path,
+        "exists",
+        lambda path: path == legacy_candidate,
+    )
+
+    binding = object.__new__(LiblinphoneBinding)
+
+    assert binding._resolve_library_path() == legacy_candidate
 
 
 def test_voip_manager_applies_backend_events_and_resolves_contact_names() -> None:
@@ -805,7 +841,7 @@ def test_liblinphone_shim_records_voice_notes_as_wav() -> None:
     """The native recorder shim should explicitly match the .wav files used by the app."""
 
     shim_source = Path(
-        "src/yoyopod/communication/integrations/liblinphone_binding/native/liblinphone_shim.c"
+        "src/yoyopod/communication/integrations/liblinphone/native/liblinphone_shim.c"
     ).read_text(encoding="utf-8")
 
     assert (
@@ -818,7 +854,7 @@ def test_liblinphone_shim_wires_incoming_message_debug_paths() -> None:
     """The native shim should cover aggregated and undecryptable incoming message paths."""
 
     shim_source = Path(
-        "src/yoyopod/communication/integrations/liblinphone_binding/native/liblinphone_shim.c"
+        "src/yoyopod/communication/integrations/liblinphone/native/liblinphone_shim.c"
     ).read_text(encoding="utf-8")
 
     assert (
