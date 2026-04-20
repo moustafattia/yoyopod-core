@@ -61,3 +61,7 @@ def run() -> None:
 from yoyopod_cli import build as _build
 
 app.add_typer(_build.app, name="build")
+
+from yoyopod_cli import setup as _setup
+
+app.add_typer(_setup.app, name="setup")
