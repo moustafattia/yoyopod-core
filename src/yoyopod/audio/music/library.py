@@ -7,7 +7,6 @@ import random
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
@@ -237,6 +236,9 @@ class LocalMusicService:
 
 __all__ = [
     "AUDIO_EXTENSIONS",
+    "LEGACY_LIBRARY_ROOTS",
+    "LEGACY_PLAYLIST_SCHEMES",
+    "LEGACY_TRACK_SCHEMES",
     "LocalLibraryItem",
     "LocalMusicService",
 ]

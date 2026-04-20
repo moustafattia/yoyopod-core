@@ -13,7 +13,6 @@ from yoyopod.audio.music.library import (
     LEGACY_TRACK_SCHEMES,
     LocalLibraryItem,
     LocalMusicService,
-    os,
 )
 
 __all__ = [
@@ -23,5 +22,4 @@ __all__ = [
     "LEGACY_LIBRARY_ROOTS",
     "LEGACY_PLAYLIST_SCHEMES",
     "LEGACY_TRACK_SCHEMES",
-    "os",
 ]
