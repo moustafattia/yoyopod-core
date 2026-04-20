@@ -24,7 +24,7 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod remote preflight` | Run host-side preflight checks (dirty tree + quality gate) before any remote work. |
 | `yoyopod remote restart` | Restart the yoyopod app on the Pi. |
 | `yoyopod remote rtc` | Inspect or control PiSugar RTC remotely. |
-| `yoyopod remote screenshot` | Capture the display shadow buffer from the Pi and copy it locally. |
+| `yoyopod remote screenshot` | Capture a screenshot from the Pi's display and copy it locally. |
 | `yoyopod remote service` | Manage the yoyopod@<user> systemd unit on the Pi. |
 | `yoyopod remote setup` | Run full Pi setup remotely. Flags forward to `yoyopod setup pi` on the target. |
 | `yoyopod remote status` | Show repo SHA, processes, and log tail on the Pi. |

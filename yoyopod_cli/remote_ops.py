@@ -12,6 +12,7 @@ from yoyopod_cli.paths import HOST, PiPaths, load_pi_paths
 from yoyopod_cli.remote_shared import build_remote_app, pi_conn
 from yoyopod_cli.remote_transport import (
     run_remote,
+    run_remote_capture,
     shell_quote,
     validate_config,
 )
@@ -70,6 +71,39 @@ def _build_sync(pi: PiPaths, branch: str) -> str:
     )
 
 
+def _build_screenshot_alive_check(pi: PiPaths) -> str:
+    """Remote shell that prints ALIVE if the app PID is live, DEAD otherwise."""
+    pid = shell_quote(pi.pid_file)
+    return f"test -f {pid} && kill -0 $(cat {pid}) 2>/dev/null " "&& echo ALIVE || echo DEAD"
+
+
+def _build_screenshot_clear(pi: PiPaths) -> str:
+    """Remote shell that removes any stale screenshot file."""
+    return f"rm -f {shell_quote(pi.screenshot_path)}"
+
+
+def _build_screenshot_signal(pi: PiPaths, *, readback: bool) -> str:
+    """Remote shell that signals the app to capture a screenshot.
+
+    SIGUSR1 = LVGL readback (hardware-accurate); SIGUSR2 = PIL shadow buffer.
+    """
+    signal_name = "USR1" if readback else "USR2"
+    pid = shell_quote(pi.pid_file)
+    return f"kill -{signal_name} $(cat {pid})"
+
+
+def _build_screenshot_wait(pi: PiPaths, *, attempts: int = 20) -> str:
+    """Remote shell that waits up to `attempts` seconds for the PNG file."""
+    path = shell_quote(pi.screenshot_path)
+    return (
+        f"for _ in $(seq 1 {attempts}); do "
+        f"test -f {path} && echo READY && exit 0; "
+        "sleep 1; "
+        "done; "
+        "echo MISSING"
+    )
+
+
 # ---- commands ---------------------------------------------------------------
 
 
@@ -125,11 +159,22 @@ def sync(ctx: typer.Context, verbose: bool = typer.Option(False, "--verbose")) -
 def screenshot(
     ctx: typer.Context,
     out: str = typer.Option(
-        "", "--out", help="Local file path. Default: logs/screenshots/<timestamp>.png"
+        "",
+        "--out",
+        help="Local file path. Default: logs/screenshots/<timestamp>.png",
+    ),
+    readback: bool = typer.Option(
+        False,
+        "--readback",
+        help="Use LVGL readback (SIGUSR1) instead of shadow buffer (SIGUSR2).",
     ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """Capture the display shadow buffer from the Pi and copy it locally."""
+    """Capture a screenshot from the Pi's display and copy it locally.
+
+    Signals the running app (PID from pid_file) via SIGUSR1/SIGUSR2 to trigger
+    its registered save-screenshot handler. Requires the app to be running.
+    """
     from datetime import datetime
 
     configure_logging(verbose)
@@ -137,18 +182,47 @@ def screenshot(
     validate_config(conn)
     pi = load_pi_paths()
 
-    remote_png = pi.screenshot_path
-    # Use a heredoc so shell quoting doesn't conflict with Python string quotes.
-    python_path_literal = repr(remote_png)
-    python_src = (
-        "from yoyopod.ui.display.factory import capture_shadow_png\n"
-        f"capture_shadow_png({python_path_literal})\n"
-    )
-    cmd = f"python - <<'PY_SCREENSHOT_EOF'\n{python_src}PY_SCREENSHOT_EOF"
-    rc = run_remote(conn, cmd)
-    if rc != 0:
-        raise typer.Exit(rc)
+    # 1. Verify app is alive
+    alive = run_remote_capture(conn, _build_screenshot_alive_check(pi))
+    if alive.returncode != 0 or alive.stdout.strip() != "ALIVE":
+        typer.echo(
+            "Remote app is not running; start/restart it before requesting a screenshot.",
+            err=True,
+        )
+        if alive.stderr.strip():
+            typer.echo(alive.stderr.strip(), err=True)
+        raise typer.Exit(1)
 
+    # 2. Clear stale screenshot
+    clear = run_remote_capture(conn, _build_screenshot_clear(pi))
+    if clear.returncode != 0:
+        typer.echo("Failed to clear the previous screenshot on the Pi.", err=True)
+        if clear.stderr.strip():
+            typer.echo(clear.stderr.strip(), err=True)
+        raise typer.Exit(clear.returncode)
+
+    # 3. Signal the app to capture
+    signal_result = run_remote_capture(conn, _build_screenshot_signal(pi, readback=readback))
+    if signal_result.returncode != 0:
+        typer.echo("Failed to trigger screenshot capture on the Pi.", err=True)
+        if signal_result.stderr.strip():
+            typer.echo(signal_result.stderr.strip(), err=True)
+        raise typer.Exit(signal_result.returncode)
+
+    # 4. Wait for the file to appear
+    verify = run_remote_capture(conn, _build_screenshot_wait(pi))
+    if verify.returncode != 0 or verify.stdout.strip() != "READY":
+        typer.echo(
+            "Screenshot was not created on the Pi within the timeout. "
+            "Confirm the app is running and the screenshot signal handlers are installed. "
+            "Inspect `yoyopod remote logs --errors` for tracebacks.",
+            err=True,
+        )
+        if verify.stderr.strip():
+            typer.echo(verify.stderr.strip(), err=True)
+        raise typer.Exit(1)
+
+    # 5. SCP the file back
     local_target = (
         Path(out)
         if out
@@ -156,7 +230,7 @@ def screenshot(
     )
     local_target.parent.mkdir(parents=True, exist_ok=True)
 
-    scp_cmd = ["scp", f"{conn.ssh_target}:{remote_png}", str(local_target)]
+    scp_cmd = ["scp", f"{conn.ssh_target}:{pi.screenshot_path}", str(local_target)]
     completed = subprocess.run(scp_cmd, check=False)
     if completed.returncode != 0:
         raise typer.Exit(completed.returncode)
