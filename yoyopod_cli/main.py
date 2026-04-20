@@ -55,3 +55,9 @@ def _root(
 def run() -> None:
     """Entry-point shim used by ``[project.scripts]``."""
     app()
+
+
+# --- subapps ---
+from yoyopod_cli import build as _build
+
+app.add_typer(_build.app, name="build")
