@@ -15,7 +15,7 @@ from yoyopod_cli.defaults import (
 DEFAULT_TEST_MUSIC_TARGET_DIR = CLI_DEFAULT_TEST_MUSIC_TARGET_DIR
 
 TEST_MUSIC_MANIFEST_FILENAME = ".yoyopod_test_music_manifest.json"
-TEST_MUSIC_LIBRARY_VERSION = 1
+TEST_MUSIC_LIBRARY_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,19 +64,19 @@ TEST_TONE_SPECS: tuple[TestToneSpec, ...] = (
         relative_path="tracks/alpha-beacon.wav",
         title="Alpha Beacon",
         frequency_hz=440.0,
-        duration_seconds=1.10,
+        duration_seconds=2.6,
     ),
     TestToneSpec(
         relative_path="tracks/bravo-lantern.wav",
         title="Bravo Lantern",
         frequency_hz=554.37,
-        duration_seconds=1.25,
+        duration_seconds=2.8,
     ),
     TestToneSpec(
         relative_path="tracks/charlie-sundial.wav",
         title="Charlie Sundial",
         frequency_hz=659.25,
-        duration_seconds=0.95,
+        duration_seconds=2.4,
     ),
 )
 
