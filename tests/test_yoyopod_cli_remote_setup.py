@@ -15,7 +15,7 @@ def test_build_setup_calls_pi_setup() -> None:
         skip_builds=False,
         dry_run=False,
     )
-    assert "yoyopod setup pi" in shell
+    assert "uv run yoyopod setup pi" in shell
 
 
 def test_build_verify_setup_calls_pi_verify() -> None:
@@ -25,7 +25,7 @@ def test_build_verify_setup_calls_pi_verify() -> None:
         with_network=False,
         with_pisugar=False,
     )
-    assert "yoyopod setup verify-pi" in shell
+    assert "uv run yoyopod setup verify-pi" in shell
 
 
 def test_setup_help() -> None:
@@ -40,9 +40,9 @@ def test_verify_setup_help() -> None:
     assert result.exit_code == 0
 
 
-# --- venv activation for setup / verify-setup ---
+# --- checkout-local uv run for setup / verify-setup ---
 
-def test_build_setup_activates_venv_before_yoyopod() -> None:
+def test_build_setup_uses_uv_run_yoyopod() -> None:
     shell = _build_setup(
         venv_relpath=".venv",
         with_voice=False,
@@ -52,23 +52,19 @@ def test_build_setup_activates_venv_before_yoyopod() -> None:
         skip_builds=False,
         dry_run=False,
     )
-    activate_idx = shell.find("source")
-    yoyopod_idx = shell.find("yoyopod setup pi")
-    assert activate_idx >= 0, f"expected venv activation in: {shell}"
-    assert activate_idx < yoyopod_idx, "venv must activate BEFORE yoyopod invocation"
+    assert "uv run yoyopod setup pi" in shell
+    assert "source " not in shell
 
 
-def test_build_verify_setup_activates_venv_before_yoyopod() -> None:
+def test_build_verify_setup_uses_uv_run_yoyopod() -> None:
     shell = _build_verify_setup(
         venv_relpath=".venv",
         with_voice=False,
         with_network=False,
         with_pisugar=False,
     )
-    activate_idx = shell.find("source")
-    yoyopod_idx = shell.find("yoyopod setup verify-pi")
-    assert activate_idx >= 0, f"expected venv activation in: {shell}"
-    assert activate_idx < yoyopod_idx, "venv must activate BEFORE yoyopod invocation"
+    assert "uv run yoyopod setup verify-pi" in shell
+    assert "source " not in shell
 
 
 # --- Fix 1: feature-flag passthrough regression tests ---
@@ -83,7 +79,7 @@ def test_build_setup_passes_all_feature_flags() -> None:
         skip_builds=True,
         dry_run=True,
     )
-    assert "yoyopod setup pi" in shell
+    assert "uv run yoyopod setup pi" in shell
     assert "--with-voice" in shell
     assert "--with-network" in shell
     assert "--with-pisugar" in shell
@@ -102,7 +98,7 @@ def test_build_setup_default_has_no_feature_flags() -> None:
         skip_builds=False,
         dry_run=False,
     )
-    assert "yoyopod setup pi" in shell
+    assert "uv run yoyopod setup pi" in shell
     for flag in (
         "--with-voice",
         "--with-network",
@@ -121,7 +117,7 @@ def test_build_verify_setup_passes_feature_flags() -> None:
         with_network=True,
         with_pisugar=True,
     )
-    assert "yoyopod setup verify-pi" in shell
+    assert "uv run yoyopod setup verify-pi" in shell
     assert "--with-voice" in shell
     assert "--with-network" in shell
     assert "--with-pisugar" in shell

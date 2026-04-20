@@ -15,12 +15,12 @@ from yoyopod_cli.remote_infra import (
 
 def test_build_power_invokes_pi_power_battery() -> None:
     shell = _build_power()
-    assert "yoyopod pi power battery" in shell
+    assert "uv run yoyopod pi power battery" in shell
 
 
 def test_build_rtc_status() -> None:
     shell = _build_rtc("status", time_iso="", repeat_mask=127)
-    assert "yoyopod pi power rtc" in shell
+    assert "uv run yoyopod pi power rtc" in shell
     assert "status" in shell
 
 
@@ -71,22 +71,18 @@ def test_power_cli_invokes_run_remote(monkeypatch) -> None:
     assert len(calls) == 1
 
 
-# --- Fix 2: venv activation for power / rtc ---
+# --- Fix 2: checkout-local uv run for power / rtc ---
 
-def test_build_power_activates_venv_before_yoyopod() -> None:
+def test_build_power_uses_uv_run_yoyopod() -> None:
     shell = _build_power()
-    activate_idx = shell.find("source")
-    yoyopod_idx = shell.find("yoyopod pi power battery")
-    assert activate_idx >= 0, f"expected venv activation in: {shell}"
-    assert activate_idx < yoyopod_idx, "venv must activate BEFORE yoyopod invocation"
+    assert "uv run yoyopod pi power battery" in shell
+    assert "source " not in shell
 
 
-def test_build_rtc_activates_venv_before_yoyopod() -> None:
+def test_build_rtc_uses_uv_run_yoyopod() -> None:
     shell = _build_rtc("status", time_iso="", repeat_mask=127)
-    activate_idx = shell.find("source")
-    yoyopod_idx = shell.find("yoyopod pi power rtc")
-    assert activate_idx >= 0, f"expected venv activation in: {shell}"
-    assert activate_idx < yoyopod_idx, "venv must activate BEFORE yoyopod invocation"
+    assert "uv run yoyopod pi power rtc" in shell
+    assert "source " not in shell
 
 
 # --- Fix 4: service install persists env file ---

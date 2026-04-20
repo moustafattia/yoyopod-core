@@ -33,11 +33,11 @@ def test_build_validate_minimal() -> None:
     )
     assert "git fetch origin" in shell
     assert "git checkout 'main'" in shell or "git checkout main" in shell
-    assert "yoyopod pi validate deploy" in shell
-    assert "yoyopod pi validate smoke" in shell
+    assert "uv run yoyopod pi validate deploy" in shell
+    assert "uv run yoyopod pi validate smoke" in shell
     assert "--with-power" not in shell
     assert "--with-rtc" not in shell
-    assert "voip" not in shell or "yoyopod pi validate voip" not in shell
+    assert "voip" not in shell or "uv run yoyopod pi validate voip" not in shell
     assert "lvgl" not in shell
     assert "navigation" not in shell
 
@@ -53,11 +53,11 @@ def test_build_validate_all_flags() -> None:
         with_lvgl_soak=True,
         with_navigation=True,
     )
-    assert "yoyopod pi validate smoke --with-power --with-rtc" in shell
-    assert "yoyopod pi validate music" in shell
-    assert "yoyopod pi validate voip" in shell
-    assert "yoyopod pi validate lvgl" in shell
-    assert "yoyopod pi validate navigation" in shell
+    assert "uv run yoyopod pi validate smoke --with-power --with-rtc" in shell
+    assert "uv run yoyopod pi validate music" in shell
+    assert "uv run yoyopod pi validate voip" in shell
+    assert "uv run yoyopod pi validate lvgl" in shell
+    assert "uv run yoyopod pi validate navigation" in shell
 
 
 def test_build_validate_only_music() -> None:
@@ -71,8 +71,8 @@ def test_build_validate_only_music() -> None:
         with_lvgl_soak=False,
         with_navigation=False,
     )
-    assert "yoyopod pi validate music" in shell
-    assert "yoyopod pi validate voip" not in shell
+    assert "uv run yoyopod pi validate music" in shell
+    assert "uv run yoyopod pi validate voip" not in shell
 
 
 def test_build_validate_syncs_branch_before_validation_stages() -> None:
@@ -92,7 +92,7 @@ def test_build_validate_syncs_branch_before_validation_stages() -> None:
         shell.find("git reset --hard origin/feature-x"),
         shell.find("git reset --hard origin/'feature-x'"),
     )
-    deploy_idx = shell.find("yoyopod pi validate deploy")
+    deploy_idx = shell.find("uv run yoyopod pi validate deploy")
     assert sync_idx >= 0, f"sync step missing from: {shell}"
     assert deploy_idx >= 0
     assert sync_idx < deploy_idx, "sync must happen before validation"
@@ -121,11 +121,11 @@ def test_validate_has_all_with_flags() -> None:
         assert flag in names
 
 
-# --- Fix 2: venv activation ---
+# --- Fix 2: checkout-local uv run invocation ---
 
 
-def test_build_validate_activates_venv_before_yoyopod_invocations() -> None:
-    """Venv activation must appear before first yoyopod invocation."""
+def test_build_validate_uses_uv_run_for_checkout_local_invocations() -> None:
+    """Remote validate must use `uv run yoyopod` instead of a potentially stale installed script."""
     shell = _build_validate(
         branch="main",
         sha="",
@@ -136,10 +136,9 @@ def test_build_validate_activates_venv_before_yoyopod_invocations() -> None:
         with_lvgl_soak=False,
         with_navigation=False,
     )
-    activate_idx = shell.find("source")
-    yoyopod_idx = shell.find("yoyopod pi validate")
-    assert activate_idx >= 0, f"expected venv activation in: {shell}"
-    assert activate_idx < yoyopod_idx, "venv must activate BEFORE yoyopod invocations"
+    assert "uv run yoyopod pi validate deploy" in shell
+    assert "uv run yoyopod pi validate smoke" in shell
+    assert "source " not in shell
 
 
 # --- Fix 3: SHA pinning ---

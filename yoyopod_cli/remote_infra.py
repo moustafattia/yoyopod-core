@@ -11,7 +11,6 @@ from yoyopod_cli.remote_transport import (
     run_remote,
     shell_quote,
     validate_config,
-    venv_activate_prefix,
 )
 
 app = build_remote_app("infra", "Remote power, rtc, and service commands.")
@@ -19,14 +18,14 @@ app = build_remote_app("infra", "Remote power, rtc, and service commands.")
 
 def _build_power() -> str:
     """Invoke ``yoyopod pi power battery`` on the Pi."""
-    pi = load_pi_paths()
-    return f"{venv_activate_prefix(pi.venv)} && yoyopod pi power battery"
+    load_pi_paths()
+    return "uv run yoyopod pi power battery"
 
 
 def _build_rtc(action: str, *, time_iso: str, repeat_mask: int) -> str:
     """Build ``yoyopod pi power rtc <action>`` remote shell."""
-    pi = load_pi_paths()
-    cmd = f"{venv_activate_prefix(pi.venv)} && yoyopod pi power rtc {shell_quote(action)}"
+    load_pi_paths()
+    cmd = f"uv run yoyopod pi power rtc {shell_quote(action)}"
     if action == "set-alarm":
         if not time_iso:
             raise typer.BadParameter("set-alarm requires --time")

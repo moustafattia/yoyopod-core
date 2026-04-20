@@ -7,7 +7,7 @@ import typer
 from yoyopod_cli.common import configure_logging
 from yoyopod_cli.paths import load_pi_paths
 from yoyopod_cli.remote_shared import build_remote_app, pi_conn
-from yoyopod_cli.remote_transport import run_remote, validate_config, venv_activate_prefix
+from yoyopod_cli.remote_transport import run_remote, validate_config
 
 app = build_remote_app("setup_remote", "Run setup on the Pi via SSH.")
 
@@ -22,7 +22,7 @@ def _build_setup(
     skip_builds: bool,
     dry_run: bool,
 ) -> str:
-    cmd = f"{venv_activate_prefix(venv_relpath)} && yoyopod setup pi"
+    cmd = "uv run yoyopod setup pi"
     if with_voice:
         cmd += " --with-voice"
     if with_network:
@@ -45,7 +45,7 @@ def _build_verify_setup(
     with_network: bool,
     with_pisugar: bool,
 ) -> str:
-    cmd = f"{venv_activate_prefix(venv_relpath)} && yoyopod setup verify-pi"
+    cmd = "uv run yoyopod setup verify-pi"
     if with_voice:
         cmd += " --with-voice"
     if with_network:

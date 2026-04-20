@@ -9,14 +9,12 @@ from __future__ import annotations
 import typer
 
 from yoyopod_cli.common import configure_logging
-from yoyopod_cli.paths import load_pi_paths
 from yoyopod_cli.remote_shared import build_remote_app, pi_conn
 from yoyopod_cli.remote_transport import (
     run_local,
     run_remote,
     shell_quote,
     validate_config,
-    venv_activate_prefix,
 )
 
 app = build_remote_app("validate_app", "Validate commit + health on the Pi.")
@@ -48,7 +46,6 @@ def _build_validate(
     ensures it is reachable from origin/<branch>). Without a SHA the branch tip
     on origin is used.
     """
-    pi = load_pi_paths()
     br = shell_quote(branch)
     steps = [
         "git fetch origin",
@@ -61,22 +58,21 @@ def _build_validate(
         steps.append(f"git reset --hard {sh}")
     else:
         steps.append(f"git reset --hard origin/{br}")
-    steps.append(venv_activate_prefix(pi.venv))
-    smoke_cmd = "yoyopod pi validate smoke"
+    smoke_cmd = "uv run yoyopod pi validate smoke"
     if with_power:
         smoke_cmd += " --with-power"
     if with_rtc:
         smoke_cmd += " --with-rtc"
-    steps.extend(["yoyopod pi validate deploy", smoke_cmd])
+    steps.extend(["uv run yoyopod pi validate deploy", smoke_cmd])
     if with_music:
-        steps.append("yoyopod pi validate music")
+        steps.append("uv run yoyopod pi validate music")
     if with_voip:
-        steps.append("yoyopod pi validate voip")
-    steps.append("yoyopod pi validate stability")
+        steps.append("uv run yoyopod pi validate voip")
+    steps.append("uv run yoyopod pi validate stability")
     if with_lvgl_soak:
-        steps.append("yoyopod pi validate lvgl")
+        steps.append("uv run yoyopod pi validate lvgl")
     if with_navigation:
-        steps.append("yoyopod pi validate navigation")
+        steps.append("uv run yoyopod pi validate navigation")
     return " && ".join(steps)
 
 
