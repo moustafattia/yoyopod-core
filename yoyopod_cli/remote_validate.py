@@ -35,7 +35,7 @@ def _build_validate(
     """Shell that fast-forwards the branch on the Pi, then runs staged validation."""
     br = shell_quote(branch)
     steps = [
-        f"git fetch origin",
+        "git fetch origin",
         f"git checkout {br}",
         f"git reset --hard origin/{br}",
         "yoyopod pi validate deploy",
