@@ -35,7 +35,9 @@ def test_build_validate_minimal() -> None:
     )
     assert "git fetch --prune origin" in shell
     assert shell.count("git clean -fd") == 2
-    assert "git checkout 'main'" in shell or "git checkout main" in shell
+    assert "git checkout --force -B main origin/main" in shell or (
+        "git checkout --force -B 'main' 'origin/main'" in shell
+    )
     assert "uv run yoyopod pi validate deploy" in shell
     assert "uv run yoyopod pi validate smoke" in shell
     assert "--with-power" not in shell
@@ -114,9 +116,9 @@ def test_build_validate_cleans_untracked_files_before_and_after_checkout() -> No
     )
     assert shell.count("git clean -fd") == 2
     first_clean_idx = shell.find("git clean -fd")
-    checkout_idx = shell.find("git checkout feature-x")
+    checkout_idx = shell.find("git checkout --force -B feature-x origin/feature-x")
     if checkout_idx < 0:
-        checkout_idx = shell.find("git checkout 'feature-x'")
+        checkout_idx = shell.find("git checkout --force -B 'feature-x' 'origin/feature-x'")
     reset_idx = max(
         shell.find("git reset --hard origin/feature-x"),
         shell.find("git reset --hard 'origin/feature-x'"),
@@ -126,6 +128,22 @@ def test_build_validate_cleans_untracked_files_before_and_after_checkout() -> No
     assert checkout_idx > first_clean_idx
     assert reset_idx > checkout_idx
     assert second_clean_idx > reset_idx
+
+
+def test_build_validate_force_resets_branch_before_validation() -> None:
+    shell = _build_validate(
+        branch="feature-x",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
+    )
+    assert "git checkout --force -B feature-x origin/feature-x" in shell or (
+        "git checkout --force -B 'feature-x' 'origin/feature-x'" in shell
+    )
 
 
 def test_preflight_help() -> None:

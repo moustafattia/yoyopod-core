@@ -124,7 +124,7 @@ def _build_validate(
     steps = [
         "git fetch --prune origin",
         "git clean -fd",
-        f"git checkout {br}",
+        f"git checkout --force -B {br} {origin_br}",
     ]
     if sha:
         sh = shell_quote(sha)
