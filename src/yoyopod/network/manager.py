@@ -58,15 +58,18 @@ class NetworkManager:
 
         logger.info("Starting network manager")
         with self._lifecycle_lock:
-            if (
-                expected_generation is not None
-                and expected_generation != self._lifecycle_generation
-            ):
+            if expected_generation is None:
+                expected_generation = self._lifecycle_generation
+            elif expected_generation != self._lifecycle_generation:
                 logger.info("Skipping network bring-up after concurrent lifecycle change")
                 return False
             self.backend.open()
             self.backend.init_modem()
             state = self.backend.get_state()
+
+        if not self._lifecycle_generation_matches(expected_generation):
+            logger.info("Skipping network post-init after concurrent lifecycle change")
+            return False
 
         if state.phase == ModemPhase.REGISTERED:
             self._publish(
@@ -95,7 +98,7 @@ class NetworkManager:
                 except Exception as exc:
                     logger.debug("Initial GPS query failed: {}", exc)
 
-            if self._start_ppp():
+            if self._start_ppp(expected_generation=expected_generation):
                 self._publish(NetworkPppUpEvent(connection_type="4g"))
         else:
             logger.error("Modem init failed: {}", state.error)
@@ -170,11 +173,17 @@ class NetworkManager:
                 self._publish(NetworkGpsNoFixEvent(reason="no_fix"))
             return coord
 
-    def _start_ppp(self) -> bool:
+    def _start_ppp(self, *, expected_generation: int | None = None) -> bool:
         """Spawn PPP under lifecycle lock, then wait for the link without blocking shutdown."""
 
         wait_for_ppp_link = getattr(self.backend, "wait_for_ppp_link", None)
         with self._lifecycle_lock:
+            if (
+                expected_generation is not None
+                and expected_generation != self._lifecycle_generation
+            ):
+                logger.info("Skipping PPP start after concurrent lifecycle change")
+                return False
             if wait_for_ppp_link is None:
                 return bool(self.backend.start_ppp())
 
@@ -182,6 +191,12 @@ class NetworkManager:
                 return False
 
         return bool(wait_for_ppp_link(timeout=self.config.ppp_timeout))
+
+    def _lifecycle_generation_matches(self, expected_generation: int) -> bool:
+        """Return True when no concurrent stop has invalidated the current bring-up."""
+
+        with self._lifecycle_lock:
+            return expected_generation == self._lifecycle_generation
 
     def _publish(self, event: object) -> None:
         """Publish an event if the bus is available."""

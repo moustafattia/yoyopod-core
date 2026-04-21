@@ -8,7 +8,13 @@ import yaml
 from yoyopod.config import ConfigManager
 from yoyopod.config.models import build_config_model
 from yoyopod.core import EventBus
-from yoyopod.core import NetworkGpsFixEvent, NetworkGpsNoFixEvent, NetworkPppUpEvent
+from yoyopod.core import (
+    NetworkGpsFixEvent,
+    NetworkGpsNoFixEvent,
+    NetworkPppDownEvent,
+    NetworkPppUpEvent,
+    NetworkRegisteredEvent,
+)
 from yoyopod.network import NetworkConfig, NetworkManager
 from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
 
@@ -318,6 +324,36 @@ def test_manager_stop_cancels_recovery_restart_after_reset() -> None:
     assert recovery_thread.is_alive() is False
     assert recover_result == [False]
     assert backend.opened is False
+
+
+def test_manager_stop_cancels_ppp_start_after_post_init_events() -> None:
+    """stop() should prevent PPP startup if shutdown lands after modem init succeeds."""
+
+    config = build_config_model(NetworkConfig, {"enabled": True, "apn": "internet"})
+    backend = FakeBackend()
+    backend.state.phase = ModemPhase.REGISTERING
+    backend.health_online = False
+    manager = NetworkManager(config=config, backend=backend)
+    published: list[object] = []
+    stop_requested = False
+
+    def intercept_publish(event: object) -> None:
+        nonlocal stop_requested
+        published.append(event)
+        if not stop_requested and isinstance(event, NetworkRegisteredEvent):
+            stop_requested = True
+            manager.stop()
+
+    manager._publish = intercept_publish
+
+    recovered = manager.recover()
+
+    assert recovered is False
+    assert backend.closed is True
+    assert backend.ppp_started is False
+    assert any(isinstance(event, NetworkRegisteredEvent) for event in published)
+    assert any(isinstance(event, NetworkPppDownEvent) for event in published)
+    assert not any(isinstance(event, NetworkPppUpEvent) for event in published)
 
 
 def test_manager_from_config_manager_uses_domain_owned_network_settings(tmp_path) -> None:
