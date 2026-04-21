@@ -84,16 +84,16 @@ class WiringBoot:
 
         self.ensure_coordinators()
         assert self.app.playback_coordinator is not None
-        self.app.music_backend.on_track_change(self.app.playback_coordinator.publish_track_change)
+        self.app.music_backend.on_track_change(self.app.playback_coordinator.handle_track_change)
         self.app.music_backend.on_playback_state_change(
-            self.app.playback_coordinator.publish_playback_state_change
+            self.app.playback_coordinator.handle_playback_state_change
         )
         if self.app.audio_volume_controller is not None:
             self.app.music_backend.on_connection_change(
                 self.app.audio_volume_controller.sync_output_volume_on_music_connect
             )
         self.app.music_backend.on_connection_change(
-            self.app.playback_coordinator.publish_availability_change
+            self.app.playback_coordinator.handle_availability_change
         )
         self.logger.info("  Music callbacks registered")
 

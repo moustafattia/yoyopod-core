@@ -170,6 +170,22 @@ class _FakeVoipManager:
         self.message_failure_callback = callback
 
 
+class _FakeMusicBackend:
+    def __init__(self) -> None:
+        self.track_callback = None
+        self.playback_state_callback = None
+        self.connection_change_callback = None
+
+    def on_track_change(self, callback) -> None:
+        self.track_callback = callback
+
+    def on_playback_state_change(self, callback) -> None:
+        self.playback_state_callback = callback
+
+    def on_connection_change(self, callback) -> None:
+        self.connection_change_callback = callback
+
+
 class _FakeCallCoordinator:
     def handle_incoming_call(self, *_args) -> None:
         return None
@@ -178,6 +194,17 @@ class _FakeCallCoordinator:
         return None
 
     def handle_registration_change(self, *_args) -> None:
+        return None
+
+    def handle_availability_change(self, *_args) -> None:
+        return None
+
+
+class _FakePlaybackCoordinator:
+    def handle_track_change(self, *_args) -> None:
+        return None
+
+    def handle_playback_state_change(self, *_args) -> None:
         return None
 
     def handle_availability_change(self, *_args) -> None:
@@ -313,3 +340,35 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     assert voip_manager.message_received_callback is voice_note_events.handle_voice_note_activity_changed
     assert voip_manager.message_delivery_callback is voice_note_events.handle_voice_note_activity_changed
     assert voip_manager.message_failure_callback is voice_note_events.handle_voice_note_failure
+
+
+def test_setup_music_callbacks_bind_direct_playback_handlers() -> None:
+    """Music callbacks should wire straight to playback handlers on main-thread delivery."""
+
+    music_backend = _FakeMusicBackend()
+    playback_coordinator = _FakePlaybackCoordinator()
+    audio_volume_controller = SimpleNamespace(
+        sync_output_volume_on_music_connect=lambda *_args: None
+    )
+    app = SimpleNamespace(
+        music_backend=music_backend,
+        playback_coordinator=playback_coordinator,
+        audio_volume_controller=audio_volume_controller,
+    )
+    wiring = WiringBoot(
+        app,
+        logger=SimpleNamespace(
+            info=lambda *_args, **_kwargs: None,
+            warning=lambda *_args, **_kwargs: None,
+        ),
+    )
+    wiring.ensure_coordinators = lambda: None
+
+    wiring.setup_music_callbacks()
+
+    assert music_backend.track_callback.__name__ == "handle_track_change"
+    assert music_backend.playback_state_callback.__name__ == "handle_playback_state_change"
+    assert (
+        music_backend.connection_change_callback.__name__
+        == "handle_availability_change"
+    )
