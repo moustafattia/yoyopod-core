@@ -17,6 +17,8 @@ from yoyopod.integrations.cloud.handlers import (
     seed_cloud_state,
     sync_now,
 )
+from yoyopod.integrations.cloud.manager import CloudManager
+from yoyopod.integrations.cloud.models import CloudAccessToken, CloudStatusSnapshot
 
 
 @dataclass(slots=True)
@@ -160,7 +162,10 @@ class _DisabledMqttClient:
 
 
 __all__ = [
+    "CloudAccessToken",
     "CloudIntegration",
+    "CloudManager",
+    "CloudStatusSnapshot",
     "PublishTelemetryCommand",
     "SyncNowCommand",
     "setup",

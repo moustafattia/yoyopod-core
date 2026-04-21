@@ -14,12 +14,12 @@ from yoyopod.audio import (
     OutputVolumeController,
     RecentTrackHistoryStore,
 )
-from yoyopod.cloud import CloudManager
 from yoyopod.communication.calling.history import CallHistoryStore
 from yoyopod.communication.calling.manager import VoIPManager
 from yoyopod.communication.models import VoIPConfig
 from yoyopod.config import ConfigManager
 from yoyopod.device import AudioDeviceCatalog
+from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
 from yoyopod.network import NetworkManager
 from yoyopod.power.manager import PowerManager

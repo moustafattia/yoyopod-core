@@ -27,6 +27,9 @@ from yoyopod.core.runtime_state import VoiceState as CoreVoiceState
 from yoyopod.core.setup_contract import (
     RUNTIME_REQUIRED_CONFIG_FILES as CORE_RUNTIME_REQUIRED_CONFIG_FILES,
 )
+from yoyopod.backends.cloud import CloudClientError as BackendCloudClientError
+from yoyopod.backends.cloud import CloudDeviceClient as BackendCloudDeviceClient
+from yoyopod.backends.cloud import DeviceMqttClient as BackendDeviceMqttClient
 from yoyopod.integrations.contacts.cloud_sync import (
     build_cloud_contact as ContactsBuildCloudContact,
 )
@@ -39,11 +42,22 @@ from yoyopod.integrations.contacts.models import (
     contacts_from_mapping as contacts_from_mapping_new,
 )
 from yoyopod.integrations.contacts.models import contacts_to_mapping as contacts_to_mapping_new
+from yoyopod.integrations.cloud.manager import CloudManager as IntegrationCloudManager
+from yoyopod.integrations.cloud.models import CloudAccessToken as IntegrationCloudAccessToken
+from yoyopod.integrations.cloud.models import (
+    CloudStatusSnapshot as IntegrationCloudStatusSnapshot,
+)
 from yoyopod.runtime_state import PlaybackQueue as RuntimeStatePlaybackQueue
 from yoyopod.runtime_state import Track as RuntimeStateTrack
 from yoyopod.event_bus import EventBus, EventHandler
 from yoyopod.events import CallState, RegistrationState, Track, TrackChangedEvent
 from yoyopod.fsm import MusicFSM
+from yoyopod.cloud import CloudAccessToken as LegacyCloudAccessToken
+from yoyopod.cloud import CloudClientError as LegacyCloudClientError
+from yoyopod.cloud import CloudDeviceClient as LegacyCloudDeviceClient
+from yoyopod.cloud import CloudManager as LegacyCloudManager
+from yoyopod.cloud import CloudStatusSnapshot as LegacyCloudStatusSnapshot
+from yoyopod.cloud import DeviceMqttClient as LegacyDeviceMqttClient
 from yoyopod.people import Contact as LegacyContact
 from yoyopod.people import PeopleDirectory as LegacyPeopleDirectory
 from yoyopod.people import PeopleManager as LegacyPeopleManager
@@ -90,6 +104,17 @@ def test_legacy_people_import_paths_resolve_to_relocated_contacts_symbols() -> N
     assert legacy_build_cloud_contact is ContactsBuildCloudContact
     assert legacy_contacts_from_mapping is contacts_from_mapping_new
     assert legacy_contacts_to_mapping is contacts_to_mapping_new
+
+
+def test_legacy_cloud_import_paths_resolve_to_relocated_cloud_symbols() -> None:
+    """Legacy cloud imports should keep pointing at the new cloud ownership seams."""
+
+    assert LegacyCloudAccessToken is IntegrationCloudAccessToken
+    assert LegacyCloudStatusSnapshot is IntegrationCloudStatusSnapshot
+    assert LegacyCloudClientError is BackendCloudClientError
+    assert LegacyCloudDeviceClient is BackendCloudDeviceClient
+    assert LegacyDeviceMqttClient is BackendDeviceMqttClient
+    assert LegacyCloudManager is IntegrationCloudManager
 
 
 def test_demo_entrypoints_keep_importing_legacy_shims(monkeypatch) -> None:

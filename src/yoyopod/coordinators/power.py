@@ -14,9 +14,6 @@ from yoyopod.coordinators.registry import CoordinatorRuntime
 from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
 from yoyopod.power.events import (
-    GracefulShutdownCancelled,
-    GracefulShutdownRequested,
-    LowBatteryWarningRaised,
     PowerAvailabilityChanged,
     PowerSnapshotUpdated,
 )
@@ -24,7 +21,7 @@ from yoyopod.power.models import PowerSnapshot
 from yoyopod.power.policies import PowerSafetyPolicy
 
 if TYPE_CHECKING:
-    from yoyopod.cloud import CloudManager
+    from yoyopod.integrations.cloud.manager import CloudManager
 
 
 class PowerCoordinator:

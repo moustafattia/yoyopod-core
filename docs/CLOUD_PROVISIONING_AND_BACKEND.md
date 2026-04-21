@@ -12,7 +12,8 @@ It covers:
 
 When this file and older plans disagree, trust the current code in:
 
-- `src/yoyopod/cloud/`
+- `src/yoyopod/integrations/cloud/`
+- `src/yoyopod/backends/cloud/`
 - `src/yoyopod/runtime/`
 - `src/yoyopod/coordinators/power.py`
 
@@ -37,14 +38,14 @@ This subsystem does not own parent claiming UX. Claiming is a backend and dashbo
 
 Current core files:
 
-- [src/yoyopod/cloud/manager.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/manager.py)
-- [src/yoyopod/cloud/client.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/client.py)
-- [src/yoyopod/cloud/mqtt_client.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/mqtt_client.py)
-- [src/yoyopod/cloud/models.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/models.py)
-- [src/yoyopod/config/models.py](/home/raouf/YoyoPod_Core/src/yoyopod/config/models.py)
-- [src/yoyopod/runtime/boot.py](/home/raouf/YoyoPod_Core/src/yoyopod/runtime/boot.py)
-- [src/yoyopod/runtime/loop.py](/home/raouf/YoyoPod_Core/src/yoyopod/runtime/loop.py)
-- [src/yoyopod/coordinators/power.py](/home/raouf/YoyoPod_Core/src/yoyopod/coordinators/power.py)
+- [src/yoyopod/integrations/cloud/manager.py](../src/yoyopod/integrations/cloud/manager.py)
+- [src/yoyopod/backends/cloud/http.py](../src/yoyopod/backends/cloud/http.py)
+- [src/yoyopod/backends/cloud/mqtt.py](../src/yoyopod/backends/cloud/mqtt.py)
+- [src/yoyopod/integrations/cloud/models.py](../src/yoyopod/integrations/cloud/models.py)
+- [src/yoyopod/config/models.py](../src/yoyopod/config/models.py)
+- [src/yoyopod/runtime/boot.py](../src/yoyopod/runtime/boot.py)
+- [src/yoyopod/runtime/loop.py](../src/yoyopod/runtime/loop.py)
+- [src/yoyopod/coordinators/power.py](../src/yoyopod/coordinators/power.py)
 
 Current architecture:
 
@@ -147,7 +148,7 @@ This lets the device start with cached config even before reaching the backend.
 
 Current HTTP client:
 
-- [src/yoyopod/cloud/client.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/client.py)
+- [src/yoyopod/backends/cloud/http.py](../src/yoyopod/backends/cloud/http.py)
 
 Current operations:
 
@@ -227,7 +228,7 @@ So remote config is not just cached; parts of it are actively enforced into the 
 
 Current MQTT implementation:
 
-- [src/yoyopod/cloud/mqtt_client.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/mqtt_client.py)
+- [src/yoyopod/backends/cloud/mqtt.py](../src/yoyopod/backends/cloud/mqtt.py)
 
 Current topic usage:
 
@@ -289,8 +290,8 @@ Heartbeat is currently emitted:
 
 Relevant references:
 
-- [src/yoyopod/cloud/manager.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/manager.py)
-- [src/yoyopod/runtime/screen_power.py](/home/raouf/YoyoPod_Core/src/yoyopod/runtime/screen_power.py)
+- [src/yoyopod/integrations/cloud/manager.py](../src/yoyopod/integrations/cloud/manager.py)
+- [src/yoyopod/runtime/screen_power.py](../src/yoyopod/runtime/screen_power.py)
 
 ### Connectivity change awareness
 
@@ -368,14 +369,14 @@ The dashboard then reads stored backend state back over REST.
 
 If you change the device/backend integration, review these together:
 
-- [src/yoyopod/cloud/manager.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/manager.py)
-- [src/yoyopod/cloud/client.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/client.py)
-- [src/yoyopod/cloud/mqtt_client.py](/home/raouf/YoyoPod_Core/src/yoyopod/cloud/mqtt_client.py)
-- [src/yoyopod/config/models.py](/home/raouf/YoyoPod_Core/src/yoyopod/config/models.py)
-- [src/yoyopod/runtime/boot.py](/home/raouf/YoyoPod_Core/src/yoyopod/runtime/boot.py)
-- [src/yoyopod/runtime/loop.py](/home/raouf/YoyoPod_Core/src/yoyopod/runtime/loop.py)
-- [src/yoyopod/coordinators/power.py](/home/raouf/YoyoPod_Core/src/yoyopod/coordinators/power.py)
-- [tests/test_cloud_config_manager.py](/home/raouf/YoyoPod_Core/tests/test_cloud_config_manager.py)
+- [src/yoyopod/integrations/cloud/manager.py](../src/yoyopod/integrations/cloud/manager.py)
+- [src/yoyopod/backends/cloud/http.py](../src/yoyopod/backends/cloud/http.py)
+- [src/yoyopod/backends/cloud/mqtt.py](../src/yoyopod/backends/cloud/mqtt.py)
+- [src/yoyopod/config/models.py](../src/yoyopod/config/models.py)
+- [src/yoyopod/runtime/boot.py](../src/yoyopod/runtime/boot.py)
+- [src/yoyopod/runtime/loop.py](../src/yoyopod/runtime/loop.py)
+- [src/yoyopod/coordinators/power.py](../src/yoyopod/coordinators/power.py)
+- [tests/test_cloud_config_manager.py](../tests/test_cloud_config_manager.py)
 
 Pair those with:
 

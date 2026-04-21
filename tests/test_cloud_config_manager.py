@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import yoyopod.cloud.manager as cloud_manager_module
-from yoyopod.cloud.client import CloudClientError
-from yoyopod.cloud.manager import CloudManager
-from yoyopod.cloud.models import CloudAccessToken
+import yoyopod.integrations.cloud.manager as cloud_manager_module
+from yoyopod.backends.cloud import CloudClientError
+from yoyopod.integrations.cloud.manager import CloudManager
+from yoyopod.integrations.cloud.models import CloudAccessToken
 from yoyopod.config.manager import ConfigManager
 
 
