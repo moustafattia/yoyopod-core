@@ -63,7 +63,7 @@ The file references below were captured at the time of writing. Their links have
 
 - [tests/config/test_config_models.py](../tests/config/test_config_models.py)
 - [tests/config/test_config_manager.py](../tests/config/test_config_manager.py)
-- [tests/test_screen_routing.py](../tests/test_screen_routing.py)
+- [tests/ui/test_screen_routing.py](../tests/ui/test_screen_routing.py)
 - [tests/test_output_volume.py](../tests/test_output_volume.py)
 - add new focused voice tests under `tests/`
 
@@ -298,7 +298,7 @@ Files to add or update:
 
 - [tests/config/test_config_models.py](../tests/config/test_config_models.py)
 - [tests/config/test_config_manager.py](../tests/config/test_config_manager.py)
-- [tests/test_screen_routing.py](../tests/test_screen_routing.py)
+- [tests/ui/test_screen_routing.py](../tests/ui/test_screen_routing.py)
 - [tests/test_output_volume.py](../tests/test_output_volume.py)
 - suggested new tests:
   - `../tests/test_voice_commands.py`

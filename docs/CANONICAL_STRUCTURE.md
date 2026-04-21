@@ -168,6 +168,10 @@ The test tree should mirror the same ownership split as `src/yoyopod/`.
   - typed config loading, composition, and validation
 - `tests/cli/`
   - `yoyopod_cli/` command and helper coverage
+- `tests/ui/`
+  - display, input, screen, and LVGL coverage for `ui/`
+- `tests/e2e/`
+  - cross-domain orchestration and soak-style behavior checks
 - `tests/fixtures/`
   - shared fakes, builders, and reusable test helpers
 

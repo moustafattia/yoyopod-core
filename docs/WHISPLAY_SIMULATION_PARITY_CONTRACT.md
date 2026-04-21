@@ -137,7 +137,7 @@ Small anti-aliasing or color differences can be tolerated. Geometry drift should
   - should become a Whisplay preview surface, not an independently evolving layout engine
 - `src/yoyopod/ui/lvgl_binding/`
   - candidate home for off-screen or mirrored LVGL preview support
-- `tests/test_display.py`
+- `tests/ui/test_display.py`
 - `tests/test_remaining_lvgl_views.py`
 - future screenshot parity tests under `tests/`
 

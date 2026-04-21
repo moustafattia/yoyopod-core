@@ -138,7 +138,7 @@ Then add any focused commands relevant to your area, for example:
 
 ```bash
 python -m compileall src/yoyopod tests demos scripts
-uv run pytest -q tests/test_app_orchestration.py
+uv run pytest -q tests/e2e/test_app_orchestration.py
 uv run pytest -q tests/cli/test_setup_cli.py tests/cli/test_cli.py
 ```
 

@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 SHIM_PATH = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[2]
     / "src"
     / "yoyopod"
     / "ui"
