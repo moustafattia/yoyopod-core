@@ -107,6 +107,12 @@ def test_double_tap_select_attribute_tracks_state_machine_configuration() -> Non
 
     assert adapter.double_tap_select_enabled is True
 
+    adapter.double_tap_select_enabled = False
+
+    assert adapter.double_tap_select_enabled is False
+    assert adapter.state.double_tap_select_enabled is False
+    assert InputAction.SELECT not in adapter.get_capabilities()
+
     adapter.set_double_tap_select_enabled(False)
 
     assert adapter.double_tap_select_enabled is False

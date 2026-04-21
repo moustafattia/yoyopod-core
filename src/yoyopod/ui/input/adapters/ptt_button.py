@@ -142,7 +142,7 @@ class PTTInputAdapter(InputHAL):
 
     def set_double_tap_select_enabled(self, enabled: bool) -> None:
         """Enable or disable delayed double-tap select for one-button navigation."""
-        self._state_machine.set_double_tap_select_enabled(enabled)
+        self.double_tap_select_enabled = bool(enabled)
 
     @property
     def enable_navigation(self) -> bool:
