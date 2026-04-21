@@ -59,19 +59,19 @@ class WiringBoot:
             self.app.call_coordinator.handle_availability_change
         )
         self.app.voip_manager.on_message_summary_change(
-            self.app.voice_note_events.handle_voice_note_summary_changed
+            self.app.handle_voice_note_summary_changed
         )
         self.app.voip_manager.on_message_received(
-            self.app.voice_note_events.handle_voice_note_activity_changed
+            self.app.handle_voice_note_activity_changed
         )
         self.app.voip_manager.on_message_delivery_change(
-            self.app.voice_note_events.handle_voice_note_activity_changed
+            self.app.handle_voice_note_activity_changed
         )
         self.app.voip_manager.on_message_failure(
-            self.app.voice_note_events.handle_voice_note_failure
+            self.app.handle_voice_note_failure
         )
         self.refresh_talk_summary()
-        self.app.voice_note_events.sync_active_voice_note_context()
+        self.app.sync_active_voice_note_context()
         self.logger.info("  VoIP callbacks registered")
 
     def setup_music_callbacks(self) -> None:

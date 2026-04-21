@@ -60,7 +60,7 @@ class RecoverySupervisor:
             return
 
         if self.app.network_manager is not None:
-            self.app.network_events.sync_network_context_from_manager()
+            self.app.sync_network_context_from_manager()
             if self.app.cloud_manager is not None:
                 self.app.cloud_manager.note_network_change(
                     connected=self.app.network_manager.is_online

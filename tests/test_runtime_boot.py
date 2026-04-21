@@ -320,7 +320,10 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     app = SimpleNamespace(
         voip_manager=voip_manager,
         call_coordinator=call_coordinator,
-        voice_note_events=voice_note_events,
+        handle_voice_note_summary_changed=voice_note_events.handle_voice_note_summary_changed,
+        handle_voice_note_activity_changed=voice_note_events.handle_voice_note_activity_changed,
+        handle_voice_note_failure=voice_note_events.handle_voice_note_failure,
+        sync_active_voice_note_context=voice_note_events.sync_active_voice_note_context,
         context=None,
         call_history_store=None,
     )
