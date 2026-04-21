@@ -1,4 +1,4 @@
-# Runtime Event Flow and Coordinator Ownership
+# Runtime Event Flow and Main-Thread Ownership
 
 **Last updated:** 2026-04-21  
 **Status:** Current implementation on `main`
@@ -9,14 +9,14 @@ It is intentionally descriptive, not aspirational. If code and docs disagree, tr
 
 ## Big picture
 
-The runtime has one coordinator thread, centered on `YoyoPodApp`.
+The runtime has one main thread, centered on `YoyoPodApp`.
 
 Background or device-facing code does not usually mutate UI state directly. Instead, it either:
 
 1. schedules a main-thread task through `MainThreadScheduler`, or
 2. publishes a typed event onto `Bus` from already-main-thread code.
 
-`RuntimeLoopService.run_iteration()` then drains scheduler tasks first, drains bus events second, and lets the extracted coordinators update FSM state, screens, and shared context.
+`RuntimeLoopService.run_iteration()` then drains scheduler tasks first, drains bus events second, and lets the extracted runtime owners update FSM state, screens, and shared context.
 
 ## Dispatch rules
 
@@ -26,7 +26,7 @@ That means background timing follows one rule:
 
 - backend callbacks schedule their handling through `MainThreadScheduler`
 - scheduled handlers may then publish typed events onto `Bus`
-- the next coordinator iteration drains scheduler tasks before it drains bus events
+- the next main-thread iteration drains scheduler tasks before it drains bus events
 
 This is the real current behavior, not an implementation detail to ignore while debugging.
 
@@ -40,19 +40,19 @@ Owns:
 - the shared `MainThreadScheduler`
 - shared managers, screens, FSM instances, and runtime services
 - app-level event handlers that still write directly into `AppContext`
-- the coordinator-thread loop through `RuntimeLoopService`
+- the main-thread loop through `RuntimeLoopService`
 
-`YoyoPodApp` is still the highest-level owner of runtime behavior. The extracted coordinators reduce pressure on it, but it still carries cross-cutting responsibilities for screen-change events, network events, shutdown, recovery, and some voice-note updates.
+`YoyoPodApp` is still the highest-level owner of runtime behavior. The extracted runtime owners reduce pressure on it, but it still carries cross-cutting responsibilities for network events, shutdown, recovery, and some voice-note updates.
 
 ### `RuntimeBootService`
 
 Owns:
 - boot-time wiring
 - constructing `AppStateRuntime`
-- binding backend callbacks to event publishers
-- binding extracted coordinators to the `Bus`
+- constructing `CallRuntime` and `MusicRuntime`
+- binding backend callbacks to runtime handlers and event publishers
 
-This is where the app decides which backend signals become typed runtime events.
+This is where the app decides which backend signals become typed runtime events and which runtime helpers exist around the initialized managers and screens.
 
 Canonical owner:
 - `src/yoyopod/core/bootstrap/`
@@ -65,7 +65,7 @@ Owns:
 - calling recovery, power-runtime, shutdown, LVGL, and periodic screen refresh work in a stable order
 
 This service is the bridge between queued background work and deterministic main-thread handling.
-Current fairness protections are intentionally local to this service: each coordinator
+Current fairness protections are intentionally local to this service: each main-thread
 iteration drains at most 4 queued scheduler tasks and 8 queued `Bus` items before it
 continues into protected VoIP, LVGL, watchdog, and power spans, and pending generic
 work keeps the loop on a 10 ms cadence instead of collapsing into a zero-sleep spin.
@@ -80,9 +80,9 @@ Owns:
 - base UI state vs call/music overlay state
 - shared derived state such as VoIP readiness and the latest power snapshot
 
-It does not listen to events itself. It is the shared derived-state authority used by the coordinators, not a bag of screen/backend/config references.
+It does not listen to events itself. It is the shared derived-state authority used by the runtime owners, not a bag of screen/backend/config references.
 
-### `CallCoordinator`
+### `CallRuntime`
 
 Owns:
 - translating VoIP runtime events into call FSM transitions
@@ -91,7 +91,7 @@ Owns:
 - VoIP readiness state in `AppStateRuntime`
 - call-history persistence at call end
 
-### `PlaybackCoordinator`
+### `MusicRuntime`
 
 Owns:
 - translating music backend events into music FSM transitions
@@ -99,20 +99,20 @@ Owns:
 - recording recent tracks
 - handling music backend availability loss
 
-### `PowerCoordinator`
+### `PowerRuntimeService`
 
 Owns:
 - applying new power snapshots to runtime and `AppContext`
 - refreshing visible power-related UI
 - running `PowerSafetyPolicy` and publishing resulting power events
 
-### `ScreenCoordinator`
+### `ScreenManager`
 
-Owns only small screen-stack and render helpers:
+Owns screen navigation plus the small screen-stack and render helpers used by the domain runtimes:
 - push/pop call screens
 - refresh visible screens when other coordinators decide they should change
 
-It is a UI helper, not a routing authority.
+It is a UI helper and routing authority for screens, not a domain-behavior owner.
 
 ### `ScreenPowerService`
 
@@ -141,7 +141,7 @@ Canonical owner:
 Owns:
 - periodic power polling
 - watchdog start/feed/disable cadence
-- queueing PiSugar I/O off the coordinator thread when needed
+- queueing PiSugar I/O off the main thread when needed
 
 ### `NetworkManager`
 
@@ -149,7 +149,7 @@ Owns:
 - modem backend lifecycle
 - publishing network events (`PPP`, signal, GPS, modem-ready)
 
-Today it does **not** have an extracted `NetworkCoordinator`. `YoyoPodApp` still handles those events directly.
+Today it does **not** have a separate network runtime class. `YoyoPodApp` still handles those events directly through app-level subscriptions.
 
 ## Core event pipeline
 
@@ -167,12 +167,12 @@ Examples:
 The common pattern is:
 - boot wiring registers backend callbacks in `RuntimeBootService`
 - those callbacks schedule handling through `app.scheduler.run_on_main(...)`
-- the scheduled handler calls `publish_*()` methods on a coordinator or service
-- those handlers publish typed events onto `Bus` from the coordinator thread
+- the scheduled handler calls runtime or service methods on the main thread
+- those handlers publish typed events onto `Bus` from the main thread
 
 This means background threads can report state changes without touching UI objects directly.
 
-## 3. `RuntimeLoopService` drains work on the coordinator thread
+## 3. `RuntimeLoopService` drains work on the main thread
 
 `RuntimeLoopService.process_pending_main_thread_actions()` does two things in order:
 - drains queued scheduler tasks from `MainThreadScheduler`
@@ -189,18 +189,18 @@ queued work quickly.
 ## 4. Event handlers mutate runtime state and UI
 
 Handlers live in two places today:
-- extracted coordinators (`CallCoordinator`, `PlaybackCoordinator`, `PowerCoordinator`)
-- `YoyoPodApp` and runtime services for still-centralized concerns like network and screen-power bookkeeping
+- extracted runtime owners (`CallRuntime`, `MusicRuntime`, `PowerRuntimeService`)
+- `YoyoPodApp`, `ScreenManager`, and runtime services for still-centralized concerns like network and screen-power bookkeeping
 
 ## Important flows
 
 ### Incoming call flow
 
 1. `VoIPManager` invokes the callback registered by `RuntimeBootService.setup_voip_callbacks()`.
-2. That callback schedules `CallCoordinator.publish_incoming_call()` onto the main thread.
-3. `CallCoordinator` publishes `IncomingCallEvent` onto `Bus`.
-4. `RuntimeLoopService` drains the event on the coordinator thread.
-5. `CallCoordinator.handle_incoming_call()`:
+2. That callback schedules `CallRuntime.handle_incoming_call()` onto the main thread.
+3. `CallRuntime` publishes `IncomingCallEvent` onto `Bus` as needed for other subscribers.
+4. `RuntimeLoopService` drains the event on the main thread.
+5. `CallRuntime.handle_incoming_call()`:
    - guards against duplicate handling
    - records an in-progress call session
    - pauses music if playback is active
@@ -209,54 +209,54 @@ Handlers live in two places today:
    - pushes `IncomingCallScreen`
    - starts the ring tone
 
-Ownership: call behavior belongs to `CallCoordinator`; derived app state belongs to `AppStateRuntime`; actual screen stack mutations happen through `ScreenCoordinator`.
+Ownership: call behavior belongs to `CallRuntime`; derived app state belongs to `AppStateRuntime`; actual screen stack mutations happen through `ScreenManager`.
 
 ### Call state change flow
 
 1. `VoIPManager` reports `CallState`.
-2. `CallCoordinator.publish_call_state_events()` publishes the call-domain events now owned by `src/yoyopod/integrations/call/events.py`: `CallStateChangedEvent`, and `CallEndedEvent` for `RELEASED`.
-3. The coordinator-thread drain calls `CallCoordinator.handle_call_state_change()` or `handle_call_ended()`.
+2. `CallRuntime` publishes the call-domain events owned by `src/yoyopod/integrations/call/events.py`: `CallStateChangedEvent`, and `CallEndedEvent` for `RELEASED`.
+3. The main-thread drain calls `CallRuntime.handle_call_state_change()` or `handle_call_ended()`.
 4. Those methods update the call FSM, derived app state, call screens, call history, and optional music resume.
 
-Notable ownership detail: `CallCoordinator` directly decides music pause/resume around calls through `CallInterruptionPolicy`, so call orchestration currently owns one of the main cross-domain behaviors.
+Notable ownership detail: `CallRuntime` directly decides music pause/resume around calls through `CallInterruptionPolicy`, so call orchestration currently owns one of the main cross-domain behaviors.
 
 ### Playback change flow
 
 1. `MpvBackend` invokes callbacks registered in `RuntimeBootService.setup_music_callbacks()`.
-2. `PlaybackCoordinator.publish_track_change()` or `publish_playback_state_change()` publishes the music-domain events now owned by `src/yoyopod/integrations/music/events.py`.
+2. `MusicRuntime.handle_track_change()` or `handle_playback_state_change()` publishes the music-domain events now owned by `src/yoyopod/integrations/music/events.py` when other subscribers need them.
 3. Those callbacks arrive from the mpv IPC dispatch thread, so boot wiring schedules them onto the main thread before they publish onto `Bus`.
-4. The coordinator-thread drain calls `PlaybackCoordinator.handle_track_change()` or `handle_playback_state_change()`.
-5. `PlaybackCoordinator` updates the music-domain `MusicFSM`, re-derives app state, records recents, and refreshes the now-playing screen.
+4. The main-thread drain calls `MusicRuntime.handle_track_change()` or `handle_playback_state_change()`.
+5. `MusicRuntime` updates the music-domain `MusicFSM`, re-derives app state, records recents, and refreshes the now-playing screen.
 
-Ownership: playback truth comes from the music backend; playback interpretation for app state belongs to `PlaybackCoordinator` plus `AppStateRuntime`.
+Ownership: playback truth comes from the music backend; playback interpretation for app state belongs to `MusicRuntime` plus `AppStateRuntime`.
 
 ### Power snapshot flow
 
 1. `PowerRuntimeService.poll_status()` fetches a snapshot from `PowerManager`.
-2. It calls `PowerCoordinator.publish_snapshot()` and, on availability transitions, `publish_availability_change()`.
-3. `PowerCoordinator.handle_snapshot_updated()`:
+2. It queues the completion back onto the main thread.
+3. `PowerRuntimeService.handle_snapshot_updated()`:
    - stores the snapshot in `AppStateRuntime`
    - updates `AppContext`
    - refreshes visible UI when user-visible data changed
    - runs `PowerSafetyPolicy`
-   - republishes policy outputs like low-battery warnings or graceful shutdown requests
+   - publishes policy outputs like low-battery warnings or graceful shutdown requests
 
-Ownership: power telemetry and safety evaluation are centralized in `PowerCoordinator`, but overlay rendering and shutdown execution remain in `ScreenPowerService` and `core.shutdown.ShutdownLifecycleService`.
+Ownership: power telemetry, safety evaluation, and power availability handling are centralized in `PowerRuntimeService`, while overlay rendering and shutdown execution remain in `ScreenPowerService` and `core.shutdown.ShutdownLifecycleService`.
 
 ### Screen change and user activity flow
 
 1. Input adapters fire semantic actions into `InputManager`.
 2. `ScreenManager` dispatches the action to the active screen.
 3. On LVGL paths, `ScreenManager` uses `action_scheduler` to queue the action onto the coordinator thread before it runs.
-4. If navigation changes the visible route, `ScreenManager.on_screen_changed` calls `YoyoPodApp._handle_screen_changed()`.
-5. That method publishes `ScreenChangedEvent`.
+4. If navigation changes the visible route, `ScreenManager.on_screen_changed` schedules `ScreenChangedEvent` publication through the app scheduler.
+5. `ScreenPowerService` and other app-level subscribers react to that event on the main thread.
 6. `ScreenPowerService.handle_screen_changed_event()`:
-   - syncs base UI state through `YoyoPodApp._sync_screen_changed()` and `AppStateRuntime.sync_ui_state_for_screen()`
+   - syncs base UI state through `AppStateRuntime.sync_ui_state_for_screen()`
    - marks user activity so the display stays awake
 
 Input activity separately publishes `UserActivityEvent`, which `ScreenPowerService` uses to track idle time and wake the display.
 
-Ownership: route-change bookkeeping is split. `ScreenManager` knows when the route changed, `YoyoPodApp` republishes it, `ScreenPowerService` handles the event, and `AppStateRuntime` owns the resulting base UI state.
+Ownership: route-change bookkeeping is split. `ScreenManager` knows when the route changed, the app scheduler republishes it, `ScreenPowerService` handles the event, and `AppStateRuntime` owns the resulting base UI state.
 
 ### Network status flow
 

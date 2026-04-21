@@ -38,7 +38,7 @@ from yoyopod.integrations.music.library import LocalLibraryItem, LocalMusicServi
 
 if TYPE_CHECKING:
     from yoyopod.backends.music import MusicBackend, MusicConfig, Track
-    from yoyopod.integrations.music.coordinator import PlaybackCoordinator
+    from yoyopod.integrations.music.runtime import MusicRuntime
 
 
 @dataclass(slots=True)
@@ -52,7 +52,7 @@ class MusicIntegration:
 
 
 __all__ = [
-    "PlaybackCoordinator",
+    "MusicRuntime",
     "LoadPlaylistCommand",
     "LocalLibraryItem",
     "LocalMusicService",
@@ -85,10 +85,10 @@ def __getattr__(name: str) -> Any:
         from yoyopod.integrations.music.fsm import MusicFSM, MusicState
 
         return {"MusicFSM": MusicFSM, "MusicState": MusicState}[name]
-    if name == "PlaybackCoordinator":
-        from yoyopod.integrations.music.coordinator import PlaybackCoordinator
+    if name == "MusicRuntime":
+        from yoyopod.integrations.music.runtime import MusicRuntime
 
-        return PlaybackCoordinator
+        return MusicRuntime
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

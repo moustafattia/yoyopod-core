@@ -1,6 +1,4 @@
-"""
-Call-event coordination for YoyoPod.
-"""
+"""Live call-runtime orchestration for YoyoPod."""
 
 from __future__ import annotations
 
@@ -8,7 +6,6 @@ from typing import TYPE_CHECKING, Callable
 
 from loguru import logger
 
-from yoyopod.core import Bus
 from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.call import (
     CallHistoryStore,
@@ -19,7 +16,7 @@ from yoyopod.integrations.call import (
     RegistrationState,
     sync_context_voip_status,
 )
-from yoyopod.ui.screens.coordinator import ScreenCoordinator
+from yoyopod.ui.screens.manager import ScreenManager
 
 if TYPE_CHECKING:
     from yoyopod.backends.music import MusicBackend
@@ -27,13 +24,13 @@ if TYPE_CHECKING:
     from yoyopod.core import AppContext
 
 
-class CallCoordinator:
-    """Own VoIP event publishing and main-thread call orchestration."""
+class CallRuntime:
+    """Own main-thread call orchestration for the live runtime."""
 
     def __init__(
         self,
         runtime: AppStateRuntime,
-        screen_coordinator: ScreenCoordinator,
+        screen_manager: ScreenManager | None,
         auto_resume_after_call: bool,
         config_manager: "ConfigManager | None",
         context: "AppContext | None",
@@ -43,7 +40,7 @@ class CallCoordinator:
         initial_voip_registered: bool = False,
     ) -> None:
         self.runtime = runtime
-        self.screen_coordinator = screen_coordinator
+        self.screen_manager = screen_manager
         self.auto_resume_after_call = auto_resume_after_call
         self.config_manager = config_manager
         self.context = context
@@ -53,36 +50,6 @@ class CallCoordinator:
         self.voip_registered = initial_voip_registered
         self._ringer = CallRinger()
         self._session_tracker = CallSessionTracker(call_history_store)
-
-    def bind(self, event_bus: Bus) -> None:
-        """Retain the legacy bind hook for boot compatibility."""
-
-        del event_bus
-
-    def publish_incoming_call(self, caller_address: str, caller_name: str) -> None:
-        """Compatibility wrapper over the direct incoming-call handler."""
-
-        self.handle_incoming_call(caller_address, caller_name)
-
-    def publish_call_state_events(self, state: CallState) -> None:
-        """Compatibility wrapper over the direct call-state handler."""
-
-        self.handle_call_state_change(state)
-
-    def publish_registration_change(self, state: RegistrationState) -> None:
-        """Compatibility wrapper over the direct registration handler."""
-
-        self.handle_registration_change(state)
-
-    def publish_availability_change(
-        self,
-        available: bool,
-        reason: str = "",
-        registration_state: RegistrationState = RegistrationState.NONE,
-    ) -> None:
-        """Compatibility wrapper over the direct availability handler."""
-
-        self.handle_availability_change(available, reason, registration_state)
 
     def start_ringing(self) -> None:
         """Start playing the ring tone for an incoming call."""
@@ -120,7 +87,7 @@ class CallCoordinator:
             session = self._session_tracker.ensure_outgoing_call(self._current_caller_info())
             self.runtime.call_fsm.transition("dial")
             self.runtime.sync_app_state("call_outgoing")
-            self.screen_coordinator.show_outgoing_call(
+            self._show_outgoing_call(
                 session.sip_address,
                 session.display_name,
             )
@@ -139,7 +106,7 @@ class CallCoordinator:
             state_change = self.runtime.sync_app_state("call_connected")
             if state_change.entered(AppRuntimeState.CALL_ACTIVE_MUSIC_PAUSED):
                 logger.info("In call (music paused in background)")
-            self.screen_coordinator.show_in_call()
+            self._show_in_call()
             self.stop_ringing()
             return
 
@@ -167,7 +134,7 @@ class CallCoordinator:
             )
             self.stop_ringing()
             self._session_tracker.clear_pending_incoming_call()
-            self.screen_coordinator.pop_call_screens()
+            self._pop_call_screens()
             self.runtime.sync_app_state(f"call_ended:{reason}")
             return
 
@@ -176,7 +143,7 @@ class CallCoordinator:
         self.stop_ringing()
         self._session_tracker.clear_pending_incoming_call()
         self._finalize_call_history()
-        self.screen_coordinator.pop_call_screens()
+        self._pop_call_screens()
 
         should_resume = self.runtime.call_interruption_policy.should_auto_resume(
             self.auto_resume_after_call
@@ -220,7 +187,7 @@ class CallCoordinator:
         elif state == RegistrationState.FAILED:
             logger.warning("VoIP registration failed")
 
-        self.screen_coordinator.refresh_call_screen_if_visible()
+        self._refresh_call_screen_if_visible()
 
     def handle_availability_change(
         self,
@@ -241,7 +208,7 @@ class CallCoordinator:
                 running=True,
                 registration_state=registration_state,
             )
-            self.screen_coordinator.refresh_call_screen_if_visible()
+            self._refresh_call_screen_if_visible()
             return
 
         logger.warning(f"VoIP backend unavailable ({reason or 'unknown'})")
@@ -253,7 +220,7 @@ class CallCoordinator:
             registration_state=registration_state,
         )
         self.stop_ringing()
-        self.screen_coordinator.refresh_call_screen_if_visible()
+        self._refresh_call_screen_if_visible()
 
         if self.runtime.call_fsm.is_active or self._session_tracker.has_live_session:
             self.handle_call_ended(reason=reason or "unavailable")
@@ -289,7 +256,7 @@ class CallCoordinator:
             return False
 
         self.runtime.music_fsm.transition("play")
-        self.screen_coordinator.refresh_now_playing_screen()
+        self._refresh_now_playing_screen()
         return True
 
     def _present_incoming_call_if_ready(self) -> None:
@@ -302,8 +269,38 @@ class CallCoordinator:
             return
 
         caller_address, caller_name = self._session_tracker.pending_incoming_call
-        self.screen_coordinator.show_incoming_call(caller_address, caller_name)
+        self._show_incoming_call(caller_address, caller_name)
         self.start_ringing()
+
+    def _pop_call_screens(self) -> None:
+        if self.screen_manager is None:
+            return
+        self.screen_manager.pop_call_screens()
+
+    def _refresh_now_playing_screen(self) -> None:
+        if self.screen_manager is None:
+            return
+        self.screen_manager.refresh_now_playing_screen()
+
+    def _refresh_call_screen_if_visible(self) -> None:
+        if self.screen_manager is None:
+            return
+        self.screen_manager.refresh_call_screen_if_visible()
+
+    def _show_incoming_call(self, caller_address: str, caller_name: str) -> None:
+        if self.screen_manager is None:
+            return
+        self.screen_manager.show_incoming_call(caller_address, caller_name)
+
+    def _show_in_call(self) -> None:
+        if self.screen_manager is None:
+            return
+        self.screen_manager.show_in_call()
+
+    def _show_outgoing_call(self, callee_address: str, callee_name: str) -> None:
+        if self.screen_manager is None:
+            return
+        self.screen_manager.show_outgoing_call(callee_address, callee_name)
 
     def _has_live_call_state(self) -> bool:
         """Return whether the coordinator still has a live call to tear down."""

@@ -226,6 +226,74 @@ class ScreenManager:
         self.refresh_current_screen()
         return True
 
+    def pop_call_screens(self) -> None:
+        """Pop all call-related screens from the stack."""
+
+        call_route_names = {"in_call", "incoming_call", "outgoing_call"}
+        while self.current_screen is not None and self.current_screen.route_name in call_route_names:
+            self.pop_screen()
+            if not self.screen_stack:
+                break
+
+        logger.debug("Call screens cleared from stack")
+
+    def refresh_now_playing_screen(self) -> None:
+        """Refresh the now-playing screen when it is currently visible."""
+
+        if self.current_screen is None or self.current_screen.route_name != "now_playing":
+            return
+        self.current_screen.render()
+        logger.debug("  -> Now playing screen refreshed")
+
+    def refresh_call_screen_if_visible(self) -> None:
+        """Refresh the Talk root screen when it is currently visible."""
+
+        if self.current_screen is None or self.current_screen.route_name != "call":
+            return
+        self.current_screen.render()
+        logger.debug("  -> Call screen refreshed")
+
+    def show_incoming_call(self, caller_address: str, caller_name: str) -> None:
+        """Update and show the incoming-call screen."""
+
+        screen = self.screens.get("incoming_call")
+        if screen is None:
+            return
+
+        setattr(screen, "caller_address", caller_address)
+        setattr(screen, "caller_name", caller_name)
+        setattr(screen, "ring_animation_frame", 0)
+
+        if self.current_screen is not screen:
+            self.push_screen("incoming_call")
+            logger.info("  -> Pushed incoming call screen")
+
+    def show_in_call(self) -> None:
+        """Show the active in-call screen when it is not already visible."""
+
+        screen = self.screens.get("in_call")
+        if screen is None:
+            return
+
+        if self.current_screen is not screen:
+            self.push_screen("in_call")
+            logger.info("  -> Pushed in-call screen")
+
+    def show_outgoing_call(self, callee_address: str, callee_name: str) -> None:
+        """Update and show the outgoing-call screen."""
+
+        screen = self.screens.get("outgoing_call")
+        if screen is None:
+            return
+
+        setattr(screen, "callee_address", callee_address)
+        setattr(screen, "callee_name", callee_name or "Unknown")
+        setattr(screen, "ring_animation_frame", 0)
+
+        if self.current_screen is not screen:
+            self.push_screen("outgoing_call")
+            logger.info("  -> Pushed outgoing call screen")
+
     def flush_pending_navigation_refresh(self) -> bool:
         """Render one deferred LVGL navigation refresh when present."""
         if not self._navigation_refresh_pending:

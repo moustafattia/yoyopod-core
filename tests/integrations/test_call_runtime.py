@@ -1,4 +1,4 @@
-"""Focused tests for the call coordinator's config-driven status behavior."""
+"""Focused tests for the call runtime's config-driven status behavior."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from yoyopod.integrations.call import (
     CallHistoryStore,
     CallInterruptionPolicy,
 )
-from yoyopod.integrations.call.coordinator import CallCoordinator
+from yoyopod.integrations.call.runtime import CallRuntime
 from yoyopod.integrations.call.models import CallState, RegistrationState
 from yoyopod.integrations.music import MusicFSM
 
 
-class _ScreenCoordinatorStub:
-    """Small screen-coordinator double for call-coordinator tests."""
+class _ScreenManagerStub:
+    """Small screen-manager double for call-runtime tests."""
 
     def __init__(self) -> None:
         self.refresh_calls = 0
@@ -80,7 +80,7 @@ class _VoipManagerStub:
 
 
 def _build_runtime() -> AppStateRuntime:
-    """Create the minimal coordinator runtime required by CallCoordinator."""
+    """Create the minimal derived runtime required by CallRuntime."""
 
     return AppStateRuntime(
         music_fsm=MusicFSM(),
@@ -95,10 +95,10 @@ def test_registration_change_uses_config_manager_for_voip_configured_status() ->
     context = AppContext()
     config_manager = _ConfigManagerStub(sip_username="kid@example.com")
     runtime = _build_runtime()
-    screen_coordinator = _ScreenCoordinatorStub()
-    coordinator = CallCoordinator(
+    screen_manager = _ScreenManagerStub()
+    runtime_owner = CallRuntime(
         runtime=runtime,
-        screen_coordinator=screen_coordinator,
+        screen_manager=screen_manager,
         auto_resume_after_call=True,
         config_manager=config_manager,
         context=context,
@@ -106,14 +106,14 @@ def test_registration_change_uses_config_manager_for_voip_configured_status() ->
         voip_manager_provider=lambda: None,
     )
 
-    coordinator.handle_registration_change(RegistrationState.OK)
+    runtime_owner.handle_registration_change(RegistrationState.OK)
 
     assert context.voip.configured is True
     assert context.voip.ready is True
     assert context.voip.running is True
     assert context.voip.registration_state == RegistrationState.OK.value
     assert runtime.voip_ready is True
-    assert screen_coordinator.refresh_calls == 1
+    assert screen_manager.refresh_calls == 1
 
 
 def test_availability_change_uses_reported_registration_state() -> None:
@@ -122,9 +122,9 @@ def test_availability_change_uses_reported_registration_state() -> None:
     context = AppContext()
     config_manager = _ConfigManagerStub(sip_username="kid@example.com")
     runtime = _build_runtime()
-    coordinator = CallCoordinator(
+    runtime_owner = CallRuntime(
         runtime=runtime,
-        screen_coordinator=_ScreenCoordinatorStub(),
+        screen_manager=_ScreenManagerStub(),
         auto_resume_after_call=True,
         config_manager=config_manager,
         context=context,
@@ -132,7 +132,7 @@ def test_availability_change_uses_reported_registration_state() -> None:
         voip_manager_provider=lambda: None,
     )
 
-    coordinator.handle_availability_change(False, "backend_stopped", RegistrationState.NONE)
+    runtime_owner.handle_availability_change(False, "backend_stopped", RegistrationState.NONE)
 
     assert context.voip.configured is True
     assert context.voip.ready is False
@@ -147,9 +147,9 @@ def test_terminal_call_states_record_rejected_and_failed_history(tmp_path: Path)
     voip_manager = _VoipManagerStub()
     config_manager = _ConfigManagerStub(sip_username="kid@example.com")
     runtime = _build_runtime()
-    coordinator = CallCoordinator(
+    runtime_owner = CallRuntime(
         runtime=runtime,
-        screen_coordinator=_ScreenCoordinatorStub(),
+        screen_manager=_ScreenManagerStub(),
         auto_resume_after_call=True,
         config_manager=config_manager,
         context=context,
@@ -158,19 +158,19 @@ def test_terminal_call_states_record_rejected_and_failed_history(tmp_path: Path)
         call_history_store=CallHistoryStore(tmp_path / "call_history.json"),
     )
 
-    coordinator.handle_incoming_call("sip:mama@example.com", "Mama")
-    coordinator.handle_call_state_change(CallState.INCOMING)
+    runtime_owner.handle_incoming_call("sip:mama@example.com", "Mama")
+    runtime_owner.handle_call_state_change(CallState.INCOMING)
     voip_manager._pending_terminal_action = "reject"
-    coordinator.handle_call_state_change(CallState.END)
+    runtime_owner.handle_call_state_change(CallState.END)
 
     voip_manager._caller_info = {
         "address": "sip:dad@example.com",
         "name": "Dad",
         "display_name": "Dad",
     }
-    coordinator.handle_call_state_change(CallState.OUTGOING)
-    coordinator.handle_call_state_change(CallState.ERROR)
+    runtime_owner.handle_call_state_change(CallState.OUTGOING)
+    runtime_owner.handle_call_state_change(CallState.ERROR)
 
-    recent = coordinator.call_history_store.list_recent(2)  # type: ignore[union-attr]
+    recent = runtime_owner.call_history_store.list_recent(2)  # type: ignore[union-attr]
     assert recent[0].outcome == "failed"
     assert recent[1].outcome == "rejected"

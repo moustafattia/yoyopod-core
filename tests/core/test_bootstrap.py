@@ -189,7 +189,7 @@ class _FakeMusicBackend:
         self.connection_change_callbacks.append(callback)
 
 
-class _FakeCallCoordinator:
+class _FakeCallRuntime:
     def handle_incoming_call(self, *_args) -> None:
         return None
 
@@ -203,7 +203,7 @@ class _FakeCallCoordinator:
         return None
 
 
-class _FakePlaybackCoordinator:
+class _FakeMusicRuntime:
     def handle_track_change(self, *_args) -> None:
         return None
 
@@ -310,10 +310,10 @@ def test_init_core_components_refuses_whisplay_when_lvgl_backend_does_not_start(
 
 
 def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
-    """VoIP callbacks should wire straight to the coordinator handlers on main-thread delivery."""
+    """VoIP callbacks should wire straight to the call runtime handlers."""
 
     voip_manager = _FakeVoipManager()
-    call_coordinator = _FakeCallCoordinator()
+    call_runtime = _FakeCallRuntime()
     synced = {"talk": 0, "active": 0}
     voice_note_events = SimpleNamespace(
         handle_voice_note_summary_changed=lambda *_args: None,
@@ -324,7 +324,7 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     )
     app = SimpleNamespace(
         voip_manager=voip_manager,
-        call_coordinator=call_coordinator,
+        call_runtime=call_runtime,
         voice_note_events=voice_note_events,
         context=None,
         call_history_store=None,
@@ -347,7 +347,7 @@ def test_setup_music_callbacks_schedule_playback_handlers_on_main_thread() -> No
 
     music_backend = _FakeMusicBackend()
     handled: list[tuple[str, object]] = []
-    playback_coordinator = SimpleNamespace(
+    music_runtime = SimpleNamespace(
         handle_track_change=lambda track: handled.append(("track", track)),
         handle_playback_state_change=lambda state: handled.append(("state", state)),
         handle_availability_change=lambda available, reason: handled.append(
@@ -361,7 +361,7 @@ def test_setup_music_callbacks_schedule_playback_handlers_on_main_thread() -> No
     )
     app = SimpleNamespace(
         music_backend=music_backend,
-        playback_coordinator=playback_coordinator,
+        music_runtime=music_runtime,
         audio_volume_controller=audio_volume_controller,
         scheduler=SimpleNamespace(run_on_main=lambda fn: fn()),
     )
@@ -380,40 +380,16 @@ def test_setup_music_callbacks_schedule_playback_handlers_on_main_thread() -> No
     ]
 
 
-def test_bind_coordinator_events_uses_existing_runtime_owners() -> None:
-    """Event binding should use the initialized coordinators without rebuilding them."""
-
-    bindings: list[tuple[str, object]] = []
-    bus = object()
-    app = SimpleNamespace(
-        bus=bus,
-        call_coordinator=SimpleNamespace(bind=lambda bus: bindings.append(("call", bus))),
-        playback_coordinator=SimpleNamespace(
-            bind=lambda bus: bindings.append(("playback", bus))
-        ),
-        power_coordinator=SimpleNamespace(bind=lambda bus: bindings.append(("power", bus))),
-    )
-
-    RuntimeBootService(app).bind_coordinator_events()
-
-    assert bindings == [
-        ("call", bus),
-        ("playback", bus),
-        ("power", bus),
-    ]
-
-
-def test_setup_event_subscriptions_keeps_legacy_build_then_bind_flow() -> None:
-    """The compatibility alias should still ensure coordinators before binding."""
+def test_setup_event_subscriptions_keeps_legacy_runtime_helper_flow() -> None:
+    """The compatibility alias should still ensure runtime helpers."""
 
     service = RuntimeBootService(SimpleNamespace())
     calls: list[str] = []
-    service.ensure_coordinators = lambda: calls.append("ensure")
-    service.bind_coordinator_events = lambda: calls.append("bind")
+    service.ensure_runtime_helpers = lambda: calls.append("ensure")
 
     service.setup_event_subscriptions()
 
-    assert calls == ["ensure", "bind"]
+    assert calls == ["ensure"]
 
 
 def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -> None:

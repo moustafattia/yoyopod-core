@@ -1,6 +1,6 @@
 # YoyoPod - Agent Instructions
 
-Last Updated: 2026-04-20
+Last Updated: 2026-04-22
 Target Hardware: Raspberry Pi Zero 2W
 Project: iPod-inspired VoIP + local music device with small-screen button UI
 
@@ -51,7 +51,7 @@ Source-of-truth files
 - `src/yoyopod/core/bus.py`
 - `src/yoyopod/core/scheduler.py`
 - `src/yoyopod/core/events.py`
-- `src/yoyopod/core/ui_state.py`
+- `src/yoyopod/core/app_state.py`
 - `src/yoyopod/integrations/`
 - `src/yoyopod/backends/`
 - `src/yoyopod/ui/`

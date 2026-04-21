@@ -1,11 +1,10 @@
 # YoyoPod System Architecture
 
-**Last updated:** 2026-04-21
+**Last updated:** 2026-04-22
 **Status:** Current implementation
 
-This document describes the frozen target architecture the Phase A rewrite is
-converging on, while calling out where the current runtime is still in
-transition.
+This document describes the frozen architecture now implemented by the Phase A
+rewrite.
 
 ## Overview
 
@@ -40,9 +39,8 @@ The frozen end state is:
 - `src/yoyopod/ui/`: display, input, and screens
 
 `src/yoyopod/runtime/`, `src/yoyopod/coordinators/`, `src/yoyopod/audio/`,
-and the legacy domain-facade packages are now gone. The remaining migration
-surface is limited to the live dual-bus/runtime-state seams under
-`src/yoyopod/core/` plus any stale docs or test layout drift.
+and the legacy domain-facade packages are now gone. The remaining cleanup is
+mostly documentation and test-layout polish, not live runtime ownership.
 
 ## Startup And Bootstrap Flow
 
@@ -60,9 +58,9 @@ This is the startup sequence that exists on `main` today.
    - `--simulate` is parsed before the app is constructed.
 3. `main()` constructs `YoyoPodApp(config_dir="config", simulate=simulate)`.
    - The constructor does not start hardware or backend processes yet.
-- It allocates the typed `Bus`, the shared `MainThreadScheduler`, the core bootstrap service (`RuntimeBootService` from `src/yoyopod/core/bootstrap/`), the canonical coordinator-thread loop (`RuntimeLoopService` from `src/yoyopod/core/loop.py`), the remaining live services (`RuntimeRecoveryService` from `src/yoyopod/core/recovery.py`, `PowerRuntimeService` from `src/yoyopod/integrations/power/service.py`, `ShutdownLifecycleService` from `src/yoyopod/core/shutdown.py`), the canonical display-power helper (`ScreenPowerService` from `src/yoyopod/integrations/display/service.py`), and the long-lived placeholder fields for managers, screens, and shared context.
+  - It allocates the typed `Bus`, the shared `MainThreadScheduler`, the core bootstrap service (`RuntimeBootService` from `src/yoyopod/core/bootstrap/`), the canonical main-thread loop (`RuntimeLoopService` from `src/yoyopod/core/loop.py`), the remaining live services (`RuntimeRecoveryService` from `src/yoyopod/core/recovery.py`, `PowerRuntimeService` from `src/yoyopod/integrations/power/service.py`, `ShutdownLifecycleService` from `src/yoyopod/core/shutdown.py`), the canonical display-power helper (`ScreenPowerService` from `src/yoyopod/integrations/display/service.py`), and the long-lived placeholder fields for managers, screens, and shared context.
 - `RuntimeRecoveryService` now keeps VoIP/music/network recovery while `yoyopod.integrations.power.service.PowerRuntimeService` owns PiSugar polling and watchdog cadence.
-   - It also registers app-level event subscriptions on the `Bus` so later boot stages can publish typed events back onto the coordinator thread.
+- It also registers app-level event subscriptions on the `Bus` so later boot stages can publish typed events back onto the main thread.
 4. `main()` calls `app.setup()`, which delegates to `RuntimeBootService.setup()` in `src/yoyopod/core/bootstrap/`.
 5. `RuntimeBootService.setup()` currently executes boot in this order:
    1. `load_configuration()`
@@ -94,9 +92,8 @@ This is the startup sequence that exists on `main` today.
       - resolves the root route from the active interaction profile
       - pushes `hub` for one-button hardware and `menu` for the standard profile
    5. final runtime wiring
-      - builds `AppStateRuntime`, `CallCoordinator`, `PlaybackCoordinator`, `ScreenCoordinator`, and `PowerCoordinator`
+      - builds `AppStateRuntime`, `CallRuntime`, and `MusicRuntime` through `RuntimeHelpersBoot`
       - sets the initial derived UI state
-      - binds coordinator subscribers to the typed `Bus`
       - registers VoIP and music backend callbacks
       - registers power shutdown hooks
       - polls initial power state
@@ -104,10 +101,10 @@ This is the startup sequence that exists on `main` today.
 7. If setup succeeds, `main()` installs signal handlers and enters `app.run()`.
    - `SIGTERM` is translated into the same shutdown path as `Ctrl+C`.
    - `SIGUSR1` and `SIGUSR2` request screenshots on Unix targets when those signals exist.
-8. `app.run()` delegates to `RuntimeLoopService.run()`, which is the steady-state coordinator loop.
+8. `app.run()` delegates to `RuntimeLoopService.run()`, which is the steady-state main-thread loop.
    - It logs a startup status snapshot.
    - It starts the watchdog cadence.
-   - Each loop iteration drains queued scheduler tasks first, then typed bus events, pumps LVGL timers and queued input, iterates the Liblinphone backend on the coordinator thread, polls recovery and power services, and refreshes active screens on the configured cadence.
+   - Each loop iteration drains queued scheduler tasks first, then typed bus events, pumps LVGL timers and queued input, iterates the Liblinphone backend on the main thread, polls recovery and power services, and refreshes active screens on the configured cadence.
    - The outer loop adapts its next wake based on runtime state: call / recent-input paths stay fast, awake idle relaxes, and screen-off idle can relax further while still honoring the next VoIP, watchdog, power-poll, shutdown, or screen-refresh deadline.
 9. Shutdown runs through `app.stop()` and `yoyopod.core.shutdown.ShutdownLifecycleService.stop()`.
    - network, VoIP, music, and input managers are stopped
@@ -129,12 +126,12 @@ yoyopod.py / yoyopod.main
   -> YoyoPodApp
      -> RuntimeBootService
      -> RuntimeLoopService
-    -> RuntimeRecoveryService
-    -> PowerRuntimeService
-    -> integrations.display.ScreenPowerService
-      -> core.shutdown.ShutdownLifecycleService
-       -> MainThreadScheduler
-       -> Bus
+     -> RuntimeRecoveryService
+     -> PowerRuntimeService
+     -> integrations.display.ScreenPowerService
+     -> core.shutdown.ShutdownLifecycleService
+     -> MainThreadScheduler
+     -> Bus
       -> Display facade
          -> Display factory
             -> PimoroniDisplayAdapter | WhisplayDisplayAdapter | SimulationDisplayAdapter
@@ -146,7 +143,7 @@ yoyopod.py / yoyopod.main
         -> voip screens
      -> music session seam / call-session seam
       -> AppStateRuntime
-      -> CallCoordinator / PlaybackCoordinator / ScreenCoordinator / PowerCoordinator
+      -> CallRuntime / MusicRuntime
       -> AppContext
          -> focused runtime state objects (`media`, `power`, `network`, `screen`, `voip`, `talk`, `voice`)
          -> media state composes with canonical music models from `src/yoyopod/backends/music/models.py`
@@ -184,18 +181,18 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/core/app_context.py`: focused shared runtime state
 - `src/yoyopod/core/runtime_state.py`: focused runtime state objects owned by `AppContext`
 - `src/yoyopod/core/bootstrap/`: boot-time composition and manager wiring
-- `src/yoyopod/core/loop.py`: coordinator-loop scheduling and queued main-thread work
+- `src/yoyopod/core/loop.py`: main-thread loop scheduling and queued main-thread work
 - `src/yoyopod/core/recovery.py`: backend recovery supervision and retry services
 - `src/yoyopod/integrations/display/service.py`: screen wake/sleep policy and power overlays
 - `src/yoyopod/core/shutdown.py`: shutdown countdowns, hooks, and lifecycle cleanup
 - `src/yoyopod/integrations/power/service.py`: power polling and watchdog cadence
 
-### Orchestration
+### Runtime Ownership
 
-- `src/yoyopod/integrations/call/coordinator.py`: call-flow orchestration
-- `src/yoyopod/integrations/music/coordinator.py`: music-flow orchestration
-- `src/yoyopod/integrations/power/coordinator.py`: power and shutdown-related orchestration
-- `src/yoyopod/ui/screens/coordinator.py`: screen refresh and call-screen updates
+- `src/yoyopod/integrations/call/runtime.py`: call-flow orchestration and screen transitions
+- `src/yoyopod/integrations/music/runtime.py`: playback-flow orchestration and now-playing refreshes
+- `src/yoyopod/integrations/power/service.py`: power polling, power snapshot application, watchdog cadence, and safety-policy event emission
+- `src/yoyopod/ui/screens/manager.py`: screen refresh helpers and call-screen stack updates
 - `src/yoyopod/core/app_state.py`: derived runtime state and shared runtime references
 
 ### Domains and Backends

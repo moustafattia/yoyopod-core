@@ -33,7 +33,6 @@ Main files:
 - `src/yoyopod/integrations/power/__init__.py`
 - `src/yoyopod/backends/power/pisugar.py`
 - `src/yoyopod/backends/power/watchdog.py`
-- `src/yoyopod/integrations/power/coordinator.py`
 - `src/yoyopod/ui/screens/system/power_screen.py`
 - `src/yoyopod/cli/pi/power.py` (`yoyopod pi power battery`, `yoyopod pi power rtc`)
 
@@ -47,7 +46,6 @@ YoyoPodApp
         -> Unix socket or TCP PiSugar server transport
      -> PiSugarWatchdog
         -> i2cget / i2cset
-  -> integrations.power.PowerCoordinator
      -> Bus
      -> PowerSafetyPolicy
      -> AppContext / AppStateRuntime
@@ -55,8 +53,8 @@ YoyoPodApp
 ```
 
 The app schedules PiSugar polling and watchdog work through `integrations.power.PowerRuntimeService`,
-publishes typed power events, updates shared runtime state, and then applies safety
-or UI behavior from those events.
+publishes typed power events, updates shared runtime state, refreshes visible power
+UI when needed, and then applies safety behavior from those events.
 
 `src/yoyopod/integrations/power/` is now the canonical public ownership seam for
 the power manager, typed models, power-domain events, and safety policy.
@@ -235,7 +233,7 @@ yoyopod remote rtc status --host rpi-zero
 The watchdog implementation is intentionally power-domain-owned but app-scheduled.
 
 Current model:
-- the coordinator loop in `src/yoyopod/core/loop.py` enables the PiSugar software watchdog through `integrations.power.PowerRuntimeService`
+- the main-thread loop in `src/yoyopod/core/loop.py` enables the PiSugar software watchdog through `integrations.power.PowerRuntimeService`
 - the app feeds it at a configured interval while healthy
 - ordinary app shutdown disables the watchdog
 - battery-driven emergency shutdown suppresses feeding without disabling it

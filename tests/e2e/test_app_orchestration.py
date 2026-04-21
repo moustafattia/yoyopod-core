@@ -181,6 +181,44 @@ class FakeScreenManager:
         self.refresh_current_screen()
         return True
 
+    def pop_call_screens(self) -> None:
+        call_route_names = {"in_call", "incoming_call", "outgoing_call"}
+        while self.current_screen is not None and self.current_screen.route_name in call_route_names:
+            self.pop_screen()
+            if not self.screen_stack:
+                break
+
+    def refresh_now_playing_screen(self) -> None:
+        if self.current_screen is None or self.current_screen.route_name != "now_playing":
+            return
+        self.current_screen.render()
+
+    def refresh_call_screen_if_visible(self) -> None:
+        if self.current_screen is None or self.current_screen.route_name != "call":
+            return
+        self.current_screen.render()
+
+    def show_incoming_call(self, caller_address: str, caller_name: str) -> None:
+        screen = self.screen_lookup["incoming_call"]
+        setattr(screen, "caller_address", caller_address)
+        setattr(screen, "caller_name", caller_name)
+        setattr(screen, "ring_animation_frame", 0)
+        if self.current_screen is not screen:
+            self.push_screen("incoming_call")
+
+    def show_in_call(self) -> None:
+        screen = self.screen_lookup["in_call"]
+        if self.current_screen is not screen:
+            self.push_screen("in_call")
+
+    def show_outgoing_call(self, callee_address: str, callee_name: str) -> None:
+        screen = self.screen_lookup["outgoing_call"]
+        setattr(screen, "callee_address", callee_address)
+        setattr(screen, "callee_name", callee_name or "Unknown")
+        setattr(screen, "ring_animation_frame", 0)
+        if self.current_screen is not screen:
+            self.push_screen("outgoing_call")
+
     def _notify_screen_changed(self, route_name: str | None) -> None:
         if self.on_screen_changed is not None:
             self.on_screen_changed(route_name)
@@ -526,7 +564,9 @@ class OrchestrationScreens:
         return {
             "menu": self.menu,
             "power": self.power,
+            "now_playing": self.now_playing,
             "playlists": self.playlist,
+            "call": self.call,
             "contacts": self.contacts,
             "incoming_call": self.incoming_call,
             "outgoing_call": self.outgoing_call,
@@ -594,9 +634,9 @@ class OrchestrationHarness:
 
         app.boot_service.setup_event_subscriptions()
         app.runtime_loop.process_pending_main_thread_actions()
-        assert app.call_coordinator is not None
-        app.call_coordinator.start_ringing = lambda: None
-        app.call_coordinator.stop_ringing = lambda: None
+        assert app.call_runtime is not None
+        app.call_runtime.start_ringing = lambda: None
+        app.call_runtime.stop_ringing = lambda: None
         return cls(
             app=app,
             music_backend=music_backend,
@@ -646,14 +686,14 @@ class OrchestrationHarness:
             self.screen_manager.push_screen(screen_name)
 
     def show_now_playing(self) -> None:
-        self.screen_manager.current_screen = self.screens.now_playing
+        self.screen_manager.push_screen("now_playing")
 
     def publish(self, event: object) -> None:
         self.pending_semantic_events += 1
         if isinstance(event, IncomingCallEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.call_coordinator.handle_incoming_call(
+                lambda: self.app.call_runtime.handle_incoming_call(
                         event.caller_address,
                         event.caller_name,
                     )
@@ -665,7 +705,7 @@ class OrchestrationHarness:
         if isinstance(event, CallStateChangedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.call_coordinator.handle_call_state_change(event.state)
+                lambda: self.app.call_runtime.handle_call_state_change(event.state)
                 )
             )
             worker.start()
@@ -674,7 +714,7 @@ class OrchestrationHarness:
         if isinstance(event, CallEndedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.call_coordinator.handle_call_ended(reason=event.reason)
+                lambda: self.app.call_runtime.handle_call_ended(reason=event.reason)
                 )
             )
             worker.start()
@@ -683,7 +723,7 @@ class OrchestrationHarness:
         if isinstance(event, RegistrationChangedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.call_coordinator.handle_registration_change(event.state)
+                lambda: self.app.call_runtime.handle_registration_change(event.state)
                 )
             )
             worker.start()
@@ -692,7 +732,7 @@ class OrchestrationHarness:
         if isinstance(event, VoIPAvailabilityChangedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.call_coordinator.handle_availability_change(
+                lambda: self.app.call_runtime.handle_availability_change(
                         event.available,
                         event.reason,
                         event.registration_state,
@@ -705,7 +745,7 @@ class OrchestrationHarness:
         if isinstance(event, TrackChangedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.playback_coordinator.handle_track_change(event.track)
+                lambda: self.app.music_runtime.handle_track_change(event.track)
                 )
             )
             worker.start()
@@ -714,7 +754,7 @@ class OrchestrationHarness:
         if isinstance(event, PlaybackStateChangedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.playback_coordinator.handle_playback_state_change(
+                lambda: self.app.music_runtime.handle_playback_state_change(
                         event.state
                     )
                 )
@@ -725,7 +765,7 @@ class OrchestrationHarness:
         if isinstance(event, MusicAvailabilityChangedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                    lambda: self.app.playback_coordinator.handle_availability_change(
+                lambda: self.app.music_runtime.handle_availability_change(
                         event.available,
                         event.reason,
                     )
@@ -997,7 +1037,7 @@ def test_outgoing_call_does_not_change_idle_or_paused_music(
 
     worker = threading.Thread(
         target=lambda: app.runtime_loop.queue_main_thread_callback(
-            lambda: app.call_coordinator.handle_call_state_change(CallState.OUTGOING)
+        lambda: app.call_runtime.handle_call_state_change(CallState.OUTGOING)
         )
     )
     worker.start()
@@ -1078,14 +1118,14 @@ def test_background_events_wait_for_drain_before_mutating_state() -> None:
 
     worker = threading.Thread(
         target=lambda: app.runtime_loop.queue_main_thread_callback(
-            lambda: app.call_coordinator.handle_registration_change(RegistrationState.OK)
+        lambda: app.call_runtime.handle_registration_change(RegistrationState.OK)
         )
     )
     worker.start()
     worker.join()
     worker = threading.Thread(
         target=lambda: app.runtime_loop.queue_main_thread_callback(
-            lambda: app.playback_coordinator.handle_playback_state_change("playing")
+        lambda: app.music_runtime.handle_playback_state_change("playing")
         )
     )
     worker.start()
@@ -1118,16 +1158,16 @@ def test_periodic_in_call_refresh_only_renders_visible_call_screen() -> None:
     """Live in-call refreshes should come from the main loop, not a screen-owned thread."""
     app, _, screen_manager = _build_app(playback_state="stopped")
 
-    assert app.screen_coordinator is not None
-    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
+    assert app.screen_manager is not None
+    assert app.screen_manager.refresh_current_screen_for_visible_tick() is False
     assert app.in_call_screen.render_calls == 0
 
     screen_manager.push_screen("in_call")
-    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is True
+    assert app.screen_manager.refresh_current_screen_for_visible_tick() is True
     assert app.in_call_screen.render_calls == 1
 
     screen_manager.pop_screen()
-    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
+    assert app.screen_manager.refresh_current_screen_for_visible_tick() is False
     assert app.in_call_screen.render_calls == 1
 
 
@@ -1135,12 +1175,12 @@ def test_periodic_visible_tick_refreshes_visible_now_playing_screen() -> None:
     """Visible-tick refreshes should reuse the generic screen opt-in path."""
     harness = OrchestrationHarness.build(playback_state="playing")
 
-    assert harness.app.screen_coordinator is not None
-    assert harness.app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
+    assert harness.app.screen_manager is not None
+    assert harness.app.screen_manager.refresh_current_screen_for_visible_tick() is False
     assert harness.screens.now_playing.render_calls == 0
 
     harness.show_now_playing()
-    assert harness.app.screen_coordinator.refresh_current_screen_for_visible_tick() is True
+    assert harness.app.screen_manager.refresh_current_screen_for_visible_tick() is True
     assert harness.screens.now_playing.render_calls == 1
     assert harness.screens.now_playing.refresh_for_visible_tick_calls == 1
 
@@ -1273,7 +1313,7 @@ def test_call_end_restores_previous_screen_base_state() -> None:
 
     worker = threading.Thread(
         target=lambda: app.runtime_loop.queue_main_thread_callback(
-            lambda: app.call_coordinator.handle_call_ended()
+        lambda: app.call_runtime.handle_call_ended()
         )
     )
     worker.start()
@@ -1551,13 +1591,13 @@ def test_periodic_power_refresh_only_renders_visible_power_screen() -> None:
         FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
     )
 
-    assert app.screen_coordinator is not None
-    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
+    assert app.screen_manager is not None
+    assert app.screen_manager.refresh_current_screen_for_visible_tick() is False
     assert app.power_screen.render_calls == 0
     assert app.power_screen.refresh_for_visible_tick_calls == 0
 
     screen_manager.push_screen("power")
-    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is True
+    assert app.screen_manager.refresh_current_screen_for_visible_tick() is True
     assert app.power_screen.render_calls == 1
     assert app.power_screen.refresh_for_visible_tick_calls == 1
 

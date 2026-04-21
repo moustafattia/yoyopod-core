@@ -1,10 +1,10 @@
 # Canonical Config And Package Structure
 
-**Last updated:** 2026-04-21
-**Status:** Current migration reference
+**Last updated:** 2026-04-22
+**Status:** Current implementation reference
 
 This document defines the reusable structure pattern established by the
-call + contacts hard cut and the remaining Phase A cleanup work.
+call + contacts hard cut and the frozen Phase A package layout.
 
 ## Goals
 
@@ -113,12 +113,15 @@ Frozen canonical package homes:
 - `src/yoyopod/integrations/call/`
   - canonical call-domain seam: calls, registration, messaging, history, and voice notes
   - owns call-domain typed events in `events.py`
+  - `runtime.py` owns call-flow orchestration and screen transitions
 - `src/yoyopod/integrations/music/`
   - canonical music-domain seam
   - owns music-domain typed events in `events.py`
+  - `runtime.py` owns playback-flow orchestration and visible now-playing refreshes
 - `src/yoyopod/integrations/power/`
   - canonical power-domain seam
   - owns power-domain typed events in `events.py` and battery safety policy in `policies.py`
+  - `service.py` owns live power polling, watchdog cadence, power snapshot application, and safety-event emission
 - `src/yoyopod/integrations/network/`
   - canonical cellular/network seam
   - owns modem / PPP / signal events in `events.py`

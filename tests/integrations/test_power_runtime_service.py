@@ -1,4 +1,4 @@
-"""Tests for the canonical power runtime service coordination helpers."""
+"""Tests for the canonical power runtime service helpers."""
 
 from __future__ import annotations
 
@@ -8,40 +8,34 @@ from types import SimpleNamespace
 from yoyopod.integrations.power import BatteryState, PowerRuntimeService, PowerSnapshot
 
 
-class _FakePowerCoordinator:
-    """Capture direct power coordinator handler calls."""
-
-    def __init__(self) -> None:
-        self.snapshot_calls: list[PowerSnapshot] = []
-        self.availability_calls: list[tuple[bool, str]] = []
-
-    def handle_snapshot_updated(self, snapshot: PowerSnapshot) -> None:
-        self.snapshot_calls.append(snapshot)
-
-    def handle_availability_change(self, available: bool, reason: str) -> None:
-        self.availability_calls.append((available, reason))
-
-
 def test_publish_snapshot_calls_power_handlers_directly() -> None:
-    """Runtime power refreshes should call coordinator handlers directly on main-thread delivery."""
+    """Runtime power refreshes should apply snapshots on main-thread delivery."""
 
     snapshot = PowerSnapshot(
         available=True,
         checked_at=datetime(2026, 4, 21, 10, 0, 0),
         battery=BatteryState(level_percent=82.0),
     )
-    coordinator = _FakePowerCoordinator()
+    runtime = SimpleNamespace(
+        power_snapshot=None,
+        set_power_snapshot=lambda new_snapshot: setattr(runtime, "power_snapshot", new_snapshot),
+        set_power_available=lambda available: setattr(runtime, "power_available", available),
+    )
+    context = SimpleNamespace(update_power_status=lambda _snapshot: None)
     app = SimpleNamespace(
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=None,
-        app_state_runtime=SimpleNamespace(power_snapshot=None),
-        power_coordinator=coordinator,
+        app_state_runtime=runtime,
+        context=context,
+        screen_manager=None,
+        cloud_manager=None,
+        bus=SimpleNamespace(publish=lambda _event: None),
     )
 
     PowerRuntimeService(app)._publish_snapshot(snapshot=snapshot)
 
-    assert coordinator.snapshot_calls == [snapshot]
-    assert coordinator.availability_calls == [(True, "ready")]
+    assert runtime.power_snapshot == snapshot
+    assert app._power_available is True
 
 
 def test_publish_snapshot_skips_duplicate_runtime_state() -> None:
@@ -53,22 +47,29 @@ def test_publish_snapshot_skips_duplicate_runtime_state() -> None:
         battery=BatteryState(level_percent=19.0),
         error="unavailable",
     )
-    coordinator = _FakePowerCoordinator()
+    runtime = SimpleNamespace(
+        power_snapshot=snapshot,
+        set_power_snapshot=lambda new_snapshot: setattr(runtime, "power_snapshot", new_snapshot),
+        set_power_available=lambda available: setattr(runtime, "power_available", available),
+    )
     app = SimpleNamespace(
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=False,
-        app_state_runtime=SimpleNamespace(power_snapshot=snapshot),
-        power_coordinator=coordinator,
+        app_state_runtime=runtime,
+        context=SimpleNamespace(update_power_status=lambda _snapshot: None),
+        screen_manager=None,
+        cloud_manager=None,
+        bus=SimpleNamespace(publish=lambda _event: None),
     )
 
     PowerRuntimeService(app)._publish_snapshot(snapshot=snapshot)
 
-    assert coordinator.snapshot_calls == []
-    assert coordinator.availability_calls == []
+    assert runtime.power_snapshot == snapshot
+    assert app._power_available is False
 
 
-def test_publish_snapshot_noops_without_runtime_or_power_owner() -> None:
-    """Power publishing should safely no-op until the runtime owners exist."""
+def test_publish_snapshot_noops_without_runtime_state() -> None:
+    """Power publishing should safely no-op until the runtime state exists."""
 
     snapshot = PowerSnapshot(
         available=True,
@@ -79,7 +80,10 @@ def test_publish_snapshot_noops_without_runtime_or_power_owner() -> None:
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=None,
         app_state_runtime=None,
-        power_coordinator=None,
+        context=SimpleNamespace(update_power_status=lambda _snapshot: None),
+        screen_manager=None,
+        cloud_manager=None,
+        bus=SimpleNamespace(publish=lambda _event: None),
     )
 
     PowerRuntimeService(app)._publish_snapshot(snapshot=snapshot)
@@ -95,20 +99,27 @@ def test_publish_cached_snapshot_requires_existing_runtime_snapshot() -> None:
         checked_at=datetime(2026, 4, 21, 10, 15, 0),
         battery=BatteryState(level_percent=88.0),
     )
-    coordinator = _FakePowerCoordinator()
+    runtime = SimpleNamespace(
+        power_snapshot=None,
+        set_power_snapshot=lambda new_snapshot: setattr(runtime, "power_snapshot", new_snapshot),
+        set_power_available=lambda available: setattr(runtime, "power_available", available),
+    )
     app = SimpleNamespace(
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=None,
-        app_state_runtime=SimpleNamespace(power_snapshot=None),
-        power_coordinator=coordinator,
+        app_state_runtime=runtime,
+        context=SimpleNamespace(update_power_status=lambda _snapshot: None),
+        screen_manager=None,
+        cloud_manager=None,
+        bus=SimpleNamespace(publish=lambda _event: None),
     )
     service = PowerRuntimeService(app)
 
     service._publish_cached_snapshot_if_ready()
-    assert coordinator.snapshot_calls == []
+    assert runtime.power_snapshot is None
 
     app.app_state_runtime.power_snapshot = snapshot
     service._publish_cached_snapshot_if_ready()
 
-    assert coordinator.snapshot_calls == [snapshot]
-    assert coordinator.availability_calls == [(True, "ready")]
+    assert runtime.power_snapshot == snapshot
+    assert app._power_available is True

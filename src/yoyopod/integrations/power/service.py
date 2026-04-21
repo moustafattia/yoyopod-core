@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING
 
 from loguru import logger
+from yoyopod.integrations.power.policies import PowerSafetyPolicy
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp
@@ -23,6 +24,7 @@ class PowerRuntimeService:
         self.app = app
         self._power_io_lock = threading.Lock()
         self._watchdog_io_lock = threading.Lock()
+        self._policy: PowerSafetyPolicy | None = None
 
     def poll_status(self, now: float | None = None, force: bool = False) -> None:
         """Refresh PiSugar power telemetry without stalling the coordinator loop."""
@@ -97,7 +99,7 @@ class PowerRuntimeService:
             return
 
         runtime = self.app.app_state_runtime
-        if runtime is None or self.app.power_coordinator is None:
+        if runtime is None:
             return
         if runtime.power_snapshot is None:
             return
@@ -108,8 +110,7 @@ class PowerRuntimeService:
         """Publish one power snapshot onto the coordinator thread."""
 
         runtime = self.app.app_state_runtime
-        power_coordinator = self.app.power_coordinator
-        if runtime is None or power_coordinator is None:
+        if runtime is None:
             return
         if (
             runtime.power_snapshot == snapshot
@@ -117,12 +118,111 @@ class PowerRuntimeService:
         ):
             return
 
-        power_coordinator.handle_snapshot_updated(snapshot)
+        self.handle_snapshot_updated(snapshot)
 
         if self.app._power_available is None or self.app._power_available != snapshot.available:
             reason = snapshot.error or ("ready" if snapshot.available else "unavailable")
             self.app._power_available = snapshot.available
-            power_coordinator.handle_availability_change(snapshot.available, reason)
+            self.handle_availability_change(snapshot.available, reason)
+
+    def handle_snapshot_updated(self, snapshot: "PowerSnapshot") -> None:
+        """Apply the latest power telemetry to runtime and UI state."""
+
+        previous_signature = self._snapshot_signature(
+            self.app.app_state_runtime.power_snapshot if self.app.app_state_runtime is not None else None
+        )
+        current_screen = (
+            self.app.screen_manager.get_current_screen()
+            if self.app.screen_manager is not None
+            else None
+        )
+        current_route_name = current_screen.route_name if current_screen is not None else None
+
+        if self.app.app_state_runtime is not None:
+            self.app.app_state_runtime.set_power_snapshot(snapshot)
+        if self.app.context is not None:
+            self.app.context.update_power_status(snapshot)
+
+        current_signature = self._snapshot_signature(snapshot)
+        if current_signature != previous_signature or current_route_name == "power":
+            if self.app.screen_manager is not None:
+                self.app.screen_manager.refresh_current_screen()
+
+        if self.app.cloud_manager is not None:
+            level = snapshot.battery.level_percent
+            charging = snapshot.battery.charging
+            if level is not None:
+                self.app.cloud_manager.publish_battery(
+                    level=round(level),
+                    charging=bool(charging),
+                    now=time.monotonic(),
+                )
+
+        policy = self._power_safety_policy()
+        if policy is None:
+            return
+
+        for event in policy.evaluate(snapshot, now=time.monotonic()):
+            self.app.bus.publish(event)
+
+    def handle_availability_change(self, available: bool, reason: str) -> None:
+        """Track power backend reachability for the runtime."""
+
+        if self.app.app_state_runtime is not None:
+            self.app.app_state_runtime.set_power_available(available)
+        if available:
+            logger.info(f"Power backend available ({reason or 'ready'})")
+            return
+
+        logger.warning(f"Power backend unavailable ({reason or 'unknown'})")
+        policy = self._power_safety_policy()
+        if policy is not None:
+            policy.shutdown_requested = False
+            policy.next_warning_at = 0.0
+
+    def _power_safety_policy(self) -> PowerSafetyPolicy | None:
+        """Return the live power safety policy for the active manager config."""
+
+        power_manager = self.app.power_manager
+        if power_manager is None:
+            self._policy = None
+            return None
+
+        power_config = getattr(power_manager, "config", None)
+        if power_config is None:
+            self._policy = None
+            return None
+        if self._policy is None or self._policy.config is not power_config:
+            self._policy = PowerSafetyPolicy(power_config)
+        return self._policy
+
+    @staticmethod
+    def _snapshot_signature(snapshot: "PowerSnapshot | None") -> tuple[object, ...] | None:
+        """Return the stable, user-visible subset of a power snapshot."""
+
+        if snapshot is None:
+            return None
+
+        return (
+            snapshot.available,
+            snapshot.error,
+            snapshot.device.model,
+            snapshot.device.firmware_version,
+            snapshot.battery.level_percent,
+            snapshot.battery.voltage_volts,
+            snapshot.battery.charging,
+            snapshot.battery.power_plugged,
+            snapshot.battery.allow_charging,
+            snapshot.battery.output_enabled,
+            snapshot.battery.temperature_celsius,
+            snapshot.rtc.time,
+            snapshot.rtc.alarm_enabled,
+            snapshot.rtc.alarm_time,
+            snapshot.rtc.alarm_repeat_mask,
+            snapshot.rtc.adjust_ppm,
+            snapshot.shutdown.safe_shutdown_level_percent,
+            snapshot.shutdown.safe_shutdown_delay_seconds,
+        )
 
     def start_watchdog(self, now: float | None = None) -> None:
         """Enable the PiSugar software watchdog once the app loop is ready."""

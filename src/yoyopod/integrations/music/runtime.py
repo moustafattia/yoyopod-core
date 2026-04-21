@@ -1,54 +1,33 @@
-"""
-Playback-event coordination for YoyoPod.
-"""
+"""Live music-runtime orchestration for YoyoPod."""
 
 from __future__ import annotations
 
 from loguru import logger
 
 from yoyopod.backends.music import Track
-from yoyopod.core import Bus
 from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.music import LocalMusicService
-from yoyopod.ui.screens.coordinator import ScreenCoordinator
+from yoyopod.ui.screens.manager import ScreenManager
 
 
-class PlaybackCoordinator:
-    """Own playback event publishing, state sync, and screen refresh behavior."""
+class MusicRuntime:
+    """Own playback runtime state sync and screen refresh behavior."""
 
     def __init__(
         self,
         runtime: AppStateRuntime,
-        screen_coordinator: ScreenCoordinator,
+        screen_manager: ScreenManager | None,
         local_music_service: LocalMusicService | None = None,
     ) -> None:
         self.runtime = runtime
-        self.screen_coordinator = screen_coordinator
+        self.screen_manager = screen_manager
         self.local_music_service = local_music_service
-
-    def bind(self, event_bus: Bus) -> None:
-        """Retain the legacy bind hook for boot compatibility."""
-
-        del event_bus
-
-    def publish_track_change(self, track: Track | None) -> None:
-        """Compatibility wrapper over the direct track-change handler."""
-
-        self.handle_track_change(track)
-
-    def publish_playback_state_change(self, playback_state: str) -> None:
-        """Compatibility wrapper over the direct playback-state handler."""
-
-        self.handle_playback_state_change(playback_state)
-
-    def publish_availability_change(self, available: bool, reason: str = "") -> None:
-        """Compatibility wrapper over the direct availability handler."""
-
-        self.handle_availability_change(available, reason)
 
     def update_now_playing_if_needed(self) -> None:
         """Refresh the now-playing screen for periodic progress updates."""
-        self.screen_coordinator.update_now_playing_if_needed()
+        if self.screen_manager is None:
+            return
+        self.screen_manager.refresh_current_screen_for_visible_tick()
 
     def on_enter_playing_with_voip(self) -> None:
         """Log entry into the playing-with-VoIP-ready state."""
@@ -66,7 +45,8 @@ class PlaybackCoordinator:
                 self.runtime.music_fsm.transition("stop")
                 self.runtime.sync_app_state("track_stopped")
 
-        self.screen_coordinator.refresh_now_playing_screen()
+        if self.screen_manager is not None:
+            self.screen_manager.refresh_now_playing_screen()
 
     def handle_playback_state_change(self, playback_state: str) -> None:
         """Sync the playback FSM with music-backend state when not in a call."""
@@ -86,17 +66,20 @@ class PlaybackCoordinator:
         state_change = self.runtime.sync_app_state(f"playback_{playback_state}")
         if state_change.entered(AppRuntimeState.PLAYING_WITH_VOIP):
             logger.info("Music playing with VoIP ready")
-        self.screen_coordinator.refresh_now_playing_screen()
+        if self.screen_manager is not None:
+            self.screen_manager.refresh_now_playing_screen()
 
     def handle_availability_change(self, available: bool, reason: str) -> None:
         """Keep playback state aligned with music-backend connectivity."""
         if available:
             logger.info(f"Music backend connected ({reason or 'ready'})")
-            self.screen_coordinator.refresh_now_playing_screen()
+            if self.screen_manager is not None:
+                self.screen_manager.refresh_now_playing_screen()
             return
 
         logger.warning(f"Music backend unavailable ({reason or 'unknown'})")
         self.runtime.call_interruption_policy.clear()
         self.runtime.music_fsm.transition("stop")
         self.runtime.sync_app_state(f"music_{reason or 'unavailable'}")
-        self.screen_coordinator.refresh_now_playing_screen()
+        if self.screen_manager is not None:
+            self.screen_manager.refresh_now_playing_screen()

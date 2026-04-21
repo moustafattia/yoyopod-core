@@ -46,8 +46,8 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 - Ring tone generated via `speaker-test`
 - Local music playback runs through an app-managed mpv process instead of an external music daemon
 - mpv pushes playback and property-change events over JSON IPC rather than using polling
-- Liblinphone backend events are drained on the coordinator thread for UI and state updates
-- `Bus` serializes typed app events on the coordinator thread
+- Liblinphone backend events are drained on the main thread for UI and state updates
+- `Bus` serializes typed app events on the main thread
 
 ## Module Boundary Rules
 
@@ -68,11 +68,11 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 
 - Shared derived state and runtime references live in `src/yoyopod/core/app_state.py`.
 - Cross-domain coordination lives with the owning domain seam:
-  - `src/yoyopod/integrations/call/coordinator.py`
-  - `src/yoyopod/integrations/music/coordinator.py`
-  - `src/yoyopod/integrations/power/coordinator.py`
+  - `src/yoyopod/integrations/call/runtime.py`
+  - `src/yoyopod/integrations/music/runtime.py`
+  - `src/yoyopod/integrations/power/service.py`
   - `src/yoyopod/integrations/voice/runtime.py`
-  - `src/yoyopod/ui/screens/coordinator.py`
+  - `src/yoyopod/ui/screens/manager.py`
 - Orchestration code may translate events into runtime state changes and navigation changes.
 - Orchestration code should not contain rendering code, hardware-driver code, or long-lived persistence logic.
 

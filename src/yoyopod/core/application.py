@@ -30,11 +30,11 @@ from yoyopod.integrations.call import (
     CallInterruptionPolicy,
     VoIPManager,
 )
-from yoyopod.integrations.call.coordinator import CallCoordinator
+from yoyopod.integrations.call.runtime import CallRuntime
 from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
 from yoyopod.integrations.music import LocalMusicService, MusicFSM, RecentTrackHistoryStore
-from yoyopod.integrations.music.coordinator import PlaybackCoordinator
+from yoyopod.integrations.music.runtime import MusicRuntime
 from yoyopod.integrations.network import NetworkManager
 from yoyopod.integrations.power import (
     PendingShutdown,
@@ -42,7 +42,6 @@ from yoyopod.integrations.power import (
     PowerManager,
     PowerRuntimeService,
 )
-from yoyopod.integrations.power.coordinator import PowerCoordinator
 from yoyopod.core.bootstrap import RuntimeBootService
 from yoyopod.core.event_subscriptions import RuntimeEventSubscriptions
 from yoyopod.core.loop import RuntimeLoopService
@@ -54,7 +53,6 @@ from yoyopod.integrations.display import ScreenPowerService
 from yoyopod.integrations.voice.runtime import VoiceRuntimeCoordinator
 from yoyopod.core.shutdown import ShutdownLifecycleService
 from yoyopod.core.status import RuntimeStatusService
-from yoyopod.ui.screens.coordinator import ScreenCoordinator
 
 if TYPE_CHECKING:
     from yoyopod.ui.display import Display
@@ -178,10 +176,8 @@ class YoyoPodApp:
 
         # Extracted coordinators
         self.app_state_runtime: Optional[AppStateRuntime] = None
-        self.screen_coordinator: Optional[ScreenCoordinator] = None
-        self.call_coordinator: Optional[CallCoordinator] = None
-        self.playback_coordinator: Optional[PlaybackCoordinator] = None
-        self.power_coordinator: Optional[PowerCoordinator] = None
+        self.call_runtime: Optional[CallRuntime] = None
+        self.music_runtime: Optional[MusicRuntime] = None
 
         # Runtime state tracked across services
         self._voip_recovery = RecoveryState()
@@ -237,8 +233,8 @@ class YoyoPodApp:
     def voip_registered(self) -> bool:
         """Expose the current VoIP registration state for compatibility."""
 
-        if self.call_coordinator is not None:
-            return self.call_coordinator.voip_registered
+        if self.call_runtime is not None:
+            return self.call_runtime.voip_registered
         return self._voip_registered
 
     @voip_registered.setter
@@ -246,8 +242,8 @@ class YoyoPodApp:
         """Store VoIP registration state before or after coordinators are initialized."""
 
         self._voip_registered = value
-        if self.call_coordinator is not None:
-            self.call_coordinator.voip_registered = value
+        if self.call_runtime is not None:
+            self.call_runtime.voip_registered = value
 
     def set_ui_tick_callback(self, callback: Callable[[], None] | None) -> None:
         """Replace the optional scaffold UI tick callback."""

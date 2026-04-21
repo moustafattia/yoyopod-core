@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-21
 **Owner:** Moustafa
-**Status:** Awaiting review
+**Status:** Implemented on branch; pending hardware validation and final review
 **Review note (2026-04-21):** Current `main` already includes the CLI polish merge (`5e2640f`) and already exposes a compatibility `src/yoyopod/core/` package. Execute Phase A against that baseline: validate the CLI rename instead of replaying it, and repurpose the existing `core/` package rather than creating a parallel one.
 **Precedes:** Phase B (HAL consolidation, formerly Phase C — renumbered when the original Phase B was absorbed into Phase A)
 **Supersedes:** `docs/RUNTIME_EVENT_FLOW.md` (the old coordinator/FSM event flow becomes historical)
@@ -25,8 +25,8 @@ Phase A rewrites the spine to a single consistent model inspired by Home Assista
 - Every event on the bus has a real reason to be there (never pub-to-self).
 - `CallState` change path: ≤5 hops, top-down readable.
 - All state transitions recorded to `events.jsonl` as structured JSON for LLM-driven debugging.
-- `app.py` shrinks from ~685 LOC to ~150 LOC.
-- The entire "coordinator" concept (CallCoordinator, PlaybackCoordinator, ScreenCoordinator, PowerCoordinator, AppStateRuntime, AppRuntimeState) deleted.
+- `app.py` becomes bootstrap-only and the canonical app object lives in `core/application.py`.
+- The generic "coordinator" package concept is deleted; runtime ownership now lives with `core/`, the owning integration, or `ScreenManager`.
 - No core-owned MusicFSM / CallFSM / CallInterruptionPolicy surface remains; any transitional implementations live under the owning integrations until the state-store cutover finishes.
 - VoIPManager's 4 private callback lists deleted.
 - Adding a new cross-cutting observer (LED status, cloud telemetry, metrics) = one new file, zero changes to existing integrations.
@@ -37,9 +37,9 @@ Phase A rewrites the spine to a single consistent model inspired by Home Assista
 
 **In scope:**
 
-- Build new `core/` primitives: `Bus`, `States`, `Services`, `Scheduler`, and `App` shell.
-- Rewrite the spine under `integrations/` in HA-style: 11 integration folders, each with a `setup(app)` function that subscribes to events, registers commands, and mirrors backend state into the store.
-- Delete all FSMs, coordinators, derived-state enums, runtime services (boot/loop/shutdown/eventwiring), AppContext.
+- Build new `core/` primitives: `Bus`, `States`, `Services`, `Scheduler`, and the canonical `Application` shell.
+- Rewrite the spine under `integrations/` in HA-style: each integration exposes a `setup(app)` function that subscribes to events, registers commands, and mirrors backend state into the store.
+- Delete the old coordinator package/runtime split, move orchestration into the owning integration/core module, and keep `AppContext` only as a slim focused runtime context.
 - Split VoIPManager into `integrations/call/` (handlers, messaging, voice notes, history).
 - Fold PowerManager, NetworkManager, CloudManager, PeopleDirectory, LocalMusicService, VoiceRuntimeCoordinator, ScreenPowerService into their respective integrations.
 - Separate GPS from network into a new `location` integration.
@@ -75,52 +75,44 @@ Plus `app.scheduler` as a main-thread task queue for background-to-main marshall
 
 ### 3.2 Directory layout
 
-```
+```text
 src/yoyopod/
-├── app.py                         # ~150 LOC — constructs core, loads integrations, runs main loop
-├── main.py                        # entry point
+├── app.py
+├── main.py
+├── config/
 ├── core/
 │   ├── __init__.py
-│   ├── app_shell.py               # YoyoPodApp class
-│   ├── bus.py                     # Bus (main-thread-only, strict)
-│   ├── states.py                  # States (entity store)
-│   ├── services.py                # Services (command registry)
-│   ├── scheduler.py               # MainThreadScheduler
-│   ├── events.py                  # StateChangedEvent + cross-cut event types
-│   └── testing.py                 # build_test_app, assert_events_contain, drain_all
+│   ├── application.py
+│   ├── bus.py
+│   ├── states.py
+│   ├── services.py
+│   ├── scheduler.py
+│   ├── events.py
+│   ├── focus.py
+│   ├── recovery.py
+│   ├── status.py
+│   └── diagnostics/
 ├── integrations/
 │   ├── call/
-│   │   ├── __init__.py            # setup(app)
-│   │   ├── events.py              # CallIncomingEvent, MessageReceivedEvent, ...
-│   │   ├── commands.py            # DialCommand, AnswerCommand, HangupCommand, ...
-│   │   ├── handlers.py            # _handle_backend_state, etc.
-│   │   ├── messaging.py           # text message handling
-│   │   ├── voice_notes.py         # voice-note record/play
-│   │   └── history.py             # call history store
 │   ├── music/
-│   │   ├── __init__.py
-│   │   ├── events.py
-│   │   ├── commands.py            # PlayCommand, PauseCommand, SeekCommand, ...
-│   │   ├── handlers.py
-│   │   └── library.py             # playlists, recent tracks
-│   ├── power/                     # battery, charging, RTC, watchdog, shutdown
-│   ├── network/                   # cellular, PPP, signal
-│   ├── location/                  # GPS (split out of network)
-│   ├── focus/                     # AudioFocus arbiter
-│   ├── cloud/                     # MQTT telemetry, HTTPS sync, remote commands
-│   ├── contacts/                  # people directory, SIP→name lookup
-│   ├── voice/                     # STT, TTS, voice commands, Ask screen backend
-│   ├── screen/                    # display on/off, brightness, idle timeout
-│   ├── diagnostics/               # event log, responsiveness watchdog, snapshots
-│   └── recovery/                  # backend recovery supervision
-├── backends/                      # adapters to external systems (adapter layer only)
-│   ├── voip/                      # LiblinphoneBackend + binding
-│   ├── music/                     # MpvBackend + process + ipc
-│   ├── power/                     # PiSugarBackend + watchdog
-│   ├── network/                   # modem AT, PPP, transport
-│   ├── location/                  # GPS backend
-│   └── voice/                     # STT engines, TTS engines
-└── ui/                            # screens + display/input (unchanged structurally for Phase A)
+│   ├── power/
+│   ├── network/
+│   ├── location/
+│   ├── cloud/
+│   ├── contacts/
+│   ├── voice/
+│   └── display/
+├── backends/
+│   ├── voip/
+│   ├── music/
+│   ├── power/
+│   ├── network/
+│   ├── location/
+│   └── voice/
+└── ui/
+    ├── display/
+    ├── input/
+    └── screens/
 ```
 
 ### 3.3 Threading model

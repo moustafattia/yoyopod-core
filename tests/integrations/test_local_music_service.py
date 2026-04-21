@@ -9,7 +9,7 @@ import pytest
 import yoyopod.integrations.music.library as library_module
 from yoyopod.backends.music import MockMusicBackend, Track
 from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
-from yoyopod.integrations.music.coordinator import PlaybackCoordinator
+from yoyopod.integrations.music.runtime import MusicRuntime
 
 
 class StubRuntime:
@@ -22,12 +22,9 @@ class StubRuntime:
         return type("StateChange", (), {"entered": lambda self, _state: False})()
 
 
-class StubScreenCoordinator:
+class StubScreenManager:
     def __init__(self) -> None:
         self.now_playing_refreshes = 0
-
-    def update_now_playing_if_needed(self) -> None:
-        return
 
     def refresh_now_playing_screen(self) -> None:
         self.now_playing_refreshes += 1
@@ -141,7 +138,7 @@ def test_local_music_service_collects_tracks_with_single_library_walk(
     ]
 
 
-def test_playback_coordinator_records_recent_local_tracks(tmp_path: Path) -> None:
+def test_music_runtime_records_recent_local_tracks(tmp_path: Path) -> None:
     music_dir = tmp_path / "Music"
     music_dir.mkdir()
     track_path = music_dir / "alpha.mp3"
@@ -151,13 +148,13 @@ def test_playback_coordinator_records_recent_local_tracks(tmp_path: Path) -> Non
     backend.start()
     store = RecentTrackHistoryStore(tmp_path / "recent_tracks.json")
     service = LocalMusicService(backend, music_dir=music_dir, recent_store=store)
-    coordinator = PlaybackCoordinator(
+    runtime_owner = MusicRuntime(
         runtime=StubRuntime(),
-        screen_coordinator=StubScreenCoordinator(),
+        screen_manager=StubScreenManager(),
         local_music_service=service,
     )
 
-    coordinator.handle_track_change(
+    runtime_owner.handle_track_change(
         Track(
             uri=str(track_path),
             name="Alpha",

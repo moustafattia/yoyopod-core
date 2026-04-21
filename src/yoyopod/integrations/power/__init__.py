@@ -10,7 +10,6 @@ from yoyopod.integrations.power.handlers import apply_snapshot
 from yoyopod.integrations.power.poller import PowerPoller
 
 if TYPE_CHECKING:
-    from yoyopod.integrations.power.coordinator import PowerCoordinator
     from yoyopod.integrations.power.manager import PowerManager
     from yoyopod.integrations.power.models import (
         BatteryState,
@@ -37,7 +36,6 @@ _PUBLIC_EXPORTS = {
     ),
     "PowerDeviceInfo": ("yoyopod.integrations.power.models", "PowerDeviceInfo"),
     "PowerManager": ("yoyopod.integrations.power.manager", "PowerManager"),
-    "PowerCoordinator": ("yoyopod.integrations.power.coordinator", "PowerCoordinator"),
     "PendingShutdown": ("yoyopod.integrations.power.models", "PendingShutdown"),
     "PowerAlert": ("yoyopod.integrations.power.models", "PowerAlert"),
     "PowerSafetyPolicy": ("yoyopod.integrations.power.policies", "PowerSafetyPolicy"),
@@ -76,7 +74,6 @@ __all__ = [
     "PendingShutdown",
     "PowerAlert",
     "PowerDeviceInfo",
-    "PowerCoordinator",
     "PowerIntegration",
     "PowerManager",
     "PowerRuntimeService",

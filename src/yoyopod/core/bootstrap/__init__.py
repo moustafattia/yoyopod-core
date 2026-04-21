@@ -29,8 +29,8 @@ from yoyopod.ui.screens.manager import ScreenManager
 from .callbacks_boot import CallbacksBoot
 from .components_boot import ComponentsBoot
 from .config_boot import ConfigBoot
-from .coordinators_boot import CoordinatorsBoot
 from .managers_boot import ManagersBoot
+from .runtime_helpers_boot import RuntimeHelpersBoot
 from .screens_boot import ScreensBoot
 
 if TYPE_CHECKING:
@@ -75,7 +75,7 @@ class RuntimeBootService:
             cloud_manager_cls=CloudManager,
         )
         self._screens_boot = ScreensBoot(app, logger=logger)
-        self._coordinators_boot = CoordinatorsBoot(app)
+        self._runtime_helpers_boot = RuntimeHelpersBoot(app)
         self._callbacks_boot = CallbacksBoot(app, logger=logger)
 
     def setup(self) -> bool:
@@ -97,8 +97,7 @@ class RuntimeBootService:
                 logger.error("Failed to setup screens")
                 return False
 
-            self.ensure_coordinators()
-            self.bind_coordinator_events()
+            self.ensure_runtime_helpers()
             self.setup_voip_callbacks()
             self.setup_music_callbacks()
             self.app.shutdown_service.register_power_shutdown_hooks()
@@ -133,18 +132,13 @@ class RuntimeBootService:
         """Register music event callbacks."""
         self._callbacks_boot.setup_music_callbacks()
 
-    def bind_coordinator_events(self) -> None:
-        """Bind coordinator-level event handlers to the shared bus."""
-        self._callbacks_boot.bind_coordinator_events()
-
     def setup_event_subscriptions(self) -> None:
-        """Backward-compatible alias for coordinator event binding."""
-        self.ensure_coordinators()
-        self.bind_coordinator_events()
+        """Backward-compatible alias for runtime-helper setup."""
+        self.ensure_runtime_helpers()
 
-    def ensure_coordinators(self) -> None:
-        """Build coordinator helpers around the initialized runtime."""
-        self._coordinators_boot.ensure_coordinators()
+    def ensure_runtime_helpers(self) -> None:
+        """Build runtime helper objects around the initialized runtime."""
+        self._runtime_helpers_boot.ensure_runtime_helpers()
 
 
 __all__ = ["RuntimeBootService"]
