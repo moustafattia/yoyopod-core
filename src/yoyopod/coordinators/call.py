@@ -11,13 +11,6 @@ from loguru import logger
 from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
 from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
-from yoyopod.core import (
-    CallEndedEvent,
-    CallStateChangedEvent,
-    IncomingCallEvent,
-    RegistrationChangedEvent,
-    VoIPAvailabilityChangedEvent,
-)
 from yoyopod.integrations.call import (
     CallHistoryStore,
     CallRinger,
@@ -46,45 +39,27 @@ class CallCoordinator:
         self.call_history_store = call_history_store
         self.voip_registered = initial_voip_registered
         self._ringer = CallRinger()
-        self._event_bus: Optional[EventBus] = None
-        self._bound = False
         self._session_tracker = CallSessionTracker(call_history_store)
 
     def bind(self, event_bus: EventBus) -> None:
-        """Bind typed event subscriptions once."""
-        if self._bound:
-            return
+        """Retain the legacy bind hook for boot compatibility."""
 
-        self._event_bus = event_bus
-        event_bus.subscribe(IncomingCallEvent, self._on_incoming_call_event)
-        event_bus.subscribe(CallStateChangedEvent, self._on_call_state_changed_event)
-        event_bus.subscribe(CallEndedEvent, self._on_call_ended_event)
-        event_bus.subscribe(RegistrationChangedEvent, self._on_registration_changed_event)
-        event_bus.subscribe(VoIPAvailabilityChangedEvent, self._on_availability_changed_event)
-        self._bound = True
+        del event_bus
 
     def publish_incoming_call(self, caller_address: str, caller_name: str) -> None:
-        """Publish an incoming-call event from the VoIP manager thread."""
-        if self._event_bus is None:
-            raise RuntimeError("CallCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct incoming-call handler."""
 
-        self._event_bus.publish(
-            IncomingCallEvent(caller_address=caller_address, caller_name=caller_name)
-        )
+        self.handle_incoming_call(caller_address, caller_name)
 
     def publish_call_state_events(self, state: CallState) -> None:
-        """Publish call state events onto the bus."""
-        if self._event_bus is None:
-            raise RuntimeError("CallCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct call-state handler."""
 
-        self._event_bus.publish(CallStateChangedEvent(state=state))
+        self.handle_call_state_change(state)
 
     def publish_registration_change(self, state: RegistrationState) -> None:
-        """Publish registration changes from the VoIP manager thread."""
-        if self._event_bus is None:
-            raise RuntimeError("CallCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct registration handler."""
 
-        self._event_bus.publish(RegistrationChangedEvent(state=state))
+        self.handle_registration_change(state)
 
     def publish_availability_change(
         self,
@@ -92,17 +67,9 @@ class CallCoordinator:
         reason: str = "",
         registration_state: RegistrationState = RegistrationState.NONE,
     ) -> None:
-        """Publish backend availability changes from VoIP threads."""
-        if self._event_bus is None:
-            raise RuntimeError("CallCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct availability handler."""
 
-        self._event_bus.publish(
-            VoIPAvailabilityChangedEvent(
-                available=available,
-                reason=reason,
-                registration_state=registration_state,
-            )
-        )
+        self.handle_availability_change(available, reason, registration_state)
 
     def start_ringing(self) -> None:
         """Start playing the ring tone for an incoming call."""
@@ -119,25 +86,6 @@ class CallCoordinator:
     def on_enter_call_active_music_paused(self) -> None:
         """Log entry into the active-call-with-paused-music state."""
         logger.info("In call (music paused in background)")
-
-    def _on_incoming_call_event(self, event: IncomingCallEvent) -> None:
-        self.handle_incoming_call(event.caller_address, event.caller_name)
-
-    def _on_call_state_changed_event(self, event: CallStateChangedEvent) -> None:
-        self.handle_call_state_change(event.state)
-
-    def _on_call_ended_event(self, event: CallEndedEvent) -> None:
-        self.handle_call_ended(reason=event.reason)
-
-    def _on_registration_changed_event(self, event: RegistrationChangedEvent) -> None:
-        self.handle_registration_change(event.state)
-
-    def _on_availability_changed_event(self, event: VoIPAvailabilityChangedEvent) -> None:
-        self.handle_availability_change(
-            event.available,
-            event.reason,
-            event.registration_state,
-        )
 
     def handle_incoming_call(self, caller_address: str, caller_name: str) -> None:
         """Capture incoming-call metadata for the active incoming phase."""

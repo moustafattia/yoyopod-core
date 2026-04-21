@@ -616,6 +616,58 @@ class OrchestrationHarness:
         self.screen_manager.current_screen = self.screens.now_playing
 
     def publish(self, event: object) -> None:
+        if isinstance(event, IncomingCallEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.call_coordinator.handle_incoming_call(
+                        event.caller_address,
+                        event.caller_name,
+                    )
+                )
+            )
+            worker.start()
+            worker.join()
+            return
+        if isinstance(event, CallStateChangedEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.call_coordinator.handle_call_state_change(event.state)
+                )
+            )
+            worker.start()
+            worker.join()
+            return
+        if isinstance(event, CallEndedEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.call_coordinator.handle_call_ended(reason=event.reason)
+                )
+            )
+            worker.start()
+            worker.join()
+            return
+        if isinstance(event, RegistrationChangedEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.call_coordinator.handle_registration_change(event.state)
+                )
+            )
+            worker.start()
+            worker.join()
+            return
+        if isinstance(event, VoIPAvailabilityChangedEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.call_coordinator.handle_availability_change(
+                        event.available,
+                        event.reason,
+                        event.registration_state,
+                    )
+                )
+            )
+            worker.start()
+            worker.join()
+            return
         if isinstance(event, TrackChangedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
@@ -906,9 +958,15 @@ def test_outgoing_call_does_not_change_idle_or_paused_music(
     app.music_fsm.sync(music_state)
     app.coordinator_runtime.sync_app_state("test_setup")
 
-    _publish_from_worker(app, CallStateChangedEvent(state=CallState.OUTGOING))
+    worker = threading.Thread(
+        target=lambda: app.runtime_loop.queue_main_thread_callback(
+            lambda: app.call_coordinator.handle_call_state_change(CallState.OUTGOING)
+        )
+    )
+    worker.start()
+    worker.join()
 
-    assert app.event_bus.drain() == 1
+    assert app.runtime_loop.process_pending_main_thread_actions() == 1
     assert app.call_fsm.state == CallSessionState.OUTGOING
     assert app.music_fsm.state == music_state
     assert screen_manager.current_screen is app.outgoing_call_screen
@@ -981,7 +1039,13 @@ def test_background_events_wait_for_drain_before_mutating_state() -> None:
     """Registration and playback events should not mutate coordinator state until drained."""
     app, _, _ = _build_app(playback_state="stopped")
 
-    _publish_from_worker(app, RegistrationChangedEvent(state=RegistrationState.OK))
+    worker = threading.Thread(
+        target=lambda: app.runtime_loop.queue_main_thread_callback(
+            lambda: app.call_coordinator.handle_registration_change(RegistrationState.OK)
+        )
+    )
+    worker.start()
+    worker.join()
     worker = threading.Thread(
         target=lambda: app.runtime_loop.queue_main_thread_callback(
             lambda: app.playback_coordinator.handle_playback_state_change("playing")
@@ -1148,9 +1212,15 @@ def test_call_end_restores_previous_screen_base_state() -> None:
     screen_manager.push_screen("incoming_call")
     screen_manager.push_screen("in_call")
 
-    _publish_from_worker(app, CallEndedEvent())
+    worker = threading.Thread(
+        target=lambda: app.runtime_loop.queue_main_thread_callback(
+            lambda: app.call_coordinator.handle_call_ended()
+        )
+    )
+    worker.start()
+    worker.join()
 
-    assert app.event_bus.drain() == 1
+    assert app.runtime_loop.process_pending_main_thread_actions() == 1
     assert screen_manager.current_screen is app.playlist_screen
     assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
 
