@@ -120,7 +120,7 @@ class Sim7600Backend:
 
     def start_ppp(self) -> bool:
         self._state.phase = ModemPhase.PPP_STARTING
-        apn = self._config.apn.strip()
+        apn = str(self._config.apn or "").strip()
         if apn:
             self._at.configure_pdp(apn)
         else:

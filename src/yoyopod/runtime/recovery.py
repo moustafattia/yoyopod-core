@@ -136,7 +136,11 @@ class RecoverySupervisor:
     def attempt_network_recovery(self, recovery_now: float) -> None:
         """Reinitialize the modem when cellular registration or PPP is down."""
 
-        if self.app.network_manager is None or not self.app.network_manager.config.enabled:
+        if (
+            self.app.simulate
+            or self.app.network_manager is None
+            or not self.app.network_manager.config.enabled
+        ):
             return
 
         if self.app.network_manager.is_online:

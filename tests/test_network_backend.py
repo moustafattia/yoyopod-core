@@ -88,6 +88,7 @@ def test_ppp_spawn_fails_without_sudo_for_non_root() -> None:
     with (
         patch("yoyopod.network.ppp.shutil.which", side_effect=_which),
         patch("yoyopod.network.ppp.os.geteuid", return_value=1000, create=True),
+        patch("yoyopod.network.ppp.Path.exists", return_value=False),
         patch("subprocess.Popen") as mock_popen,
     ):
         ppp = PppProcess(serial_port="/dev/ttyUSB3", apn="internet")
@@ -282,6 +283,29 @@ def test_backend_start_ppp_skips_blank_apn_configuration() -> None:
 
     class FakeConfig:
         apn = "   "
+        ppp_timeout = 30
+
+    backend._config = FakeConfig()
+    backend.start_ppp()
+
+    assert backend._state.phase == ModemPhase.ONLINE
+    assert "spawn" in ppp.calls
+    assert not any(call.startswith("configure_pdp:") for call in at.calls)
+
+
+def test_backend_start_ppp_skips_null_apn_configuration() -> None:
+    """start_ppp() should tolerate null APN values from config overlays."""
+
+    at = FakeAtCommands()
+    ppp = FakePpp()
+    backend = Sim7600Backend.__new__(Sim7600Backend)
+    backend._at = at
+    backend._ppp = ppp
+    backend._gps = None
+    backend._state = ModemState(phase=ModemPhase.REGISTERED)
+
+    class FakeConfig:
+        apn = None
         ppp_timeout = 30
 
     backend._config = FakeConfig()

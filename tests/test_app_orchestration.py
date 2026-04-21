@@ -1159,7 +1159,7 @@ def test_recovery_service_no_longer_owns_power_runtime_helpers() -> None:
 def test_recovery_service_schedules_network_reconnect_off_main_thread() -> None:
     """Network recovery should schedule modem retries instead of blocking the loop thread."""
 
-    app = YoyoPodApp(simulate=True)
+    app = YoyoPodApp(simulate=False)
     app.network_manager = FakeRecoveringNetworkManager([False, True])
     scheduled_attempts: list[float] = []
 
@@ -1171,6 +1171,23 @@ def test_recovery_service_schedules_network_reconnect_off_main_thread() -> None:
 
     assert scheduled_attempts == [0.0]
     assert app._network_recovery.in_flight is True
+
+
+def test_recovery_service_skips_network_recovery_in_simulation_mode() -> None:
+    """Simulation mode should not launch modem recovery attempts."""
+
+    app = YoyoPodApp(simulate=True)
+    app.network_manager = FakeRecoveringNetworkManager([True])
+    scheduled_attempts: list[float] = []
+
+    app.recovery_service.start_network_recovery_worker = (
+        lambda recovery_now: scheduled_attempts.append(recovery_now)
+    )
+
+    app.recovery_service.attempt_network_recovery(0.0)
+
+    assert scheduled_attempts == []
+    assert app._network_recovery.in_flight is False
 
 
 def test_music_recovery_backoff_doubles_after_success() -> None:
