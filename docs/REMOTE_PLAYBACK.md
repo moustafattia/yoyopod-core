@@ -1,8 +1,8 @@
 # YoYoPod Remote Playback On Device
 
-This document describes the device-side playback behavior for `yoyo-py`.
+This document describes the current device-side playback and media-import behavior for `yoyo-py`.
 
-## Contract
+## MQTT Contract
 
 Topics:
 
@@ -12,15 +12,17 @@ Topics:
 
 Rules:
 
-- `ack` topic is only for command acceptance or rejection
-- `evt` topic is only for playback lifecycle
+- `ack` emits command acceptance only
+- `evt` emits lifecycle only
+- `ack` and `nack` must never be replayed as lifecycle events on `evt`
 
-Accepted playback commands:
+Accepted commands:
 
 - `play_track`
 - `pause`
 - `resume`
 - `stop`
+- `store_media`
 
 ## ACK Payloads
 
@@ -43,9 +45,9 @@ Accepted playback commands:
 }
 ```
 
-## Playback Event Payloads
+## Event Payloads
 
-Lifecycle events are published on `evt` with `type: "playback"`.
+Playback lifecycle is published on `evt` with `type: "playback"`.
 
 Supported `eventType` values:
 
@@ -56,14 +58,21 @@ Supported `eventType` values:
 - `completed`
 - `failed`
 
-## Caching
+Device-local media import lifecycle is also published on `evt`, but with `type: "media_library"`.
 
-Remote playback now uses a bounded local cache:
+Supported media-library `eventType` values:
+
+- `imported`
+- `failed`
+
+## Remote Playback Cache
+
+Remote playback uses a bounded local cache before mpv starts playback.
 
 - cache key includes `track_id`
 - checksum is verified when provided
-- least-recently-used pruning is based on file mtime
-- cache size is bounded by config
+- least-recently-used pruning uses file mtime
+- playback runs from the cached local file, not the signed backend URL
 
 Relevant config fields:
 
@@ -73,23 +82,35 @@ Relevant config fields:
 Operational behavior:
 
 - first remote play downloads and verifies the asset
-- repeated plays use the cached local file when available
-- playback runs against the local cached file, not the signed backend URL
+- repeated plays reuse the cached local asset when possible
+- short backend token lifetime does not interrupt playback after fetch completes
+
+## Device-Local Media Import
+
+Dashboard upload now supports device-local persistence through the backend-mediated `store_media` command.
+
+Current import behavior:
+
+1. backend finalizes the uploaded household track
+2. backend sends `store_media` to the selected device
+3. device downloads the authorized asset through the same cache path used by remote playback
+4. device persists the file under `YOYOPOD_MUSIC_DIR/dashboard_uploads/`
+5. device updates `YOYOPOD_MUSIC_DIR/Dashboard Uploads.m3u`
+6. device emits `media_library.imported` or `media_library.failed`
+
+This keeps backend as the policy authority while making the resulting media available through the device-local `Listen` surface.
 
 ## Playback Behavior
 
 - only one active remote playback session is tracked
-- a new valid `play_track` interrupts current playback
-- `pause` and `resume` use the current mpv backend path
-- duplicate `commandId` values are ACKed as duplicates and not replayed
+- a new valid `play_track` interrupts the current remote playback
+- `pause` and `resume` run through the current mpv backend path
+- duplicate `commandId` values are ACKed as duplicates and are not replayed
+- `store_media` also participates in duplicate command suppression
 
-## Current Operational Caveat
+## Real Validation Notes
 
-The real Pi used for validation currently lacks a working LVGL production shim build, so cloud/media validation was performed with the app running on the actual Pi in `--simulate` display mode. Audio, MQTT, remote fetch, and cache behavior were validated on-device; the display contract remains a separate operational restore task.
-
-## Validation Notes
-
-Observed real-device validation on `piz` confirmed:
+Observed on the real `piz` device:
 
 - `ack`
 - `buffering`
@@ -97,6 +118,10 @@ Observed real-device validation on `piz` confirmed:
 - `paused`
 - `resume -> playing`
 - `stop -> stopped`
-- long-track playback beyond the short device token lifetime
-- cache miss on first long-track play
-- cache hit on repeated long-track play
+- `store_media -> media_library.imported`
+- repeated import/play paths using cached assets
+
+Operational note:
+
+- the current Pi runtime still logs VoIP recovery warnings because the Liblinphone native backend is unavailable on that device image
+- this does not block local music playback or media import
