@@ -68,7 +68,6 @@ class RuntimeBootService:
             display_cls=Display,
             get_input_manager_fn=get_input_manager,
             screen_manager_cls=ScreenManager,
-            refresh_talk_summary_fn=self.refresh_talk_summary,
             lvgl_input_bridge_cls=LvglInputBridge,
             contract_error_cls=WhisplayProductionRenderContractError,
             build_contract_message_fn=build_whisplay_production_contract_message,
@@ -144,22 +143,6 @@ class RuntimeBootService:
     def get_initial_screen_name(self) -> str:
         return self._screens_boot.get_initial_screen_name()
 
-    def refresh_talk_summary(self) -> None:
-        """Refresh Talk summary data exposed through the shared app context."""
-
-        if self.app.context is None or self.app.call_history_store is None:
-            return
-
-        self.app.context.update_call_summary(
-            missed_calls=self.app.call_history_store.missed_count(),
-            recent_calls=self.app.call_history_store.recent_preview(),
-        )
-        if self.app.voip_manager is not None:
-            self.app.context.update_voice_note_summary(
-                unread_voice_notes=self.app.voip_manager.unread_voice_note_count(),
-                latest_voice_note_by_contact=self.app.voip_manager.latest_voice_note_summary(),
-            )
-
     def setup_voip_callbacks(self) -> None:
         """Register VoIP event callbacks."""
 
@@ -196,7 +179,7 @@ class RuntimeBootService:
         self.app.voip_manager.on_message_failure(
             self.app.voice_note_events.handle_voice_note_failure
         )
-        self.refresh_talk_summary()
+        self.app.voice_note_events.sync_talk_summary_context()
         self.app.voice_note_events.sync_active_voice_note_context()
         logger.info("  VoIP callbacks registered")
 
@@ -249,6 +232,7 @@ class RuntimeBootService:
 
     def setup_event_subscriptions(self) -> None:
         """Backward-compatible alias for coordinator event binding."""
+        self.ensure_coordinators()
         self.bind_coordinator_events()
 
     def ensure_coordinators(self) -> None:

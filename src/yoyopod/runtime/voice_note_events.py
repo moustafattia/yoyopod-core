@@ -33,7 +33,7 @@ class VoiceNoteEventHandler:
         """Refresh active draft state after a message or delivery update."""
 
         self.sync_active_voice_note_context()
-        self.app.boot_service.refresh_talk_summary()
+        self.sync_talk_summary_context()
         self.refresh_talk_related_screen()
 
     def handle_voice_note_failure(self, *_args: Any) -> None:
@@ -57,6 +57,22 @@ class VoiceNoteEventHandler:
             file_path=draft.file_path,
             duration_ms=draft.duration_ms,
         )
+
+    def sync_talk_summary_context(self) -> None:
+        """Refresh Talk summary counts and latest voice-note metadata in AppContext."""
+
+        if self.app.context is None or self.app.call_history_store is None:
+            return
+
+        self.app.context.update_call_summary(
+            missed_calls=self.app.call_history_store.missed_count(),
+            recent_calls=self.app.call_history_store.recent_preview(),
+        )
+        if self.app.voip_manager is not None:
+            self.app.context.update_voice_note_summary(
+                unread_voice_notes=self.app.voip_manager.unread_voice_note_count(),
+                latest_voice_note_by_contact=self.app.voip_manager.latest_voice_note_summary(),
+            )
 
     def refresh_talk_related_screen(self) -> None:
         """Re-render Talk screens when their message state changes."""

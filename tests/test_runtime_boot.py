@@ -121,6 +121,7 @@ class _FakeApp:
         self.cloud_manager = SimpleNamespace(sync_context_state=lambda: None)
         self.call_history_store = None
         self.voip_manager = None
+        self.voice_note_events = SimpleNamespace(sync_talk_summary_context=lambda: None)
         self.context = None
         self.display = None
         self.input_manager = None
@@ -312,11 +313,13 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
 
     voip_manager = _FakeVoipManager()
     call_coordinator = _FakeCallCoordinator()
+    synced = {"talk": 0, "active": 0}
     voice_note_events = SimpleNamespace(
         handle_voice_note_summary_changed=lambda *_args: None,
         handle_voice_note_activity_changed=lambda *_args: None,
         handle_voice_note_failure=lambda *_args: None,
-        sync_active_voice_note_context=lambda: None,
+        sync_talk_summary_context=lambda: synced.__setitem__("talk", synced["talk"] + 1),
+        sync_active_voice_note_context=lambda: synced.__setitem__("active", synced["active"] + 1),
     )
     app = SimpleNamespace(
         voip_manager=voip_manager,
@@ -335,6 +338,7 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     assert voip_manager.message_received_callback is voice_note_events.handle_voice_note_activity_changed
     assert voip_manager.message_delivery_callback is voice_note_events.handle_voice_note_activity_changed
     assert voip_manager.message_failure_callback is voice_note_events.handle_voice_note_failure
+    assert synced == {"talk": 1, "active": 1}
 
 
 def test_setup_music_callbacks_bind_direct_playback_handlers() -> None:
@@ -381,6 +385,19 @@ def test_bind_coordinator_events_uses_existing_runtime_owners() -> None:
         ("playback", event_bus),
         ("power", event_bus),
     ]
+
+
+def test_setup_event_subscriptions_keeps_legacy_build_then_bind_flow() -> None:
+    """The compatibility alias should still ensure coordinators before binding."""
+
+    service = RuntimeBootService(SimpleNamespace())
+    calls: list[str] = []
+    service.ensure_coordinators = lambda: calls.append("ensure")
+    service.bind_coordinator_events = lambda: calls.append("bind")
+
+    service.setup_event_subscriptions()
+
+    assert calls == ["ensure", "bind"]
 
 
 def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -> None:

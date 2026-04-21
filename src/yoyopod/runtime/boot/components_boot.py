@@ -20,7 +20,6 @@ class ComponentsBoot:
         display_cls: Any,
         get_input_manager_fn: Any,
         screen_manager_cls: Any,
-        refresh_talk_summary_fn: Any,
         lvgl_input_bridge_cls: Any,
         contract_error_cls: Any,
         build_contract_message_fn: Any,
@@ -30,7 +29,6 @@ class ComponentsBoot:
         self.display_cls = display_cls
         self.get_input_manager_fn = get_input_manager_fn
         self.screen_manager_cls = screen_manager_cls
-        self.refresh_talk_summary_fn = refresh_talk_summary_fn
         self.lvgl_input_bridge_cls = lvgl_input_bridge_cls
         self.contract_error_cls = contract_error_cls
         self.build_contract_message_fn = build_contract_message_fn
@@ -148,7 +146,7 @@ class ComponentsBoot:
                     speaker_device_id=speaker_device_id,
                     capture_device_id=capture_device_id,
                 )
-                self.refresh_talk_summary_fn()
+                self.app.voice_note_events.sync_talk_summary_context()
             self.app.screen_power_service.update_screen_runtime_metrics(time.monotonic())
 
             self.logger.info("  - Orchestration Models")
