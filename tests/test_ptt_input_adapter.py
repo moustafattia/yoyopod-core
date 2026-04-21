@@ -101,6 +101,51 @@ def test_disabling_double_tap_select_emits_advance_immediately() -> None:
     assert actions == [InputAction.ADVANCE]
 
 
+def test_double_tap_select_attribute_tracks_state_machine_configuration() -> None:
+    """The adapter should continue exposing double_tap_select_enabled as a public attribute."""
+    adapter = PTTInputAdapter(simulate=True, enable_navigation=True)
+
+    assert adapter.double_tap_select_enabled is True
+
+    adapter.double_tap_select_enabled = False
+
+    assert adapter.double_tap_select_enabled is False
+    assert adapter.state.double_tap_select_enabled is False
+    assert InputAction.SELECT not in adapter.get_capabilities()
+
+    adapter.set_double_tap_select_enabled(False)
+
+    assert adapter.double_tap_select_enabled is False
+    assert InputAction.SELECT not in adapter.get_capabilities()
+
+
+def test_enable_navigation_attribute_remains_the_single_source_of_truth() -> None:
+    """Toggling enable_navigation on the adapter should update the shared state object."""
+    adapter = PTTInputAdapter(simulate=True, enable_navigation=True)
+
+    adapter.enable_navigation = False
+
+    assert adapter.enable_navigation is False
+    assert adapter.state.enable_navigation is False
+    assert adapter.get_capabilities() == [InputAction.PTT_PRESS, InputAction.PTT_RELEASE]
+
+
+def test_timing_attributes_remain_synchronized_with_state_machine() -> None:
+    """Public timing attributes should update the shared timing state used by gesture logic."""
+    adapter = PTTInputAdapter(simulate=True, enable_navigation=True)
+
+    adapter.debounce_time = 0.08
+    adapter.double_click_time = 0.24
+    adapter.long_press_time = 0.95
+
+    assert adapter.debounce_time == 0.08
+    assert adapter.double_click_time == 0.24
+    assert adapter.long_press_time == 0.95
+    assert adapter.state.debounce_time == 0.08
+    assert adapter.state.double_click_time == 0.24
+    assert adapter.state.long_press_time == 0.95
+
+
 def test_button_press_fires_raw_activity_immediately() -> None:
     """Physical button presses should emit wake-worthy activity before gesture resolution."""
     adapter = PTTInputAdapter(simulate=True, enable_navigation=True)
