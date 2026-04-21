@@ -51,6 +51,7 @@ from yoyopod.runtime.power_service import PowerRuntimeService
 from yoyopod.runtime.recovery import RecoverySupervisor
 from yoyopod.runtime.screen_power import ScreenPowerService
 from yoyopod.runtime.shutdown import ShutdownLifecycleService
+from yoyopod.runtime.status import RuntimeStatusService
 from yoyopod.runtime.voice_note_events import VoiceNoteEventHandler
 from yoyopod.integrations.cloud.manager import CloudManager
 
@@ -222,6 +223,7 @@ class YoyoPodApp:
         self.network_events = NetworkEventHandler(self)
         self.runtime_loop = RuntimeLoopService(self)
         self.boot_service = RuntimeBootService(self)
+        self.status_service = RuntimeStatusService(self)
         self.event_subscriptions = RuntimeEventSubscriptions(self)
         self.event_subscriptions.register()
 
@@ -289,175 +291,4 @@ class YoyoPodApp:
 
     def get_status(self, *, refresh_output_volume: bool = False) -> dict[str, Any]:
         """Return the current application status."""
-        monotonic_now = time.monotonic()
-        pending_shutdown_in_seconds = None
-        if self._pending_shutdown is not None:
-            pending_shutdown_in_seconds = max(
-                0.0,
-                self._pending_shutdown.execute_at - monotonic_now,
-            )
-
-        assert self.coordinator_runtime is not None
-        assert self.call_interruption_policy is not None
-        current_screen = (
-            self.screen_manager.get_current_screen() if self.screen_manager is not None else None
-        )
-        power_snapshot = (
-            self.power_manager.get_snapshot() if self.power_manager is not None else None
-        )
-
-        return {
-            "state": self.coordinator_runtime.get_state_name(),
-            "voip_registered": self.voip_registered,
-            "music_was_playing": self.call_interruption_policy.music_interrupted_by_call,
-            "auto_resume": self.auto_resume_after_call,
-            "voip_available": self.voip_manager is not None and self.voip_manager.running,
-            "music_available": self.music_backend is not None and self.music_backend.is_connected,
-            "volume": (
-                self.audio_volume_controller.get_output_volume(
-                    refresh_system=refresh_output_volume
-                )
-                if self.audio_volume_controller is not None
-                else (
-                    self.context.media.playback.volume
-                    if self.context is not None
-                    else None
-                )
-            ),
-            "power_available": power_snapshot.available if power_snapshot is not None else False,
-            "current_screen": getattr(current_screen, "route_name", None),
-            "screen_stack_depth": (
-                len(self.screen_manager.screen_stack) if self.screen_manager is not None else 0
-            ),
-            "input_manager_running": (
-                self.input_manager.running if self.input_manager is not None else False
-            ),
-            "pending_main_thread_callbacks": self._pending_main_thread_callback_count(),
-            "pending_event_bus_events": self.event_bus.pending_count(),
-            "input_activity_age_seconds": (
-                max(0.0, monotonic_now - self._last_input_activity_at)
-                if self._last_input_activity_at > 0.0
-                else None
-            ),
-            "last_input_action": self._last_input_activity_action_name,
-            "handled_input_activity_age_seconds": (
-                max(0.0, monotonic_now - self._last_input_handled_at)
-                if self._last_input_handled_at > 0.0
-                else None
-            ),
-            "last_handled_input_action": self._last_input_handled_action_name,
-            "battery_percent": self.context.power.battery_percent if self.context else None,
-            "battery_charging": self.context.power.battery_charging if self.context else None,
-            "external_power": self.context.power.external_power if self.context else None,
-            "missed_calls": self.context.talk.missed_calls if self.context else 0,
-            "recent_calls": self.context.talk.recent_calls if self.context else [],
-            "screen_awake": self.context.screen.awake if self.context else self._screen_awake,
-            "screen_idle_seconds": self.context.screen.idle_seconds if self.context else None,
-            "screen_on_seconds": self.context.screen.on_seconds if self.context else None,
-            "app_uptime_seconds": self.context.screen.app_uptime_seconds if self.context else None,
-            "shutdown_pending": self._pending_shutdown is not None,
-            "shutdown_reason": self._pending_shutdown.reason if self._pending_shutdown else None,
-            "shutdown_in_seconds": pending_shutdown_in_seconds,
-            "shutdown_completed": self._shutdown_completed,
-            "warning_threshold_percent": (
-                self.power_manager.config.low_battery_warning_percent
-                if self.power_manager is not None
-                else None
-            ),
-            "critical_shutdown_percent": (
-                self.power_manager.config.critical_shutdown_percent
-                if self.power_manager is not None
-                else None
-            ),
-            "shutdown_delay_seconds": (
-                self.power_manager.config.shutdown_delay_seconds
-                if self.power_manager is not None
-                else None
-            ),
-            "screen_timeout_seconds": self._screen_timeout_seconds,
-            "display_backend": (
-                getattr(self.display, "backend_kind", "pil")
-                if self.display is not None
-                else "unknown"
-            ),
-            "lvgl_initialized": bool(
-                self._lvgl_backend is not None and self._lvgl_backend.initialized
-            ),
-            "lvgl_pump_age_seconds": (
-                max(0.0, monotonic_now - self._last_lvgl_pump_at)
-                if self._last_lvgl_pump_at > 0.0
-                else None
-            ),
-            "loop_heartbeat_age_seconds": (
-                max(0.0, monotonic_now - self._last_loop_heartbeat_at)
-                if self._last_loop_heartbeat_at > 0.0
-                else None
-            ),
-            "next_voip_iterate_in_seconds": (
-                max(0.0, self._next_voip_iterate_at - monotonic_now)
-                if (
-                    self.voip_manager is not None
-                    and self.voip_manager.running
-                    and self._next_voip_iterate_at > 0.0
-                )
-                else None
-            ),
-            "power_model": power_snapshot.device.model if power_snapshot is not None else None,
-            "power_error": power_snapshot.error if power_snapshot is not None else None,
-            "power_voltage_volts": (
-                power_snapshot.battery.voltage_volts if power_snapshot is not None else None
-            ),
-            "power_temperature_celsius": (
-                power_snapshot.battery.temperature_celsius if power_snapshot is not None else None
-            ),
-            "rtc_time": power_snapshot.rtc.time if power_snapshot is not None else None,
-            "rtc_alarm_enabled": (
-                power_snapshot.rtc.alarm_enabled if power_snapshot is not None else None
-            ),
-            "rtc_alarm_time": power_snapshot.rtc.alarm_time if power_snapshot is not None else None,
-            "watchdog_enabled": (
-                self.power_manager.config.watchdog_enabled
-                if self.power_manager is not None
-                else False
-            ),
-            "watchdog_active": self._watchdog_active,
-            "watchdog_feed_in_flight": self._watchdog_feed_in_flight,
-            "watchdog_feed_suppressed": self._watchdog_feed_suppressed,
-            "watchdog_timeout_seconds": (
-                self.power_manager.config.watchdog_timeout_seconds
-                if self.power_manager is not None
-                else None
-            ),
-            "watchdog_feed_interval_seconds": (
-                self.power_manager.config.watchdog_feed_interval_seconds
-                if self.power_manager is not None
-                else None
-            ),
-            "power_refresh_in_flight": self._power_refresh_in_flight,
-            "responsiveness_watchdog_enabled": bool(
-                getattr(
-                    getattr(self.app_settings, "diagnostics", None),
-                    "responsiveness_watchdog_enabled",
-                    False,
-                )
-            ),
-            "responsiveness_capture_dir": (
-                getattr(
-                    getattr(self.app_settings, "diagnostics", None),
-                    "responsiveness_capture_dir",
-                    None,
-                )
-            ),
-            "responsiveness_last_capture_age_seconds": (
-                max(0.0, monotonic_now - self._last_responsiveness_capture_at)
-                if self._last_responsiveness_capture_at > 0.0
-                else None
-            ),
-            "responsiveness_last_capture_reason": self._last_responsiveness_capture_reason,
-            "responsiveness_last_capture_scope": self._last_responsiveness_capture_scope,
-            "responsiveness_last_capture_summary": self._last_responsiveness_capture_summary,
-            "responsiveness_last_capture_artifacts": dict(
-                self._last_responsiveness_capture_artifacts
-            ),
-            **self.runtime_loop.timing_snapshot(now=monotonic_now),
-        }
+        return self.status_service.get_status(refresh_output_volume=refresh_output_volume)
