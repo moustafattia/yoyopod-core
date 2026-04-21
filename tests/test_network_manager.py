@@ -283,6 +283,43 @@ def test_manager_stop_does_not_block_on_recovering_ppp_wait() -> None:
     assert stop_thread.is_alive() is False
 
 
+def test_manager_stop_cancels_recovery_restart_after_reset() -> None:
+    """stop() should invalidate a recovery attempt before it reopens the modem."""
+
+    config = build_config_model(NetworkConfig, {"enabled": True, "apn": "internet"})
+    backend = FakeBackend()
+    backend.state.phase = ModemPhase.REGISTERING
+    backend.health_online = False
+    manager = NetworkManager(config=config, backend=backend)
+    start_attempted = threading.Event()
+    release_start = threading.Event()
+    original_start_flow = manager._start_flow
+    recover_result: list[bool] = []
+
+    def gated_start_flow(*, expected_generation: int | None = None) -> bool:
+        start_attempted.set()
+        assert release_start.wait(timeout=1.0) is True
+        return original_start_flow(expected_generation=expected_generation)
+
+    manager._start_flow = gated_start_flow
+
+    recovery_thread = threading.Thread(
+        target=lambda: recover_result.append(manager.recover()),
+        daemon=True,
+    )
+    recovery_thread.start()
+
+    assert start_attempted.wait(timeout=1.0) is True
+
+    manager.stop()
+    release_start.set()
+    recovery_thread.join(timeout=1.0)
+
+    assert recovery_thread.is_alive() is False
+    assert recover_result == [False]
+    assert backend.opened is False
+
+
 def test_manager_from_config_manager_uses_domain_owned_network_settings(tmp_path) -> None:
     """from_config_manager() should read the canonical network domain file."""
 

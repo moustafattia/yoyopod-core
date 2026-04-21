@@ -29,6 +29,7 @@ class NetworkManager:
         self.backend = backend or Sim7600Backend(config)
         self.event_bus = event_bus
         self._lifecycle_lock = threading.RLock()
+        self._lifecycle_generation = 0
 
     @classmethod
     def from_config_manager(
@@ -42,7 +43,7 @@ class NetworkManager:
         """Open modem, initialize, and start PPP."""
         self._start_flow()
 
-    def _start_flow(self) -> None:
+    def _start_flow(self, *, expected_generation: int | None = None) -> bool:
         """Run the one-shot modem bring-up flow."""
         from yoyopod.core import (
             NetworkModemReadyEvent,
@@ -57,6 +58,12 @@ class NetworkManager:
 
         logger.info("Starting network manager")
         with self._lifecycle_lock:
+            if (
+                expected_generation is not None
+                and expected_generation != self._lifecycle_generation
+            ):
+                logger.info("Skipping network bring-up after concurrent lifecycle change")
+                return False
             self.backend.open()
             self.backend.init_modem()
             state = self.backend.get_state()
@@ -92,12 +99,14 @@ class NetworkManager:
                 self._publish(NetworkPppUpEvent(connection_type="4g"))
         else:
             logger.error("Modem init failed: {}", state.error)
+        return True
 
     def stop(self) -> None:
         """Stop PPP and close the modem."""
         from yoyopod.core import NetworkPppDownEvent
 
         with self._lifecycle_lock:
+            self._lifecycle_generation += 1
             logger.info("Stopping network manager")
             try:
                 self.backend.close()
@@ -114,13 +123,15 @@ class NetworkManager:
 
         with self._lifecycle_lock:
             logger.info("Recovering network manager")
+            expected_generation = self._lifecycle_generation
             try:
                 self.backend.close()
             except Exception as exc:
                 logger.debug("Ignoring network close error during recovery reset: {}", exc)
 
         try:
-            self._start_flow()
+            if not self._start_flow(expected_generation=expected_generation):
+                return False
         except Exception as exc:
             logger.error("Network recovery failed: {}", exc)
         return self.is_online
