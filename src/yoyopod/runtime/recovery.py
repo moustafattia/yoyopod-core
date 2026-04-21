@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from yoyopod.core import RecoveryAttemptCompletedEvent
-
 if TYPE_CHECKING:
     from yoyopod.app import YoyoPodApp
     from yoyopod.runtime.models import RecoveryState
@@ -71,18 +69,6 @@ class RecoverySupervisor:
             self.app._network_recovery,
             recovered,
             recovery_now,
-        )
-
-    def handle_recovery_attempt_completed_event(
-        self,
-        event: RecoveryAttemptCompletedEvent,
-    ) -> None:
-        """Compatibility wrapper for the legacy completion event shape."""
-
-        self.handle_recovery_attempt_completed(
-            manager=event.manager,
-            recovered=event.recovered,
-            recovery_now=event.recovery_now,
         )
 
     def attempt_manager_recovery(self, now: float | None = None) -> None:

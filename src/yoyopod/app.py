@@ -233,48 +233,6 @@ class YoyoPodApp:
         self.shutdown_service = ShutdownLifecycleService(self)
         self.runtime_loop = RuntimeLoopService(self)
         self.boot_service = RuntimeBootService(self)
-        self._register_runtime_event_subscriptions()
-
-        logger.info("=" * 60)
-        logger.info("YoyoPod Application Initializing")
-        logger.info("=" * 60)
-
-    @property
-    def voip_registered(self) -> bool:
-        """Expose the current VoIP registration state for compatibility."""
-        if self.call_coordinator is not None:
-            return self.call_coordinator.voip_registered
-        return self._voip_registered
-
-    @voip_registered.setter
-    def voip_registered(self, value: bool) -> None:
-        """Store VoIP registration state before or after coordinators are initialized."""
-        self._voip_registered = value
-        if self.call_coordinator is not None:
-            self.call_coordinator.voip_registered = value
-
-    def setup(self) -> bool:
-        """Initialize all components and register callbacks."""
-        return self.boot_service.setup()
-
-    def _pending_main_thread_callback_count(self) -> int | None:
-        """Return the combined generic and safety callback backlog."""
-
-        callback_backlog = _queue_depth(self._pending_main_thread_callbacks)
-        safety_backlog = _queue_depth(self._pending_safety_main_thread_callbacks)
-        if callback_backlog is None and safety_backlog is None:
-            return None
-        return max(0, callback_backlog or 0) + max(0, safety_backlog or 0)
-
-    def _pump_lvgl_backend(self, now: float | None = None) -> None:
-        self.runtime_loop.pump_lvgl_backend(now)
-
-    def _iterate_voip_backend_if_due(self, now: float | None = None) -> None:
-        self.runtime_loop.iterate_voip_backend_if_due(now)
-
-    def _register_runtime_event_subscriptions(self) -> None:
-        """Subscribe runtime-owned handlers on the compatibility EventBus."""
-
         self.event_bus.subscribe(
             ScreenChangedEvent,
             self.screen_power_service.handle_screen_changed_event,
@@ -309,6 +267,37 @@ class YoyoPodApp:
             NetworkPppDownEvent,
             self.handle_network_ppp_down,
         )
+
+        logger.info("=" * 60)
+        logger.info("YoyoPod Application Initializing")
+        logger.info("=" * 60)
+
+    @property
+    def voip_registered(self) -> bool:
+        """Expose the current VoIP registration state for compatibility."""
+        if self.call_coordinator is not None:
+            return self.call_coordinator.voip_registered
+        return self._voip_registered
+
+    @voip_registered.setter
+    def voip_registered(self, value: bool) -> None:
+        """Store VoIP registration state before or after coordinators are initialized."""
+        self._voip_registered = value
+        if self.call_coordinator is not None:
+            self.call_coordinator.voip_registered = value
+
+    def setup(self) -> bool:
+        """Initialize all components and register callbacks."""
+        return self.boot_service.setup()
+
+    def _pending_main_thread_callback_count(self) -> int | None:
+        """Return the combined generic and safety callback backlog."""
+
+        callback_backlog = _queue_depth(self._pending_main_thread_callbacks)
+        safety_backlog = _queue_depth(self._pending_safety_main_thread_callbacks)
+        if callback_backlog is None and safety_backlog is None:
+            return None
+        return max(0, callback_backlog or 0) + max(0, safety_backlog or 0)
 
     def handle_voice_note_summary_changed(
         self,
