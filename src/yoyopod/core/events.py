@@ -99,6 +99,14 @@ class RecoveryAttemptCompletedEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class BackendStoppedEvent:
+    """Published when one integration-owned backend becomes unavailable."""
+
+    domain: str
+    reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class VoIPAvailabilityChangedEvent:
     """Published when VoIP backend availability changes."""
 
