@@ -15,7 +15,6 @@ from typing import Callable
 import pytest
 from cffi import FFI
 
-from yoyopod.communication.calling.manager import VoIPManager
 from yoyopod.communication.calling.mock_backend import MockVoIPBackend
 from yoyopod.communication.integrations.liblinphone import LiblinphoneBackend, LiblinphoneBinding
 from yoyopod.communication.models import (
@@ -35,6 +34,7 @@ from yoyopod.communication.models import (
     VoIPEvent,
     VoIPMessageRecord,
 )
+from yoyopod.integrations.call import VoIPManager
 
 
 class FakeBinding:

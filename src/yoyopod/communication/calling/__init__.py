@@ -7,17 +7,17 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from yoyopod.communication.calling.backend_protocol import VoIPIterateMetrics
-    from yoyopod.communication.calling.history import CallHistoryEntry, CallHistoryStore
-    from yoyopod.communication.calling.manager import VoIPManager
-    from yoyopod.communication.calling.voice_notes import VoiceNoteDraft
+    from yoyopod.integrations.call.history import CallHistoryEntry, CallHistoryStore
+    from yoyopod.integrations.call.manager import VoIPManager
+    from yoyopod.integrations.call.voice_notes import VoiceNoteDraft
 
 
 _LAZY_EXPORTS = {
-    "CallHistoryEntry": "yoyopod.communication.calling.history",
-    "CallHistoryStore": "yoyopod.communication.calling.history",
+    "CallHistoryEntry": "yoyopod.integrations.call.history",
+    "CallHistoryStore": "yoyopod.integrations.call.history",
     "VoIPIterateMetrics": "yoyopod.communication.calling.backend_protocol",
-    "VoIPManager": "yoyopod.communication.calling.manager",
-    "VoiceNoteDraft": "yoyopod.communication.calling.voice_notes",
+    "VoIPManager": "yoyopod.integrations.call.manager",
+    "VoiceNoteDraft": "yoyopod.integrations.call.voice_notes",
 }
 
 

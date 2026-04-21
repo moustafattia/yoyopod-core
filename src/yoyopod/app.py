@@ -52,8 +52,7 @@ from yoyopod.runtime.shutdown import ShutdownLifecycleService
 from yoyopod.runtime.event_wiring import RuntimeEventWiring
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.integrations.cloud.manager import CloudManager
-from yoyopod.communication.calling.history import CallHistoryStore
-from yoyopod.communication.calling.manager import VoIPManager
+from yoyopod.integrations.call import CallHistoryStore, VoIPManager
 
 if TYPE_CHECKING:
     from yoyopod.ui.display import Display

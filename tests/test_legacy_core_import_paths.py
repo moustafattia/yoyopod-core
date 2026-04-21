@@ -48,6 +48,10 @@ from yoyopod.backends.network import PppProcess as BackendPppProcess
 from yoyopod.backends.network import SerialTransport as BackendSerialTransport
 from yoyopod.backends.network import Sim7600Backend as BackendSim7600Backend
 from yoyopod.backends.network import TransportError as BackendTransportError
+from yoyopod.integrations.call import CallHistoryEntry as IntegrationCallHistoryEntry
+from yoyopod.integrations.call import CallHistoryStore as IntegrationCallHistoryStore
+from yoyopod.integrations.call import VoIPManager as IntegrationVoIPManager
+from yoyopod.integrations.call import VoiceNoteDraft as IntegrationVoiceNoteDraft
 from yoyopod.integrations.power import BatteryState as IntegrationBatteryState
 from yoyopod.integrations.power import PowerManager as IntegrationPowerManager
 from yoyopod.integrations.power import PowerSnapshot as IntegrationPowerSnapshot
@@ -97,6 +101,10 @@ from yoyopod.network import ModemState as LegacyModemState
 from yoyopod.network import NetworkManager as LegacyNetworkManager
 from yoyopod.network import SignalInfo as LegacySignalInfo
 from yoyopod.network import Sim7600Backend as LegacySim7600Backend
+from yoyopod.communication.calling import CallHistoryEntry as LegacyCallHistoryEntry
+from yoyopod.communication.calling import CallHistoryStore as LegacyCallHistoryStore
+from yoyopod.communication.calling import VoIPManager as LegacyVoIPManager
+from yoyopod.communication.calling import VoiceNoteDraft as LegacyVoiceNoteDraft
 from yoyopod.network.at_commands import AtCommandSet as LegacyAtCommandSet
 from yoyopod.network.backend import Sim7600Backend as LegacyBackendSim7600Backend
 from yoyopod.network.gps import GpsReader as LegacyGpsReader
@@ -169,6 +177,15 @@ def test_legacy_people_import_paths_resolve_to_relocated_contacts_symbols() -> N
     assert legacy_build_cloud_contact is ContactsBuildCloudContact
     assert legacy_contacts_from_mapping is contacts_from_mapping_new
     assert legacy_contacts_to_mapping is contacts_to_mapping_new
+
+
+def test_legacy_call_import_paths_resolve_to_relocated_symbols() -> None:
+    """Legacy call imports should keep pointing at the canonical call seam."""
+
+    assert LegacyCallHistoryEntry is IntegrationCallHistoryEntry
+    assert LegacyCallHistoryStore is IntegrationCallHistoryStore
+    assert LegacyVoIPManager is IntegrationVoIPManager
+    assert LegacyVoiceNoteDraft is IntegrationVoiceNoteDraft
 
 
 def test_legacy_cloud_import_paths_resolve_to_relocated_cloud_symbols() -> None:

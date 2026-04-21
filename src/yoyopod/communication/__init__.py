@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .calling.manager import VoIPManager
+    from yoyopod.integrations.call.manager import VoIPManager
 
 
 def __getattr__(name: str) -> Any:
@@ -14,7 +14,7 @@ def __getattr__(name: str) -> Any:
     if name != "VoIPManager":
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-    from .calling.manager import VoIPManager as _VoIPManager
+    from yoyopod.integrations.call.manager import VoIPManager as _VoIPManager
 
     return _VoIPManager
 

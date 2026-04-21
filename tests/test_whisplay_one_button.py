@@ -12,7 +12,7 @@ from yoyopod.audio import (
     RecentTrackHistoryStore,
     Track,
 )
-from yoyopod.communication.calling import VoiceNoteDraft
+from yoyopod.integrations.call import VoiceNoteDraft
 from yoyopod.ui.display import Display
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.music.now_playing import (

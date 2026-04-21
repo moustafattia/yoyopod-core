@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from yoyopod.core import AppContext
-from yoyopod.communication.calling import VoiceNoteDraft
+from yoyopod.integrations.call import VoiceNoteDraft
 from yoyopod.communication.models import (
     MessageDeliveryState,
     MessageDirection,

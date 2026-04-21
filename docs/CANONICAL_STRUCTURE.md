@@ -104,8 +104,12 @@ Current exemplar package homes:
   - compatibility shims for the historical network import path
 - `src/yoyopod/communication/`
   - `calling/`
+  - low-level calling backends, messaging helpers, and compatibility shims
   - `messaging/`
   - `integrations/`
+  - `__init__.py` is the app-facing seam
+- `src/yoyopod/integrations/call/`
+  - canonical call manager, call-history store, and voice-note models/services
   - `__init__.py` is the app-facing seam
 - `src/yoyopod/integrations/contacts/`
   - mutable contacts/address-book concerns
@@ -136,7 +140,7 @@ The app layer should import from domain seams such as:
 - `yoyopod.integrations.network`
 - `yoyopod.audio`
 - `yoyopod.integrations.power`
-- `yoyopod.communication`
+- `yoyopod.integrations.call`
 - `yoyopod.integrations.contacts`
 
 It should not reach arbitrarily into domain internals unless the app is the
@@ -147,6 +151,7 @@ explicit owner of that internal boundary.
 The communication exemplar establishes:
 
 - communication code under `src/yoyopod/communication/`
+- public call-domain ownership under `src/yoyopod/integrations/call/`
 - contacts under `src/yoyopod/integrations/contacts/`
 - communication config separated from mutable people data
 - runtime people data seeded into `data/people/contacts.yaml` from
@@ -154,6 +159,19 @@ The communication exemplar establishes:
 
 Contacts are not communication config. The tracked people config file only says
 where the mutable address book lives and which seed file can bootstrap it.
+
+## Call Migration Pattern
+
+The call migration follows the same cutover shape:
+
+- communication policy remains under `config/communication/calling.yaml` and
+  `config/communication/messaging.yaml`
+- `src/yoyopod/integrations/call/` is the canonical owner of the public
+  call manager, call-history, and voice-note seam
+- `src/yoyopod/communication/calling/` is retained for low-level backend
+  protocol, messaging helpers, and historical compatibility imports
+- app/runtime composition depends on `yoyopod.integrations.call` instead of
+  reaching through `yoyopod.communication.calling.*` for public call services
 
 ## Voice Migration Pattern
 

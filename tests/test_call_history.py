@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from yoyopod.communication.calling.history import CallHistoryEntry, CallHistoryStore
+from yoyopod.integrations.call import CallHistoryEntry, CallHistoryStore
 
 
 def test_call_history_store_persists_and_restores_entries(tmp_path: Path) -> None:

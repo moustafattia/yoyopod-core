@@ -20,8 +20,7 @@ from yoyopod.ui.screens.voip.lvgl import LvglCallView
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.communication.calling.history import CallHistoryStore
-    from yoyopod.communication.calling.manager import VoIPManager
+    from yoyopod.integrations.call import CallHistoryStore, VoIPManager
     from yoyopod.integrations.contacts.directory import PeopleManager
     from yoyopod.integrations.contacts.models import Contact
     from yoyopod.ui.screens.view import ScreenView

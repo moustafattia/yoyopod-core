@@ -9,7 +9,6 @@ from pathlib import Path
 
 from yoyopod.communication.calling.mock_backend import MockVoIPBackend
 from yoyopod.communication.calling.messaging import MessagingService
-from yoyopod.communication.calling.voice_notes import VoiceNoteService
 from yoyopod.communication.messaging import VoIPMessageStore
 from yoyopod.communication.models import (
     MessageDeliveryChanged,
@@ -20,6 +19,7 @@ from yoyopod.communication.models import (
     VoIPConfig,
     VoIPMessageRecord,
 )
+from yoyopod.integrations.call import VoiceNoteService
 
 
 def build_config(tmp_path: Path) -> VoIPConfig:
