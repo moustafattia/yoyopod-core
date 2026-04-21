@@ -275,19 +275,25 @@ class YoyoPodApp:
     def _register_runtime_event_subscriptions(self) -> None:
         """Subscribe runtime-owned handlers on the compatibility EventBus."""
 
-        self.event_bus.subscribe(ScreenChangedEvent, self._handle_screen_changed_event)
-        self.event_bus.subscribe(UserActivityEvent, self._handle_user_activity_event)
+        self.event_bus.subscribe(
+            ScreenChangedEvent,
+            self.screen_power_service.handle_screen_changed_event,
+        )
+        self.event_bus.subscribe(
+            UserActivityEvent,
+            self.screen_power_service.handle_user_activity_event,
+        )
         self.event_bus.subscribe(
             LowBatteryWarningRaised,
-            self.handle_low_battery_warning_event,
+            self.screen_power_service.handle_low_battery_warning_event,
         )
         self.event_bus.subscribe(
             GracefulShutdownRequested,
-            self.handle_graceful_shutdown_requested_event,
+            self.shutdown_service.handle_graceful_shutdown_requested_event,
         )
         self.event_bus.subscribe(
             GracefulShutdownCancelled,
-            self.handle_graceful_shutdown_cancelled_event,
+            self.shutdown_service.handle_graceful_shutdown_cancelled_event,
         )
         self.event_bus.subscribe(NetworkPppUpEvent, self.handle_network_ppp_up)
         self.event_bus.subscribe(
@@ -303,36 +309,6 @@ class YoyoPodApp:
             NetworkPppDownEvent,
             self.handle_network_ppp_down,
         )
-
-    def _handle_screen_changed_event(self, event: ScreenChangedEvent) -> None:
-        self.screen_power_service.handle_screen_changed_event(event)
-
-    def _queue_user_activity_event(self, action: Any, _data: Any | None = None) -> None:
-        self.screen_power_service.queue_user_activity_event(action, _data)
-
-    def _handle_user_activity_event(self, event: UserActivityEvent) -> None:
-        self.screen_power_service.handle_user_activity_event(event)
-
-    def handle_low_battery_warning_event(self, event: LowBatteryWarningRaised) -> None:
-        """Forward power warning events to the screen-power policy owner."""
-
-        self.screen_power_service.handle_low_battery_warning_event(event)
-
-    def handle_graceful_shutdown_requested_event(
-        self,
-        event: GracefulShutdownRequested,
-    ) -> None:
-        """Forward power shutdown requests to the shutdown lifecycle owner."""
-
-        self.shutdown_service.handle_graceful_shutdown_requested_event(event)
-
-    def handle_graceful_shutdown_cancelled_event(
-        self,
-        event: GracefulShutdownCancelled,
-    ) -> None:
-        """Forward power shutdown cancellations to the shutdown lifecycle owner."""
-
-        self.shutdown_service.handle_graceful_shutdown_cancelled_event(event)
 
     def handle_voice_note_summary_changed(
         self,
@@ -489,25 +465,6 @@ class YoyoPodApp:
                 gps_has_fix=False,
             )
 
-    def _ensure_coordinators(self) -> None:
-        self.boot_service.ensure_coordinators()
-
-    def _update_in_call_if_needed(self) -> None:
-        """Refresh the in-call screen from the main loop when it is visible."""
-        self._ensure_coordinators()
-        assert self.screen_coordinator is not None
-        self.screen_coordinator.update_in_call_if_needed()
-
-    def _update_power_screen_if_needed(self) -> None:
-        """Refresh the power screen from the main loop when it is visible."""
-        self._ensure_coordinators()
-        assert self.screen_coordinator is not None
-        self.screen_coordinator.update_power_screen_if_needed()
-
-    def _handle_screen_changed(self, screen_name: str | None) -> None:
-        """Marshal screen-state sync work onto the coordinator thread."""
-        self.event_bus.publish(ScreenChangedEvent(screen_name=screen_name))
-
     def note_input_activity(self, action: object, _data: Any | None = None) -> None:
         """Record raw or semantic input activity before the coordinator drains it."""
 
@@ -530,36 +487,6 @@ class YoyoPodApp:
         self._last_responsiveness_capture_scope = suspected_scope
         self._last_responsiveness_capture_summary = summary
         self._last_responsiveness_capture_artifacts = dict(artifacts or {})
-
-    def _sync_screen_changed(self, screen_name: str | None) -> None:
-        """Keep the derived base UI state aligned with the active screen."""
-        self._ensure_coordinators()
-        assert self.coordinator_runtime is not None
-        self.coordinator_runtime.sync_ui_state_for_screen(screen_name)
-
-    def _wake_screen(self, now: float, *, render_current: bool) -> None:
-        self.screen_power_service.wake_screen(now, render_current=render_current)
-
-    def _sleep_screen(self, now: float) -> None:
-        self.screen_power_service.sleep_screen(now)
-
-    def _update_screen_power(self, now: float) -> None:
-        self.screen_power_service.update_screen_power(now)
-
-    def _attempt_manager_recovery(self, now: float | None = None) -> None:
-        self.recovery_service.attempt_manager_recovery(now)
-
-    def _poll_power_status(self, now: float | None = None, force: bool = False) -> None:
-        self.power_runtime.poll_status(now=now, force=force)
-
-    def _process_pending_shutdown(self, now: float) -> None:
-        self.shutdown_service.process_pending_shutdown(now)
-
-    def _start_watchdog(self, now: float | None = None) -> None:
-        self.power_runtime.start_watchdog(now=now)
-
-    def _feed_watchdog_if_due(self, now: float) -> None:
-        self.power_runtime.feed_watchdog_if_due(now)
 
     def run(self) -> None:
         """Run the main application loop until interrupted."""

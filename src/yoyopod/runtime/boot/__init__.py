@@ -23,6 +23,7 @@ from yoyopod.coordinators import (
     ScreenCoordinator,
 )
 from yoyopod.device import AudioDeviceCatalog
+from yoyopod.core import ScreenChangedEvent
 from yoyopod.integrations.call import CallHistoryStore, VoIPConfig, VoIPManager
 from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
@@ -290,10 +291,14 @@ class RuntimeBootService:
             cloud_manager=self.app.cloud_manager,
         )
         if self.app.screen_manager is not None:
-            self.app.screen_manager.on_screen_changed = self.app._handle_screen_changed
+            self.app.screen_manager.on_screen_changed = (
+                lambda screen_name: self.app.event_bus.publish(
+                    ScreenChangedEvent(screen_name=screen_name)
+                )
+            )
             current_screen = self.app.screen_manager.get_current_screen()
             current_route_name = current_screen.route_name if current_screen is not None else None
-            self.app._handle_screen_changed(current_route_name)
+            self.app.event_bus.publish(ScreenChangedEvent(screen_name=current_route_name))
 
 
 __all__ = ["RuntimeBootService"]

@@ -449,7 +449,7 @@ def _complete_power_refresh(app: YoyoPodApp) -> None:
 def _force_power_refresh(app: YoyoPodApp, *, now: float) -> None:
     """Run one forced power refresh and drain its async completion."""
 
-    app._poll_power_status(now=now, force=True)
+    app.power_runtime.poll_status(now=now, force=True)
     _complete_power_refresh(app)
 
 
@@ -1080,15 +1080,16 @@ def test_periodic_in_call_refresh_only_renders_visible_call_screen() -> None:
     """Live in-call refreshes should come from the main loop, not a screen-owned thread."""
     app, _, screen_manager = _build_app(playback_state="stopped")
 
-    app._update_in_call_if_needed()
+    assert app.screen_coordinator is not None
+    app.screen_coordinator.update_in_call_if_needed()
     assert app.in_call_screen.render_calls == 0
 
     screen_manager.push_screen("in_call")
-    app._update_in_call_if_needed()
+    app.screen_coordinator.update_in_call_if_needed()
     assert app.in_call_screen.render_calls == 1
 
     screen_manager.pop_screen()
-    app._update_in_call_if_needed()
+    app.screen_coordinator.update_in_call_if_needed()
     assert app.in_call_screen.render_calls == 1
 
 
@@ -1235,7 +1236,7 @@ def test_manager_recovery_schedules_music_reconnect_off_main_thread() -> None:
         lambda recovery_now: scheduled_attempts.append(recovery_now)
     )
 
-    app._attempt_manager_recovery(now=0.0)
+    app.recovery_service.attempt_manager_recovery(now=0.0)
 
     assert app.voip_manager.start_calls == 1
     assert app.music_backend.start_calls == 0
@@ -1491,12 +1492,13 @@ def test_periodic_power_refresh_only_renders_visible_power_screen() -> None:
         FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
     )
 
-    app._update_power_screen_if_needed()
+    assert app.screen_coordinator is not None
+    app.screen_coordinator.update_power_screen_if_needed()
     assert app.power_screen.render_calls == 0
     assert app.power_screen.refresh_for_visible_tick_calls == 0
 
     screen_manager.push_screen("power")
-    app._update_power_screen_if_needed()
+    app.screen_coordinator.update_power_screen_if_needed()
     assert app.power_screen.render_calls == 1
     assert app.power_screen.refresh_for_visible_tick_calls == 1
 
@@ -1528,8 +1530,8 @@ def test_power_poll_honors_interval_and_tracks_unavailable_backend() -> None:
     )
 
     _force_power_refresh(app, now=0.0)
-    app._poll_power_status(now=10.0)
-    app._poll_power_status(now=30.0)
+    app.power_runtime.poll_status(now=10.0)
+    app.power_runtime.poll_status(now=30.0)
     _wait_for(lambda: (app.get_status()["pending_main_thread_callbacks"] or 0) > 0)
     app.runtime_loop.process_pending_main_thread_actions()
 
@@ -1559,7 +1561,7 @@ def test_periodic_power_poll_runs_off_the_coordinator_thread() -> None:
     )
 
     started_at = time.monotonic()
-    app._poll_power_status(now=0.0)
+    app.power_runtime.poll_status(now=0.0)
     elapsed_seconds = time.monotonic() - started_at
 
     assert elapsed_seconds < 0.1
@@ -1602,7 +1604,7 @@ def test_forced_power_poll_skips_placeholder_snapshot_before_first_refresh() -> 
     app.power_manager = BlockingForcePollPowerManager()
 
     started_at = time.monotonic()
-    app._poll_power_status(now=0.0, force=True)
+    app.power_runtime.poll_status(now=0.0, force=True)
     elapsed_seconds = time.monotonic() - started_at
 
     assert elapsed_seconds < 0.1
@@ -1660,7 +1662,7 @@ def test_forced_power_poll_uses_new_cached_snapshot_while_refresh_callback_is_pe
     assert app.context.power.battery_percent == 41
     assert app.menu_screen.render_calls == 1
 
-    app._poll_power_status(now=30.0)
+    app.power_runtime.poll_status(now=30.0)
     assert app.power_manager.second_refresh_started.wait(timeout=1.0) is True
     assert app.get_status()["power_refresh_in_flight"] is True
 
@@ -1668,7 +1670,7 @@ def test_forced_power_poll_uses_new_cached_snapshot_while_refresh_callback_is_pe
     _wait_for(lambda: (app.get_status()["pending_main_thread_callbacks"] or 0) > 0)
 
     started_at = time.monotonic()
-    app._poll_power_status(now=31.0, force=True)
+    app.power_runtime.poll_status(now=31.0, force=True)
     elapsed_seconds = time.monotonic() - started_at
 
     assert elapsed_seconds < 0.1
@@ -1696,7 +1698,7 @@ def test_screen_timeout_turns_backlight_off_after_inactivity() -> None:
     app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
     app._active_brightness = app.screen_power_service.resolve_active_brightness()
     app.screen_power_service.configure_screen_power(initial_now=0.0)
-    app._update_screen_power(31.0)
+    app.screen_power_service.update_screen_power(31.0)
 
     assert app.display.set_backlight_calls == [0.8, 0.0]
     assert app.context.screen.awake is False
@@ -1738,7 +1740,7 @@ def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None
     app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
     app._active_brightness = app.screen_power_service.resolve_active_brightness()
     app.screen_power_service.configure_screen_power(initial_now=0.0)
-    app._sleep_screen(31.0)
+    app.screen_power_service.sleep_screen(31.0)
 
     assert app.context.screen.awake is False
     render_calls_before = app.menu_screen.render_calls
@@ -1767,7 +1769,7 @@ def test_user_activity_event_wakes_screen_and_refreshes_visible_power_screen_hoo
     app._active_brightness = app.screen_power_service.resolve_active_brightness()
     app.screen_power_service.configure_screen_power(initial_now=0.0)
     screen_manager.push_screen("power")
-    app._sleep_screen(31.0)
+    app.screen_power_service.sleep_screen(31.0)
 
     render_calls_before = app.power_screen.render_calls
     refresh_calls_before = app.power_screen.refresh_for_visible_tick_calls
@@ -1842,7 +1844,7 @@ def test_raw_user_activity_wakes_screen_without_rerendering_current_pil_screen()
     app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
     app._active_brightness = app.screen_power_service.resolve_active_brightness()
     app.screen_power_service.configure_screen_power(initial_now=0.0)
-    app._sleep_screen(31.0)
+    app.screen_power_service.sleep_screen(31.0)
 
     assert app.context.screen.awake is False
     render_calls_before = app.menu_screen.render_calls
@@ -1869,7 +1871,7 @@ def test_user_activity_event_wakes_sleeping_lvgl_screen_with_forced_refresh() ->
     app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
     app._active_brightness = app.screen_power_service.resolve_active_brightness()
     app.screen_power_service.configure_screen_power(initial_now=0.0)
-    app._sleep_screen(31.0)
+    app.screen_power_service.sleep_screen(31.0)
 
     _publish_from_worker(app, UserActivityEvent(action_name=None))
 
@@ -1890,9 +1892,9 @@ def test_screen_on_time_accumulates_across_sleep_and_wake_cycles() -> None:
     app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
     app._active_brightness = app.screen_power_service.resolve_active_brightness()
     app.screen_power_service.configure_screen_power(initial_now=0.0)
-    app._sleep_screen(10.0)
-    app._wake_screen(20.0, render_current=False)
-    app._sleep_screen(25.0)
+    app.screen_power_service.sleep_screen(10.0)
+    app.screen_power_service.wake_screen(20.0, render_current=False)
+    app.screen_power_service.sleep_screen(25.0)
 
     assert app.display.set_backlight_calls == [0.8, 0.0, 0.8, 0.0]
     assert app.context.screen.on_seconds == 15
@@ -2040,7 +2042,7 @@ def test_pending_shutdown_runs_hooks_and_requests_system_poweroff(tmp_path) -> N
     assert [name for name, _ in power_manager.registered_shutdown_hooks] == ["save_shutdown_state"]
     assert app._pending_shutdown is not None
 
-    app._process_pending_shutdown(app._pending_shutdown.execute_at)
+    app.shutdown_service.process_pending_shutdown(app._pending_shutdown.execute_at)
 
     assert stop_calls == ["stop"]
     assert power_manager.run_shutdown_hooks_calls == 1
@@ -2108,9 +2110,9 @@ def test_watchdog_starts_and_feeds_from_app_loop() -> None:
     app, _, _ = _build_app_with_power(power_manager)
     app.simulate = False
 
-    app._start_watchdog(now=0.0)
-    app._feed_watchdog_if_due(9.0)
-    app._feed_watchdog_if_due(10.0)
+    app.power_runtime.start_watchdog(now=0.0)
+    app.power_runtime.feed_watchdog_if_due(9.0)
+    app.power_runtime.feed_watchdog_if_due(10.0)
     _wait_for(lambda: power_manager.feed_watchdog_calls == 1)
     _wait_for(lambda: (app.get_status()["pending_main_thread_callbacks"] or 0) > 0)
     app.runtime_loop.process_pending_main_thread_actions()
@@ -2143,9 +2145,9 @@ def test_watchdog_feed_runs_off_the_coordinator_thread() -> None:
     app, _, _ = _build_app_with_power(power_manager)
     app.simulate = False
 
-    app._start_watchdog(now=0.0)
+    app.power_runtime.start_watchdog(now=0.0)
     started_at = time.monotonic()
-    app._feed_watchdog_if_due(10.0)
+    app.power_runtime.feed_watchdog_if_due(10.0)
     elapsed_seconds = time.monotonic() - started_at
 
     assert elapsed_seconds < 0.1
@@ -2182,12 +2184,12 @@ def test_watchdog_start_does_not_wait_for_in_flight_power_refresh() -> None:
     app, _, _ = _build_app_with_power(power_manager)
     app.simulate = False
 
-    app._poll_power_status(now=0.0)
+    app.power_runtime.poll_status(now=0.0)
     assert refresh_started.wait(timeout=1.0) is True
     assert app.get_status()["power_refresh_in_flight"] is True
 
     started_at = time.monotonic()
-    app._start_watchdog(now=0.0)
+    app.power_runtime.start_watchdog(now=0.0)
     elapsed_seconds = time.monotonic() - started_at
 
     assert elapsed_seconds < 0.1
@@ -2208,7 +2210,7 @@ def test_intentional_stop_disables_watchdog() -> None:
     app, _, _ = _build_app_with_power(power_manager)
     app.simulate = False
 
-    app._start_watchdog(now=0.0)
+    app.power_runtime.start_watchdog(now=0.0)
     app.stop()
 
     assert power_manager.enable_watchdog_calls == 1
@@ -2234,10 +2236,10 @@ def test_poweroff_path_suppresses_watchdog_feed_without_disabling_it() -> None:
         app._stopped = True
 
     app.stop = fake_stop
-    app._start_watchdog(now=0.0)
+    app.power_runtime.start_watchdog(now=0.0)
     app.shutdown_service.register_power_shutdown_hooks()
     _force_power_refresh(app, now=0.0)
-    app._process_pending_shutdown(app._pending_shutdown.execute_at)
+    app.shutdown_service.process_pending_shutdown(app._pending_shutdown.execute_at)
 
     assert stop_disable_watchdog == [False]
     assert power_manager.disable_watchdog_calls == 0
@@ -2459,7 +2461,7 @@ def test_runtime_loop_budgets_backlog_and_keeps_protected_work_running() -> None
     app.voip_manager = FakeRuntimeLoopVoIPManager()
     app._voip_iterate_interval_seconds = 0.02
     app._lvgl_backend = FakeLvglBackend()
-    app._start_watchdog(now=0.0)
+    app.power_runtime.start_watchdog(now=0.0)
 
     callback_budget = RuntimeLoopService._MAIN_THREAD_CALLBACK_DRAIN_BUDGET
     event_budget = RuntimeLoopService._EVENT_BUS_DRAIN_BUDGET
