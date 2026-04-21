@@ -64,12 +64,20 @@ class CloudManager:
         self._contacts_bootstrap_attempted = False
         self._playback_callbacks_bound = False
         self._remote_playback_session: dict[str, Any] | None = None
+        self._remote_playback_activation_generation = 0
         self._recent_remote_command_ids: deque[str] = deque(maxlen=32)
         self._last_remote_playback_state: str | None = None
-        media_settings = self.config_manager.get_media_settings().music
+        get_media_settings = getattr(self.config_manager, "get_media_settings", None)
+        if callable(get_media_settings):
+            media_settings = get_media_settings().music
+            remote_cache_dir = media_settings.remote_cache_dir
+            remote_cache_max_bytes = media_settings.remote_cache_max_bytes
+        else:
+            remote_cache_dir = "data/media/remote_cache"
+            remote_cache_max_bytes = 64 * 1024 * 1024
         self._remote_playback_cache = RemotePlaybackCache(
-            self.config_manager.resolve_runtime_path(media_settings.remote_cache_dir),
-            media_settings.remote_cache_max_bytes,
+            self.config_manager.resolve_runtime_path(remote_cache_dir),
+            remote_cache_max_bytes,
         )
 
     def prepare_boot(self) -> None:
@@ -1061,6 +1069,7 @@ class CloudManager:
             if callable(stop_playback):
                 stop_playback()
 
+            self._remote_playback_activation_generation += 1
             self._remote_playback_session = {
                 "command_id": command_id,
                 "track_id": track_id,
@@ -1069,6 +1078,9 @@ class CloudManager:
                 "duration_ms": payload.get("durationMs"),
                 "media_url": media_url,
                 "cached_path": None,
+                "activation_generation": self._remote_playback_activation_generation,
+                "activation_pending": True,
+                "stop_requested": False,
             }
             self._recent_remote_command_ids.append(command_id)
             mqtt.publish_ack(command_id=command_id, ok=True, payload={"command": cmd_type})
@@ -1078,43 +1090,22 @@ class CloudManager:
                 payload={"trackId": track_id, "positionMs": 0},
             )
 
-            try:
-                cached_asset = self._remote_playback_cache.prepare(
+            self._last_remote_playback_state = "buffering"
+            activation_generation = self._remote_playback_activation_generation
+            checksum_sha256 = (
+                str(payload.get("checksumSha256") or payload.get("checksum_sha256") or "").strip()
+                or None
+            )
+            self._start_worker(
+                name=f"cloud-playback-fetch-{command_id[:8]}",
+                work=lambda: self._run_prepare_remote_playback_asset(
+                    command_id=command_id,
                     track_id=track_id,
                     media_url=media_url,
-                    checksum_sha256=(
-                        str(payload.get("checksumSha256") or payload.get("checksum_sha256") or "").strip()
-                        or None
-                    ),
-                )
-            except Exception:
-                self._remote_playback_session = None
-                self._last_remote_playback_state = None
-                self._publish_playback_event(
-                    "failed",
-                    command_id=command_id,
-                    payload={
-                        "trackId": track_id,
-                        "reason": "media_fetch_failed",
-                    },
-                )
-                return
-
-            self._remote_playback_session["cached_path"] = cached_asset.path
-            self._last_remote_playback_state = "buffering"
-
-            if not music_backend.load_tracks([cached_asset.path]):
-                self._remote_playback_session = None
-                self._last_remote_playback_state = None
-                self._publish_playback_event(
-                    "failed",
-                    command_id=command_id,
-                    payload={
-                        "trackId": track_id,
-                        "reason": "decode_failed",
-                    },
-                )
-                return
+                    checksum_sha256=checksum_sha256,
+                    activation_generation=activation_generation,
+                ),
+            )
             return
 
         session = self._remote_playback_session
@@ -1150,6 +1141,11 @@ class CloudManager:
         if self._remote_playback_session is None or track is None:
             return
 
+        if self._remote_playback_session.get("activation_pending") and not self._remote_playback_session.get(
+            "cached_path"
+        ):
+            return
+
         current_uri = getattr(track, "uri", None)
         session_uri = self._remote_playback_session.get("cached_path")
         current_path = self._normalize_local_media_path(current_uri)
@@ -1164,9 +1160,11 @@ class CloudManager:
 
         if current_path is not None and session_path is not None:
             if current_path == session_path or current_path.name == session_path.name:
+                self._remote_playback_session["activation_pending"] = False
                 return
 
         if track_id and track_id in normalized_current_uri:
+            self._remote_playback_session["activation_pending"] = False
             return
 
         if not is_file_like_uri:
@@ -1198,12 +1196,18 @@ class CloudManager:
         if session is None:
             return
 
+        if state == "stopped" and session.get("activation_pending"):
+            return
+
         position_ms = self._current_playback_position_ms()
         duration_ms = session.get("duration_ms")
         event_type = state
 
         if state == "playing" and session.get("playing_started_at_monotonic") is None:
             session["playing_started_at_monotonic"] = time.monotonic()
+            session["activation_pending"] = False
+        elif state in {"paused", "buffering"}:
+            session["activation_pending"] = False
 
         if state == "stopped":
             started_at_monotonic = session.get("playing_started_at_monotonic")
@@ -1272,6 +1276,100 @@ class CloudManager:
             "payload": payload or {},
         }
         self._mqtt.publish_playback_event(event_payload)
+
+    def _run_prepare_remote_playback_asset(
+        self,
+        *,
+        command_id: str,
+        track_id: str,
+        media_url: str,
+        checksum_sha256: str | None,
+        activation_generation: int,
+    ) -> None:
+        try:
+            cached_asset = self._remote_playback_cache.prepare(
+                track_id=track_id,
+                media_url=media_url,
+                checksum_sha256=checksum_sha256,
+            )
+        except Exception as exc:
+            logger.warning("Remote playback fetch failed for {}: {}", track_id, exc)
+            self._queue_main_thread_callback(
+                lambda exc=exc: self._complete_prepare_remote_playback_asset(
+                    command_id=command_id,
+                    track_id=track_id,
+                    activation_generation=activation_generation,
+                    error=exc,
+                )
+            )
+            return
+
+        self._queue_main_thread_callback(
+            lambda cached_asset=cached_asset: self._complete_prepare_remote_playback_asset(
+                command_id=command_id,
+                track_id=track_id,
+                activation_generation=activation_generation,
+                cached_asset=cached_asset,
+            )
+        )
+
+    def _complete_prepare_remote_playback_asset(
+        self,
+        *,
+        command_id: str,
+        track_id: str,
+        activation_generation: int,
+        cached_asset: Any | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        session = self._remote_playback_session
+        if (
+            session is None
+            or session.get("command_id") != command_id
+            or session.get("track_id") != track_id
+            or session.get("activation_generation") != activation_generation
+        ):
+            return
+
+        if error is not None:
+            self._remote_playback_session = None
+            self._last_remote_playback_state = None
+            self._publish_playback_event(
+                "failed",
+                command_id=command_id,
+                payload={
+                    "trackId": track_id,
+                    "reason": "media_fetch_failed",
+                },
+            )
+            return
+
+        music_backend = getattr(self.app, "music_backend", None)
+        if music_backend is None or not getattr(music_backend, "is_connected", False):
+            self._remote_playback_session = None
+            self._last_remote_playback_state = None
+            self._publish_playback_event(
+                "failed",
+                command_id=command_id,
+                payload={
+                    "trackId": track_id,
+                    "reason": "playback_backend_error",
+                },
+            )
+            return
+
+        session["cached_path"] = cached_asset.path
+        if not music_backend.load_tracks([cached_asset.path]):
+            self._remote_playback_session = None
+            self._last_remote_playback_state = None
+            self._publish_playback_event(
+                "failed",
+                command_id=command_id,
+                payload={
+                    "trackId": track_id,
+                    "reason": "decode_failed",
+                },
+            )
 
     def _is_backend_configured(self) -> bool:
         return bool(self.config_manager.get_cloud_settings().backend.api_base_url.strip())

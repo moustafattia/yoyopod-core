@@ -69,9 +69,10 @@ Supported media-library `eventType` values:
 
 Remote playback uses a bounded local cache before mpv starts playback.
 
-- cache key includes `track_id`
+- cache key includes a sanitized `track_id`
 - checksum is verified when provided
-- least-recently-used pruning uses file mtime
+- cache downloads run off the coordinator thread before mpv load starts
+- least-recently-used pruning uses file mtime and evicts oldest files first
 - playback runs from the cached local file, not the signed backend URL
 
 Relevant config fields:
@@ -104,6 +105,7 @@ This keeps backend as the policy authority while making the resulting media avai
 
 - only one active remote playback session is tracked
 - a new valid `play_track` interrupts the current remote playback
+- pending downloads are correlated by `commandId` and activation generation so stale stop callbacks do not clear the next session
 - `pause` and `resume` run through the current mpv backend path
 - duplicate `commandId` values are ACKed as duplicates and are not replayed
 - `store_media` also participates in duplicate command suppression

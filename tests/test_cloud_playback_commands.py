@@ -130,6 +130,7 @@ def test_play_track_command_acks_and_publishes_buffering_then_playing() -> None:
     manager._mqtt = _FakeMqttClient()
     manager._remote_playback_cache = _FakePlaybackCache()
     manager._bind_playback_callbacks()
+    manager._start_worker = lambda *, name, work: work()  # type: ignore[method-assign]
 
     manager._apply_mqtt_command(
         {
@@ -150,6 +151,7 @@ def test_play_track_command_acks_and_publishes_buffering_then_playing() -> None:
     assert manager._mqtt.acks[0]["command_id"] == "cmd-1"
     assert manager._mqtt.acks[0]["ok"] is True
     assert manager._mqtt.events[0]["eventType"] == "buffering"
+    assert manager._remote_playback_session["cached_path"] == "/tmp/cached-track.mp3"
 
     music_backend.position_ms = 500
     music_backend.emit_playback("playing")
@@ -220,3 +222,39 @@ def test_invalid_play_command_nacks() -> None:
             "reason": "invalid_command",
         }
     ]
+
+
+def test_stopped_callback_during_pending_remote_fetch_does_not_clear_session() -> None:
+    music_backend = _FakeMusicBackend()
+    manager = CloudManager(
+        app=_FakeApp(music_backend),
+        config_manager=_FakeConfigManager(),
+        client=SimpleNamespace(),
+    )
+    manager._mqtt = _FakeMqttClient()
+    manager._bind_playback_callbacks()
+
+    queued_work: list[object] = []
+    manager._start_worker = lambda *, name, work: queued_work.append(work)  # type: ignore[method-assign]
+
+    manager._apply_mqtt_command(
+        {
+            "messageType": "playback.command",
+            "commandId": "cmd-4",
+            "command": "play_track",
+            "payload": {
+                "trackId": "track-4",
+                "mediaUrl": "https://media.example.test/file.mp3",
+                "title": "Song",
+            },
+        }
+    )
+
+    assert manager._remote_playback_session is not None
+    assert manager._remote_playback_session["activation_pending"] is True
+
+    music_backend.emit_playback("stopped")
+
+    assert manager._remote_playback_session is not None
+    assert music_backend.loaded == []
+    assert len(queued_work) == 1

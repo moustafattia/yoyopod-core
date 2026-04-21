@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import tempfile
 import urllib.request
 from dataclasses import dataclass
@@ -35,7 +36,11 @@ class RemotePlaybackCache:
         extension: str = ".mp3",
     ) -> CachedPlaybackAsset:
         checksum_suffix = (checksum_sha256 or "nochecksum")[:16]
-        target_path = self.root / f"{track_id}-{checksum_suffix}{extension}"
+        target_path = self._target_path_for(
+            track_id=track_id,
+            checksum_suffix=checksum_suffix,
+            extension=extension,
+        )
 
         if target_path.exists():
             os.utime(target_path, None)
@@ -89,7 +94,7 @@ class RemotePlaybackCache:
 
     def _prune(self) -> None:
         files = [entry for entry in self.root.glob("*") if entry.is_file()]
-        files.sort(key=lambda entry: entry.stat().st_mtime, reverse=True)
+        files.sort(key=lambda entry: entry.stat().st_mtime)
 
         total_size = sum(entry.stat().st_size for entry in files)
         for entry in files:
@@ -98,3 +103,35 @@ class RemotePlaybackCache:
             size = entry.stat().st_size
             entry.unlink(missing_ok=True)
             total_size -= size
+
+    def _target_path_for(
+        self,
+        *,
+        track_id: str,
+        checksum_suffix: str,
+        extension: str,
+    ) -> Path:
+        safe_track_id = self._sanitize_filename_component(track_id)
+        safe_extension = self._sanitize_extension(extension)
+        target_path = self.root / f"{safe_track_id}-{checksum_suffix}{safe_extension}"
+
+        resolved_root = self.root.resolve(strict=False)
+        resolved_target = target_path.resolve(strict=False)
+        if resolved_target.parent != resolved_root:
+            raise ValueError("unsafe_cache_path")
+        return resolved_target
+
+    @staticmethod
+    def _sanitize_filename_component(value: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9._-]+", "-", str(value).strip())
+        normalized = normalized.strip(".-")
+        return normalized or "track"
+
+    @staticmethod
+    def _sanitize_extension(value: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9.]+", "", str(value).strip())
+        if not normalized:
+            return ".mp3"
+        if not normalized.startswith("."):
+            normalized = f".{normalized}"
+        return normalized[:16]
