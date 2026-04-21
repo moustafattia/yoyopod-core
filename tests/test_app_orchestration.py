@@ -616,10 +616,42 @@ class OrchestrationHarness:
         self.screen_manager.current_screen = self.screens.now_playing
 
     def publish(self, event: object) -> None:
+        if isinstance(event, TrackChangedEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.playback_coordinator.handle_track_change(event.track)
+                )
+            )
+            worker.start()
+            worker.join()
+            return
+        if isinstance(event, PlaybackStateChangedEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.playback_coordinator.handle_playback_state_change(
+                        event.state
+                    )
+                )
+            )
+            worker.start()
+            worker.join()
+            return
+        if isinstance(event, MusicAvailabilityChangedEvent):
+            worker = threading.Thread(
+                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                    lambda: self.app.playback_coordinator.handle_availability_change(
+                        event.available,
+                        event.reason,
+                    )
+                )
+            )
+            worker.start()
+            worker.join()
+            return
         _publish_from_worker(self.app, event)
 
     def drain_events(self) -> int:
-        return self.app.event_bus.drain()
+        return self.app.runtime_loop.process_pending_main_thread_actions()
 
 
 def _build_app(playback_state: str = "stopped", auto_resume: bool = True) -> tuple[
@@ -950,12 +982,18 @@ def test_background_events_wait_for_drain_before_mutating_state() -> None:
     app, _, _ = _build_app(playback_state="stopped")
 
     _publish_from_worker(app, RegistrationChangedEvent(state=RegistrationState.OK))
-    _publish_from_worker(app, PlaybackStateChangedEvent(state="playing"))
+    worker = threading.Thread(
+        target=lambda: app.runtime_loop.queue_main_thread_callback(
+            lambda: app.playback_coordinator.handle_playback_state_change("playing")
+        )
+    )
+    worker.start()
+    worker.join()
 
     assert not app.voip_registered
     assert app.music_fsm.state == MusicState.IDLE
 
-    assert app.event_bus.drain() == 2
+    assert app.runtime_loop.process_pending_main_thread_actions() == 2
     assert app.voip_registered
     assert app.music_fsm.state == MusicState.PLAYING
     assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYING_WITH_VOIP

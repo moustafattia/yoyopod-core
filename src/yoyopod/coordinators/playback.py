@@ -11,11 +11,6 @@ from yoyopod.audio.music.models import Track
 from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
 from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
-from yoyopod.core import (
-    MusicAvailabilityChangedEvent,
-    PlaybackStateChangedEvent,
-    TrackChangedEvent,
-)
 
 
 class PlaybackCoordinator:
@@ -30,40 +25,26 @@ class PlaybackCoordinator:
         self.runtime = runtime
         self.screen_coordinator = screen_coordinator
         self.local_music_service = local_music_service
-        self._event_bus: EventBus | None = None
-        self._bound = False
 
     def bind(self, event_bus: EventBus) -> None:
-        """Bind typed event subscriptions once."""
-        if self._bound:
-            return
+        """Retain the legacy bind hook for boot compatibility."""
 
-        self._event_bus = event_bus
-        event_bus.subscribe(TrackChangedEvent, self._on_track_changed_event)
-        event_bus.subscribe(PlaybackStateChangedEvent, self._on_playback_state_changed_event)
-        event_bus.subscribe(MusicAvailabilityChangedEvent, self._on_availability_changed_event)
-        self._bound = True
+        del event_bus
 
     def publish_track_change(self, track: Track | None) -> None:
-        """Publish a music track change from the poller thread."""
-        if self._event_bus is None:
-            raise RuntimeError("PlaybackCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct track-change handler."""
 
-        self._event_bus.publish(TrackChangedEvent(track=track))
+        self.handle_track_change(track)
 
     def publish_playback_state_change(self, playback_state: str) -> None:
-        """Publish a playback-state change from the poller thread."""
-        if self._event_bus is None:
-            raise RuntimeError("PlaybackCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct playback-state handler."""
 
-        self._event_bus.publish(PlaybackStateChangedEvent(state=playback_state))
+        self.handle_playback_state_change(playback_state)
 
     def publish_availability_change(self, available: bool, reason: str = "") -> None:
-        """Publish music-backend connectivity changes from worker threads."""
-        if self._event_bus is None:
-            raise RuntimeError("PlaybackCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct availability handler."""
 
-        self._event_bus.publish(MusicAvailabilityChangedEvent(available=available, reason=reason))
+        self.handle_availability_change(available, reason)
 
     def update_now_playing_if_needed(self) -> None:
         """Refresh the now-playing screen for periodic progress updates."""
@@ -72,15 +53,6 @@ class PlaybackCoordinator:
     def on_enter_playing_with_voip(self) -> None:
         """Log entry into the playing-with-VoIP-ready state."""
         logger.info("Music playing with VoIP ready")
-
-    def _on_track_changed_event(self, event: TrackChangedEvent) -> None:
-        self.handle_track_change(event.track)
-
-    def _on_playback_state_changed_event(self, event: PlaybackStateChangedEvent) -> None:
-        self.handle_playback_state_change(event.state)
-
-    def _on_availability_changed_event(self, event: MusicAvailabilityChangedEvent) -> None:
-        self.handle_availability_change(event.available, event.reason)
 
     def handle_track_change(self, track: Track | None) -> None:
         """Handle track changes and refresh the active screen when needed."""

@@ -13,10 +13,6 @@ from yoyopod.core import AppContext
 from yoyopod.coordinators.registry import CoordinatorRuntime
 from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
-from yoyopod.power.events import (
-    PowerAvailabilityChanged,
-    PowerSnapshotUpdated,
-)
 from yoyopod.power.models import PowerSnapshot
 from yoyopod.power.policies import PowerSafetyPolicy
 
@@ -43,37 +39,20 @@ class PowerCoordinator:
         self.policy = PowerSafetyPolicy(power_config) if power_config is not None else None
         self.now_provider = now_provider or time.monotonic
         self._event_bus: EventBus | None = None
-        self._bound = False
 
     def bind(self, event_bus: EventBus) -> None:
-        """Bind typed power event subscriptions once."""
-        if self._bound:
-            return
-
+        """Retain the legacy bind hook while direct handlers own power updates."""
         self._event_bus = event_bus
-        event_bus.subscribe(PowerSnapshotUpdated, self._on_snapshot_updated)
-        event_bus.subscribe(PowerAvailabilityChanged, self._on_availability_changed)
-        self._bound = True
 
     def publish_snapshot(self, snapshot: PowerSnapshot) -> None:
-        """Publish a refreshed power snapshot onto the event bus."""
-        if self._event_bus is None:
-            raise RuntimeError("PowerCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct snapshot handler."""
 
-        self._event_bus.publish(PowerSnapshotUpdated(snapshot=snapshot))
+        self.handle_snapshot_updated(snapshot)
 
     def publish_availability_change(self, available: bool, reason: str = "") -> None:
-        """Publish power backend availability changes onto the event bus."""
-        if self._event_bus is None:
-            raise RuntimeError("PowerCoordinator is not bound to an EventBus")
+        """Compatibility wrapper over the direct availability handler."""
 
-        self._event_bus.publish(PowerAvailabilityChanged(available=available, reason=reason))
-
-    def _on_snapshot_updated(self, event: PowerSnapshotUpdated) -> None:
-        self.handle_snapshot_updated(event.snapshot)
-
-    def _on_availability_changed(self, event: PowerAvailabilityChanged) -> None:
-        self.handle_availability_change(event.available, event.reason)
+        self.handle_availability_change(available, reason)
 
     def handle_snapshot_updated(self, snapshot: PowerSnapshot) -> None:
         """Apply the latest power telemetry to runtime and UI state."""
