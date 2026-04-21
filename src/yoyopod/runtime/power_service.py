@@ -115,12 +115,12 @@ class PowerRuntimeService:
             return
 
         assert self.app.power_coordinator is not None
-        self.app.power_coordinator.publish_snapshot(snapshot)
+        self.app.power_coordinator.handle_snapshot_updated(snapshot)
 
         if self.app._power_available is None or self.app._power_available != snapshot.available:
             reason = snapshot.error or ("ready" if snapshot.available else "unavailable")
             self.app._power_available = snapshot.available
-            self.app.power_coordinator.publish_availability_change(snapshot.available, reason)
+            self.app.power_coordinator.handle_availability_change(snapshot.available, reason)
 
     def start_watchdog(self, now: float | None = None) -> None:
         """Enable the PiSugar software watchdog once the app loop is ready."""
