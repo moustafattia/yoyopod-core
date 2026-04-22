@@ -32,6 +32,16 @@ class SimulatedWhisplayDisplayAdapter(WhisplayDisplayAdapter):
         self.simulate = True
 
 
+class PimoroniDisplayAdapter:
+    """Minimal Pimoroni display-adapter double for factory tests."""
+
+    DISPLAY_TYPE = "pimoroni"
+
+    def __init__(self) -> None:
+        self.device = object()
+        self.simulate = False
+
+
 def test_whisplay_factory_applies_one_button_profile_and_custom_timings() -> None:
     """Whisplay factory wiring should pass typed timing settings into the adapter."""
     manager = get_input_manager(
@@ -127,3 +137,26 @@ def test_simulation_factory_uses_standard_profile_keyboard_and_browser_buttons(
         InputAction.SELECT,
         InputAction.BACK,
     ]
+
+
+def test_pimoroni_factory_uses_four_button_adapter_when_displayhatmini_is_available(
+    monkeypatch,
+) -> None:
+    """Pimoroni should still create four-button input on the Pi-native path."""
+
+    fake_displayhatmini = types.ModuleType("displayhatmini")
+
+    class FakeDisplayHATMini:
+        pass
+
+    fake_displayhatmini.DisplayHATMini = FakeDisplayHATMini
+    monkeypatch.setitem(sys.modules, "displayhatmini", fake_displayhatmini)
+    monkeypatch.delitem(sys.modules, "yoyopod.ui.input.adapters.four_button", raising=False)
+
+    manager = get_input_manager(PimoroniDisplayAdapter())
+
+    assert manager is not None
+    assert len(manager.adapters) == 1
+    adapter = manager.adapters[0]
+    assert adapter.__class__.__name__ == "FourButtonInputAdapter"
+    assert adapter.simulate is False

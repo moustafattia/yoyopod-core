@@ -18,6 +18,7 @@ classifiers = [
 
 dependencies = [
     "cffi>=1.17.0",
+    "displayhatmini>=0.0.2; platform_system == 'Linux'",
     "pygame>=2.5.0",
     "requests>=2.31.0",
     "loguru>=0.7.0",
