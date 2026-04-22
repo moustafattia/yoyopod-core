@@ -39,7 +39,7 @@ app = typer.Typer(
 )
 
 # ---------------------------------------------------------------------------
-# Shared result type (inlined from yoyopod.cli.pi.smoke)
+# Shared result type for the flattened validation suite
 # ---------------------------------------------------------------------------
 
 
@@ -62,7 +62,7 @@ def _print_summary(name: str, results: list[_CheckResult]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Deploy helpers (inlined from yoyopod.cli.pi.validate)
+# Deploy helpers for the flattened validation suite
 # ---------------------------------------------------------------------------
 
 
@@ -220,7 +220,7 @@ def _entrypoint_check(deploy_config: Any) -> _CheckResult:
 
 
 # ---------------------------------------------------------------------------
-# Smoke helpers (inlined from yoyopod.cli.pi.smoke)
+# Smoke helpers for the flattened validation suite
 # ---------------------------------------------------------------------------
 
 
@@ -664,7 +664,7 @@ def _voip_check(config_dir: Path, registration_timeout: float) -> _CheckResult:
 
 
 # ---------------------------------------------------------------------------
-# VoIP drill helpers (inlined from yoyopod.cli.pi.voip lines 65–481)
+# VoIP drill helpers for the flattened validation suite
 # ---------------------------------------------------------------------------
 
 _CONNECTED_CALL_STATES: set[str] = set()  # populated lazily below

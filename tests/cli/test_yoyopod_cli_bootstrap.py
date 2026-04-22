@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 
 
 def test_package_imports() -> None:
@@ -20,3 +21,8 @@ def test_common_imports() -> None:
     assert callable(module.configure_logging)
     assert callable(module.resolve_config_dir)
     assert module.REPO_ROOT.exists()
+
+
+def test_legacy_yoyopod_cli_package_is_gone() -> None:
+    assert importlib.util.find_spec("yoyopod_cli") is not None
+    assert importlib.util.find_spec("yoyopod.cli") is None
