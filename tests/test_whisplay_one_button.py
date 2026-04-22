@@ -300,7 +300,7 @@ def test_hub_advance_wraps_from_last_card_to_first(
         ),
     )
 
-    hub.selected_index = 3
+    hub.selected_index = 4
     hub.on_advance()
 
     assert hub.selected_index == 0
@@ -353,10 +353,57 @@ def test_hub_select_requests_setup_route_for_setup_card(
         listen_subtitle_provider=build_hub_listen_subtitle_provider(display),
     )
 
-    hub.selected_index = 3
+    hub.selected_index = 4
     hub.on_select()
 
     assert hub.consume_navigation_request() == NavigationRequest.route("select", payload="Setup")
+
+
+def test_hub_watch_picker_uses_double_tap_to_enter_and_choose(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """Watch card should use SELECT to enter/choose faces and ADVANCE to cycle."""
+    hub = HubScreen(
+        display,
+        one_button_context,
+        listen_subtitle_provider=build_hub_listen_subtitle_provider(display),
+    )
+
+    assert hub.cards()[0].title == "Watch"
+    assert hub.watch_picker_active is False
+    assert hub.active_watch_face().key == "minimal_digital"
+
+    hub.on_select()  # enter picker
+    assert hub.watch_picker_active is True
+
+    hub.on_advance()  # next face in picker
+    assert hub.picker_watch_face().key == "analog"
+    hub.on_select()  # choose and close picker
+
+    assert hub.watch_picker_active is False
+    assert hub.active_watch_face().key == "analog"
+    assert hub.consume_navigation_request() is None
+
+
+def test_hub_watch_picker_back_exits_picker_without_triggering_hold_to_ask(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """Holding while browsing watch faces should close picker and stay on hub."""
+    hub = HubScreen(
+        display,
+        one_button_context,
+        listen_subtitle_provider=build_hub_listen_subtitle_provider(display),
+    )
+
+    hub.on_select()
+    assert hub.watch_picker_active is True
+
+    hub.on_back()
+
+    assert hub.watch_picker_active is False
+    assert hub.consume_navigation_request() is None
 
 
 def test_hub_cards_use_mode_specific_hero_tiles(

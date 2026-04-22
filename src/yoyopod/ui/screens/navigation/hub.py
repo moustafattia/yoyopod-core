@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Optional
 
 from yoyopod.ui.display import Display
@@ -30,6 +31,14 @@ class HubCard:
     subtitle: str
     mode: str
     icon: str
+
+
+@dataclass(frozen=True, slots=True)
+class WatchFace:
+    """Static metadata for a supported watch face."""
+
+    key: str
+    label: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +99,14 @@ class HubScreen(LvglScreen):
             listen_subtitle_provider or build_hub_listen_subtitle_provider(display)
         )
         self.selected_index = 0
+        self.watch_faces = [
+            WatchFace(key="minimal_digital", label="Minimal digital"),
+            WatchFace(key="analog", label="Analog-style"),
+            WatchFace(key="activity", label="Activity-style"),
+        ]
+        self.active_watch_face_index = 0
+        self.watch_picker_active = False
+        self.watch_picker_index = 0
 
     def enter(self) -> None:
         """Refresh lightweight summaries when the hub becomes active."""
@@ -106,12 +123,50 @@ class HubScreen(LvglScreen):
 
     def cards(self) -> list[HubCard]:
         """Build the live root-card list."""
-        return [
+        cards = [
             HubCard("Listen", self._listen_subtitle(), "listen", "listen"),
             HubCard("Talk", self._talk_subtitle(), "talk", "talk"),
             HubCard("Ask", "Safe questions", "ask", "ask"),
             HubCard("Setup", self._setup_subtitle(), "setup", "setup"),
         ]
+        if self.is_one_button_mode():
+            watch_face_name = (
+                self.picker_watch_face().label
+                if self.watch_picker_active
+                else self.active_watch_face().label
+            )
+            cards.insert(0, HubCard("Watch", watch_face_name, "setup", "clock"))
+        return cards
+
+    def selected_card(self) -> HubCard:
+        """Return the currently highlighted card with wraparound safety."""
+        cards = self.cards()
+        self.selected_index %= len(cards)
+        return cards[self.selected_index]
+
+    def active_watch_face(self) -> WatchFace:
+        """Return the currently selected watch-face metadata."""
+        return self.watch_faces[self.active_watch_face_index]
+
+    def picker_watch_face(self) -> WatchFace:
+        """Return the preview face while in watch-face picker mode."""
+        return self.watch_faces[self.watch_picker_index]
+
+    def watch_timestamp(self) -> datetime:
+        """Return the wall-clock timestamp used by watch-face rendering."""
+        return datetime.now()
+
+    def watch_battery_percent(self) -> int:
+        """Return normalized battery percent for watch-face chrome."""
+        if self.context is None:
+            return 100
+        return max(0, min(100, int(round(self.context.power.battery_percent))))
+
+    def watch_is_charging(self) -> bool:
+        """Return True when power telemetry indicates charging."""
+        if self.context is None:
+            return False
+        return bool(self.context.power.battery_charging)
 
     def _listen_subtitle(self) -> str:
         """Return the compact Listen card subtitle."""
@@ -160,14 +215,29 @@ class HubScreen(LvglScreen):
 
     def on_advance(self, data=None) -> None:
         """Cycle to the next card."""
+        if self.watch_picker_active:
+            self.watch_picker_index = (self.watch_picker_index + 1) % len(self.watch_faces)
+            return
         self.selected_index = (self.selected_index + 1) % len(self.cards())
 
     def on_select(self, data=None) -> None:
         """Open the selected root card."""
-        self.request_route("select", payload=self.cards()[self.selected_index].title)
+        selected = self.selected_card()
+        if selected.title != "Watch":
+            self.request_route("select", payload=selected.title)
+            return
+        if not self.watch_picker_active:
+            self.watch_picker_active = True
+            self.watch_picker_index = self.active_watch_face_index
+            return
+        self.active_watch_face_index = self.watch_picker_index
+        self.watch_picker_active = False
 
     def on_back(self, data=None) -> None:
         """Open Ask in quick-command mode (hold-to-ask shortcut)."""
+        if self.watch_picker_active:
+            self.watch_picker_active = False
+            return
         if self.screen_manager is not None:
             ask_screen = self.screen_manager.screens.get("ask")
             if ask_screen is not None and hasattr(ask_screen, "set_quick_command"):
