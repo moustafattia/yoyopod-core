@@ -137,21 +137,32 @@ def build_now_playing_actions(
 ) -> PlaybackActions:
     """Build the focused playback actions for the now-playing screen.
 
-    When no explicit callback is supplied, the action is a no-op. Actions are
-    intentionally injected to avoid `AppContext` method coupling from screens.
+    When a callback is not supplied, fallback to context playback methods so
+    screens created with only the context continue to provide usable defaults.
     """
 
+    resolved_toggle_playback: Callable[[], None] | None = toggle_playback_action
+    resolved_previous_track: Callable[[], None] | None = previous_track_action
+    resolved_next_track: Callable[[], None] | None = next_track_action
+
+    if resolved_toggle_playback is None and context is not None:
+        resolved_toggle_playback = context.toggle_playback
+    if resolved_previous_track is None and context is not None:
+        resolved_previous_track = context.previous_track
+    if resolved_next_track is None and context is not None:
+        resolved_next_track = context.next_track
+
     def toggle_playback() -> None:
-        if toggle_playback_action is not None:
-            toggle_playback_action()
+        if resolved_toggle_playback is not None:
+            resolved_toggle_playback()
 
     def previous_track() -> None:
-        if previous_track_action is not None:
-            previous_track_action()
+        if resolved_previous_track is not None:
+            resolved_previous_track()
 
     def next_track() -> None:
-        if next_track_action is not None:
-            next_track_action()
+        if resolved_next_track is not None:
+            resolved_next_track()
 
     return PlaybackActions(
         toggle=toggle_playback,

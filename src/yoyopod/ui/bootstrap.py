@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -56,6 +57,10 @@ def build_and_register_screens(app: "YoyoPodApp", *, logger: Any) -> None:
     )
     from yoyopod.voice.models import VoiceSettings
 
+    HUB_LISTEN_PLAYLIST_CACHE_SECONDS = 30.0
+    cached_playlist_count: int | None = None
+    cached_playlist_count_valid_until = 0.0
+
     display = app.display
     context = app.context
     screen_manager = app.screen_manager
@@ -100,20 +105,32 @@ def build_and_register_screens(app: "YoyoPodApp", *, logger: Any) -> None:
         )
 
     def _hub_listen_snapshot() -> HubListenSnapshot:
+        """Return cached playback + library snapshot data for the hub card."""
+
+        def _playlist_count() -> int | None:
+            nonlocal cached_playlist_count, cached_playlist_count_valid_until
+
+            if time.monotonic() < cached_playlist_count_valid_until:
+                return cached_playlist_count
+
+            playlist_count: int | None = None
+            if app.playback_coordinator is not None:
+                playlist_count = app.playback_coordinator.get_playlist_count()
+            elif app.local_music_service is not None and app.local_music_service.is_available:
+                try:
+                    playlist_count = app.local_music_service.playlist_count()
+                except Exception:
+                    playlist_count = None
+            cached_playlist_count = playlist_count
+            cached_playlist_count_valid_until = time.monotonic() + HUB_LISTEN_PLAYLIST_CACHE_SECONDS
+            return playlist_count
+
         snapshot = _playback_snapshot()
-        playlist_count: int | None = None
-        if app.playback_coordinator is not None:
-            playlist_count = app.playback_coordinator.get_playlist_count()
-        elif app.local_music_service is not None and app.local_music_service.is_available:
-            try:
-                playlist_count = app.local_music_service.playlist_count()
-            except Exception:
-                playlist_count = None
         return HubListenSnapshot(
             is_connected=snapshot.is_connected,
             track=snapshot.track,
             playback_state=snapshot.playback_state,
-            playlist_count=playlist_count,
+            playlist_count=_playlist_count(),
         )
 
     def _list_callable_contacts():
