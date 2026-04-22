@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
+from loguru import logger
+
 from yoyopod.integrations.music import LocalLibraryItem, LocalMusicService
 from yoyopod.integrations.music import ShuffleAllCommand
 from yoyopod.ui.display import Display
@@ -146,8 +148,13 @@ class ListenScreen(Screen):
                             ShuffleAllCommand(),
                         )
                     )
-                except Exception:
-                    return False
+                except KeyError:
+                    logger.debug("music.shuffle_all service unavailable; falling back to local library")
+                except Exception as exc:
+                    logger.warning(
+                        "music.shuffle_all service failed ({}); falling back to local library",
+                        exc,
+                    )
         music_service = self._resolve_music_service()
         if music_service is not None:
             if music_service.shuffle_all():

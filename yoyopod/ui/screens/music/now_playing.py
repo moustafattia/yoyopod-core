@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from loguru import logger
+
 from yoyopod.integrations.music import (
     NextTrackCommand,
     PauseCommand,
@@ -150,11 +152,19 @@ def build_now_playing_actions(
         services = getattr(app, "services", None)
         states = getattr(app, "states", None)
         if services is not None and hasattr(services, "call") and states is not None:
-            if states.get_value("music.state") == "playing":
-                services.call("music", "pause", PauseCommand())
-            else:
-                services.call("music", "resume", ResumeCommand())
-            return
+            try:
+                if states.get_value("music.state") == "playing":
+                    services.call("music", "pause", PauseCommand())
+                else:
+                    services.call("music", "resume", ResumeCommand())
+                return
+            except KeyError:
+                logger.debug("music playback service unavailable; falling back to backend controls")
+            except Exception as exc:
+                logger.warning(
+                    "music playback service failed ({}); falling back to backend controls",
+                    exc,
+                )
         if resolved_music_backend is not None:
             if not resolved_music_backend.is_connected:
                 return
@@ -169,8 +179,16 @@ def build_now_playing_actions(
     def previous_track() -> None:
         services = getattr(app, "services", None)
         if services is not None and hasattr(services, "call"):
-            services.call("music", "previous_track", PreviousTrackCommand())
-            return
+            try:
+                services.call("music", "previous_track", PreviousTrackCommand())
+                return
+            except KeyError:
+                logger.debug("music.previous_track service unavailable; falling back to backend")
+            except Exception as exc:
+                logger.warning(
+                    "music.previous_track service failed ({}); falling back to backend",
+                    exc,
+                )
         if resolved_music_backend is not None:
             if resolved_music_backend.is_connected:
                 resolved_music_backend.previous_track()
@@ -181,8 +199,16 @@ def build_now_playing_actions(
     def next_track() -> None:
         services = getattr(app, "services", None)
         if services is not None and hasattr(services, "call"):
-            services.call("music", "next_track", NextTrackCommand())
-            return
+            try:
+                services.call("music", "next_track", NextTrackCommand())
+                return
+            except KeyError:
+                logger.debug("music.next_track service unavailable; falling back to backend")
+            except Exception as exc:
+                logger.warning(
+                    "music.next_track service failed ({}); falling back to backend",
+                    exc,
+                )
         if resolved_music_backend is not None:
             if resolved_music_backend.is_connected:
                 resolved_music_backend.next_track()

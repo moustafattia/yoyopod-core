@@ -325,6 +325,33 @@ def test_listen_screen_can_resolve_music_service_and_shuffle_via_app(
     assert screen.consume_navigation_request() == NavigationRequest.route("shuffle_started")
 
 
+def test_listen_screen_falls_back_when_app_shuffle_service_is_unregistered(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """Listen should fall back to the local library when shuffle service is absent."""
+
+    backend = FakeMusicBackend()
+    music_service = LocalMusicService(backend)
+    music_service.shuffle_all = lambda: True  # type: ignore[method-assign]
+
+    def raise_missing_service(domain: str, service: str, data=None) -> bool:
+        raise KeyError(f"Unknown service: {domain}.{service}")
+
+    app = SimpleNamespace(
+        context=one_button_context,
+        get_music_library=lambda: music_service,
+        services=SimpleNamespace(call=raise_missing_service),
+    )
+    screen = ListenScreen(display, app=app)
+
+    screen.enter()
+    screen.selected_index = 2
+    screen.on_select()
+
+    assert screen.consume_navigation_request() == NavigationRequest.route("shuffle_started")
+
+
 def test_hub_select_requests_setup_route_for_setup_card(
     display: Display,
     one_button_context: AppContext,
@@ -497,6 +524,39 @@ def test_now_playing_actions_can_use_music_services_from_app(
         ("music", "next_track"),
         ("music", "previous_track"),
     ]
+
+
+def test_now_playing_actions_fall_back_when_app_music_services_are_unregistered(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """Now Playing should still control playback when app music services are absent."""
+
+    backend = FakeMusicBackend()
+    backend.play()
+
+    def raise_missing_service(domain: str, service: str, data=None) -> bool:
+        raise KeyError(f"Unknown service: {domain}.{service}")
+
+    app = SimpleNamespace(
+        context=one_button_context,
+        states=SimpleNamespace(get_value=lambda entity, default=None: "playing"),
+        services=SimpleNamespace(call=raise_missing_service),
+        music_backend=backend,
+    )
+    screen = NowPlayingScreen(
+        display,
+        app=app,
+        state_provider=build_now_playing_state_provider(app=app, music_backend=backend),
+        actions=build_now_playing_actions(app=app, music_backend=backend),
+    )
+
+    screen.on_select()
+    screen.on_advance()
+    screen.on_up()
+
+    assert backend.pause_calls == 1
+    assert backend.next_track_calls == 1
 
 
 def test_playlist_advance_wraps_and_select_loads_playlist(
