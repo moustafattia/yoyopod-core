@@ -1,9 +1,14 @@
 """Tests for yoyopod_cli.pi_validate."""
 from __future__ import annotations
 
+import sys
+from types import ModuleType
+
 from typer.testing import CliRunner
 
-from yoyopod_cli.pi_validate import app
+import yoyopod_cli.pi_validate as pi_validate
+
+app = pi_validate.app
 
 
 def _collect_option_names(click_cmd: object) -> set[str]:
@@ -110,3 +115,125 @@ def test_all_seven_subcommands_present() -> None:
     assert result.exit_code == 0
     for name in ("deploy", "smoke", "music", "voip", "stability", "navigation", "lvgl"):
         assert name in result.output
+
+
+def test_display_check_prefers_lvgl_probe_when_ui_backend_is_available(
+    monkeypatch,
+) -> None:
+    ui_calls: list[tuple[str, int | None]] = []
+
+    class FakeUiBackend:
+        def initialize(self) -> bool:
+            ui_calls.append(("initialize", None))
+            return True
+
+        def show_probe_scene(self, scene_id: int) -> None:
+            ui_calls.append(("show_probe_scene", scene_id))
+
+        def force_refresh(self) -> None:
+            ui_calls.append(("force_refresh", None))
+
+        def pump(self, milliseconds: int) -> None:
+            ui_calls.append(("pump", milliseconds))
+
+    class FakeAdapter:
+        pass
+
+    class FakeDisplay:
+        COLOR_BLACK = (0, 0, 0)
+        COLOR_WHITE = (255, 255, 255)
+        COLOR_GREEN = (0, 255, 0)
+
+        def __init__(self, hardware: str, simulate: bool) -> None:
+            assert hardware == "whisplay"
+            assert simulate is False
+            self.WIDTH = 240
+            self.HEIGHT = 280
+            self.ORIENTATION = "portrait"
+            self.simulate = False
+            self.backend_kind = "unavailable"
+            self._adapter = FakeAdapter()
+            self._ui_backend = FakeUiBackend()
+
+        def get_adapter(self) -> FakeAdapter:
+            return self._adapter
+
+        def get_ui_backend(self) -> FakeUiBackend:
+            return self._ui_backend
+
+        def refresh_backend_kind(self) -> str:
+            self.backend_kind = "lvgl"
+            return self.backend_kind
+
+        def clear(self, color) -> None:
+            raise AssertionError("LVGL smoke path should not call immediate draw helpers")
+
+        def text(self, *args, **kwargs) -> None:
+            raise AssertionError("LVGL smoke path should not call immediate draw helpers")
+
+        def update(self) -> None:
+            raise AssertionError("LVGL smoke path should not call immediate draw helpers")
+
+    fake_display_module = ModuleType("yoyopod.ui.display")
+    fake_display_module.Display = FakeDisplay
+    fake_display_module.detect_hardware = lambda: "whisplay"
+    monkeypatch.setitem(sys.modules, "yoyopod.ui.display", fake_display_module)
+
+    result, _display = pi_validate._display_check({"display": {"hardware": "auto"}}, 0.0)
+
+    assert result.status == "pass"
+    assert "backend=lvgl" in result.details
+    assert ui_calls == [
+        ("initialize", None),
+        ("show_probe_scene", 1),
+        ("force_refresh", None),
+        ("pump", 16),
+    ]
+
+
+def test_display_check_keeps_immediate_draw_path_without_ui_backend(monkeypatch) -> None:
+    draw_calls: list[str] = []
+
+    class FakeAdapter:
+        pass
+
+    class FakeDisplay:
+        COLOR_BLACK = (0, 0, 0)
+        COLOR_WHITE = (255, 255, 255)
+        COLOR_GREEN = (0, 255, 0)
+
+        def __init__(self, hardware: str, simulate: bool) -> None:
+            assert hardware == "pimoroni"
+            assert simulate is False
+            self.WIDTH = 320
+            self.HEIGHT = 240
+            self.ORIENTATION = "landscape"
+            self.simulate = False
+            self.backend_kind = "pil"
+            self._adapter = FakeAdapter()
+
+        def get_adapter(self) -> FakeAdapter:
+            return self._adapter
+
+        def get_ui_backend(self):
+            return None
+
+        def clear(self, color) -> None:
+            draw_calls.append("clear")
+
+        def text(self, text: str, x: int, y: int, **kwargs) -> None:
+            draw_calls.append(text)
+
+        def update(self) -> None:
+            draw_calls.append("update")
+
+    fake_display_module = ModuleType("yoyopod.ui.display")
+    fake_display_module.Display = FakeDisplay
+    fake_display_module.detect_hardware = lambda: "pimoroni"
+    monkeypatch.setitem(sys.modules, "yoyopod.ui.display", fake_display_module)
+
+    result, _display = pi_validate._display_check({"display": {"hardware": "auto"}}, 0.0)
+
+    assert result.status == "pass"
+    assert "backend=pil" in result.details
+    assert draw_calls == ["clear", "YoyoPod Pi smoke", "Display OK", "update"]

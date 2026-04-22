@@ -272,6 +272,29 @@ def _display_check(
 ) -> tuple[_CheckResult, Any]:
     """Validate display initialization on target hardware."""
     from yoyopod.ui.display import Display, detect_hardware
+    from yoyopod.ui.lvgl_binding.binding import LvglBinding
+
+    def _render_lvgl_probe(display: Any, ui_backend: Any) -> None:
+        if not ui_backend.initialize():
+            raise RuntimeError("LVGL backend failed to initialize during smoke validation")
+
+        ui_backend.show_probe_scene(LvglBinding.SCENE_CARD)
+        ui_backend.force_refresh()
+        ui_backend.pump(16)
+
+        refresh_backend_kind = getattr(display, "refresh_backend_kind", None)
+        if callable(refresh_backend_kind):
+            refresh_backend_kind()
+
+        if hold_seconds <= 0:
+            return
+
+        remaining_seconds = hold_seconds
+        while remaining_seconds > 0:
+            slice_seconds = min(0.05, remaining_seconds)
+            time.sleep(slice_seconds)
+            ui_backend.pump(max(1, int(slice_seconds * 1000)))
+            remaining_seconds -= slice_seconds
 
     requested_hardware = str(app_config.get("display", {}).get("hardware", "auto")).lower()
     resolved_hardware = detect_hardware() if requested_hardware == "auto" else requested_hardware
@@ -293,14 +316,18 @@ def _display_check(
     try:
         display = Display(hardware=resolved_hardware, simulate=False)
         adapter = display.get_adapter()
+        ui_backend = display.get_ui_backend()
 
-        display.clear(display.COLOR_BLACK)
-        display.text("YoyoPod Pi smoke", 10, 40, color=display.COLOR_WHITE, font_size=18)
-        display.text("Display OK", 10, 75, color=display.COLOR_GREEN, font_size=18)
-        display.update()
+        if ui_backend is not None:
+            _render_lvgl_probe(display, ui_backend)
+        else:
+            display.clear(display.COLOR_BLACK)
+            display.text("YoyoPod Pi smoke", 10, 40, color=display.COLOR_WHITE, font_size=18)
+            display.text("Display OK", 10, 75, color=display.COLOR_GREEN, font_size=18)
+            display.update()
 
-        if hold_seconds > 0:
-            time.sleep(hold_seconds)
+            if hold_seconds > 0:
+                time.sleep(hold_seconds)
 
         if display.simulate:
             return (
@@ -321,6 +348,7 @@ def _display_check(
                 status="pass",
                 details=(
                     f"adapter={adapter.__class__.__name__}, "
+                    f"backend={display.backend_kind}, "
                     f"size={display.WIDTH}x{display.HEIGHT}, "
                     f"orientation={display.ORIENTATION}, "
                     f"requested={requested_hardware}, resolved={resolved_hardware}"
