@@ -79,8 +79,9 @@ Pre-commit rule
 - When dispatching implementer subagents, include "run `uv run python scripts/quality.py gate && uv run pytest -q` before the final commit step" as an explicit requirement.
 
 Hardware modes
+- Pimoroni Display HAT Mini: landscape + four buttons on the shared LVGL path
 - PiSugar Whisplay: portrait + single button
-- Simulation: Whisplay-profile browser preview + web-button input
+- Simulation: shared LVGL browser preview + keyboard/web-button input
 
 Guardrails
 - Prefer narrow, reviewable changes.

@@ -134,7 +134,7 @@ yoyopod.py / yoyopod.main
      -> Bus
       -> Display facade
          -> Display factory
-            -> WhisplayDisplayAdapter (hardware or simulation profile)
+            -> WhisplayDisplayAdapter | PimoroniDisplayAdapter | SimulationDisplayAdapter
      -> InputManager
         -> PTTInputAdapter | KeyboardInputAdapter
      -> ScreenManager
@@ -232,7 +232,8 @@ yoyopod.py / yoyopod.main
 Supported adapters:
 
 - `WhisplayDisplayAdapter`: 240x280 portrait hardware path
-- Whisplay-profile simulation: browser preview transport backed by the same LVGL/RGB565 adapter contract
+- `PimoroniDisplayAdapter`: 320x240 landscape ST7789/GPIO hardware path
+- `SimulationDisplayAdapter`: browser preview transport backed by the same LVGL/RGB565 adapter contract
 
 Selection happens in `src/yoyopod/ui/display/factory.py` using:
 
@@ -245,7 +246,7 @@ Whisplay has one extra contract on top of the general selection rules:
 
 - non-simulated Whisplay startup requires `display.whisplay_renderer=lvgl`
 - if the Whisplay driver, board init, or LVGL backend is unavailable, startup stops instead of silently degrading to another renderer
-- simulation reuses the Whisplay LVGL/framebuffer path; there is no supported PIL renderer anymore
+- simulation reuses the shared LVGL/framebuffer path; there is no supported PIL renderer anymore
 
 ## Input Architecture
 
@@ -260,8 +261,9 @@ Core semantic actions:
 
 Current adapters:
 
-- `PTTInputAdapter`: Whisplay single-button mapping, including the live browser-preview simulation path
-- `KeyboardInputAdapter`: retained for explicit simulation/test doubles and local debugging helpers
+- `PTTInputAdapter`: Whisplay single-button mapping
+- `FourButtonInputAdapter`: Pimoroni four-button mapping
+- `KeyboardInputAdapter`: simulation and local debugging helpers
 
 ## Screen Architecture
 

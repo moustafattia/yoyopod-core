@@ -27,8 +27,8 @@ Simulation now reuses the same render contract as hardware:
 3. Browser preview reuses that mirrored framebuffer instead of maintaining a
    second simulation-specific renderer.
 
-This means simulation is a Whisplay-profile preview path, not a separate
-"generic simulation" product.
+This means simulation is its own adapter surface backed by the same LVGL output
+contract, not a second renderer.
 
 ## Goals
 
@@ -82,7 +82,9 @@ Small anti-aliasing or color differences can be tolerated. Geometry drift should
 - `src/yoyopod/ui/display/factory.py`
   - owns adapter selection and preview startup
 - `src/yoyopod/ui/display/adapters/whisplay.py`
-  - owns both Whisplay output behavior and the simulation mirror
+  - owns Whisplay output behavior
+- `src/yoyopod/ui/display/adapters/simulation.py`
+  - owns the simulation adapter surface while reusing the shared LVGL contract
 - `src/yoyopod/ui/display/rgb565.py`
   - owns the framebuffer and PNG encoding helpers used by the adapter
 - `src/yoyopod/ui/display/adapters/simulation_web/server.py`

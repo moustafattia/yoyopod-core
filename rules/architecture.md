@@ -20,18 +20,18 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
     |  `- MpvIpcClient (backends/music/ipc.py) -- mpv JSON IPC
     |- VoIPManager (integrations/call/manager.py)
     |  `- LiblinphoneBackend (backends/voip/backend.py)
-    |- Display HAL (ui/display/) -- Whisplay LVGL hardware + Whisplay-profile simulation
-    |- Input HAL (ui/input/) -- one-button Whisplay input + simulation input
+    |- Display HAL (ui/display/) -- LVGL-backed Whisplay, Pimoroni, and simulation adapters
+    |- Input HAL (ui/input/) -- four-button Pimoroni, one-button Whisplay, and simulation input
     `- ScreenManager (ui/screens/manager.py) -- stack-based navigation
 ```
 
 ## Display HAL
 
-`ui/display/`: `DisplayHAL` interface -> factory -> Whisplay LVGL adapter, with simulation reusing the same Whisplay render contract. The `Display` facade hides hardware-specific rendering details.
+`ui/display/`: `DisplayHAL` interface -> factory -> LVGL-backed adapters for Whisplay, Pimoroni, and simulation. The `Display` facade hides hardware-specific rendering details.
 
 ## Input HAL
 
-`ui/input/`: semantic actions such as `SELECT`, `BACK`, `UP`, `DOWN`, `PTT_PRESS`, and `PTT_RELEASE`. The live runtime is Whisplay-first: `ptt_button.py` is the canonical hardware path, while simulation/browser input mirrors that profile. `InputManager` dispatches actions to the active screen.
+`ui/input/`: semantic actions such as `SELECT`, `BACK`, `UP`, `DOWN`, `PTT_PRESS`, and `PTT_RELEASE`. The live runtime supports the Whisplay single-button path, the Pimoroni four-button path, and simulation keyboard/browser input, all dispatching semantic actions through `InputManager`.
 
 ## Screen System
 

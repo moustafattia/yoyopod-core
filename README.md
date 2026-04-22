@@ -18,8 +18,9 @@ Approved contacts are now backend-synced policy data:
   when the backend household contact list is still empty
 
 Supported display/input modes:
+- Pimoroni Display HAT Mini: `320x240` landscape adapter surface on the shared LVGL path
 - PiSugar Whisplay HAT: `240x280` portrait with a single PTT-style button
-- Simulation mode: Whisplay-profile browser preview with web-button input
+- Simulation mode: shared LVGL browser preview with keyboard and web-button input
 
 ## Call And Music Contract
 

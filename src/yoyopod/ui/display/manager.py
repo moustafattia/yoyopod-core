@@ -3,7 +3,7 @@ Display controller with Hardware Abstraction Layer (HAL).
 
 This module provides the Display class, which acts as a facade for hardware-specific
 display adapters. The class maintains backward compatibility with existing code while
-supporting the Whisplay LVGL hardware path plus its simulation mirror.
+supporting the shared LVGL hardware and simulation paths.
 
 The display system uses the following architecture:
     Display (facade) → DisplayFactory → DisplayHAL → Hardware-specific adapter

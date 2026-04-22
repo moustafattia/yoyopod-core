@@ -32,8 +32,8 @@ def _patch_fake_server(monkeypatch) -> FakeServer:
     return fake_server
 
 
-def test_simulate_mode_uses_whisplay_lvgl_adapter(monkeypatch) -> None:
-    """Simulation should mirror the Whisplay LVGL profile instead of a PIL adapter."""
+def test_simulate_mode_uses_simulation_lvgl_adapter(monkeypatch) -> None:
+    """Simulation should use its own adapter surface on the shared LVGL path."""
 
     fake_server = _patch_fake_server(monkeypatch)
     display = Display(simulate=True)
@@ -42,12 +42,12 @@ def test_simulate_mode_uses_whisplay_lvgl_adapter(monkeypatch) -> None:
         adapter = display.get_adapter()
         info = get_hardware_info(adapter)
 
-        assert adapter.DISPLAY_TYPE == "whisplay"
+        assert adapter.DISPLAY_TYPE == "simulation"
         assert adapter.SIMULATED_HARDWARE == "whisplay"
         assert display.WIDTH == 240
         assert display.HEIGHT == 280
         assert display.ORIENTATION == "portrait"
-        assert info["display_type"] == "whisplay"
+        assert info["display_type"] == "simulation"
         assert info["simulated_hardware"] == "whisplay"
         assert info["simulated"] is True
         assert info["renderer"] == "unavailable"
@@ -56,15 +56,15 @@ def test_simulate_mode_uses_whisplay_lvgl_adapter(monkeypatch) -> None:
         display.cleanup()
 
 
-def test_simulate_flag_overrides_explicit_hardware_to_whisplay_simulation(monkeypatch) -> None:
-    """The simulate flag should still resolve to the Whisplay-profile adapter."""
+def test_simulate_flag_overrides_explicit_hardware_to_simulation_adapter(monkeypatch) -> None:
+    """The simulate flag should still resolve to the simulation adapter surface."""
 
     _patch_fake_server(monkeypatch)
     display = Display(hardware="whisplay", simulate=True)
 
     try:
         adapter = display.get_adapter()
-        assert adapter.DISPLAY_TYPE == "whisplay"
+        assert adapter.DISPLAY_TYPE == "simulation"
         assert adapter.SIMULATED_HARDWARE == "whisplay"
         assert adapter.simulate is True
     finally:

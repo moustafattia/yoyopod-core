@@ -1,4 +1,4 @@
-"""Display hardware factory for the LVGL-only Whisplay runtime."""
+"""Display hardware factory for the LVGL-only runtime."""
 
 from __future__ import annotations
 
@@ -6,10 +6,23 @@ import os
 
 from loguru import logger
 
+from yoyopod.config.models import PimoroniGpioConfig
 from yoyopod.ui.display.hal import DisplayHAL
 from yoyopod.ui.display.adapters.whisplay_paths import find_whisplay_driver
 
-VALID_DISPLAY_TYPES = {"auto", "whisplay", "simulation"}
+VALID_DISPLAY_TYPES = {"auto", "whisplay", "pimoroni", "simulation"}
+
+
+def _get_pimoroni_gpio_config() -> PimoroniGpioConfig | None:
+    """Return Pimoroni GPIO config from the active board config when available."""
+
+    try:
+        from yoyopod.config.manager import ConfigManager
+
+        mgr = ConfigManager()
+        return mgr.app_settings.display.pimoroni_gpio
+    except Exception:
+        return None
 
 
 def _normalize_display_hardware(hardware: str) -> str:
@@ -37,7 +50,12 @@ def detect_hardware() -> str:
         logger.info("Detected Whisplay HAT (driver found at {})", whisplay_driver_path)
         return "whisplay"
 
-    logger.warning("No Whisplay hardware detected - defaulting to simulation mode")
+    gpio_config = _get_pimoroni_gpio_config()
+    if gpio_config is not None and gpio_config.dc is not None and gpio_config.backlight is not None:
+        logger.info("Detected Pimoroni/ST7789 LVGL path from board GPIO config")
+        return "pimoroni"
+
+    logger.warning("No supported display hardware detected - defaulting to simulation mode")
     logger.info("To force hardware type, set YOYOPOD_DISPLAY environment variable")
     return "simulation"
 
@@ -104,16 +122,26 @@ def get_display(
             lvgl_buffer_lines=whisplay_lvgl_buffer_lines,
         )
 
+    if hardware == "pimoroni":
+        logger.info("Creating Pimoroni LVGL display adapter")
+        from yoyopod.ui.display.adapters.pimoroni import PimoroniDisplayAdapter
+
+        adapter = PimoroniDisplayAdapter(
+            simulate=False,
+            lvgl_buffer_lines=whisplay_lvgl_buffer_lines,
+            gpio_config=_get_pimoroni_gpio_config(),
+        )
+        if adapter.simulate:
+            return _attach_simulation_preview(adapter)
+        return adapter
+
     if hardware == "simulation":
-        logger.info("Creating simulated Whisplay LVGL adapter (240x280 portrait)")
-        from yoyopod.ui.display.adapters.whisplay import WhisplayDisplayAdapter
+        logger.info("Creating simulation display adapter on the shared LVGL path")
+        from yoyopod.ui.display.adapters.simulation import SimulationDisplayAdapter
 
         return _attach_simulation_preview(
-            WhisplayDisplayAdapter(
-                simulate=True,
-                renderer="lvgl",
+            SimulationDisplayAdapter(
                 lvgl_buffer_lines=whisplay_lvgl_buffer_lines,
-                enforce_production_contract=False,
             )
         )
 

@@ -22,8 +22,9 @@ class WhisplayDisplayAdapter:
 
 
 class SimulatedWhisplayDisplayAdapter(WhisplayDisplayAdapter):
-    """Minimal simulation display-adapter double mirroring Whisplay."""
+    """Minimal simulation display-adapter double on the shared LVGL path."""
 
+    DISPLAY_TYPE = "simulation"
     SIMULATED_HARDWARE = "whisplay"
 
     def __init__(self) -> None:
@@ -73,10 +74,10 @@ def test_whisplay_factory_keeps_standard_profile_when_navigation_disabled() -> N
     assert adapter.enable_navigation is False
 
 
-def test_simulated_whisplay_factory_uses_one_button_profile_and_browser_buttons(
+def test_simulation_factory_uses_standard_profile_keyboard_and_browser_buttons(
     monkeypatch,
 ) -> None:
-    """Simulation should mirror Whisplay one-button browser controls."""
+    """Simulation should use standard keyboard/web controls on its own adapter surface."""
 
     class FakeServer:
         def __init__(self) -> None:
@@ -103,29 +104,22 @@ def test_simulated_whisplay_factory_uses_one_button_profile_and_browser_buttons(
 
     observed: list[InputAction] = []
     assert manager is not None
-    assert manager.interaction_profile == InteractionProfile.ONE_BUTTON
-    manager.on_action(InputAction.ADVANCE, lambda data=None: observed.append(InputAction.ADVANCE))
+    assert manager.interaction_profile == InteractionProfile.STANDARD
+    assert manager.adapters[0].__class__.__name__ == "KeyboardInputAdapter"
+    manager.on_action(InputAction.UP, lambda data=None: observed.append(InputAction.UP))
+    manager.on_action(InputAction.DOWN, lambda data=None: observed.append(InputAction.DOWN))
     manager.on_action(InputAction.SELECT, lambda data=None: observed.append(InputAction.SELECT))
     manager.on_action(InputAction.BACK, lambda data=None: observed.append(InputAction.BACK))
 
     assert server.callback is not None
     server.callback("DOWN")
-    server.callback("SELECT")
-    server.callback("BACK")
-
-    assert observed == [
-        InputAction.ADVANCE,
-        InputAction.SELECT,
-        InputAction.BACK,
-    ]
-
-    observed.clear()
     server.callback("UP")
     server.callback("SELECT")
     server.callback("BACK")
 
     assert observed == [
-        InputAction.ADVANCE,
+        InputAction.DOWN,
+        InputAction.UP,
         InputAction.SELECT,
         InputAction.BACK,
     ]

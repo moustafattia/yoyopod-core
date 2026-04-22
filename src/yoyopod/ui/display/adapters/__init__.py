@@ -8,11 +8,21 @@ when the adapter is not selected. Use the display factory to create adapters.
 """
 
 __all__ = [
+    "PimoroniDisplayAdapter",
+    "SimulationDisplayAdapter",
     "WhisplayDisplayAdapter",
 ]
 
 
 def __getattr__(name: str):
+    if name == "PimoroniDisplayAdapter":
+        from yoyopod.ui.display.adapters.pimoroni import PimoroniDisplayAdapter
+
+        return PimoroniDisplayAdapter
+    if name == "SimulationDisplayAdapter":
+        from yoyopod.ui.display.adapters.simulation import SimulationDisplayAdapter
+
+        return SimulationDisplayAdapter
     if name == "WhisplayDisplayAdapter":
         from yoyopod.ui.display.adapters.whisplay import WhisplayDisplayAdapter
 

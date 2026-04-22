@@ -4,7 +4,7 @@
 **Status:** Current implementation
 
 This document describes the live display abstraction used by the LVGL-only
-Whisplay runtime.
+runtime.
 
 ## Goals
 
@@ -18,7 +18,9 @@ Whisplay runtime.
 - `src/yoyopod/ui/display/hal.py`: HAL interface
 - `src/yoyopod/ui/display/manager.py`: `Display` facade
 - `src/yoyopod/ui/display/factory.py`: adapter selection and simulation startup
-- `src/yoyopod/ui/display/adapters/whisplay.py`: Whisplay hardware adapter plus simulation mirror
+- `src/yoyopod/ui/display/adapters/whisplay.py`: Whisplay hardware adapter
+- `src/yoyopod/ui/display/adapters/pimoroni.py`: Pimoroni/ST7789 hardware adapter
+- `src/yoyopod/ui/display/adapters/simulation.py`: simulation adapter on the shared LVGL path
 - `src/yoyopod/ui/display/rgb565.py`: framebuffer and PNG helpers used by the adapter
 
 ## Architecture
@@ -26,7 +28,7 @@ Whisplay runtime.
 ```text
 Display
   -> get_display(...)
-     -> WhisplayDisplayAdapter
+     -> WhisplayDisplayAdapter | PimoroniDisplayAdapter | SimulationDisplayAdapter
         -> LVGL backend
         -> hardware SPI flushes or browser preview transport
         -> RGB565 framebuffer screenshots
@@ -41,7 +43,13 @@ Display
 - PiSugar Whisplay HAT
 - LVGL-only production path
 
-### Whisplay-profile simulation
+### Pimoroni / ST7789 hardware
+
+- `320x240`
+- landscape
+- LVGL-backed adapter over ST7789 SPI plus GPIO control
+
+### Simulation
 
 - `240x280`
 - portrait
@@ -73,7 +81,7 @@ scene-driven through LVGL.
 3. Whisplay driver path detection
 4. simulation fallback
 
-If `simulate=True`, simulation always uses the Whisplay-profile adapter.
+If `simulate=True`, simulation always uses the simulation adapter surface.
 
 ## Production Contract
 
@@ -83,5 +91,5 @@ If `simulate=True`, simulation always uses the Whisplay-profile adapter.
 
 ## Summary
 
-The display HAL is implemented and frozen around one runtime surface: Whisplay
-hardware plus its Whisplay-profile simulation mirror.
+The display HAL is implemented and frozen around LVGL-backed Whisplay, Pimoroni,
+and simulation adapter surfaces.
