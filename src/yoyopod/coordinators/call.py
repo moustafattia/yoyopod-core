@@ -184,9 +184,6 @@ class CallCoordinator:
         if voip_manager is not None:
             return bool(voip_manager.running and voip_manager.registered)
 
-        context = self.runtime.context
-        if context is not None:
-            return bool(context.voip.running and context.voip.ready)
         return self.voip_registered
 
     def make_call(self, sip_address: str, *, contact_name: str | None = None) -> bool:

@@ -271,3 +271,28 @@ def test_ready_to_call_prefers_live_voip_manager_state() -> None:
     )
 
     assert coordinator.is_ready_to_call() is True
+
+
+def test_ready_to_call_fallback_uses_cached_registration_when_no_live_manager() -> None:
+    """Use coordinator registration state when runtime.voip_manager is unavailable."""
+
+    context = AppContext()
+    context.update_voip_status(
+        configured=True,
+        ready=False,
+        running=False,
+        registration_state="failed",
+    )
+
+    runtime = _build_runtime(
+        config_manager=_ConfigManagerStub(sip_username="kid@example.com"),
+        context=context,
+    )
+    coordinator = CallCoordinator(
+        runtime=runtime,
+        screen_coordinator=_ScreenCoordinatorStub(),
+        auto_resume_after_call=True,
+        initial_voip_registered=True,
+    )
+
+    assert coordinator.is_ready_to_call() is True
