@@ -64,6 +64,20 @@ class PowerManager:
 
     def refresh(self) -> PowerSnapshot:
         """Collect and store a new snapshot from the backend."""
+        if self._should_fast_fail_refresh():
+            previous_error = self.last_snapshot.error.strip()
+            self.last_snapshot = PowerSnapshot(
+                available=False,
+                checked_at=datetime.now(),
+                source=self.last_snapshot.source,
+                error=(
+                    previous_error
+                    if previous_error and previous_error != "power snapshot not collected yet"
+                    else "power backend unavailable"
+                ),
+            )
+            return self.last_snapshot
+
         try:
             self.last_snapshot = self.backend.get_snapshot()
         except Exception as exc:
@@ -74,6 +88,17 @@ class PowerManager:
                 error=str(exc),
             )
         return self.last_snapshot
+
+    def _should_fast_fail_refresh(self) -> bool:
+        """Avoid repeated full PiSugar sweeps when the backend is already known offline."""
+        if not self.config.enabled or self.last_snapshot.available:
+            return False
+
+        try:
+            return not self.probe()
+        except Exception as exc:
+            logger.debug(f"Power probe failed during refresh gate: {exc}")
+            return True
 
     def get_snapshot(self, refresh: bool = False) -> PowerSnapshot:
         """Return the cached snapshot, optionally refreshing first."""

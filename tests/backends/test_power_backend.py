@@ -121,6 +121,41 @@ def test_pisugar_backend_marks_snapshot_unavailable_when_transport_is_down() -> 
     assert "get model" in snapshot.error
 
 
+def test_pisugar_backend_marks_snapshot_unavailable_when_only_identity_queries_work() -> None:
+    """Model-only responses should not count as a usable power telemetry snapshot."""
+
+    backend = PiSugarBackend(
+        PowerConfig(),
+        transport=FakeTransport(
+            {
+                "get model": "PiSugar 3",
+                "get firmware_version": "I2C not connected",
+                "get battery": "I2C not connected",
+                "get battery_v": "I2C not connected",
+                "get battery_charging": "I2C not connected",
+                "get battery_power_plugged": "I2C not connected",
+                "get battery_allow_charging": "I2C not connected",
+                "get battery_output_enabled": "I2C not connected",
+                "get temperature": "I2C not connected",
+                "get rtc_time": "I2C not connected",
+                "get rtc_alarm_enabled": "I2C not connected",
+                "get rtc_alarm_time": "I2C not connected",
+                "get alarm_repeat": "0",
+                "get rtc_adjust_ppm": "0.0",
+                "get safe_shutdown_level": "0.0",
+                "get safe_shutdown_delay": "0",
+            }
+        ),
+    )
+
+    snapshot = backend.get_snapshot()
+
+    assert backend.probe() is False
+    assert snapshot.available is False
+    assert snapshot.device.model == "PiSugar 3"
+    assert "get battery" in snapshot.error
+
+
 def test_pisugar_probe_returns_false_when_backend_is_disabled() -> None:
     """Disabled power config should short-circuit probe attempts."""
 

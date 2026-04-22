@@ -144,7 +144,7 @@ class PowerRuntimeService:
             self.app.context.update_power_status(snapshot)
 
         current_signature = self._snapshot_signature(snapshot)
-        if current_signature != previous_signature or current_route_name == "power":
+        if current_signature != previous_signature:
             if self.app.screen_manager is not None:
                 self.app.screen_manager.refresh_current_screen()
 

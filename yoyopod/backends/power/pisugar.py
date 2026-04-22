@@ -137,7 +137,7 @@ class PiSugarBackend:
             return False
 
         try:
-            self._query("get model")
+            self._read_float("get battery")
             return True
         except (PowerTransportError, ValueError) as exc:
             logger.debug(f"PiSugar probe failed: {exc}")
@@ -154,22 +154,32 @@ class PiSugarBackend:
                 error="power backend disabled",
             )
 
-        success_count = 0
+        telemetry_success_count = 0
         errors: list[str] = []
 
-        def read_optional(reader: Callable[[str], object], command: str):
-            nonlocal success_count
+        def read_optional(
+            reader: Callable[[str], object],
+            command: str,
+            *,
+            counts_as_telemetry: bool = True,
+        ):
+            nonlocal telemetry_success_count
             try:
                 value = reader(command)
             except (PowerTransportError, ValueError) as exc:
                 errors.append(f"{command}: {exc}")
                 return None
-            success_count += 1
+            if counts_as_telemetry:
+                telemetry_success_count += 1
             return value
 
         device = PowerDeviceInfo(
-            model=read_optional(self._read_str, "get model"),
-            firmware_version=read_optional(self._read_str, "get firmware_version"),
+            model=read_optional(self._read_str, "get model", counts_as_telemetry=False),
+            firmware_version=read_optional(
+                self._read_str,
+                "get firmware_version",
+                counts_as_telemetry=False,
+            ),
         )
         battery = BatteryState(
             level_percent=read_optional(self._read_float, "get battery"),
@@ -184,22 +194,32 @@ class PiSugarBackend:
             time=read_optional(self._read_datetime, "get rtc_time"),
             alarm_enabled=read_optional(self._read_bool, "get rtc_alarm_enabled"),
             alarm_time=read_optional(self._read_datetime, "get rtc_alarm_time"),
-            alarm_repeat_mask=read_optional(self._read_int, "get alarm_repeat"),
-            adjust_ppm=read_optional(self._read_float, "get rtc_adjust_ppm"),
+            alarm_repeat_mask=read_optional(
+                self._read_int,
+                "get alarm_repeat",
+                counts_as_telemetry=False,
+            ),
+            adjust_ppm=read_optional(
+                self._read_float,
+                "get rtc_adjust_ppm",
+                counts_as_telemetry=False,
+            ),
         )
         shutdown = ShutdownState(
             safe_shutdown_level_percent=read_optional(
                 self._read_float,
                 "get safe_shutdown_level",
+                counts_as_telemetry=False,
             ),
             safe_shutdown_delay_seconds=read_optional(
                 self._read_int,
                 "get safe_shutdown_delay",
+                counts_as_telemetry=False,
             ),
         )
 
         return PowerSnapshot(
-            available=success_count > 0,
+            available=telemetry_success_count > 0,
             checked_at=checked_at,
             device=device,
             battery=battery,

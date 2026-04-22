@@ -45,7 +45,7 @@ class ExplodingBackend:
     """Backend double that raises on refresh."""
 
     def probe(self) -> bool:
-        return False
+        return True
 
     def get_snapshot(self) -> PowerSnapshot:
         raise RuntimeError("backend boom")
@@ -97,6 +97,23 @@ def test_power_manager_returns_unavailable_snapshot_when_backend_refresh_fails()
 
     assert snapshot.available is False
     assert snapshot.error == "backend boom"
+
+
+def test_power_manager_fast_fails_repeated_refresh_when_backend_stays_unreachable() -> None:
+    """Repeated offline PiSugar refreshes should use the lightweight probe path."""
+
+    snapshot = PowerSnapshot(
+        available=True,
+        checked_at=datetime(2026, 4, 4, 12, 0, 0),
+        battery=BatteryState(level_percent=83.0),
+    )
+    backend = FakeBackend(snapshot, probe_result=False)
+    manager = PowerManager(PowerConfig(), backend=backend)
+
+    refreshed = manager.refresh()
+
+    assert refreshed.available is False
+    assert backend.refresh_calls == 0
 
 
 def test_power_manager_reads_power_config_from_config_manager(tmp_path) -> None:
