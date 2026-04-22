@@ -11,7 +11,6 @@ from yoyopod.backends.music import PlaybackQueue, Track
 from yoyopod.ui.input.hal import InteractionProfile
 
 if TYPE_CHECKING:
-    from yoyopod.core.audio_manager import MusicManager
     from yoyopod.core.audio_volume import AudioVolumeController
     from yoyopod.integrations.power.models import PowerSnapshot
 
@@ -382,10 +381,8 @@ class AppContext:
 
     def __init__(
         self,
-        audio_manager: "MusicManager | None" = None,
         interaction_profile: InteractionProfile = InteractionProfile.STANDARD,
     ) -> None:
-        self.audio_manager = audio_manager
         self.audio_volume_controller: AudioVolumeController | None = None
         self.interaction_profile = interaction_profile
 
@@ -491,8 +488,6 @@ class AppContext:
         cached_volume = max(0, min(100, int(volume)))
         self.media.playback.volume = cached_volume
         self.voice.output_volume = cached_volume
-        if self.audio_manager is not None:
-            self.audio_manager.volume = cached_volume
         return cached_volume
 
     def set_volume(self, volume: int) -> None:

@@ -6,8 +6,6 @@ from typing import Any
 
 _PUBLIC_EXPORTS = {
     "ActiveVoiceNoteState": ("yoyopod.core.app_context", "ActiveVoiceNoteState"),
-    "AudioDevice": ("yoyopod.core.audio_manager", "AudioDevice"),
-    "AudioManager": ("yoyopod.core.audio_manager", "AudioManager"),
     "AudioDeviceCatalog": ("yoyopod.core.hardware", "AudioDeviceCatalog"),
     "AudioFocusGrantedEvent": ("yoyopod.core.events", "AudioFocusGrantedEvent"),
     "AudioFocusLostEvent": ("yoyopod.core.events", "AudioFocusLostEvent"),
@@ -25,7 +23,6 @@ _PUBLIC_EXPORTS = {
     "LogBuffer": ("yoyopod.core.logbuffer", "LogBuffer"),
     "MainThreadScheduler": ("yoyopod.core.scheduler", "MainThreadScheduler"),
     "MediaRuntimeState": ("yoyopod.core.app_context", "MediaRuntimeState"),
-    "MusicManager": ("yoyopod.core.audio_manager", "MusicManager"),
     "NetworkRuntimeState": ("yoyopod.core.app_context", "NetworkRuntimeState"),
     "OutputVolumeController": ("yoyopod.core.audio_volume", "OutputVolumeController"),
     "PlaybackState": ("yoyopod.core.app_context", "PlaybackState"),
