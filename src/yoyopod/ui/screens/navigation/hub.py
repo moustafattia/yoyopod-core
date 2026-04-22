@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
-from yoyopod.ui.screens.base import Screen
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.navigation.lvgl import LvglHubView
 from yoyopod.ui.screens.navigation.hub_pil_view import render_hub_pil
 from yoyopod.ui.screens.theme import (
@@ -21,7 +20,6 @@ from yoyopod.ui.screens.theme import (
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.audio.music.models import Track
-    from yoyopod.ui.screens.view import ScreenView
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +75,7 @@ def build_hub_listen_subtitle_provider(
     return provider
 
 
-class HubScreen(Screen):
+class HubScreen(LvglScreen):
     """Carousel-style root screen for the one-button Whisplay flow."""
 
     def __init__(
@@ -92,7 +90,6 @@ class HubScreen(Screen):
             listen_subtitle_provider or build_hub_listen_subtitle_provider(display)
         )
         self.selected_index = 0
-        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Refresh lightweight summaries when the hub becomes active."""
@@ -103,26 +100,9 @@ class HubScreen(Screen):
         """Leave the retained LVGL Hub view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
-
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglHubView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+    def _create_lvgl_view(self, ui_backend: object) -> LvglHubView:
+        """Build the retained LVGL view for this screen."""
+        return LvglHubView(self, ui_backend)
 
     def cards(self) -> list[HubCard]:
         """Build the live root-card list."""
@@ -174,9 +154,7 @@ class HubScreen(Screen):
 
     def render(self) -> None:
         """Render the selected root card."""
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_hub_pil(self)
 

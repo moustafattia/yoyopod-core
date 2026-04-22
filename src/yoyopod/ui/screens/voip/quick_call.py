@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.theme import (
     INK,
     draw_empty_state,
@@ -22,7 +21,6 @@ if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.communication.calling.history import CallHistoryStore
     from yoyopod.people import Contact
-    from yoyopod.ui.screens.view import ScreenView
 
 
 @dataclass(slots=True)
@@ -46,7 +44,7 @@ class TalkDeckCard:
     icon_key: str | None = None
 
 
-class CallScreen(Screen):
+class CallScreen(LvglScreen):
     """Talk screen showing one person at a time."""
 
     _MAX_CONTACTS = 10
@@ -66,7 +64,6 @@ class CallScreen(Screen):
         self.people: list[TalkPerson] = []
         self.deck_cards: list[TalkDeckCard] = []
         self.selected_index = 0
-        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Refresh the contact deck when Talk becomes active."""
@@ -79,27 +76,10 @@ class CallScreen(Screen):
         """Leave the retained LVGL Talk view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
+    def _create_lvgl_view(self, ui_backend: object) -> LvglCallView:
+        """Build the retained LVGL view for this screen."""
 
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
-
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglCallView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+        return LvglCallView(self, ui_backend)
 
     def _sorted_contacts(self) -> list["Contact"]:
         """Return contacts ordered for child-facing Talk access."""
@@ -229,10 +209,7 @@ class CallScreen(Screen):
 
     def render(self) -> None:
         """Render the Talk contact deck."""
-
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
 
         theme = render_backdrop(self.display, "talk")

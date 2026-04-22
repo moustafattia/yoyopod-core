@@ -11,12 +11,14 @@ from loguru import logger
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.input.hal import InteractionProfile
+from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.router import NavigationRequest
 
 if TYPE_CHECKING:
     from yoyopod.ui.screens.manager import ScreenManager
     from yoyopod.core import AppContext
     from yoyopod.ui.input import InputAction
+    from yoyopod.ui.screens.view import ScreenView
 
 
 class Screen(ABC):
@@ -216,3 +218,49 @@ class Screen(ABC):
                   {'command': str, 'confidence': float, ...}
         """
         pass
+
+
+class LvglScreen(Screen):
+    """Shared retained-LVGL lifecycle for dual-renderer screen controllers."""
+
+    def __init__(
+        self,
+        display: Display,
+        context: Optional['AppContext'] = None,
+        name: str = "Screen",
+    ) -> None:
+        super().__init__(display, context, name)
+        self._lvgl_view: "ScreenView | None" = None
+
+    @abstractmethod
+    def _create_lvgl_view(self, ui_backend: Any) -> "ScreenView":
+        """Return a newly constructed LVGL view for this screen."""
+
+    def _ensure_lvgl_view(self) -> "ScreenView | None":
+        """Return a live retained LVGL view when the backend is active."""
+        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+            self._lvgl_view = None
+            return None
+
+        ui_backend = (
+            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        )
+        if ui_backend is None or not getattr(ui_backend, "initialized", False):
+            self._lvgl_view = None
+            return None
+
+        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
+        if self._lvgl_view is not None:
+            return self._lvgl_view
+
+        self._lvgl_view = self._create_lvgl_view(ui_backend)
+        self._lvgl_view.build()
+        return self._lvgl_view
+
+    def _sync_lvgl_view(self) -> bool:
+        """Sync the retained LVGL view, returning False when PIL should render."""
+        lvgl_view = self._ensure_lvgl_view()
+        if lvgl_view is None:
+            return False
+        lvgl_view.sync()
+        return True

@@ -6,17 +6,15 @@ from typing import TYPE_CHECKING, Optional
 
 from yoyopod.audio.music import LocalLibraryItem, LocalMusicService
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.navigation.lvgl import LvglListenView
 from yoyopod.ui.screens.navigation.listen_pil_view import render_listen_pil
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.ui.screens.view import ScreenView
 
 
-class ListenScreen(Screen):
+class ListenScreen(LvglScreen):
     """Local music landing screen for Playlists, Recent, and Shuffle."""
 
     def __init__(
@@ -30,7 +28,6 @@ class ListenScreen(Screen):
         self.music_service = music_service
         self.items: list[LocalLibraryItem] = []
         self.selected_index = 0
-        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Refresh the local library menu when entering Listen."""
@@ -42,26 +39,9 @@ class ListenScreen(Screen):
         """Leave the retained LVGL Listen view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
-
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglListenView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+    def _create_lvgl_view(self, ui_backend: object) -> LvglListenView:
+        """Build the retained LVGL view for this screen."""
+        return LvglListenView(self, ui_backend)
 
     def _load_items(self) -> None:
         """Load the fixed local-first Listen menu items."""
@@ -80,9 +60,7 @@ class ListenScreen(Screen):
 
     def render(self) -> None:
         """Render the local library menu."""
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_listen_pil(self)
 

@@ -12,8 +12,7 @@ from yoyopod.coordinators.voice import (
     VoiceSettingsResolver,
 )
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.navigation.lvgl import LvglAskView
 from yoyopod.ui.screens.theme import (
     ASK,
@@ -36,10 +35,9 @@ if TYPE_CHECKING:
     from yoyopod.config import ConfigManager
     from yoyopod.communication.calling.manager import VoIPManager
     from yoyopod.people import PeopleManager
-    from yoyopod.ui.screens.view import ScreenView
 
 
-class AskScreen(Screen):
+class AskScreen(LvglScreen):
     """Unified stateful Ask screen with idle / listening / thinking / reply states."""
 
     _FAMILY_ALIAS_GROUPS: tuple[tuple[str, ...], ...] = (
@@ -98,7 +96,6 @@ class AskScreen(Screen):
         self._quick_command = False
         self._ptt_active = False
         self._auto_return_timer = None
-        self._lvgl_view: "ScreenView | None" = None
         self._bind_voice_runtime()
 
     def enter(self) -> None:
@@ -269,29 +266,9 @@ class AskScreen(Screen):
         self._headline = headline
         self._body = body
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
-
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
-
-        ui_backend = (
-            self.display.get_ui_backend()
-            if hasattr(self.display, "get_ui_backend")
-            else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglAskView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+    def _create_lvgl_view(self, ui_backend: object) -> LvglAskView:
+        """Build the retained LVGL view for this screen."""
+        return LvglAskView(self, ui_backend)
 
     def current_view_model(self) -> tuple[str, str, str, str]:
         """Return title, subtitle, footer, and icon for the current Ask state."""
@@ -304,9 +281,7 @@ class AskScreen(Screen):
     def render(self) -> None:
         """Render the current Ask state."""
 
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
 
         if self._state == "reply":

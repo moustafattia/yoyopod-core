@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Optional, cast
+from typing import TYPE_CHECKING, Callable, Optional
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.theme import SUCCESS, WARNING, talk_monogram
 from yoyopod.ui.screens.voip.lvgl.voice_note_view import LvglVoiceNoteView
 from yoyopod.ui.screens.voip.voice_note_models import (
@@ -34,7 +33,7 @@ __all__ = [
 ]
 
 
-class VoiceNoteScreen(Screen):
+class VoiceNoteScreen(LvglScreen):
     """Kid-facing voice-note flow with real record, review, and send states."""
 
     def __init__(
@@ -51,7 +50,6 @@ class VoiceNoteScreen(Screen):
         self._recording_controller = VoiceNoteRecordingController(self._actions)
         self._state = "ready"
         self._selected_action_index = 0
-        self._lvgl_view: LvglVoiceNoteView | None = None
 
     def enter(self) -> None:
         """Reset the voice-note flow when opened."""
@@ -66,28 +64,10 @@ class VoiceNoteScreen(Screen):
         """Leave the retained LVGL voice-note view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> LvglVoiceNoteView | None:
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
+    def _create_lvgl_view(self, ui_backend: object) -> LvglVoiceNoteView:
+        """Build the retained LVGL view for this screen."""
 
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = cast(
-            LvglVoiceNoteView | None,
-            current_retained_view(cast(Any, self._lvgl_view), ui_backend),
-        )
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglVoiceNoteView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+        return LvglVoiceNoteView(self, ui_backend)
 
     def wants_ptt_passthrough(self) -> bool:
         """Return True when the single-button adapter should emit raw PTT hold events."""
@@ -238,9 +218,7 @@ class VoiceNoteScreen(Screen):
         """Render the current voice-note flow state."""
 
         self._sync_state_from_provider(default_state=self._state)
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_voice_note_pil(self)
 

@@ -8,15 +8,13 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.theme import talk_monogram
 from yoyopod.ui.screens.voip.lvgl.talk_contact_view import LvglTalkContactView
 from yoyopod.ui.screens.voip.talk_contact_pil_view import render_talk_contact_pil
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.ui.screens.view import ScreenView
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +26,7 @@ class TalkAction:
     subtitle: str = ""
 
 
-class TalkContactScreen(Screen):
+class TalkContactScreen(LvglScreen):
     """Action picker for the currently selected Talk contact."""
 
     def __init__(
@@ -40,7 +38,6 @@ class TalkContactScreen(Screen):
         super().__init__(display, context, "TalkContact")
         self.voip_manager = voip_manager
         self.selected_index = 0
-        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Reset the action cursor and create the LVGL view when active."""
@@ -53,27 +50,10 @@ class TalkContactScreen(Screen):
         """Leave the retained LVGL action view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
+    def _create_lvgl_view(self, ui_backend: object) -> LvglTalkContactView:
+        """Build the retained LVGL view for this screen."""
 
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
-
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglTalkContactView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+        return LvglTalkContactView(self, ui_backend)
 
     def current_contact_name(self) -> str:
         """Return the child-facing selected contact name."""
@@ -150,10 +130,7 @@ class TalkContactScreen(Screen):
 
     def render(self) -> None:
         """Render the contact action picker."""
-
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_talk_contact_pil(self)
 

@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 from loguru import logger
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.voip.call_actions import CallActions
 from yoyopod.ui.screens.voip.call_history_pil_view import render_call_history_pil
 from yoyopod.ui.screens.voip.lvgl.call_history_view import LvglCallHistoryView
@@ -16,10 +15,9 @@ from yoyopod.ui.screens.voip.lvgl.call_history_view import LvglCallHistoryView
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.communication.calling.history import CallHistoryEntry, CallHistoryStore
-    from yoyopod.ui.screens.view import ScreenView
 
 
-class CallHistoryScreen(Screen):
+class CallHistoryScreen(LvglScreen):
     """Show recent and missed calls, with quick redial when possible."""
 
     def __init__(
@@ -39,7 +37,6 @@ class CallHistoryScreen(Screen):
         self.selected_index = 0
         self.scroll_offset = 0
         self.max_visible_items = 4 if display.is_portrait() else 5
-        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Refresh call history and clear the unseen-missed badge count."""
@@ -54,25 +51,10 @@ class CallHistoryScreen(Screen):
         """Leave the retained LVGL call-history view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
+    def _create_lvgl_view(self, ui_backend: object) -> LvglCallHistoryView:
+        """Build the retained LVGL view for this screen."""
 
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglCallHistoryView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+        return LvglCallHistoryView(self, ui_backend)
 
     def _load_entries(self) -> None:
         """Load the recent calls from persistent storage."""
@@ -115,9 +97,7 @@ class CallHistoryScreen(Screen):
 
     def render(self) -> None:
         """Render the recent-calls list."""
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_call_history_pil(self)
 

@@ -8,17 +8,15 @@ from loguru import logger
 
 from yoyopod.audio.music import LocalMusicService
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
-from yoyopod.ui.screens.base import Screen
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.music.lvgl import LvglPlaylistView
 from yoyopod.ui.screens.music.playlist_pil_view import render_playlist_pil
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.ui.screens.view import ScreenView
 
 
-class PlaylistScreen(Screen):
+class PlaylistScreen(LvglScreen):
     """Browse local playlists from the on-device music library."""
 
     def __init__(
@@ -36,7 +34,6 @@ class PlaylistScreen(Screen):
         self.max_visible_items = 3 if display.is_portrait() else 4
         self.loading = False
         self.error_message: str | None = None
-        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Refresh playlists when the screen becomes active."""
@@ -48,24 +45,9 @@ class PlaylistScreen(Screen):
         """Leave the retained LVGL playlist view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
-
-        ui_backend = self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglPlaylistView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+    def _create_lvgl_view(self, ui_backend: object) -> LvglPlaylistView:
+        """Build the retained LVGL view for this screen."""
+        return LvglPlaylistView(self, ui_backend)
 
     def _update_scroll_window(self) -> None:
         """Keep the selected item visible within the current scroll window."""
@@ -159,9 +141,7 @@ class PlaylistScreen(Screen):
 
     def render(self) -> None:
         """Render the local playlist browser."""
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_playlist_pil(self)
 

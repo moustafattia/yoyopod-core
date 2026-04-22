@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING, Callable, Literal, Optional
 from loguru import logger
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.theme import talk_monogram
 from yoyopod.ui.screens.voip.call_actions import CallActions
 from yoyopod.ui.screens.voip.contact_list_pil_view import render_contact_list_pil
@@ -17,10 +16,9 @@ from yoyopod.ui.screens.voip.lvgl import LvglContactListView
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.people import Contact
-    from yoyopod.ui.screens.view import ScreenView
 
 
-class ContactListScreen(Screen):
+class ContactListScreen(LvglScreen):
     """Full contact list for calling or picking a voice-note recipient."""
 
     def __init__(
@@ -40,7 +38,6 @@ class ContactListScreen(Screen):
         self.selected_index = 0
         self.scroll_offset = 0
         self.max_visible_items = 4 if display.is_portrait() else 5
-        self._lvgl_view: "ScreenView | None" = None
 
     @property
     def title_text(self) -> str:
@@ -72,26 +69,10 @@ class ContactListScreen(Screen):
         """Leave the retained LVGL contacts view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
+    def _create_lvgl_view(self, ui_backend: object) -> LvglContactListView:
+        """Build the retained LVGL view for this screen."""
 
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglContactListView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+        return LvglContactListView(self, ui_backend)
 
     def load_contacts(self) -> None:
         """Load contacts from the people directory."""
@@ -103,9 +84,7 @@ class ContactListScreen(Screen):
 
     def render(self) -> None:
         """Render the contact list."""
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_contact_list_pil(self)
 

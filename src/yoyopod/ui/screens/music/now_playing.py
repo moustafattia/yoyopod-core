@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.base import LvglScreen
 from yoyopod.ui.screens.music.lvgl import LvglNowPlayingView
 from yoyopod.ui.screens.music.now_playing_pil_view import render_now_playing_pil
 from yoyopod.ui.screens.theme import (
@@ -24,7 +23,6 @@ from yoyopod.ui.screens.theme import (
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.audio.music.models import Track
-    from yoyopod.ui.screens.view import ScreenView
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,7 +169,7 @@ def build_now_playing_actions(
     )
 
 
-class NowPlayingScreen(Screen):
+class NowPlayingScreen(LvglScreen):
     """Current playback screen styled for the new Listen mode."""
 
     def __init__(
@@ -185,7 +183,6 @@ class NowPlayingScreen(Screen):
         super().__init__(display, context, "NowPlaying")
         self._state_provider = state_provider or build_now_playing_state_provider(context=context)
         self._actions = actions or build_now_playing_actions(context=context)
-        self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:
         """Create the LVGL view when the screen becomes active."""
@@ -196,32 +193,14 @@ class NowPlayingScreen(Screen):
         """Leave the retained LVGL now-playing view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
-        """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
-            self._lvgl_view = None
-            return None
+    def _create_lvgl_view(self, ui_backend: object) -> LvglNowPlayingView:
+        """Build the retained LVGL view for this screen."""
 
-        ui_backend = (
-            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
-        )
-        if ui_backend is None or not getattr(ui_backend, "initialized", False):
-            self._lvgl_view = None
-            return None
-
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
-        self._lvgl_view = LvglNowPlayingView(self, ui_backend)
-        self._lvgl_view.build()
-        return self._lvgl_view
+        return LvglNowPlayingView(self, ui_backend)
 
     def render(self) -> None:
         """Render the now-playing view."""
-        lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
+        if self._sync_lvgl_view():
             return
         render_now_playing_pil(self)
 
