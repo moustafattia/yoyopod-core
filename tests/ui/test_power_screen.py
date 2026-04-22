@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 from datetime import datetime
+import time
 from types import SimpleNamespace
 
 from yoyopod.core import AppContext
@@ -19,6 +20,7 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.system.power import (
     PowerScreen,
+    PowerScreenActions,
     PowerScreenState,
     build_power_screen_actions,
     build_power_screen_state_provider,
@@ -430,6 +432,84 @@ def test_power_screen_visible_tick_skips_immediate_post_enter_refresh() -> None:
         screen.refresh_for_visible_tick()
 
         assert provider.calls == 1
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_page_change_to_gps_uses_cached_rows_without_immediate_query() -> None:
+    """Entering the GPS page should not synchronously hit the modem on page change."""
+
+    display = Display(simulate=True)
+    try:
+        gps_refresh_calls: list[str] = []
+        screen = PowerScreen(
+            display,
+            AppContext(),
+            state_provider=lambda: PowerScreenState(
+                network_enabled=True,
+                network_rows=(("Status", "Online"),),
+                gps_rows=(
+                    ("Fix", "Searching"),
+                    ("Lat", "--"),
+                    ("Lng", "--"),
+                    ("Alt", "--"),
+                    ("Speed", "--"),
+                ),
+            ),
+            actions=PowerScreenActions(
+                refresh_gps=lambda: gps_refresh_calls.append("refresh") or True,
+            ),
+        )
+
+        screen.enter()
+        screen.on_advance()
+        screen.on_advance()
+
+        assert screen._current_page_title() == "GPS"
+        assert gps_refresh_calls == []
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_visible_tick_waits_for_gps_page_dwell_before_query() -> None:
+    """Visible ticks should wait for a short GPS-page dwell before polling the modem."""
+
+    display = Display(simulate=True)
+    try:
+        gps_refresh_calls: list[str] = []
+        screen = PowerScreen(
+            display,
+            AppContext(),
+            state_provider=lambda: PowerScreenState(
+                network_enabled=True,
+                network_rows=(("Status", "Online"),),
+                gps_rows=(
+                    ("Fix", "Searching"),
+                    ("Lat", "--"),
+                    ("Lng", "--"),
+                    ("Alt", "--"),
+                    ("Speed", "--"),
+                ),
+            ),
+            actions=PowerScreenActions(
+                refresh_gps=lambda: gps_refresh_calls.append("refresh") or True,
+            ),
+        )
+        screen._visible_tick_refresh_grace_seconds = 0.0
+        screen._gps_page_refresh_delay_seconds = 30.0
+
+        screen.enter()
+        screen.on_advance()
+        screen.on_advance()
+        screen.refresh_for_visible_tick()
+
+        assert gps_refresh_calls == []
+
+        screen._gps_page_entered_at = time.monotonic() - 31.0
+        screen._last_gps_query_at = 0.0
+        screen.refresh_for_visible_tick()
+
+        assert gps_refresh_calls == ["refresh"]
     finally:
         display.cleanup()
 

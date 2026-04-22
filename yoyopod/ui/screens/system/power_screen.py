@@ -126,7 +126,9 @@ class PowerScreen(Screen):
         self.in_detail = False
         self._lvgl_view: "ScreenView | None" = None
         self._last_gps_query_at = 0.0
-        self._gps_refresh_interval_seconds = 2.0
+        self._gps_refresh_interval_seconds = 5.0
+        self._gps_page_refresh_delay_seconds = 1.0
+        self._gps_page_entered_at: float | None = None
         self._visible_tick_refresh_grace_seconds = 0.5
         self._last_prepared_refresh_at = 0.0
         self._prepared_state: PowerScreenState | None = None
@@ -142,6 +144,7 @@ class PowerScreen(Screen):
         if self._actions.refresh_voice_devices is not None:
             self._actions.refresh_voice_devices()
         self.refresh_prepared_state()
+        self._sync_page_visibility_state()
         self._ensure_lvgl_view()
 
     def exit(self) -> None:
@@ -433,7 +436,7 @@ class PowerScreen(Screen):
         ):
             return
         self.refresh_prepared_state(
-            allow_gps_refresh=self._current_page_title() == "GPS",
+            allow_gps_refresh=self._gps_refresh_allowed_for_visible_tick(),
         )
 
     @staticmethod
@@ -527,9 +530,27 @@ class PowerScreen(Screen):
         return pages[self._page_index_for(pages)].title
 
     def _refresh_after_page_change(self) -> None:
-        self.refresh_prepared_state(
-            allow_gps_refresh=self._current_page_title() == "GPS",
-        )
+        # Show cached GPS rows immediately and only poll again after the page has
+        # stayed visible long enough to justify a modem round-trip.
+        self.refresh_prepared_state()
+        self._sync_page_visibility_state()
+
+    def _sync_page_visibility_state(self) -> None:
+        if self._current_page_title() != "GPS":
+            self._gps_page_entered_at = None
+            return
+
+        if self._gps_page_entered_at is None:
+            self._gps_page_entered_at = time.monotonic()
+
+    def _gps_refresh_allowed_for_visible_tick(self) -> bool:
+        self._sync_page_visibility_state()
+        if self._gps_page_entered_at is None:
+            return False
+
+        return (
+            time.monotonic() - self._gps_page_entered_at
+        ) >= self._gps_page_refresh_delay_seconds
 
     def _get_snapshot(self) -> Optional["PowerSnapshot"]:
         return self._get_state().snapshot
