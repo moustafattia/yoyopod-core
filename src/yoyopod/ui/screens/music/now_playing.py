@@ -23,7 +23,7 @@ from yoyopod.ui.screens.theme import (
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.audio.music.backend import MusicBackend
+    from yoyopod.audio.music.models import Track
     from yoyopod.ui.screens.view import ScreenView
 
 
@@ -39,6 +39,16 @@ class NowPlayingState:
 
 
 @dataclass(frozen=True, slots=True)
+class NowPlayingSnapshot:
+    """Read-only playback snapshot used to build the now-playing view state."""
+
+    is_connected: bool
+    track: "Track | None" = None
+    playback_state: str = "stopped"
+    time_position: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
 class NowPlayingActions:
     """Focused playback actions exposed to the now-playing screen."""
 
@@ -50,13 +60,14 @@ class NowPlayingActions:
 def build_now_playing_state_provider(
     *,
     context: "AppContext | None" = None,
-    music_backend: "MusicBackend | None" = None,
+    snapshot_provider: Callable[[], NowPlayingSnapshot] | None = None,
 ) -> Callable[[], NowPlayingState]:
     """Build a narrow prepared-state provider for the now-playing screen."""
 
     def provider() -> NowPlayingState:
-        if music_backend is not None:
-            if not music_backend.is_connected:
+        if snapshot_provider is not None:
+            snapshot = snapshot_provider()
+            if not snapshot.is_connected:
                 return NowPlayingState(
                     title="Music Offline",
                     artist="Trying to reconnect",
@@ -65,12 +76,12 @@ def build_now_playing_state_provider(
                     is_playing=False,
                 )
 
-            current_track = music_backend.get_current_track()
-            playback_state = music_backend.get_playback_state()
+            current_track = snapshot.track
+            playback_state = snapshot.playback_state
             if current_track is not None:
                 progress = 0.0
                 if current_track.length > 0:
-                    progress = music_backend.get_time_position() / current_track.length
+                    progress = snapshot.time_position / current_track.length
                 state_label = (
                     "PLAYING"
                     if playback_state == "playing"
@@ -120,34 +131,29 @@ def build_now_playing_state_provider(
 def build_now_playing_actions(
     *,
     context: "AppContext | None" = None,
-    music_backend: "MusicBackend | None" = None,
+    toggle_playback_action: Callable[[], None] | None = None,
+    previous_track_action: Callable[[], None] | None = None,
+    next_track_action: Callable[[], None] | None = None,
 ) -> NowPlayingActions:
     """Build the focused playback actions for the now-playing screen."""
 
     def toggle_playback() -> None:
-        if music_backend is not None:
-            if not music_backend.is_connected:
-                return
-            if music_backend.get_playback_state() == "playing":
-                music_backend.pause()
-            else:
-                music_backend.play()
+        if toggle_playback_action is not None:
+            toggle_playback_action()
             return
         if context is not None:
             context.toggle_playback()
 
     def previous_track() -> None:
-        if music_backend is not None:
-            if music_backend.is_connected:
-                music_backend.previous_track()
+        if previous_track_action is not None:
+            previous_track_action()
             return
         if context is not None:
             context.previous_track()
 
     def next_track() -> None:
-        if music_backend is not None:
-            if music_backend.is_connected:
-                music_backend.next_track()
+        if next_track_action is not None:
+            next_track_action()
             return
         if context is not None:
             context.next_track()
