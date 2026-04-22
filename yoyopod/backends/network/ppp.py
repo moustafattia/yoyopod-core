@@ -39,6 +39,7 @@ class PppProcess:
         if launch_prefix is None:
             return False
 
+        manage_default_route = self._should_manage_default_route()
         cmd = [
             *launch_prefix,
             pppd_binary,
@@ -46,12 +47,16 @@ class PppProcess:
             str(self.baud_rate),
             "nodetach",
             "noauth",
-            "defaultroute",
-            "usepeerdns",
             "persist",
             "connect",
             "chat -v '' AT OK 'ATD*99#' CONNECT",
         ]
+        if manage_default_route:
+            cmd.extend(("defaultroute", "usepeerdns"))
+        else:
+            logger.info(
+                "Skipping pppd default-route/DNS takeover because another uplink already owns the default route"
+            )
 
         try:
             self._process = subprocess.Popen(
@@ -101,6 +106,32 @@ class PppProcess:
             if candidate.startswith("/") and Path(candidate).exists():
                 return candidate
         return None
+
+    def _should_manage_default_route(self) -> bool:
+        """Return False when another non-PPP interface already owns the default route."""
+
+        try:
+            result = subprocess.run(
+                ["ip", "-o", "route", "show", "default"],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+        except Exception as exc:
+            logger.debug("Could not inspect default route before spawning pppd: {}", exc)
+            return True
+
+        if result.returncode != 0:
+            return True
+
+        for line in result.stdout.splitlines():
+            tokens = line.split()
+            if "dev" not in tokens:
+                continue
+            interface = tokens[tokens.index("dev") + 1]
+            if not interface.startswith("ppp"):
+                return False
+        return True
 
     def wait_for_link(self, timeout: float = 30.0) -> bool:
         """Block until ppp0 interface exists or timeout expires."""

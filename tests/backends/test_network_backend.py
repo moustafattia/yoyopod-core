@@ -14,6 +14,10 @@ def test_ppp_spawn_constructs_correct_command():
     with (
         patch("yoyopod.backends.network.ppp.shutil.which", return_value="pppd"),
         patch("yoyopod.backends.network.ppp.os.geteuid", return_value=0, create=True),
+        patch(
+            "yoyopod.backends.network.ppp.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout="default via 10.64.64.64 dev ppp0\n"),
+        ),
         patch("subprocess.Popen") as mock_popen,
     ):
         mock_proc = MagicMock()
@@ -27,6 +31,8 @@ def test_ppp_spawn_constructs_correct_command():
         args = mock_popen.call_args[0][0]
         assert "pppd" in args[0]
         assert "/dev/ttyUSB3" in args
+        assert "defaultroute" in args
+        assert "usepeerdns" in args
         assert mock_proc.pid == 12345
 
 
@@ -39,6 +45,10 @@ def test_ppp_spawn_uses_sbin_fallback_when_path_omits_pppd():
             side_effect=lambda candidate: "/usr/sbin/pppd" if candidate == "/usr/sbin/pppd" else None,
         ),
         patch("yoyopod.backends.network.ppp.os.geteuid", return_value=0, create=True),
+        patch(
+            "yoyopod.backends.network.ppp.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout="default via 10.64.64.64 dev ppp0\n"),
+        ),
         patch("subprocess.Popen") as mock_popen,
     ):
         mock_proc = MagicMock()
@@ -65,6 +75,10 @@ def test_ppp_spawn_uses_sudo_wrapper_for_non_root_noauth() -> None:
     with (
         patch("yoyopod.backends.network.ppp.shutil.which", side_effect=_which),
         patch("yoyopod.backends.network.ppp.os.geteuid", return_value=1000, create=True),
+        patch(
+            "yoyopod.backends.network.ppp.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout="default via 10.64.64.64 dev ppp0\n"),
+        ),
         patch("subprocess.Popen") as mock_popen,
     ):
         mock_proc = MagicMock()
@@ -90,12 +104,44 @@ def test_ppp_spawn_fails_without_sudo_for_non_root() -> None:
         patch("yoyopod.backends.network.ppp.shutil.which", side_effect=_which),
         patch("yoyopod.backends.network.ppp.os.geteuid", return_value=1000, create=True),
         patch("yoyopod.backends.network.ppp.Path.exists", return_value=False),
+        patch(
+            "yoyopod.backends.network.ppp.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout="default via 10.64.64.64 dev ppp0\n"),
+        ),
         patch("subprocess.Popen") as mock_popen,
     ):
         ppp = PppProcess(serial_port="/dev/ttyUSB3", apn="internet")
 
         assert ppp.spawn() is False
         mock_popen.assert_not_called()
+
+
+def test_ppp_spawn_skips_default_route_and_peer_dns_when_wifi_is_already_primary() -> None:
+    """spawn() should not let PPP take over global routing/DNS when another uplink is primary."""
+
+    with (
+        patch("yoyopod.backends.network.ppp.shutil.which", return_value="/usr/sbin/pppd"),
+        patch("yoyopod.backends.network.ppp.os.geteuid", return_value=0, create=True),
+        patch(
+            "yoyopod.backends.network.ppp.subprocess.run",
+            return_value=MagicMock(
+                returncode=0,
+                stdout="default via 192.168.178.1 dev wlan0 proto dhcp src 192.168.178.85 metric 50\n",
+            ),
+        ),
+        patch("subprocess.Popen") as mock_popen,
+    ):
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.pid = 12345
+        mock_popen.return_value = mock_proc
+
+        ppp = PppProcess(serial_port="/dev/ttyUSB3", apn="internet")
+
+        assert ppp.spawn() is True
+        args = mock_popen.call_args[0][0]
+        assert "defaultroute" not in args
+        assert "usepeerdns" not in args
 
 
 def test_ppp_kill_terminates_process():
