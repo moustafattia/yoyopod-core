@@ -22,6 +22,9 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod remote logs` | Tail yoyopod logs on the Pi. |
 | `yoyopod remote power` | Query PiSugar state remotely. |
 | `yoyopod remote preflight` | Run host-side preflight checks (dirty tree + quality gate) before any remote work. |
+| `yoyopod remote release push` | Push a pre-built slot dir to the Pi and atomically switch to it. |
+| `yoyopod remote release rollback` | Swap current <-> previous on the Pi and restart. |
+| `yoyopod remote release status` | Print current / previous / health from the Pi. |
 | `yoyopod remote restart` | Restart the yoyopod app on the Pi. |
 | `yoyopod remote rtc` | Inspect or control PiSugar RTC remotely. |
 | `yoyopod remote screenshot` | Capture a screenshot from the Pi's display and copy it locally. |
