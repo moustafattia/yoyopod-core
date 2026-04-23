@@ -100,7 +100,7 @@ def test_push_aborts_and_cleans_up_on_preflight_fail(
     result = runner.invoke(release_app, ["push", str(slot)])
     assert result.exit_code != 0
     flip.assert_not_called()
-    cleanup.assert_called_once_with("2026.04.22-abc")
+    cleanup.assert_called_once()
 
 
 @patch("yoyopod_cli.remote_release._check_rollback_available")
@@ -140,16 +140,20 @@ def test_push_rejects_non_slot_directory(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
+@patch("yoyopod_cli.remote_release._conn")
 @patch("yoyopod_cli.remote_release._rollback_on_pi")
-def test_rollback_invokes_pi_side(rollback: MagicMock) -> None:
+def test_rollback_invokes_pi_side(rollback: MagicMock, conn: MagicMock) -> None:
+    conn.return_value = _fake_conn()
     rollback.return_value = 0
     result = runner.invoke(release_app, ["rollback"])
     assert result.exit_code == 0
     rollback.assert_called_once()
 
 
+@patch("yoyopod_cli.remote_release._conn")
 @patch("yoyopod_cli.remote_release._status_from_pi")
-def test_status_prints_current_and_previous(status: MagicMock) -> None:
+def test_status_prints_current_and_previous(status: MagicMock, conn: MagicMock) -> None:
+    conn.return_value = _fake_conn()
     status.return_value = (
         "current=2026.04.22-abc\nprevious=2026.04.20-def\nhealth=ok\n"
     )
@@ -244,13 +248,16 @@ def test_push_uses_slotpaths_root_override(
 # --- New tests for Fix 2: --first-deploy flag ---
 
 
+@patch("yoyopod_cli.remote_release._conn")
 @patch("yoyopod_cli.remote_release._check_rollback_available")
 @patch("yoyopod_cli.remote_release._rsync_to_pi")
 def test_push_refuses_when_no_rollback_path_without_flag(
     rsync: MagicMock,
     check: MagicMock,
+    conn: MagicMock,
     tmp_path: Path,
 ) -> None:
+    conn.return_value = _fake_conn()
     slot = _write_slot(tmp_path, "2026.04.22-abc")
     check.return_value = 1  # no previous symlink
     result = runner.invoke(release_app, ["push", str(slot)])

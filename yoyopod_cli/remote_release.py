@@ -10,7 +10,7 @@ import typer
 
 from yoyopod_cli.paths import SlotPaths, load_slot_paths
 from yoyopod_cli.release_manifest import load_manifest
-from yoyopod_cli.remote_shared import _resolve_remote_connection
+from yoyopod_cli.remote_shared import pi_conn
 from yoyopod_cli.remote_transport import run_remote, run_remote_capture, validate_config
 
 app = typer.Typer(name="release", help="Slot-deploy push/rollback/status.", no_args_is_help=True)
@@ -26,9 +26,9 @@ def _slots() -> SlotPaths:
     return _slot_paths_cache
 
 
-def _conn() -> object:
-    """Resolve RemoteConnection from env/YAML defaults (no CLI flags required)."""
-    conn = _resolve_remote_connection("", "", "", "")
+def _conn(ctx: typer.Context) -> object:
+    """Resolve RemoteConnection from typer context (respects --host/--user overrides)."""
+    conn = pi_conn(ctx)
     validate_config(conn)  # type: ignore[arg-type]
     return conn
 
@@ -39,8 +39,10 @@ def _slot_python_invocation(version: str) -> str:
     return f"PYTHONPATH={base}/app:{base}/venv " f"python3 -m yoyopod_cli"
 
 
-def _rsync_to_pi(slot: Path, version: str, pi_host: str, pi_user: str) -> int:
+def _rsync_to_pi(conn: object, slot: Path, version: str) -> int:
     """Rsync a local slot directory to the Pi release store."""
+    pi_host: str = getattr(conn, "host", "")
+    pi_user: str = getattr(conn, "user", "")
     target = (
         f"{pi_user}@{pi_host}:{_slots().releases_dir()}/{version}/"
         if pi_user
@@ -50,9 +52,8 @@ def _rsync_to_pi(slot: Path, version: str, pi_host: str, pi_user: str) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
-def _run_preflight_on_pi(version: str) -> int:
+def _run_preflight_on_pi(conn: object, version: str) -> int:
     """Run the preflight health check for the uploaded slot on the Pi."""
-    conn = _conn()
     cmd = (
         f"{_slot_python_invocation(version)} health preflight "
         f"--slot {_slots().releases_dir()}/{shlex.quote(version)}"
@@ -60,9 +61,8 @@ def _run_preflight_on_pi(version: str) -> int:
     return run_remote(conn, cmd)  # type: ignore[arg-type]
 
 
-def _flip_symlinks_on_pi(version: str) -> int:
+def _flip_symlinks_on_pi(conn: object, version: str) -> int:
     """Atomically flip current → new version, previous → old current."""
-    conn = _conn()
     new_slot = f"{_slots().releases_dir()}/{shlex.quote(version)}"
     prev_path = _slots().previous_path()
     current_path = _slots().current_path()
@@ -82,9 +82,8 @@ def _flip_symlinks_on_pi(version: str) -> int:
     return run_remote(conn, script)  # type: ignore[arg-type]
 
 
-def _run_live_probe_on_pi(version: str, timeout_s: int = 60) -> int:
+def _run_live_probe_on_pi(conn: object, version: str, timeout_s: int = 60) -> int:
     """Poll the Pi until the new version reports as live, or timeout."""
-    conn = _conn()
     current_path = _slots().current_path()
     # Live probe runs against the CURRENT slot (after flip), so use current_path
     # to find the active venv.
@@ -98,15 +97,13 @@ def _run_live_probe_on_pi(version: str, timeout_s: int = 60) -> int:
     return run_remote(conn, cmd)  # type: ignore[arg-type]
 
 
-def _rollback_on_pi() -> int:
+def _rollback_on_pi(conn: object) -> int:
     """Invoke the rollback script on the Pi (swaps current ↔ previous)."""
-    conn = _conn()
     return run_remote(conn, f"sudo {_slots().bin_dir()}/rollback.sh")  # type: ignore[arg-type]
 
 
-def _status_from_pi() -> str:
+def _status_from_pi(conn: object) -> str:
     """Retrieve current/previous/health status lines from the Pi."""
-    conn = _conn()
     current_path = _slots().current_path()
     previous_path = _slots().previous_path()
     cmd = (
@@ -119,21 +116,20 @@ def _status_from_pi() -> str:
     return proc.stdout
 
 
-def _cleanup_remote_slot(version: str) -> None:
+def _cleanup_remote_slot(conn: object, version: str) -> None:
     """Remove a partially-uploaded slot from the Pi."""
-    conn = _conn()
     run_remote(conn, f"rm -rf {_slots().releases_dir()}/{shlex.quote(version)}")  # type: ignore[arg-type]
 
 
-def _check_rollback_available() -> int:
+def _check_rollback_available(conn: object) -> int:
     """Return 0 if previous symlink exists as a symlink on the Pi, nonzero otherwise."""
-    conn = _conn()
     cmd = f"test -L {_slots().previous_path()}"
     return run_remote(conn, cmd)  # type: ignore[arg-type]
 
 
 @app.command("push")
 def push(
+    ctx: typer.Context,
     slot: Path = typer.Argument(..., help="Local release slot dir from build_release."),
     first_deploy: bool = typer.Option(
         False,
@@ -155,9 +151,11 @@ def push(
         typer.echo(f"invalid manifest: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
+    conn = _conn(ctx)
+
     # Pre-flight: confirm a rollback path exists, unless operator opted out.
     if not first_deploy:
-        rb_check = _check_rollback_available()
+        rb_check = _check_rollback_available(conn)
         if rb_check != 0:
             typer.echo(
                 "ERROR: no rollback path on Pi (previous symlink missing).\n"
@@ -167,34 +165,33 @@ def push(
             )
             raise typer.Exit(code=2)
 
-    conn = _conn()
     host: str = getattr(conn, "host", "")
     user: str = getattr(conn, "user", "")
 
     typer.echo(f"rsync -> {user}@{host}:{_slots().releases_dir()}/{manifest.version}/")
-    rc = _rsync_to_pi(slot, manifest.version, host, user)
+    rc = _rsync_to_pi(conn, slot, manifest.version)
     if rc != 0:
         typer.echo("rsync failed", err=True)
         raise typer.Exit(code=rc)
 
     typer.echo("preflight...")
-    rc = _run_preflight_on_pi(manifest.version)
+    rc = _run_preflight_on_pi(conn, manifest.version)
     if rc != 0:
         typer.echo("preflight failed -- removing uploaded slot", err=True)
-        _cleanup_remote_slot(manifest.version)
+        _cleanup_remote_slot(conn, manifest.version)
         raise typer.Exit(code=rc)
 
     typer.echo("flip + restart...")
-    rc = _flip_symlinks_on_pi(manifest.version)
+    rc = _flip_symlinks_on_pi(conn, manifest.version)
     if rc != 0:
         typer.echo("symlink flip / restart failed", err=True)
         raise typer.Exit(code=rc)
 
     typer.echo("live probe...")
-    rc = _run_live_probe_on_pi(manifest.version)
+    rc = _run_live_probe_on_pi(conn, manifest.version)
     if rc != 0:
         typer.echo("live probe failed — rolling back", err=True)
-        rb_rc = _rollback_on_pi()
+        rb_rc = _rollback_on_pi(conn)
         if rb_rc != 0:
             typer.echo(f"rollback also failed (exit {rb_rc}) — system state unknown", err=True)
         raise typer.Exit(code=rc)
@@ -203,15 +200,17 @@ def push(
 
 
 @app.command("rollback")
-def rollback() -> None:
+def rollback(ctx: typer.Context) -> None:
     """Swap current <-> previous on the Pi and restart."""
-    rc = _rollback_on_pi()
+    conn = _conn(ctx)
+    rc = _rollback_on_pi(conn)
     if rc != 0:
         raise typer.Exit(code=rc)
     typer.echo("rollback complete")
 
 
 @app.command("status")
-def status() -> None:
+def status(ctx: typer.Context) -> None:
     """Print current / previous / health from the Pi."""
-    typer.echo(_status_from_pi())
+    conn = _conn(ctx)
+    typer.echo(_status_from_pi(conn))
