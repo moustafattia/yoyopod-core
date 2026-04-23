@@ -43,7 +43,7 @@ def preflight(
         except ValueError as exc:
             errors.append(f"manifest.json invalid: {exc}")
 
-    for required in ("venv", "app"):
+    for required in ("venv", "app", "config"):
         if not (slot / required).is_dir():
             errors.append(f"{required}/ missing in {slot}")
 

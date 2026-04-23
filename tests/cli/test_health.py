@@ -31,6 +31,7 @@ def test_preflight_passes_with_valid_release_dir(tmp_path: Path) -> None:
     )
     (release_dir / "venv").mkdir()
     (release_dir / "app").mkdir()
+    (release_dir / "config").mkdir()
     (release_dir / "bin").mkdir()
     launch = release_dir / "bin" / "launch"
     launch.write_text("#!/bin/sh\necho hi\n")
@@ -105,6 +106,33 @@ def test_live_exits_nonzero_when_no_release_manifest(monkeypatch: pytest.MonkeyP
     assert result.exit_code == 1
 
 
+def test_preflight_fails_on_missing_config(tmp_path: Path) -> None:
+    release_dir = tmp_path / "release"
+    release_dir.mkdir()
+    (release_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "version": "x",
+                "channel": "dev",
+                "released_at": "2026-04-22T10:00:00Z",
+                "artifacts": {"full": {"type": "full", "sha256": "a" * 64, "size": 10}},
+                "requires": {"min_os_version": "0.0.0", "min_battery_pct": 0, "min_free_mb": 0},
+            }
+        )
+    )
+    (release_dir / "venv").mkdir()
+    (release_dir / "app").mkdir()
+    (release_dir / "bin").mkdir()
+    launch = release_dir / "bin" / "launch"
+    launch.write_text("#!/bin/sh\nexit 0\n")
+    launch.chmod(0o755)
+    # NO config/ dir — should fail
+    result = runner.invoke(health_app, ["preflight", "--slot", str(release_dir)])
+    assert result.exit_code == 1
+    assert "config" in (result.stderr or result.stdout).lower()
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="os.X_OK is always True on Windows")
 def test_preflight_fails_on_non_executable_launcher(tmp_path: Path) -> None:
     release_dir = tmp_path / "release"
@@ -123,6 +151,7 @@ def test_preflight_fails_on_non_executable_launcher(tmp_path: Path) -> None:
     )
     (release_dir / "venv").mkdir()
     (release_dir / "app").mkdir()
+    (release_dir / "config").mkdir()
     (release_dir / "bin").mkdir()
     launch = release_dir / "bin" / "launch"
     launch.write_text("#!/bin/sh\necho hi\n")

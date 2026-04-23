@@ -41,6 +41,8 @@ def test_build_writes_manifest(tmp_path: Path) -> None:
     launch = fake_repo / "deploy" / "scripts" / "launch.sh"
     launch.write_text("#!/bin/sh\nexit 0\n")
     launch.chmod(0o755)
+    (fake_repo / "config" / "app").mkdir(parents=True)
+    (fake_repo / "config" / "app" / "core.yaml").write_text("test: true\n")
 
     out = tmp_path / "out"
     result_dir = build_release.build(
@@ -56,6 +58,7 @@ def test_build_writes_manifest(tmp_path: Path) -> None:
     assert (result_dir / "app" / "yoyopod" / "main.py").exists()
     assert (result_dir / "bin" / "launch").exists()
     assert os.access(result_dir / "bin" / "launch", os.X_OK)
+    assert (result_dir / "config" / "app" / "core.yaml").exists()
 
     manifest = json.loads((result_dir / "manifest.json").read_text())
     assert manifest["version"] == "2026.04.22-test"
@@ -76,6 +79,8 @@ def test_build_refuses_existing_output_dir(tmp_path: Path) -> None:
     launch = fake_repo / "deploy" / "scripts" / "launch.sh"
     launch.write_text("#!/bin/sh\nexit 0\n")
     launch.chmod(0o755)
+    (fake_repo / "config" / "app").mkdir(parents=True)
+    (fake_repo / "config" / "app" / "core.yaml").write_text("test: true\n")
 
     out = tmp_path / "out"
     build_release.build(

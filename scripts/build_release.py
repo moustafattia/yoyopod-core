@@ -113,6 +113,27 @@ def _resolve_venv(repo_root: Path, dest_venv: Path, python_version: str) -> None
         )
 
 
+def _copy_config(repo_root: Path, dest_config: Path) -> None:
+    """Copy repo's top-level config/ tree into the slot.
+
+    The launcher cd's to the slot dir before exec, so the app's relative
+    config lookups resolve here. State-dir-aware config lookup is a
+    separate follow-up; for now config travels with the release.
+
+    *.local.yaml files are excluded — those are dev-machine overrides
+    that should not ship to the Pi.
+    """
+    src = repo_root / "config"
+    if not src.is_dir():
+        # Tests use minimal fixtures without config/. Skip silently.
+        return
+    shutil.copytree(
+        src,
+        dest_config,
+        ignore=shutil.ignore_patterns("*.local.yaml", "*.local.*"),
+    )
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
@@ -150,6 +171,7 @@ def build(
 
     _copy_sources(repo_root, slot_dir / "app")
     _copy_launcher(repo_root, slot_dir / "bin")
+    _copy_config(repo_root, slot_dir / "config")
     (slot_dir / "assets").mkdir(exist_ok=True)
 
     if skip_venv:
