@@ -12,7 +12,10 @@
 
 set -euo pipefail
 
-ROOT="${YOYOPOD_ROOT:-/opt/yoyopod}"
+# Self-locate ROOT from $0 (script lives at <root>/bin/rollback.sh).
+# YOYOPOD_ROOT env override remains for tests.
+SCRIPT_PATH="$(readlink -f "$0")"
+ROOT="${YOYOPOD_ROOT:-$(dirname "$(dirname "${SCRIPT_PATH}")")}"
 CURRENT="${ROOT}/current"
 PREVIOUS="${ROOT}/previous"
 

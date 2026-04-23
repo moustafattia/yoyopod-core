@@ -66,3 +66,33 @@ def test_rollback_fails_when_current_is_not_symlink(tmp_path: Path) -> None:
     (root / "previous").symlink_to(root / "releases" / "v1")
     result = _run(root)
     assert result.returncode != 0
+
+
+def test_rollback_self_locates_root_from_script_path(tmp_path: Path) -> None:
+    """When YOYOPOD_ROOT is unset, ROOT is derived from the script's own path."""
+    import shutil
+
+    root = tmp_path / "yoyopod-alt"
+    bin_dir = root / "bin"
+    releases = root / "releases"
+    bin_dir.mkdir(parents=True)
+    releases.mkdir()
+    (releases / "v1").mkdir()
+    (releases / "v2").mkdir()
+    (root / "current").symlink_to(releases / "v2")
+    (root / "previous").symlink_to(releases / "v1")
+    # Copy rollback.sh into the fake root.
+    rollback_in_fake_root = bin_dir / "rollback.sh"
+    shutil.copy(ROLLBACK_SH, rollback_in_fake_root)
+    rollback_in_fake_root.chmod(0o755)
+    env = {**os.environ, "YOYOPOD_SKIP_SYSTEMCTL": "1"}
+    # Note: YOYOPOD_ROOT NOT set — script must self-locate.
+    env.pop("YOYOPOD_ROOT", None)
+    result = subprocess.run(
+        ["bash", str(rollback_in_fake_root)],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (root / "current").resolve() == (releases / "v1").resolve()
