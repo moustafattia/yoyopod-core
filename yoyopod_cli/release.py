@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import typer
-
-from yoyopod._version import __version__
 from yoyopod_cli.common import REPO_ROOT
 
 app = typer.Typer(
@@ -87,6 +85,14 @@ def _replace_version_text(version: str) -> None:
     if count != 1:
         raise SystemExit(f"Could not update version in {_VERSION_FILE}")
     _VERSION_FILE.write_text(updated, encoding="utf-8")
+
+
+def _current_version() -> str:
+    source = _VERSION_FILE.read_text(encoding="utf-8")
+    match = _VERSION_PATTERN.search(source)
+    if match is None:
+        raise SystemExit(f"Could not read version from {_VERSION_FILE}")
+    return match.group("version")
 
 
 def _artifact_sha256(path: Path) -> str:
@@ -171,8 +177,9 @@ def _build_repo_bundle(version: str) -> tuple[Path, Path]:
 def current() -> None:
     """Show the current YoYoPod package version and expected tag."""
 
-    typer.echo(f"version: {__version__}")
-    typer.echo(f"tag: {_release_tag(__version__)}")
+    version = _current_version()
+    typer.echo(f"version: {version}")
+    typer.echo(f"tag: {_release_tag(version)}")
 
 
 @app.command("bump")
@@ -188,12 +195,13 @@ def bump(
 ) -> None:
     """Increment the shared YoYoPod semantic version."""
 
-    next_version = _next_version(__version__, part)
+    current_version = _current_version()
+    next_version = _next_version(current_version, part)
     if dry_run:
         typer.echo(next_version)
         return
     _replace_version_text(next_version)
-    typer.echo(f"Bumped version: {__version__} -> {next_version}")
+    typer.echo(f"Bumped version: {current_version} -> {next_version}")
 
 
 @app.command("set-version")
@@ -233,7 +241,7 @@ def build(
 ) -> None:
     """Build Python distributions plus a full YoYoPod repo release bundle."""
 
-    version = __version__
+    version = _current_version()
     expected_tag = _release_tag(version)
     if check_tag and check_tag != expected_tag:
         raise SystemExit(

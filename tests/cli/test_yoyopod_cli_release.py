@@ -29,7 +29,7 @@ def test_bump_dry_run_shows_next_patch_version() -> None:
     result = runner.invoke(app, ["bump", "patch", "--dry-run"])
 
     assert result.exit_code == 0
-    assert result.output.strip() == "0.1.1"
+    assert result.output.strip() == release_cli._next_version(__version__, "patch")
 
 
 def test_set_version_rewrites_version_file(monkeypatch, tmp_path: Path) -> None:
@@ -62,6 +62,12 @@ def test_build_creates_release_metadata_and_checksums(
     monkeypatch.setattr(release_cli, "_DIST_DIR", dist_dir)
     monkeypatch.setattr(release_cli, "_tracked_worktree_is_clean", lambda: True)
     monkeypatch.setattr(release_cli, "_git_sha", lambda: "abc123")
+    monkeypatch.setattr(release_cli, "_current_version", lambda: __version__)
+
+    sdist_name = f"yoyopod-{__version__}.tar.gz"
+    wheel_name = f"yoyopod-{__version__}-py3-none-any.whl"
+    repo_tar_name = f"yoyopod-core-{__version__}.tar.gz"
+    repo_zip_name = f"yoyopod-core-{__version__}.zip"
 
     def fake_run(
         command: list[str],
@@ -71,8 +77,8 @@ def test_build_creates_release_metadata_and_checksums(
     ) -> subprocess.CompletedProcess[str]:
         del capture_output, cwd
         if command[:2] == ["uv", "build"]:
-            (dist_dir / "yoyopod-0.1.0.tar.gz").write_text("sdist", encoding="utf-8")
-            (dist_dir / "yoyopod-0.1.0-py3-none-any.whl").write_text("wheel", encoding="utf-8")
+            (dist_dir / sdist_name).write_text("sdist", encoding="utf-8")
+            (dist_dir / wheel_name).write_text("wheel", encoding="utf-8")
         elif command[:2] == ["git", "archive"]:
             output_index = command.index("-o") + 1
             Path(command[output_index]).write_text("bundle", encoding="utf-8")
@@ -90,5 +96,46 @@ def test_build_creates_release_metadata_and_checksums(
     assert metadata["git_sha"] == "abc123"
     checksums = (dist_dir / "SHA256SUMS.txt").read_text(encoding="utf-8")
     assert "release-metadata.json" in checksums
-    assert "yoyopod-core-0.1.0.tar.gz" in checksums
-    assert "yoyopod-0.1.0-py3-none-any.whl" in checksums
+    assert repo_tar_name in checksums
+    assert repo_zip_name in checksums
+    assert wheel_name in checksums
+    assert sdist_name in checksums
+
+
+def test_build_uses_updated_version_after_set_version(monkeypatch, tmp_path: Path) -> None:
+    version_file = tmp_path / "_version.py"
+    version_file.write_text('__version__ = "0.1.0"\n', encoding="utf-8")
+    dist_dir = tmp_path / "dist"
+
+    monkeypatch.setattr(release_cli, "_VERSION_FILE", version_file)
+    monkeypatch.setattr(release_cli, "_DIST_DIR", dist_dir)
+    monkeypatch.setattr(release_cli, "_tracked_worktree_is_clean", lambda: True)
+    monkeypatch.setattr(release_cli, "_git_sha", lambda: "abc123")
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture_output: bool = False,
+        cwd: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        del capture_output, cwd
+        version = release_cli._current_version()
+        if command[:2] == ["uv", "build"]:
+            (dist_dir / f"yoyopod-{version}.tar.gz").write_text("sdist", encoding="utf-8")
+            (dist_dir / f"yoyopod-{version}-py3-none-any.whl").write_text("wheel", encoding="utf-8")
+        elif command[:2] == ["git", "archive"]:
+            output_index = command.index("-o") + 1
+            Path(command[output_index]).write_text("bundle", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(release_cli, "_run", fake_run)
+
+    runner = CliRunner()
+    set_result = runner.invoke(app, ["set-version", "0.2.0"])
+    assert set_result.exit_code == 0
+
+    build_result = runner.invoke(app, ["build", "--allow-dirty", "--check-tag", "v0.2.0"])
+    assert build_result.exit_code == 0
+    metadata = json.loads((dist_dir / "release-metadata.json").read_text(encoding="utf-8"))
+    assert metadata["version"] == "0.2.0"
+    assert metadata["tag"] == "v0.2.0"
