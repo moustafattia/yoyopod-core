@@ -63,6 +63,15 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod build lvgl` | Build the pinned LVGL shim for the current platform. |
 | `yoyopod build simulation` | Build the LVGL native shim required by ``python yoyopod.py --simulate``. |
 
+## `yoyopod release`
+
+| Command | What it does |
+|---|---|
+| `yoyopod release build` | Build Python distributions plus a full YoYoPod repo release bundle. |
+| `yoyopod release bump` | Increment the shared YoYoPod semantic version. |
+| `yoyopod release current` | Show the current YoYoPod package version and expected tag. |
+| `yoyopod release set-version` | Set the shared YoYoPod semantic version explicitly. |
+
 ## `yoyopod setup`
 
 | Command | What it does |

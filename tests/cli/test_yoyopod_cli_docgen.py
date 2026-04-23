@@ -1,4 +1,5 @@
 """Tests for yoyopod_cli._docgen."""
+
 from __future__ import annotations
 
 from yoyopod_cli._docgen import generate_commands_md
@@ -35,12 +36,25 @@ def test_docgen_contains_dev_commands() -> None:
     assert "`yoyopod dev profile pyperf`" in md
 
 
+def test_docgen_contains_release_commands() -> None:
+    md = generate_commands_md(app)
+
+    assert "## `yoyopod release`" in md
+    assert "`yoyopod release current`" in md
+    assert "`yoyopod release build`" in md
+
+
 def test_docgen_does_not_contain_cut_commands() -> None:
     md = generate_commands_md(app)
     for cut in (
-        "gallery", "tune", "whisplay",
-        "registration-stability", "reconnect-drill", "call-soak",
-        "navigation-soak", "lvgl-soak",
+        "gallery",
+        "tune",
+        "whisplay",
+        "registration-stability",
+        "reconnect-drill",
+        "call-soak",
+        "navigation-soak",
+        "lvgl-soak",
         "provision-test-music",
     ):
         assert cut not in md, f"cut command still present: {cut}"

@@ -28,6 +28,7 @@ Plan docs are useful, but they are not automatically the current implementation 
 - [`../README.md`](../README.md), repo overview and quick start
 - [`CONTRIBUTOR_WORKFLOW.md`](CONTRIBUTOR_WORKFLOW.md), day-to-day contributor path and PR checklist
 - [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md), setup, running, validation, package layout
+- [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md), versioning, release artifacts, and GitHub release flow
 - [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md), current runtime architecture and startup/bootstrap flow
 - [`CANONICAL_STRUCTURE.md`](CANONICAL_STRUCTURE.md), canonical config topology and package ownership template
 
@@ -37,6 +38,7 @@ Plan docs are useful, but they are not automatically the current implementation 
 - [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md), main developer setup guide
 - [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md), repo-owned setup and dependency contract
 - [`QUALITY_GATES.md`](QUALITY_GATES.md), current staged quality gate and audit contract
+- [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md), semantic versioning and release packaging flow
 - [`PI_PROFILING_WORKFLOW.md`](PI_PROFILING_WORKFLOW.md), bounded profiling and Pi investigation workflow
 - [`DEPLOYED_PI_DEPENDENCIES.md`](DEPLOYED_PI_DEPENDENCIES.md), deployed/runtime dependency inventory
 - [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md), day-to-day Raspberry Pi workflow

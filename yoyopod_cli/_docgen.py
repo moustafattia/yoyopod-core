@@ -35,6 +35,7 @@ def generate_commands_md(typer_app: typer.Typer) -> str:
         "`yoyopod remote` - dev-machine to Pi via SSH": [],
         "`yoyopod pi` - on the Pi": [],
         "`yoyopod build`": [],
+        "`yoyopod release`": [],
         "`yoyopod setup`": [],
         "`yoyopod dev`": [],
     }
@@ -49,6 +50,8 @@ def generate_commands_md(typer_app: typer.Typer) -> str:
             groups["`yoyopod pi` - on the Pi"].append((path, help_text))
         elif parts[1] == "build":
             groups["`yoyopod build`"].append((path, help_text))
+        elif parts[1] == "release":
+            groups["`yoyopod release`"].append((path, help_text))
         elif parts[1] == "setup":
             groups["`yoyopod setup`"].append((path, help_text))
         elif parts[1] == "dev":
