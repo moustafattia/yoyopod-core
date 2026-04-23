@@ -161,8 +161,11 @@ def test_build_uses_real_launcher_from_deploy_scripts(tmp_path: Path) -> None:
     bundled = slot / "bin" / "launch"
     assert bundled.exists()
     # First line should be the bash shebang.
-    first_line = bundled.read_text().splitlines()[0]
+    launcher_text = bundled.read_text()
+    first_line = launcher_text.splitlines()[0]
     assert first_line.startswith("#!/usr/bin/env bash")
+    assert "LD_LIBRARY_PATH" in launcher_text
+    assert "lvgl_binding/native/build/lvgl/lib" in launcher_text
 
 
 def test_build_release_script_runs_without_installed_checkout(tmp_path: Path) -> None:

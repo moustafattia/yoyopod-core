@@ -11,6 +11,7 @@ SLOT_PYTHON_STDLIB_MARKER = Path("python") / "lib" / "python3.12" / "os.py"
 
 APP_NATIVE_RUNTIME_ARTIFACTS: tuple[Path, ...] = (
     Path("yoyopod") / "ui" / "lvgl_binding" / "native" / "build" / "libyoyopod_lvgl_shim.so",
+    Path("yoyopod") / "ui" / "lvgl_binding" / "native" / "build" / "lvgl" / "lib" / "liblvgl.so.9",
     Path("yoyopod")
     / "backends"
     / "voip"
