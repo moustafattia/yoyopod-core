@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -92,7 +93,7 @@ def test_live_reports_current_release_from_env(
         )
     )
     monkeypatch.setenv("YOYOPOD_RELEASE_MANIFEST", str(manifest_path))
-    result = runner.invoke(health_app, ["live"])
+    result = runner.invoke(health_app, ["live", "--skip-systemd"])
     assert result.exit_code == 0
     assert "version=2026.04.22-abc" in result.stdout
     assert "2026.04.22-abc" in result.stdout
@@ -100,7 +101,7 @@ def test_live_reports_current_release_from_env(
 
 def test_live_exits_nonzero_when_no_release_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("YOYOPOD_RELEASE_MANIFEST", "/nonexistent/path.json")
-    result = runner.invoke(health_app, ["live"])
+    result = runner.invoke(health_app, ["live", "--skip-systemd"])
     assert result.exit_code == 1
 
 
@@ -129,3 +130,55 @@ def test_preflight_fails_on_non_executable_launcher(tmp_path: Path) -> None:
     result = runner.invoke(health_app, ["preflight", "--slot", str(release_dir)])
     assert result.exit_code == 1
     assert "not executable" in (result.stderr or result.stdout).lower()
+
+
+def test_live_fails_when_systemctl_reports_inactive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "version": "x",
+                "channel": "dev",
+                "released_at": "2026-04-22T10:00:00Z",
+                "artifacts": {"full": {"type": "full", "sha256": "a" * 64, "size": 10}},
+                "requires": {"min_os_version": "0.0.0", "min_battery_pct": 0, "min_free_mb": 0},
+            }
+        )
+    )
+    monkeypatch.setenv("YOYOPOD_RELEASE_MANIFEST", str(manifest_path))
+    fake_result = MagicMock()
+    fake_result.stdout = "inactive\n"
+    with patch("yoyopod_cli.health.subprocess.run", return_value=fake_result):
+        result = runner.invoke(health_app, ["live"])
+    assert result.exit_code == 1
+    assert "inactive" in (result.stderr or result.stdout).lower() or "not active" in (
+        result.stderr or result.stdout
+    ).lower()
+
+
+def test_live_passes_when_systemctl_reports_active(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "version": "2026.04.22-abc",
+                "channel": "dev",
+                "released_at": "2026-04-22T10:00:00Z",
+                "artifacts": {"full": {"type": "full", "sha256": "a" * 64, "size": 10}},
+                "requires": {"min_os_version": "0.0.0", "min_battery_pct": 0, "min_free_mb": 0},
+            }
+        )
+    )
+    monkeypatch.setenv("YOYOPOD_RELEASE_MANIFEST", str(manifest_path))
+    fake_result = MagicMock()
+    fake_result.stdout = "active\n"
+    with patch("yoyopod_cli.health.subprocess.run", return_value=fake_result):
+        result = runner.invoke(health_app, ["live"])
+    assert result.exit_code == 0
+    assert "version=2026.04.22-abc" in result.stdout

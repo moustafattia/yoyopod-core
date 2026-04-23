@@ -15,6 +15,7 @@ and prints the running version. Used as a readiness probe after the flip.
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 import typer
@@ -60,10 +61,38 @@ def preflight(
 
 
 @app.command("live")
-def live() -> None:
-    """Report the running version from the release manifest. Exit 0 = release detected."""
+def live(
+    service: str = typer.Option(
+        "yoyopod-slot.service",
+        "--service",
+        help="systemd unit to check for activity.",
+    ),
+    skip_systemd: bool = typer.Option(
+        False,
+        "--skip-systemd",
+        help="Skip systemd activity check (for tests / non-deploy callers).",
+    ),
+) -> None:
+    """Report the running version. Exit 0 = release detected AND service active."""
     info = current_release()
     if info is None:
         typer.echo("FAIL: no release manifest resolvable", err=True)
         raise typer.Exit(code=1)
+
+    if not skip_systemd:
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", service],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (subprocess.SubprocessError, FileNotFoundError) as exc:
+            typer.echo(f"FAIL: systemctl check failed: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        status = result.stdout.strip()
+        if status != "active":
+            typer.echo(f"FAIL: {service} is {status} (not active)", err=True)
+            raise typer.Exit(code=1)
+
     typer.echo(f"version={info.version} channel={info.channel} released_at={info.released_at}")
