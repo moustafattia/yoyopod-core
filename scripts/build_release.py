@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -132,6 +133,88 @@ def _venv_python_path(dest_venv: Path) -> Path:
     return dest_venv / scripts_dir / python_name
 
 
+def _copy_python_runtime(python_launcher: Path, runtime_dir: Path, python_version: str) -> None:
+    """Copy the base Python stdlib/binary needed by the slot runtime wrapper."""
+
+    info_script = (
+        "import json, sys, sysconfig; "
+        "print(json.dumps({"
+        "'executable': sys.executable, "
+        "'stdlib': sysconfig.get_path('stdlib'), "
+        "'libdir': sysconfig.get_config_var('LIBDIR'), "
+        "'ldlibrary': sysconfig.get_config_var('LDLIBRARY')"
+        "}))"
+    )
+    result = subprocess.run(
+        [str(python_launcher), "-c", info_script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    info = json.loads(result.stdout)
+    executable = Path(str(info["executable"]))
+    stdlib = Path(str(info["stdlib"]))
+    libdir = Path(str(info["libdir"])) if info.get("libdir") else None
+    ldlibrary = str(info.get("ldlibrary") or "")
+
+    runtime_bin = runtime_dir / "bin"
+    runtime_lib = runtime_dir / "lib"
+    runtime_bin.mkdir(parents=True, exist_ok=True)
+    runtime_lib.mkdir(parents=True, exist_ok=True)
+
+    target_python = runtime_bin / f"python{python_version}"
+    shutil.copy2(executable, target_python)
+    target_python.chmod(0o755)
+
+    stdlib_target = runtime_lib / f"python{python_version}"
+    shutil.copytree(
+        stdlib,
+        stdlib_target,
+        ignore=shutil.ignore_patterns(
+            "__pycache__",
+            "site-packages",
+            "dist-packages",
+            "test",
+            "tests",
+            "idlelib",
+            "tkinter",
+            "turtledemo",
+        ),
+    )
+
+    if libdir is not None and ldlibrary:
+        for candidate in libdir.glob(f"{ldlibrary}*"):
+            if candidate.is_file():
+                shutil.copy2(candidate, runtime_lib / candidate.name)
+
+
+def _write_python_runtime_wrapper(dest_venv: Path, python_version: str) -> None:
+    """Replace venv Python executables with a relocatable bundled-runtime wrapper."""
+
+    wrapper = f"""#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f "$0")"
+VENV_DIR="$(dirname "$(dirname "$SCRIPT_PATH")")"
+SLOT_DIR="$(dirname "$VENV_DIR")"
+RUNTIME_DIR="${{SLOT_DIR}}/python"
+SITE_PACKAGES="$(find "${{VENV_DIR}}/lib" -maxdepth 2 -type d -name site-packages | head -n 1)"
+
+export PYTHONHOME="${{RUNTIME_DIR}}"
+export LD_LIBRARY_PATH="${{RUNTIME_DIR}}/lib${{LD_LIBRARY_PATH:+:${{LD_LIBRARY_PATH}}}}"
+if [ -n "${{SITE_PACKAGES}}" ]; then
+    export PYTHONPATH="${{PYTHONPATH:+${{PYTHONPATH}}:}}${{SITE_PACKAGES}}"
+fi
+
+exec "${{RUNTIME_DIR}}/bin/python{python_version}" "$@"
+"""
+    bin_dir = dest_venv / "bin"
+    for name in ("python", "python3", f"python{python_version}"):
+        target = bin_dir / name
+        target.write_text(wrapper, encoding="utf-8", newline="\n")
+        target.chmod(0o755)
+
+
 def _resolve_python_launcher(python_version: str) -> Path:
     expected = python_version.strip()
     current = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -186,19 +269,20 @@ def _resolve_venv(dest_venv: Path, requirements_path: Path, python_version: str)
         ],
         check=True,
     )
-    if requirements_path.stat().st_size == 0:
-        return
-    subprocess.run(
-        [
-            str(python_bin),
-            "-m",
-            "pip",
-            "install",
-            "-r",
-            str(requirements_path),
-        ],
-        check=True,
-    )
+    if requirements_path.stat().st_size != 0:
+        subprocess.run(
+            [
+                str(python_bin),
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                str(requirements_path),
+            ],
+            check=True,
+        )
+    _copy_python_runtime(python_launcher, dest_venv.parent / "python", python_version)
+    _write_python_runtime_wrapper(dest_venv, python_version)
 
 
 def _copy_native_runtime_artifacts(repo_root: Path, dest_app: Path, *, required: bool) -> None:

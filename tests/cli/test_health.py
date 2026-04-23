@@ -11,7 +11,12 @@ from typer.testing import CliRunner
 
 from yoyopod.core.setup_contract import RUNTIME_REQUIRED_CONFIG_FILES
 from yoyopod_cli.health import app as health_app
-from yoyopod_cli.slot_contract import APP_NATIVE_RUNTIME_ARTIFACTS, SLOT_VENV_PYTHON
+from yoyopod_cli.slot_contract import (
+    APP_NATIVE_RUNTIME_ARTIFACTS,
+    SLOT_PYTHON_BIN,
+    SLOT_PYTHON_STDLIB_MARKER,
+    SLOT_VENV_PYTHON,
+)
 
 runner = CliRunner()
 
@@ -40,6 +45,12 @@ def _write_release_dir(tmp_path: Path) -> Path:
     python_bin.parent.mkdir(parents=True, exist_ok=True)
     python_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     python_bin.chmod(0o755)
+    runtime_python = release_dir / SLOT_PYTHON_BIN
+    runtime_python.parent.mkdir(parents=True, exist_ok=True)
+    runtime_python.write_text("python\n", encoding="utf-8")
+    runtime_stdlib = release_dir / SLOT_PYTHON_STDLIB_MARKER
+    runtime_stdlib.parent.mkdir(parents=True, exist_ok=True)
+    runtime_stdlib.write_text("# stdlib marker\n", encoding="utf-8")
 
     (release_dir / "app").mkdir(exist_ok=True)
     for relative in APP_NATIVE_RUNTIME_ARTIFACTS:

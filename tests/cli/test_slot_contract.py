@@ -6,6 +6,8 @@ import pytest
 
 from yoyopod_cli.slot_contract import (
     APP_NATIVE_RUNTIME_ARTIFACTS,
+    SLOT_PYTHON_BIN,
+    SLOT_PYTHON_STDLIB_MARKER,
     SLOT_VENV_PYTHON,
     is_self_contained_slot,
     missing_self_contained_paths,
@@ -20,6 +22,12 @@ def test_self_contained_contract_rejects_symlinked_launch_python(
     python_bin = slot / SLOT_VENV_PYTHON
     python_bin.parent.mkdir(parents=True)
     python_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    runtime_python = slot / SLOT_PYTHON_BIN
+    runtime_python.parent.mkdir(parents=True, exist_ok=True)
+    runtime_python.write_text("python\n", encoding="utf-8")
+    runtime_stdlib = slot / SLOT_PYTHON_STDLIB_MARKER
+    runtime_stdlib.parent.mkdir(parents=True, exist_ok=True)
+    runtime_stdlib.write_text("# stdlib marker\n", encoding="utf-8")
     for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
         target = slot / "app" / relative
         target.parent.mkdir(parents=True, exist_ok=True)

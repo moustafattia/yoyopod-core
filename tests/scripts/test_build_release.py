@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from yoyopod_cli.slot_contract import APP_NATIVE_RUNTIME_ARTIFACTS, SLOT_VENV_PYTHON
+from yoyopod_cli.slot_contract import (
+    APP_NATIVE_RUNTIME_ARTIFACTS,
+    SLOT_PYTHON_BIN,
+    SLOT_PYTHON_STDLIB_MARKER,
+    SLOT_VENV_PYTHON,
+)
 
 _SCRIPTS_DIR = str(Path(__file__).resolve().parents[2] / "scripts")
 sys.path.insert(0, _SCRIPTS_DIR)
@@ -309,6 +314,7 @@ def test_resolve_venv_copies_python_interpreter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
+    runtime_calls: list[tuple[Path, Path, str]] = []
 
     def fake_run(argv: list[str], *, check: bool) -> subprocess.CompletedProcess[str]:
         del check
@@ -326,9 +332,25 @@ def test_resolve_venv_copies_python_interpreter(
     monkeypatch.setattr(build_release, "_resolve_python_launcher", lambda _: python_launcher)
     monkeypatch.setattr(build_release.subprocess, "run", fake_run)
 
+    def fake_copy_runtime(python: Path, runtime_dir: Path, version: str) -> None:
+        runtime_calls.append((python, runtime_dir, version))
+        (runtime_dir / "bin").mkdir(parents=True)
+        (runtime_dir / "lib" / f"python{version}").mkdir(parents=True)
+        (runtime_dir / "bin" / f"python{version}").write_text("python\n", encoding="utf-8")
+        (runtime_dir / "lib" / f"python{version}" / "os.py").write_text(
+            "# stdlib marker\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(build_release, "_copy_python_runtime", fake_copy_runtime)
+
     build_release._resolve_venv(tmp_path / "venv", requirements, "3.12")
 
     assert calls[0] == [str(python_launcher), "-m", "venv", "--copies", str(tmp_path / "venv")]
+    assert runtime_calls == [(python_launcher, tmp_path / "python", "3.12")]
+    wrapper = (tmp_path / "venv" / "bin" / "python").read_text(encoding="utf-8")
+    assert 'export PYTHONHOME="${RUNTIME_DIR}"' in wrapper
+    assert 'exec "${RUNTIME_DIR}/bin/python3.12" "$@"' in wrapper
 
 
 def test_build_rejects_invalid_channel(tmp_path: Path) -> None:
@@ -431,6 +453,12 @@ def test_build_with_venv_validates_self_contained_runtime_contract(tmp_path: Pat
         python_bin.parent.mkdir(parents=True, exist_ok=True)
         python_bin.write_text("#!/bin/sh\nexit 0\n")
         python_bin.chmod(0o755)
+        runtime_python = dest_venv.parent / SLOT_PYTHON_BIN
+        runtime_python.parent.mkdir(parents=True, exist_ok=True)
+        runtime_python.write_text("python\n", encoding="utf-8")
+        runtime_stdlib = dest_venv.parent / SLOT_PYTHON_STDLIB_MARKER
+        runtime_stdlib.parent.mkdir(parents=True, exist_ok=True)
+        runtime_stdlib.write_text("# stdlib marker\n", encoding="utf-8")
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(build_release, "_resolve_venv", _fake_resolve_venv)
@@ -443,5 +471,7 @@ def test_build_with_venv_validates_self_contained_runtime_contract(tmp_path: Pat
         )
 
     assert (slot / SLOT_VENV_PYTHON).is_file()
+    assert (slot / SLOT_PYTHON_BIN).is_file()
+    assert (slot / SLOT_PYTHON_STDLIB_MARKER).is_file()
     for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
         assert (slot / "app" / relative).is_file()

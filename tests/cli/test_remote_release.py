@@ -9,7 +9,12 @@ from typer.testing import CliRunner
 
 from yoyopod.core.setup_contract import RUNTIME_REQUIRED_CONFIG_FILES
 from yoyopod_cli.remote_release import app as release_app
-from yoyopod_cli.slot_contract import APP_NATIVE_RUNTIME_ARTIFACTS, SLOT_VENV_PYTHON
+from yoyopod_cli.slot_contract import (
+    APP_NATIVE_RUNTIME_ARTIFACTS,
+    SLOT_PYTHON_BIN,
+    SLOT_PYTHON_STDLIB_MARKER,
+    SLOT_VENV_PYTHON,
+)
 
 runner = CliRunner()
 
@@ -45,6 +50,12 @@ def _write_slot(tmp_path: Path, version: str, *, self_contained: bool = True) ->
         python_bin.parent.mkdir(parents=True, exist_ok=True)
         python_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         python_bin.chmod(0o755)
+        runtime_python = slot / SLOT_PYTHON_BIN
+        runtime_python.parent.mkdir(parents=True, exist_ok=True)
+        runtime_python.write_text("python\n", encoding="utf-8")
+        runtime_stdlib = slot / SLOT_PYTHON_STDLIB_MARKER
+        runtime_stdlib.parent.mkdir(parents=True, exist_ok=True)
+        runtime_stdlib.write_text("# stdlib marker\n", encoding="utf-8")
         for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
             target = slot / "app" / relative
             target.parent.mkdir(parents=True, exist_ok=True)
