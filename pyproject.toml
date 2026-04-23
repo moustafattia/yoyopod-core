@@ -1,6 +1,6 @@
 [project]
 name = "yoyopod"
-version = "0.1.0"
+dynamic = ["version"]
 description = "YoYoPod integrated VoIP and local-first mpv player for Raspberry Pi"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
 ]
+urls = { Repository = "https://github.com/moustafattia/yoyopod-core", Issues = "https://github.com/moustafattia/yoyopod-core/issues" }
 
 dependencies = [
     "cffi>=1.17.0",
@@ -57,8 +58,27 @@ yoyopod = "yoyopod_cli.main:run"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "yoyopod/_version.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["yoyopod", "yoyopod_cli"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/README.md",
+    "/pyproject.toml",
+    "/yoyopod",
+    "/yoyopod.py",
+    "/yoyopod_cli",
+]
+exclude = [
+    "/.agents",
+    "/.claude",
+    "/.worktrees",
+    "/dist",
+    "/logs",
+]
 
 [tool.black]
 line-length = 100

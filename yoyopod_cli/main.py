@@ -8,6 +8,7 @@ Usage:
     yoyopod logs [-f --errors]   # Tail logs from the Pi
     yoyopod restart              # Restart the app on the Pi
     yoyopod validate             # Run the validation suite on the Pi
+    yoyopod release <cmd>        # Versioning and release artifacts
     yoyopod remote <cmd>         # Dev-machine → Pi commands
     yoyopod pi <cmd>             # On-device commands
     yoyopod build <cmd>          # Native extension builds
@@ -64,6 +65,10 @@ def run() -> None:
 from yoyopod_cli import build as _build  # noqa: E402
 
 app.add_typer(_build.app, name="build")
+
+from yoyopod_cli import release as _release  # noqa: E402
+
+app.add_typer(_release.app, name="release")
 
 from yoyopod_cli import setup as _setup  # noqa: E402
 

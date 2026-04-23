@@ -14,15 +14,10 @@ from yoyopod.integrations.network.commands import (
     RefreshSignalCommand,
     SetApnCommand,
 )
-from yoyopod.integrations.network.handlers import (
-    apply_modem_status_to_state,
-    apply_ppp_status_to_state,
-    apply_signal_to_state,
-)
-from yoyopod.integrations.network.poller import NetworkPoller
 
 if TYPE_CHECKING:
     from yoyopod.backends.network import ModemBackend, PPPBackend
+    from yoyopod.integrations.network.handlers import NetworkEventHandler
     from yoyopod.integrations.network.manager import NetworkManager
     from yoyopod.integrations.network.models import (
         GpsCoordinate,
@@ -30,6 +25,7 @@ if TYPE_CHECKING:
         ModemState,
         SignalInfo,
     )
+    from yoyopod.integrations.network.poller import NetworkPoller
 
 
 _PUBLIC_EXPORTS = {
@@ -67,7 +63,7 @@ class NetworkIntegration:
     """Runtime handles owned by the scaffold network integration."""
 
     backend: object
-    poller: NetworkPoller
+    poller: "NetworkPoller"
 
 
 def setup(
@@ -78,11 +74,16 @@ def setup(
 ) -> NetworkIntegration:
     """Register scaffold network services and start modem polling."""
 
+    from yoyopod.integrations.network.handlers import (
+        apply_modem_status_to_state,
+        apply_ppp_status_to_state,
+        apply_signal_to_state,
+    )
+    from yoyopod.integrations.network.poller import NetworkPoller
+
     actual_backend = backend or _build_backend(_resolve_network_config(app.config))
     actual_interval = (
-        15.0
-        if poll_interval_seconds is None
-        else max(0.1, float(poll_interval_seconds))
+        15.0 if poll_interval_seconds is None else max(0.1, float(poll_interval_seconds))
     )
     integration = NetworkIntegration(
         backend=actual_backend,
@@ -136,6 +137,8 @@ def teardown(app: Any) -> None:
 
 
 def _handle_enable_ppp(app: Any, backend: object, command: EnablePppCommand) -> bool:
+    from yoyopod.integrations.network.handlers import apply_ppp_status_to_state
+
     if not isinstance(command, EnablePppCommand):
         raise TypeError("network.enable_ppp expects EnablePppCommand")
     enabled = bool(backend.enable_ppp())
@@ -144,6 +147,8 @@ def _handle_enable_ppp(app: Any, backend: object, command: EnablePppCommand) -> 
 
 
 def _handle_disable_ppp(app: Any, backend: object, command: DisablePppCommand) -> bool:
+    from yoyopod.integrations.network.handlers import apply_ppp_status_to_state
+
     if not isinstance(command, DisablePppCommand):
         raise TypeError("network.disable_ppp expects DisablePppCommand")
     backend.disable_ppp()
@@ -151,7 +156,11 @@ def _handle_disable_ppp(app: Any, backend: object, command: DisablePppCommand) -
     return True
 
 
-def _handle_refresh_signal(app: Any, backend: object, command: RefreshSignalCommand) -> object | None:
+def _handle_refresh_signal(
+    app: Any, backend: object, command: RefreshSignalCommand
+) -> object | None:
+    from yoyopod.integrations.network.handlers import apply_signal_to_state
+
     if not isinstance(command, RefreshSignalCommand):
         raise TypeError("network.refresh_signal expects RefreshSignalCommand")
     signal = backend.get_signal()
