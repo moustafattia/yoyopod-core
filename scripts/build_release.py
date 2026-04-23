@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -83,22 +84,33 @@ def _copy_launcher(repo_root: Path, dest_bin: Path) -> None:
 
 
 def _resolve_venv(repo_root: Path, dest_venv: Path, python_version: str) -> None:
-    """Resolve aarch64 wheels into dest_venv/ via `uv pip install --target`.
+    """Resolve aarch64 wheels into dest_venv/.
 
-    Installs the project and its dependencies. The project package itself
-    will appear in dest_venv/ alongside third-party deps; this is harmless
-    because the launcher's PYTHONPATH puts ${SLOT_DIR}/app first.
-    Requires network access. Tests use skip_venv=True to avoid this.
+    Builds the project as a wheel first (uv pip install with --only-binary
+    cannot build sdists), then installs the wheel and its transitive
+    dependencies. Requires network access for transitive deps.
+    Tests use skip_venv=True to avoid this path.
     """
     dest_venv.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        "uv", "pip", "install",
-        "--target", str(dest_venv),
-        "--python-version", python_version,
-        "--only-binary", ":all:",
-        str(repo_root),  # install the project from its source dir
-    ]
-    subprocess.run(cmd, check=True)
+    with tempfile.TemporaryDirectory() as wheel_tmp:
+        subprocess.run(
+            ["uv", "build", "--wheel", "--out-dir", wheel_tmp, str(repo_root)],
+            check=True,
+        )
+        wheels = list(Path(wheel_tmp).glob("*.whl"))
+        if not wheels:
+            raise RuntimeError(f"uv build produced no wheel in {wheel_tmp}")
+        wheel = wheels[0]
+        subprocess.run(
+            [
+                "uv", "pip", "install",
+                "--target", str(dest_venv),
+                "--python-version", python_version,
+                "--only-binary", ":all:",
+                str(wheel),
+            ],
+            check=True,
+        )
 
 
 def _sha256(path: Path) -> str:
