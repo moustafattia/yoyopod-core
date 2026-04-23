@@ -1,22 +1,20 @@
-"""Build a self-contained release slot directory from the repo.
+"""Build a release slot directory from the repo.
 
 Produces:
   <output_root>/<version>/
     ├── app/              # yoyopod + yoyopod_cli source trees
     ├── config/           # repo's top-level config/ tree (default app config)
-    ├── venv/             # uv-resolved site-packages (only when --with-venv)
+    ├── venv/             # runtime venv (only when --with-venv)
     ├── bin/launch        # copy of deploy/scripts/launch.sh
     ├── assets/           # currently empty; reserved for fonts/images
     └── manifest.json     # schema-v1 release manifest
 
-VENV NOTE: --with-venv is OFF by default. Cross-compiling a Pi-aarch64
-venv from a dev machine is unreliable because not every YoyoPod dep
-ships an aarch64 wheel and source builds for the target can't run on
-the host. Without --with-venv, the slot ships an empty venv/ dir and
-the launcher falls back to the Pi's system Python (which already has
-deps installed via the legacy `uv sync` flow). Use --with-venv only
-when running this script in a proper Linux/aarch64 build environment
-(CI runner, qemu, buildx container).
+SELF-CONTAINED NOTE: --with-venv is OFF by default. Cross-compiling a
+Pi-runnable slot from a Windows or non-aarch64 dev machine is unreliable
+because not every YoyoPod dependency ships a compatible wheel and the
+target-native venv layout is POSIX-only. Use --with-venv only in a proper
+Linux/aarch64 build environment, or build on a Pi checkout via
+`yoyopod remote release build-pi`.
 """
 
 from __future__ import annotations
@@ -30,6 +28,11 @@ import sys
 import tarfile
 import tomllib
 from pathlib import Path
+
+from yoyopod_cli.slot_contract import (
+    APP_NATIVE_RUNTIME_ARTIFACTS,
+    missing_self_contained_paths,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -70,12 +73,19 @@ def _copy_sources(repo_root: Path, dest_app: Path) -> None:
             src,
             dest_app / pkg,
             ignore=shutil.ignore_patterns(
-                "__pycache__", "*.pyc", "*.pyo",
-                ".pytest_cache", ".mypy_cache", ".ruff_cache",
-                "*.egg-info", "*.dist-info",
+                "__pycache__",
+                "*.pyc",
+                "*.pyo",
+                ".pytest_cache",
+                ".mypy_cache",
+                ".ruff_cache",
+                "*.egg-info",
+                "*.dist-info",
                 ".DS_Store",
             ),
         )
+    for native_artifact in APP_NATIVE_RUNTIME_ARTIFACTS:
+        shutil.rmtree(dest_app / native_artifact.parent, ignore_errors=True)
 
 
 def _copy_launcher(repo_root: Path, dest_bin: Path) -> None:
@@ -121,20 +131,53 @@ def _venv_python_path(dest_venv: Path) -> Path:
     return dest_venv / scripts_dir / python_name
 
 
+def _resolve_python_launcher(python_version: str) -> Path:
+    expected = python_version.strip()
+    current = f"{sys.version_info.major}.{sys.version_info.minor}"
+    if current == expected:
+        return Path(sys.executable)
+
+    candidates = [f"python{expected}"]
+    if expected.startswith("3."):
+        candidates.extend(["python3", "python"])
+
+    for candidate in candidates:
+        resolved = shutil.which(candidate)
+        if not resolved:
+            continue
+        result = subprocess.run(
+            [
+                resolved,
+                "-c",
+                "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip() == expected:
+            return Path(resolved)
+
+    raise FileNotFoundError(
+        f"Could not find a Python {expected} interpreter in PATH. "
+        "Run this script under the target interpreter or adjust --python-version."
+    )
+
+
 def _resolve_venv(dest_venv: Path, requirements_path: Path, python_version: str) -> None:
     """Create a real venv in dest_venv and install runtime dependencies into it."""
+    python_launcher = _resolve_python_launcher(python_version)
     subprocess.run(
-        ["uv", "venv", "--python", python_version, str(dest_venv)],
+        [str(python_launcher), "-m", "venv", str(dest_venv)],
         check=True,
     )
     python_bin = _venv_python_path(dest_venv)
     subprocess.run(
         [
-            "uv",
+            str(python_bin),
+            "-m",
             "pip",
             "install",
-            "--python",
-            str(python_bin),
             "--upgrade",
             "pip",
             "setuptools",
@@ -146,16 +189,39 @@ def _resolve_venv(dest_venv: Path, requirements_path: Path, python_version: str)
         return
     subprocess.run(
         [
-            "uv",
+            str(python_bin),
+            "-m",
             "pip",
             "install",
-            "--python",
-            str(python_bin),
             "-r",
             str(requirements_path),
         ],
         check=True,
     )
+
+
+def _copy_native_runtime_artifacts(repo_root: Path, dest_app: Path, *, required: bool) -> None:
+    """Copy only the runtime `.so` shims into the slot app tree."""
+
+    for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
+        src = repo_root / relative
+        dest = dest_app / relative
+        if not src.is_file():
+            if required:
+                raise FileNotFoundError(f"required native runtime artifact missing: {src}")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+
+
+def _validate_self_contained_slot(slot_dir: Path) -> None:
+    """Raise when the slot does not satisfy the self-contained runtime contract."""
+
+    missing = missing_self_contained_paths(slot_dir)
+    if not missing:
+        return
+    rendered = ", ".join(str(path.as_posix()) for path in missing)
+    raise RuntimeError("slot is not self-contained; missing required runtime files: " f"{rendered}")
 
 
 def _copy_config(repo_root: Path, dest_config: Path) -> None:
@@ -205,7 +271,7 @@ def build(
 
     Returns the slot directory path. Venv resolution is skipped by default
     (skip_venv=True); pass skip_venv=False only in a Linux/aarch64 build
-    environment where cross-compile constraints can be satisfied.
+    environment where a self-contained Pi runtime can be produced.
     """
     valid_channels = ("dev", "beta", "stable")
     if channel not in valid_channels:
@@ -221,11 +287,13 @@ def build(
     _copy_config(repo_root, slot_dir / "config")
     _write_runtime_requirements(repo_root, slot_dir / "runtime-requirements.txt")
     (slot_dir / "assets").mkdir(exist_ok=True)
+    _copy_native_runtime_artifacts(repo_root, slot_dir / "app", required=not skip_venv)
 
     if skip_venv:
         (slot_dir / "venv").mkdir()
     else:
         _resolve_venv(slot_dir / "venv", slot_dir / "runtime-requirements.txt", python_version)
+        _validate_self_contained_slot(slot_dir)
 
     tarball = output_root / f"{version}.tar.gz"
     _make_tarball(slot_dir, tarball)
@@ -233,9 +301,9 @@ def build(
     manifest = ReleaseManifest(
         version=version,
         channel=channel,  # type: ignore[arg-type]
-        released_at=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace(
-            "+00:00", "Z"
-        ),
+        released_at=dt.datetime.now(dt.timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
         artifacts={
             "full": Artifact(
                 type="full",
@@ -271,10 +339,9 @@ def main() -> None:
         "--with-venv",
         action="store_true",
         help=(
-            "Resolve and bundle a venv into the slot. OFF by default — "
-            "cross-platform venv resolution is unreliable; the slot launcher "
-            "falls back to the Pi's system Python. Use this only in a Linux/"
-            "aarch64 build environment."
+            "Resolve and bundle a self-contained runtime venv into the slot. "
+            "OFF by default because target-native builds are only reliable in "
+            "a Linux/aarch64 environment or via `yoyopod remote release build-pi`."
         ),
     )
     parser.add_argument("--python-version", default="3.12")

@@ -4,7 +4,8 @@ preflight: given a slot directory (not yet active), validate that it is
 structurally sound enough to become current. Runs BEFORE the symlink flip.
 Checks performed:
   * manifest.json exists and parses
-  * venv/ exists (even if empty, the dir must be there)
+  * venv/bin/python exists
+  * native runtime shim `.so` files exist
   * app/ exists
   * bin/launch exists and is executable
 
@@ -23,6 +24,7 @@ import typer
 from yoyopod.core.release import current_release
 from yoyopod.core.setup_contract import RUNTIME_REQUIRED_CONFIG_FILES
 from yoyopod_cli.release_manifest import load_manifest
+from yoyopod_cli.slot_contract import SLOT_REQUIRED_DIRS, missing_self_contained_paths
 
 app = typer.Typer(name="health", help="Slot-deploy health probes.")
 
@@ -44,9 +46,12 @@ def preflight(
         except ValueError as exc:
             errors.append(f"manifest.json invalid: {exc}")
 
-    for required in ("venv", "app", "config"):
+    for required in SLOT_REQUIRED_DIRS:
         if not (slot / required).is_dir():
             errors.append(f"{required}/ missing in {slot}")
+
+    for relative in missing_self_contained_paths(slot):
+        errors.append(f"required runtime file missing: {relative.as_posix()}")
 
     # Each runtime-required config file must be present in the slot.
     for relative in RUNTIME_REQUIRED_CONFIG_FILES:

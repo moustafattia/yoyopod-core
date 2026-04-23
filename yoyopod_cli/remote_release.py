@@ -1,22 +1,48 @@
-"""yoyopod remote release {push,rollback,status} - slot-deploy CLI."""
+"""yoyopod remote release {build-pi,push,rollback,status} - slot-deploy CLI."""
 
 from __future__ import annotations
 
 import shlex
 import subprocess
+import tarfile
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import typer
 
-from yoyopod_cli.paths import SlotPaths, load_slot_paths
-from yoyopod_cli.release_manifest import load_manifest
+from yoyopod_cli.common import checkout_python_path
+from yoyopod_cli.paths import SlotPaths, load_pi_paths, load_slot_paths
+from yoyopod_cli.release_manifest import ReleaseManifest, load_manifest
 from yoyopod_cli.remote_shared import RemoteConnection, pi_conn
 from yoyopod_cli.remote_transport import run_remote, run_remote_capture, validate_config
+from yoyopod_cli.slot_contract import is_self_contained_slot, missing_self_contained_paths
 
 app = typer.Typer(name="release", help="Slot-deploy push/rollback/status.", no_args_is_help=True)
 
 # Cache the slot paths per process - load once, not per-helper-call.
 _slot_paths_cache: SlotPaths | None = None
+
+
+@dataclass(frozen=True)
+class PreparedSlotArtifact:
+    """A local slot artifact materialized into a directory tree."""
+
+    source: Path
+    slot_dir: Path
+    manifest: ReleaseManifest
+    self_contained: bool
+
+
+@dataclass(frozen=True)
+class RemoteBuiltArtifact:
+    """Metadata emitted by `remote release build-pi`."""
+
+    build_root: str
+    slot_dir: str
+    artifact_path: str
 
 
 def _slots() -> SlotPaths:
@@ -66,10 +92,76 @@ def _slot_subapp_command(
         else ""
     )
     return (
-        f"PYTHON={shlex.quote(python_bin)}; "
-        f'[ -x "$PYTHON" ] || PYTHON="$(command -v python3.12 || command -v python3)"; '
-        f'{manifest_env}"$PYTHON" -c {python_code} {command_args}'
+        f"test -x {shlex.quote(python_bin)} && "
+        f"{manifest_env}{shlex.quote(python_bin)} -c {python_code} {command_args}"
     )
+
+
+def _is_tarball(path: Path) -> bool:
+    return path.name.endswith(".tar.gz") or path.suffix == ".tgz"
+
+
+def _safe_extract_tarball(artifact: Path, destination: Path) -> None:
+    """Extract one local tarball after rejecting path traversal entries."""
+
+    destination_root = destination.resolve()
+    with tarfile.open(artifact, "r:*") as handle:
+        for member in handle.getmembers():
+            target = (destination / member.name).resolve()
+            try:
+                target.relative_to(destination_root)
+            except ValueError as exc:
+                raise ValueError(f"tarball contains unsafe path: {member.name}") from exc
+        try:
+            handle.extractall(destination, filter="data")
+        except TypeError:
+            handle.extractall(destination)
+
+
+def _find_materialized_slot_dir(root: Path) -> Path:
+    manifests = [candidate.parent for candidate in root.rglob("manifest.json")]
+    if len(manifests) != 1:
+        raise ValueError(f"expected exactly one slot manifest in {root}, found {len(manifests)}")
+    return manifests[0]
+
+
+@contextmanager
+def _prepared_slot_artifact(artifact: Path) -> Iterator[PreparedSlotArtifact]:
+    """Yield one slot artifact as a local directory tree plus parsed metadata."""
+
+    if not artifact.exists():
+        raise FileNotFoundError(f"release artifact not found: {artifact}")
+
+    tempdir: tempfile.TemporaryDirectory[str] | None = None
+    slot_dir: Path
+    try:
+        if artifact.is_dir():
+            slot_dir = artifact
+        elif _is_tarball(artifact):
+            tempdir = tempfile.TemporaryDirectory(prefix="yoyopod-slot-artifact-")
+            extract_root = Path(tempdir.name)
+            _safe_extract_tarball(artifact, extract_root)
+            slot_dir = _find_materialized_slot_dir(extract_root)
+        else:
+            raise ValueError(
+                f"unsupported release artifact: {artifact} (expected slot dir or .tar.gz)"
+            )
+
+        manifest_path = slot_dir / "manifest.json"
+        if not manifest_path.exists():
+            raise FileNotFoundError(f"manifest.json missing from release artifact: {slot_dir}")
+
+        manifest = load_manifest(manifest_path)
+        resolved_slot = slot_dir.resolve()
+        yield PreparedSlotArtifact(
+            source=artifact,
+            slot_dir=resolved_slot,
+            manifest=manifest,
+            self_contained=is_self_contained_slot(resolved_slot),
+        )
+    finally:
+        if tempdir is not None:
+            tempdir.cleanup()
 
 
 def _rsync_to_pi(conn: RemoteConnection, slot: Path, version: str) -> int:
@@ -272,10 +364,77 @@ def _slot_exists_state(conn: object, version: str) -> str:
     return _run_slot_remote_capture(conn, cmd).stdout.strip()
 
 
+def _remote_build_pi_command(*, channel: str, version: str | None, python_version: str) -> str:
+    """Return one checkout-based remote command that builds a self-contained artifact."""
+    pi = load_pi_paths()
+    python_bin = shlex.quote(checkout_python_path(pi.venv))
+    version_arg = f" --version {shlex.quote(version)}" if version else ""
+    return (
+        "set -e; "
+        "build_root=$(mktemp -d /tmp/yoyopod-release-build.XXXXXX); "
+        f"{python_bin} -m yoyopod_cli.main build ensure-native; "
+        f'slot=$({python_bin} scripts/build_release.py --output "$build_root" --channel '
+        f"{shlex.quote(channel)}{version_arg} --with-venv --python-version "
+        f"{shlex.quote(python_version)}); "
+        'artifact="${slot}.tar.gz"; '
+        'test -f "$artifact"; '
+        'printf "YOYOPOD_BUILD_ROOT=%s\\n" "$build_root"; '
+        'printf "YOYOPOD_SLOT=%s\\n" "$slot"; '
+        'printf "YOYOPOD_ARTIFACT=%s\\n" "$artifact"'
+    )
+
+
+def _parse_tagged_stdout(stdout: str, tag: str) -> str:
+    prefix = f"{tag}="
+    for line in reversed(stdout.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith(prefix):
+            return stripped.removeprefix(prefix)
+    raise ValueError(f"remote output missing {tag}")
+
+
+def _build_pi_artifact(
+    conn: RemoteConnection,
+    *,
+    channel: str,
+    version: str | None,
+    python_version: str,
+) -> RemoteBuiltArtifact:
+    result = run_remote_capture(
+        conn,
+        _remote_build_pi_command(
+            channel=channel,
+            version=version,
+            python_version=python_version,
+        ),
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        msg = f"remote release build failed (exit {result.returncode})"
+        if stderr:
+            msg += f": {stderr}"
+        raise RuntimeError(msg)
+    return RemoteBuiltArtifact(
+        build_root=_parse_tagged_stdout(result.stdout, "YOYOPOD_BUILD_ROOT"),
+        slot_dir=_parse_tagged_stdout(result.stdout, "YOYOPOD_SLOT"),
+        artifact_path=_parse_tagged_stdout(result.stdout, "YOYOPOD_ARTIFACT"),
+    )
+
+
+def _download_remote_artifact(conn: RemoteConnection, remote_path: str, local_path: Path) -> int:
+    """Download one remote tarball to the local machine."""
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    scp_cmd = ["scp", f"{conn.ssh_target}:{remote_path}", str(local_path)]
+    return subprocess.run(scp_cmd, check=False).returncode
+
+
 @app.command("push")
 def push(
     ctx: typer.Context,
-    slot: Path = typer.Argument(..., help="Local release slot dir from build_release."),
+    artifact: Path = typer.Argument(
+        ...,
+        help="Local release slot dir or .tar.gz artifact from build_release.",
+    ),
     first_deploy: bool = typer.Option(
         False,
         "--first-deploy",
@@ -289,87 +448,113 @@ def push(
         "--force",
         help=("Overwrite an existing release slot of the same version " "(never the active one)."),
     ),
+    hydrate_on_target: bool = typer.Option(
+        False,
+        "--hydrate-on-target",
+        help=(
+            "Compatibility escape hatch for older source-only slots that do not bundle "
+            "their own runtime venv and native shims."
+        ),
+    ),
 ) -> None:
-    """Push a pre-built slot dir to the Pi and atomically switch to it."""
-    manifest_path = slot / "manifest.json"
-    if not manifest_path.exists():
-        typer.echo(f"not a release slot (no manifest.json): {slot}", err=True)
-        raise typer.Exit(code=2)
-    try:
-        manifest = load_manifest(manifest_path)
-    except ValueError as exc:
-        typer.echo(f"invalid manifest: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
-
+    """Push a pre-built slot dir or tarball to the Pi and atomically switch to it."""
     conn = _conn(ctx)
+    try:
+        with _prepared_slot_artifact(artifact.resolve()) as prepared:
+            manifest = prepared.manifest
 
-    state = _slot_exists_state(conn, manifest.version)
-    if state == "CURRENT":
-        typer.echo(
-            f"ERROR: slot {manifest.version} is the currently-active release on the Pi.\n"
-            "Refusing to overwrite. Bump the version.",
-            err=True,
-        )
-        raise typer.Exit(code=2)
-    if state == "EXISTS" and not force:
-        typer.echo(
-            f"ERROR: slot {manifest.version} already exists on the Pi.\n"
-            "Releases are immutable; bump the version, or pass --force to overwrite "
-            "(only allowed when the slot is not the active release).",
-            err=True,
-        )
-        raise typer.Exit(code=2)
+            state = _slot_exists_state(conn, manifest.version)
+            if state == "CURRENT":
+                typer.echo(
+                    f"ERROR: slot {manifest.version} is the currently-active release on the Pi.\n"
+                    "Refusing to overwrite. Bump the version.",
+                    err=True,
+                )
+                raise typer.Exit(code=2)
+            if state == "EXISTS" and not force:
+                typer.echo(
+                    f"ERROR: slot {manifest.version} already exists on the Pi.\n"
+                    "Releases are immutable; bump the version, or pass --force to overwrite "
+                    "(only allowed when the slot is not the active release).",
+                    err=True,
+                )
+                raise typer.Exit(code=2)
 
-    if not first_deploy:
-        rb_check = _check_rollback_available(conn)
-        if rb_check != 0:
-            typer.echo(
-                "ERROR: no rollback path on Pi (previous symlink missing).\n"
-                "If this is the very first deploy, re-run with --first-deploy to acknowledge.\n"
-                "Otherwise, investigate why the previous symlink is gone.",
-                err=True,
-            )
-            raise typer.Exit(code=2)
+            if not first_deploy:
+                rb_check = _check_rollback_available(conn)
+                if rb_check != 0:
+                    typer.echo(
+                        "ERROR: no rollback path on Pi (previous symlink missing).\n"
+                        "If this is the very first deploy, re-run with --first-deploy to acknowledge.\n"
+                        "Otherwise, investigate why the previous symlink is gone.",
+                        err=True,
+                    )
+                    raise typer.Exit(code=2)
 
-    host: str = getattr(conn, "host", "")
-    user: str = getattr(conn, "user", "")
+            if not prepared.self_contained and not hydrate_on_target:
+                missing = ", ".join(
+                    path.as_posix() for path in missing_self_contained_paths(prepared.slot_dir)
+                )
+                typer.echo(
+                    "ERROR: release artifact is not self-contained.\n"
+                    "Missing required runtime files: "
+                    f"{missing}\n"
+                    "Rebuild it with `--with-venv` in a Linux/aarch64 environment or via "
+                    "`yoyopod remote release build-pi`, or re-run with "
+                    "`--hydrate-on-target` to use the legacy compatibility path.",
+                    err=True,
+                )
+                raise typer.Exit(code=2)
 
-    typer.echo(f"rsync -> {user}@{host}:{_slots().releases_dir()}/{manifest.version}/")
-    rc = _rsync_to_pi(conn, slot, manifest.version)
-    if rc != 0:
-        typer.echo("rsync failed", err=True)
-        raise typer.Exit(code=rc)
+            host: str = getattr(conn, "host", "")
+            user: str = getattr(conn, "user", "")
 
-    typer.echo("hydrate runtime...")
-    rc = _hydrate_slot_on_pi(conn, manifest.version)
-    if rc != 0:
-        typer.echo("slot hydration failed -- removing uploaded slot", err=True)
-        _cleanup_remote_slot(conn, manifest.version)
-        raise typer.Exit(code=rc)
+            typer.echo(f"rsync -> {user}@{host}:{_slots().releases_dir()}/{manifest.version}/")
+            rc = _rsync_to_pi(conn, prepared.slot_dir, manifest.version)
+            if rc != 0:
+                typer.echo("rsync failed", err=True)
+                raise typer.Exit(code=rc)
 
-    typer.echo("preflight...")
-    rc = _run_preflight_on_pi(conn, manifest.version)
-    if rc != 0:
-        typer.echo("preflight failed -- removing uploaded slot", err=True)
-        _cleanup_remote_slot(conn, manifest.version)
-        raise typer.Exit(code=rc)
+            if prepared.self_contained:
+                typer.echo("self-contained slot detected; skipping target hydration")
+            else:
+                typer.echo("hydrate runtime on target...")
+                rc = _hydrate_slot_on_pi(conn, manifest.version)
+                if rc != 0:
+                    typer.echo("slot hydration failed -- removing uploaded slot", err=True)
+                    _cleanup_remote_slot(conn, manifest.version)
+                    raise typer.Exit(code=rc)
 
-    typer.echo("flip + restart...")
-    rc = _flip_symlinks_on_pi(conn, manifest.version)
-    if rc != 0:
-        typer.echo("symlink flip / restart failed", err=True)
-        raise typer.Exit(code=rc)
+            typer.echo("preflight...")
+            rc = _run_preflight_on_pi(conn, manifest.version)
+            if rc != 0:
+                typer.echo("preflight failed -- removing uploaded slot", err=True)
+                _cleanup_remote_slot(conn, manifest.version)
+                raise typer.Exit(code=rc)
 
-    typer.echo("live probe...")
-    rc = _run_live_probe_on_pi(conn, manifest.version)
-    if rc != 0:
-        typer.echo("live probe failed - rolling back", err=True)
-        rb_rc = _rollback_on_pi(conn)
-        if rb_rc != 0:
-            typer.echo(f"rollback also failed (exit {rb_rc}) - system state unknown", err=True)
-        raise typer.Exit(code=rc)
+            typer.echo("flip + restart...")
+            rc = _flip_symlinks_on_pi(conn, manifest.version)
+            if rc != 0:
+                typer.echo("symlink flip / restart failed", err=True)
+                raise typer.Exit(code=rc)
 
-    typer.echo(f"released {manifest.version}")
+            typer.echo("live probe...")
+            rc = _run_live_probe_on_pi(conn, manifest.version)
+            if rc != 0:
+                typer.echo("live probe failed - rolling back", err=True)
+                rb_rc = _rollback_on_pi(conn)
+                if rb_rc != 0:
+                    typer.echo(
+                        f"rollback also failed (exit {rb_rc}) - system state unknown", err=True
+                    )
+                raise typer.Exit(code=rc)
+
+            typer.echo(f"released {manifest.version}")
+    except typer.Exit:
+        raise
+    except (FileNotFoundError, RuntimeError, ValueError, tarfile.TarError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
 
 
 @app.command("rollback")
@@ -387,3 +572,67 @@ def status(ctx: typer.Context) -> None:
     """Print current / previous / health from the Pi."""
     conn = _conn(ctx)
     typer.echo(_status_from_pi(conn))
+
+
+@app.command("build-pi")
+def build_pi(
+    ctx: typer.Context,
+    output: Path = typer.Option(
+        Path("build") / "releases",
+        "--output",
+        help="Local directory that should receive the downloaded .tar.gz artifact.",
+    ),
+    channel: str = typer.Option("dev", "--channel"),
+    version: str | None = typer.Option(None, "--version"),
+    python_version: str = typer.Option("3.12", "--python-version"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite an existing local artifact of the same filename.",
+    ),
+    keep_remote: bool = typer.Option(
+        False,
+        "--keep-remote",
+        help="Keep the temporary remote build directory on the Pi after download.",
+    ),
+) -> None:
+    """Build a self-contained release artifact on the Pi checkout and download it locally."""
+
+    conn = _conn(ctx)
+    typer.echo("build self-contained artifact on target checkout...")
+    try:
+        built = _build_pi_artifact(
+            conn,
+            channel=channel,
+            version=version,
+            python_version=python_version,
+        )
+    except (RuntimeError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+    local_output = output.resolve()
+    local_output.mkdir(parents=True, exist_ok=True)
+    local_artifact = local_output / Path(built.artifact_path).name
+    if local_artifact.exists() and not force:
+        typer.echo(
+            f"local artifact already exists: {local_artifact}\n" "Pass --force to overwrite it.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    typer.echo(f"download -> {local_artifact}")
+    rc = _download_remote_artifact(conn, built.artifact_path, local_artifact)
+    if rc != 0:
+        typer.echo("download failed", err=True)
+        raise typer.Exit(code=rc)
+
+    if not keep_remote:
+        cleanup_rc = _run_slot_remote(conn, f"rm -rf {shlex.quote(built.build_root)}")
+        if cleanup_rc != 0:
+            typer.echo(
+                f"warning: remote cleanup failed for {built.build_root} (exit {cleanup_rc})",
+                err=True,
+            )
+
+    typer.echo(str(local_artifact))

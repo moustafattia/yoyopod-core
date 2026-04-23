@@ -21,7 +21,10 @@ Current contract:
 - every release lives in `/opt/yoyopod/releases/<version>/`
 - `current` points at the active release
 - `previous` points at the last release for rollback
-- the Pi hydrates its own slot-local `venv/` during deploy
+- self-contained slots carry their own `venv/bin/python` and native shim `.so` files
+- `yoyopod remote release push` accepts either a slot directory or a `.tar.gz` artifact
+- Pi-side hydration is now a legacy compatibility path used only with `--hydrate-on-target`
+- `yoyopod remote release build-pi` builds a self-contained artifact on the Pi checkout and downloads it locally
 - tracked repo `config/` is bundled into every slot
 - `YOYOPOD_STATE_DIR` exists for persistent state, but runtime config is still read
   from the slot's bundled `./config`
@@ -150,18 +153,27 @@ That value must match `slot.root` in `deploy/pi-deploy.local.yaml`.
 After bootstrap completes, `yoyopod remote release ...` no longer needs this
 checkout to remain on the Pi.
 
-### 4. Build the first slot locally
+### 4. Build the first self-contained slot
 
 On the dev machine:
 
 ```bash
-uv run python scripts/build_release.py --output build/releases --channel dev
+uv run yoyopod remote release build-pi --output build/releases --channel dev
+```
+
+That is the recommended workflow when your workstation is not itself a Linux/aarch64
+build environment.
+
+If you do have a matching builder already, you can build locally instead:
+
+```bash
+uv run python scripts/build_release.py --output build/releases --channel dev --with-venv
 ```
 
 Or set the version explicitly:
 
 ```bash
-uv run python scripts/build_release.py --output build/releases --channel dev --version 2026.04.23-mybuild
+uv run yoyopod remote release build-pi --output build/releases --channel dev --version 2026.04.23-mybuild
 ```
 
 ### 5. Push the first release
@@ -169,13 +181,13 @@ uv run python scripts/build_release.py --output build/releases --channel dev --v
 The first slot deploy has no rollback target yet, so `--first-deploy` is required:
 
 ```bash
-uv run yoyopod remote release push build/releases/<version> --first-deploy
+uv run yoyopod remote release push build/releases/<version>.tar.gz --first-deploy
 ```
 
 If you have not stored `host` and `user` locally yet:
 
 ```bash
-uv run yoyopod remote --host rpi-zero --user tifo release push build/releases/<version> --first-deploy
+uv run yoyopod remote --host rpi-zero --user tifo release push build/releases/<version>.tar.gz --first-deploy
 ```
 
 ### 6. Enable boot-time startup
@@ -238,7 +250,7 @@ those changes into the repo's `config/` tree before the first slot build.
 On the dev machine:
 
 ```bash
-uv run python scripts/build_release.py --output build/releases --channel dev
+uv run yoyopod remote release build-pi --output build/releases --channel dev
 ```
 
 ### 3. Cut over from the legacy service to the slot service
@@ -258,7 +270,7 @@ sudo systemctl disable --now yoyopod@tifo.service
 Now push the first slot release:
 
 ```bash
-uv run yoyopod remote --host rpi-zero --user tifo release push build/releases/<version> --first-deploy
+uv run yoyopod remote --host rpi-zero --user tifo release push build/releases/<version>.tar.gz --first-deploy
 ```
 
 After the push succeeds:
@@ -288,8 +300,8 @@ After one more successful slot release, `previous` becomes meaningful and normal
 rollback is available:
 
 ```bash
-uv run python scripts/build_release.py --output build/releases --channel dev
-uv run yoyopod remote release push build/releases/<next-version>
+uv run yoyopod remote release build-pi --output build/releases --channel dev
+uv run yoyopod remote release push build/releases/<next-version>.tar.gz
 ```
 
 ## Normal Day-Two Deploys
@@ -297,8 +309,8 @@ uv run yoyopod remote release push build/releases/<next-version>
 After the board has already been migrated or bootstrapped once:
 
 ```bash
-uv run python scripts/build_release.py --output build/releases --channel dev
-uv run yoyopod remote release push build/releases/<version>
+uv run yoyopod remote release build-pi --output build/releases --channel dev
+uv run yoyopod remote release push build/releases/<version>.tar.gz
 uv run yoyopod remote release status
 ```
 
@@ -306,12 +318,12 @@ What happens during `release push`:
 
 1. upload the new slot to `/opt/yoyopod/releases/<version>/`
 2. repair `bin/launch` permissions on the Pi after upload
-3. hydrate the slot-local `venv/`
-4. copy the currently working native shim `.so` files into the new slot
-5. run `yoyopod health preflight`
-6. atomically flip `current` and `previous`
-7. restart `yoyopod-slot.service`
-8. run a shell-only live probe against the active systemd unit and active slot path
+3. if the artifact is legacy source-only and you explicitly passed `--hydrate-on-target`,
+   build the slot-local `venv/` and copy native runtime shims on the Pi
+4. run `yoyopod health preflight`
+5. atomically flip `current` and `previous`
+6. restart `yoyopod-slot.service`
+7. run a shell-only live probe against the active systemd unit and active slot path
 
 ## Rollback
 
@@ -337,12 +349,14 @@ ssh tifo@rpi-zero 'readlink -f /opt/yoyopod/current && readlink -f /opt/yoyopod/
 
 These are the issues found while bringing the flow up on a real Pi Zero 2W.
 
-### Release commands no longer need a repo checkout; legacy remote flows still do
+### Release deploys no longer need a repo checkout; build-pi and legacy remote flows still do
 
 `yoyopod remote release ...` now talks directly to `/opt/yoyopod`, so it does not
-need `~/yoyopod-core` after bootstrap. The older `remote sync`, `remote validate`,
-and `remote setup` flows still depend on `project_dir`, so only remove the checkout
-if you are intentionally dropping those workflows.
+need `~/yoyopod-core` after bootstrap for `push`, `rollback`, or `status`.
+`yoyopod remote release build-pi` still uses the stable checkout as a build factory,
+and the older `remote sync`, `remote validate`, and `remote setup` flows still
+depend on `project_dir`, so only remove the checkout if you are intentionally
+dropping those workflows.
 
 Those legacy checkout-based flows no longer require `uv` on the board, though:
 they bootstrap and use the checkout-local `.venv` directly.
@@ -383,11 +397,11 @@ Migration preserves old board config under `/opt/yoyopod/state/config/`, but the
 running app still reads the slot's bundled `./config`. Treat state config as a
 preserved backup until the runtime config loader moves to the state-dir contract.
 
-### Fresh-board hydration is the slow path
+### Legacy hydration is now an explicit escape hatch
 
-With no current slot to copy from, the Pi has to create a fresh `venv/` and build
-or confirm native runtime pieces locally. That first deploy is the slowest one.
-Subsequent deploys are faster because they clone the current slot runtime forward.
+`release push` now expects an authoritative self-contained artifact by default.
+If you re-use an older source-only slot, the command will refuse it unless you
+explicitly opt into `--hydrate-on-target`.
 
 ## Field Notes From Bring-Up
 
@@ -395,6 +409,8 @@ The main issues discovered while getting this live were:
 
 - `launch.sh` must call `yoyopod.main.main()` directly; `python -m yoyopod.main`
   is not a valid runtime entrypoint
+- slot launch must require the slot-local `venv/bin/python`; silently falling back
+  to a board-global interpreter reintroduces hidden runtime dependencies
 - built slots must include the tracked repo `config/` tree
 - the release live probe must not depend on reading only `manifest.json`; it has
   to confirm the active unit and active slot

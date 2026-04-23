@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import json
+import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
+from yoyopod.core.setup_contract import RUNTIME_REQUIRED_CONFIG_FILES
 from yoyopod_cli.remote_release import app as release_app
+from yoyopod_cli.slot_contract import APP_NATIVE_RUNTIME_ARTIFACTS, SLOT_VENV_PYTHON
 
 runner = CliRunner()
 
 
-def _write_slot(tmp_path: Path, version: str) -> Path:
+def _write_slot(tmp_path: Path, version: str, *, self_contained: bool = True) -> Path:
     slot = tmp_path / version
     slot.mkdir()
     (slot / "manifest.json").write_text(
@@ -28,12 +31,36 @@ def _write_slot(tmp_path: Path, version: str) -> Path:
     )
     (slot / "runtime-requirements.txt").write_text("typer>=0.12.0\n", encoding="utf-8")
     (slot / "app").mkdir()
-    (slot / "venv").mkdir()
     (slot / "bin").mkdir()
     launch = slot / "bin" / "launch"
     launch.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     launch.chmod(0o755)
+    for relative in RUNTIME_REQUIRED_CONFIG_FILES:
+        target = slot / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# placeholder\n", encoding="utf-8")
+
+    if self_contained:
+        python_bin = slot / SLOT_VENV_PYTHON
+        python_bin.parent.mkdir(parents=True, exist_ok=True)
+        python_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        python_bin.chmod(0o755)
+        for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
+            target = slot / "app" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("shim\n", encoding="utf-8")
+    else:
+        (slot / "venv").mkdir()
+
     return slot
+
+
+def _write_slot_tarball(tmp_path: Path, version: str, *, self_contained: bool = True) -> Path:
+    slot = _write_slot(tmp_path, version, self_contained=self_contained)
+    artifact = tmp_path / f"{version}.tar.gz"
+    with tarfile.open(artifact, "w:gz") as handle:
+        handle.add(slot, arcname=slot.name)
+    return artifact
 
 
 def _fake_conn() -> MagicMock:
@@ -99,7 +126,7 @@ def test_rsync_to_pi_falls_back_to_scp_when_rsync_fails(
 @patch("yoyopod_cli.remote_release._run_preflight_on_pi")
 @patch("yoyopod_cli.remote_release._flip_symlinks_on_pi")
 @patch("yoyopod_cli.remote_release._run_live_probe_on_pi")
-def test_push_runs_build_rsync_hydrate_preflight_flip_live(
+def test_push_runs_rsync_preflight_flip_live_for_self_contained_slot(
     live_probe: MagicMock,
     flip: MagicMock,
     preflight: MagicMock,
@@ -113,9 +140,8 @@ def test_push_runs_build_rsync_hydrate_preflight_flip_live(
     conn.return_value = _fake_conn()
     check_rb.return_value = 0
     state.return_value = "NEW"
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
     rsync.return_value = 0
-    hydrate.return_value = 0
     preflight.return_value = 0
     flip.return_value = 0
     live_probe.return_value = 0
@@ -124,10 +150,103 @@ def test_push_runs_build_rsync_hydrate_preflight_flip_live(
     assert result.exit_code == 0, result.stdout
 
     rsync.assert_called_once()
-    hydrate.assert_called_once()
+    hydrate.assert_not_called()
     preflight.assert_called_once()
     flip.assert_called_once()
     live_probe.assert_called_once()
+    assert "self-contained slot detected" in result.stdout.lower()
+
+
+@patch("yoyopod_cli.remote_release._slot_exists_state")
+@patch("yoyopod_cli.remote_release._check_rollback_available")
+@patch("yoyopod_cli.remote_release._conn")
+def test_push_rejects_source_only_slot_without_hydrate_flag(
+    conn: MagicMock,
+    check_rb: MagicMock,
+    state: MagicMock,
+    tmp_path: Path,
+) -> None:
+    conn.return_value = _fake_conn()
+    check_rb.return_value = 0
+    state.return_value = "NEW"
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=False)
+
+    result = runner.invoke(release_app, ["push", str(slot)])
+    assert result.exit_code != 0
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "not self-contained" in combined.lower()
+    assert "hydrate-on-target" in combined
+
+
+@patch("yoyopod_cli.remote_release._slot_exists_state")
+@patch("yoyopod_cli.remote_release._check_rollback_available")
+@patch("yoyopod_cli.remote_release._conn")
+@patch("yoyopod_cli.remote_release._rsync_to_pi")
+@patch("yoyopod_cli.remote_release._hydrate_slot_on_pi")
+@patch("yoyopod_cli.remote_release._run_preflight_on_pi")
+@patch("yoyopod_cli.remote_release._flip_symlinks_on_pi")
+@patch("yoyopod_cli.remote_release._run_live_probe_on_pi")
+def test_push_hydrates_source_only_slot_when_flag_is_set(
+    live_probe: MagicMock,
+    flip: MagicMock,
+    preflight: MagicMock,
+    hydrate: MagicMock,
+    rsync: MagicMock,
+    conn: MagicMock,
+    check_rb: MagicMock,
+    state: MagicMock,
+    tmp_path: Path,
+) -> None:
+    conn.return_value = _fake_conn()
+    check_rb.return_value = 0
+    state.return_value = "NEW"
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=False)
+    rsync.return_value = 0
+    hydrate.return_value = 0
+    preflight.return_value = 0
+    flip.return_value = 0
+    live_probe.return_value = 0
+
+    result = runner.invoke(release_app, ["push", str(slot), "--hydrate-on-target"])
+    assert result.exit_code == 0, result.stdout
+    hydrate.assert_called_once()
+    preflight.assert_called_once()
+
+
+@patch("yoyopod_cli.remote_release._slot_exists_state")
+@patch("yoyopod_cli.remote_release._check_rollback_available")
+@patch("yoyopod_cli.remote_release._conn")
+@patch("yoyopod_cli.remote_release._rsync_to_pi")
+@patch("yoyopod_cli.remote_release._hydrate_slot_on_pi")
+@patch("yoyopod_cli.remote_release._run_preflight_on_pi")
+@patch("yoyopod_cli.remote_release._flip_symlinks_on_pi")
+@patch("yoyopod_cli.remote_release._run_live_probe_on_pi")
+def test_push_accepts_self_contained_tarball(
+    live_probe: MagicMock,
+    flip: MagicMock,
+    preflight: MagicMock,
+    hydrate: MagicMock,
+    rsync: MagicMock,
+    conn: MagicMock,
+    check_rb: MagicMock,
+    state: MagicMock,
+    tmp_path: Path,
+) -> None:
+    conn.return_value = _fake_conn()
+    check_rb.return_value = 0
+    state.return_value = "NEW"
+    artifact = _write_slot_tarball(tmp_path, "2026.04.22-abc", self_contained=True)
+    rsync.return_value = 0
+    preflight.return_value = 0
+    flip.return_value = 0
+    live_probe.return_value = 0
+
+    result = runner.invoke(release_app, ["push", str(artifact)])
+    assert result.exit_code == 0, result.stdout
+    hydrate.assert_not_called()
+    rsync.assert_called_once()
+    uploaded_slot = rsync.call_args[0][1]
+    assert uploaded_slot.name == "2026.04.22-abc"
 
 
 @patch("yoyopod_cli.remote_release._slot_exists_state")
@@ -148,11 +267,11 @@ def test_push_aborts_and_cleans_up_on_hydration_fail(
     conn.return_value = _fake_conn()
     check_rb.return_value = 0
     state.return_value = "NEW"
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=False)
     rsync.return_value = 0
     hydrate.return_value = 1
 
-    result = runner.invoke(release_app, ["push", str(slot)])
+    result = runner.invoke(release_app, ["push", str(slot), "--hydrate-on-target"])
     assert result.exit_code != 0
     cleanup.assert_called_once()
 
@@ -179,13 +298,13 @@ def test_push_aborts_and_cleans_up_on_preflight_fail(
     conn.return_value = _fake_conn()
     check_rb.return_value = 0
     state.return_value = "NEW"
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
     rsync.return_value = 0
-    hydrate.return_value = 0
     preflight.return_value = 1
 
     result = runner.invoke(release_app, ["push", str(slot)])
     assert result.exit_code != 0
+    hydrate.assert_not_called()
     flip.assert_not_called()
     cleanup.assert_called_once()
 
@@ -214,15 +333,15 @@ def test_push_rolls_back_on_live_fail(
     conn.return_value = _fake_conn()
     check_rb.return_value = 0
     state.return_value = "NEW"
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
     rsync.return_value = 0
-    hydrate.return_value = 0
     preflight.return_value = 0
     flip.return_value = 0
     live.return_value = 1
 
     result = runner.invoke(release_app, ["push", str(slot)])
     assert result.exit_code != 0
+    hydrate.assert_not_called()
     rollback.assert_called_once()
 
 
@@ -297,9 +416,8 @@ def test_push_surfaces_rollback_failure_when_rollback_also_fails(
     conn.return_value = _fake_conn()
     check_rb.return_value = 0
     state.return_value = "NEW"
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
     rsync.return_value = 0
-    hydrate.return_value = 0
     preflight.return_value = 0
     flip.return_value = 0
     live.return_value = 1
@@ -344,18 +462,18 @@ def test_push_uses_slotpaths_root_override(
     check_rb.return_value = 0
     state.return_value = "NEW"
     rsync.return_value = 0
-    hydrate.return_value = 0
     preflight.return_value = 0
     flip.return_value = 0
     live.return_value = 0
 
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
     result = runner.invoke(release_app, ["push", str(slot)])
 
     rr._slot_paths_cache = None
 
     assert result.exit_code == 0, result.stdout
     assert "/srv/yoyopod-alt" in result.stdout
+    hydrate.assert_not_called()
 
 
 @patch("yoyopod_cli.remote_release._slot_exists_state")
@@ -371,7 +489,7 @@ def test_push_refuses_when_no_rollback_path_without_flag(
 ) -> None:
     conn.return_value = _fake_conn()
     state.return_value = "NEW"
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
     check.return_value = 1
 
     result = runner.invoke(release_app, ["push", str(slot)])
@@ -406,15 +524,15 @@ def test_push_with_first_deploy_flag_skips_rollback_check(
     conn.return_value = fake_conn
     state.return_value = "NEW"
     rsync.return_value = 0
-    hydrate.return_value = 0
     preflight.return_value = 0
     flip.return_value = 0
     live.return_value = 0
 
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
     result = runner.invoke(release_app, ["push", str(slot), "--first-deploy"])
     assert result.exit_code == 0, result.stdout
     check.assert_not_called()
+    hydrate.assert_not_called()
 
 
 @patch("yoyopod_cli.remote_release._slot_exists_state")
@@ -434,7 +552,7 @@ def test_push_refuses_to_overwrite_existing_slot_without_force(
     conn.return_value = fake_conn
     state.return_value = "EXISTS"
     check.return_value = 0
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
 
     result = runner.invoke(release_app, ["push", str(slot)])
     assert result.exit_code != 0
@@ -468,15 +586,15 @@ def test_push_with_force_overwrites_non_current_slot(
     state.return_value = "EXISTS"
     check.return_value = 0
     rsync.return_value = 0
-    hydrate.return_value = 0
     preflight.return_value = 0
     flip.return_value = 0
     live.return_value = 0
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
 
     result = runner.invoke(release_app, ["push", str(slot), "--force"])
     assert result.exit_code == 0, result.stdout
     rsync.assert_called_once()
+    hydrate.assert_not_called()
 
 
 @patch("yoyopod_cli.remote_release.run_remote")
@@ -536,17 +654,19 @@ def test_hydrate_slot_uses_build_subapp_entrypoint(run_remote_mock: MagicMock) -
     assert "PYTHONPATH=" not in cmd
     assert "libyoyopod_lvgl_shim.so" in cmd
     assert "libyoyopod_liblinphone_shim.so" in cmd
+    assert "command -v python3.12" not in cmd
     assert run_remote_mock.call_args.kwargs["workdir"] is None
 
 
-def test_slot_subapp_command_prepends_slot_app_to_sys_path() -> None:
+def test_slot_subapp_command_requires_slot_python() -> None:
     from yoyopod_cli.remote_release import _slot_subapp_command
 
     cmd = _slot_subapp_command("/opt/yoyopod/releases/2026.04.22-abc", "yoyopod_cli.health", "live")
     assert "sys.path.insert(0," in cmd
     assert "/opt/yoyopod/releases/2026.04.22-abc/app" in cmd
     assert "from yoyopod_cli.health import app; app()" in cmd
-    assert "PYTHONPATH=" not in cmd
+    assert "command -v python3.12" not in cmd
+    assert "test -x" in cmd
 
 
 @patch("yoyopod_cli.remote_release._slot_exists_state")
@@ -566,7 +686,7 @@ def test_push_refuses_to_overwrite_current_slot_even_with_force(
     conn.return_value = fake_conn
     state.return_value = "CURRENT"
     check.return_value = 0
-    slot = _write_slot(tmp_path, "2026.04.22-abc")
+    slot = _write_slot(tmp_path, "2026.04.22-abc", self_contained=True)
 
     result = runner.invoke(release_app, ["push", str(slot), "--force"])
     assert result.exit_code != 0
@@ -575,3 +695,76 @@ def test_push_refuses_to_overwrite_current_slot_even_with_force(
         or "current" in (result.stderr or result.stdout).lower()
     )
     rsync.assert_not_called()
+
+
+@patch("yoyopod_cli.remote_release._conn")
+@patch("yoyopod_cli.remote_release.run_remote")
+@patch("yoyopod_cli.remote_release.run_remote_capture")
+@patch("yoyopod_cli.remote_release.subprocess.run")
+def test_build_pi_downloads_artifact_and_cleans_up_remote_root(
+    run_mock: MagicMock,
+    capture: MagicMock,
+    run_remote_mock: MagicMock,
+    conn: MagicMock,
+    tmp_path: Path,
+) -> None:
+    conn.return_value = _fake_conn()
+    remote_result = MagicMock()
+    remote_result.returncode = 0
+    remote_result.stdout = (
+        "Ensured native shims: LVGL, Liblinphone\n"
+        "YOYOPOD_BUILD_ROOT=/tmp/yoyopod-release-build.abcd12\n"
+        "YOYOPOD_SLOT=/tmp/yoyopod-release-build.abcd12/2026.04.22-abc\n"
+        "YOYOPOD_ARTIFACT=/tmp/yoyopod-release-build.abcd12/2026.04.22-abc.tar.gz\n"
+    )
+    remote_result.stderr = ""
+    capture.return_value = remote_result
+    scp_result = MagicMock()
+    scp_result.returncode = 0
+    run_mock.return_value = scp_result
+    run_remote_mock.return_value = 0
+
+    result = runner.invoke(release_app, ["build-pi", "--output", str(tmp_path)])
+    assert result.exit_code == 0, result.stdout
+    remote_cmd = capture.call_args[0][1]
+    assert ".venv/bin/python -m yoyopod_cli.main build ensure-native" in remote_cmd
+    assert "scripts/build_release.py" in remote_cmd
+    assert "--with-venv" in remote_cmd
+    assert "--python-version 3.12" in remote_cmd
+    scp_cmd = run_mock.call_args[0][0]
+    assert scp_cmd[0] == "scp"
+    assert scp_cmd[1].endswith("/tmp/yoyopod-release-build.abcd12/2026.04.22-abc.tar.gz")
+    assert str(tmp_path) in scp_cmd[2]
+    assert "rm -rf /tmp/yoyopod-release-build.abcd12" in run_remote_mock.call_args[0][1]
+    assert str(tmp_path / "2026.04.22-abc.tar.gz") in result.stdout
+
+
+@patch("yoyopod_cli.remote_release._conn")
+@patch("yoyopod_cli.remote_release.run_remote")
+@patch("yoyopod_cli.remote_release.run_remote_capture")
+@patch("yoyopod_cli.remote_release.subprocess.run")
+def test_build_pi_keep_remote_skips_cleanup(
+    run_mock: MagicMock,
+    capture: MagicMock,
+    run_remote_mock: MagicMock,
+    conn: MagicMock,
+    tmp_path: Path,
+) -> None:
+    conn.return_value = _fake_conn()
+    remote_result = MagicMock()
+    remote_result.returncode = 0
+    remote_result.stdout = (
+        "YOYOPOD_BUILD_ROOT=/tmp/yoyopod-release-build.abcd12\n"
+        "YOYOPOD_SLOT=/tmp/yoyopod-release-build.abcd12/2026.04.22-abc\n"
+        "YOYOPOD_ARTIFACT=/tmp/yoyopod-release-build.abcd12/2026.04.22-abc.tar.gz\n"
+    )
+    remote_result.stderr = ""
+    capture.return_value = remote_result
+    scp_result = MagicMock()
+    scp_result.returncode = 0
+    run_mock.return_value = scp_result
+    run_remote_mock.return_value = 0
+
+    result = runner.invoke(release_app, ["build-pi", "--output", str(tmp_path), "--keep-remote"])
+    assert result.exit_code == 0, result.stdout
+    run_remote_mock.assert_not_called()

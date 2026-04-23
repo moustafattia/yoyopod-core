@@ -22,10 +22,10 @@ export PYTHONUNBUFFERED=1
 # Create the state dir if missing (first boot after bootstrap).
 mkdir -p "${YOYOPOD_STATE_DIR}"
 
-# Prefer the slot's bundled Python, fall back to system python3.12.
 PYTHON="${SLOT_DIR}/venv/bin/python"
 if [ ! -x "${PYTHON}" ]; then
-    PYTHON="$(command -v python3.12 || command -v python3)"
+    echo "slot runtime missing: ${PYTHON}" >&2
+    exit 1
 fi
 
 cd "${SLOT_DIR}"

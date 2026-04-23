@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from yoyopod_cli.slot_contract import APP_NATIVE_RUNTIME_ARTIFACTS, SLOT_VENV_PYTHON
+
 _SCRIPTS_DIR = str(Path(__file__).resolve().parents[2] / "scripts")
 sys.path.insert(0, _SCRIPTS_DIR)
 import build_release  # noqa: E402
@@ -115,13 +117,19 @@ def test_build_refuses_existing_output_dir(tmp_path: Path) -> None:
 
     out = tmp_path / "out"
     build_release.build(
-        repo_root=fake_repo, output_root=out, version="2026.04.22-test",
-        channel="dev", skip_venv=True,
+        repo_root=fake_repo,
+        output_root=out,
+        version="2026.04.22-test",
+        channel="dev",
+        skip_venv=True,
     )
     with pytest.raises(FileExistsError):
         build_release.build(
-            repo_root=fake_repo, output_root=out, version="2026.04.22-test",
-            channel="dev", skip_venv=True,
+            repo_root=fake_repo,
+            output_root=out,
+            version="2026.04.22-test",
+            channel="dev",
+            skip_venv=True,
         )
 
 
@@ -224,3 +232,97 @@ def test_build_rejects_invalid_channel(tmp_path: Path) -> None:
             channel="weird",
             skip_venv=True,
         )
+
+
+def test_build_copies_native_runtime_artifacts_when_present(tmp_path: Path) -> None:
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "yoyopod").mkdir(parents=True)
+    (fake_repo / "yoyopod" / "__init__.py").write_text("")
+    (fake_repo / "yoyopod_cli").mkdir()
+    (fake_repo / "yoyopod_cli" / "__init__.py").write_text("")
+    (fake_repo / "pyproject.toml").write_text("[project]\nname='x'\nversion='0.0.1'\n")
+    (fake_repo / "deploy" / "scripts").mkdir(parents=True)
+    launch = fake_repo / "deploy" / "scripts" / "launch.sh"
+    launch.write_text("#!/bin/sh\nexit 0\n")
+    launch.chmod(0o755)
+    (fake_repo / "config" / "app").mkdir(parents=True)
+    (fake_repo / "config" / "app" / "core.yaml").write_text("test: true\n")
+    for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
+        target = fake_repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("shim\n")
+
+    slot = build_release.build(
+        repo_root=fake_repo,
+        output_root=tmp_path / "out",
+        version="2026.04.22-native",
+        channel="dev",
+        skip_venv=True,
+    )
+
+    for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
+        assert (slot / "app" / relative).is_file()
+
+
+def test_build_with_venv_rejects_missing_native_runtime_artifacts(tmp_path: Path) -> None:
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "yoyopod").mkdir(parents=True)
+    (fake_repo / "yoyopod" / "__init__.py").write_text("")
+    (fake_repo / "yoyopod_cli").mkdir()
+    (fake_repo / "yoyopod_cli" / "__init__.py").write_text("")
+    (fake_repo / "pyproject.toml").write_text("[project]\nname='x'\nversion='0.0.1'\n")
+    (fake_repo / "deploy" / "scripts").mkdir(parents=True)
+    launch = fake_repo / "deploy" / "scripts" / "launch.sh"
+    launch.write_text("#!/bin/sh\nexit 0\n")
+    launch.chmod(0o755)
+    (fake_repo / "config" / "app").mkdir(parents=True)
+    (fake_repo / "config" / "app" / "core.yaml").write_text("test: true\n")
+
+    with pytest.raises(FileNotFoundError, match="native runtime artifact"):
+        build_release.build(
+            repo_root=fake_repo,
+            output_root=tmp_path / "out",
+            version="2026.04.22-native-missing",
+            channel="dev",
+            skip_venv=False,
+        )
+
+
+def test_build_with_venv_validates_self_contained_runtime_contract(tmp_path: Path) -> None:
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "yoyopod").mkdir(parents=True)
+    (fake_repo / "yoyopod" / "__init__.py").write_text("")
+    (fake_repo / "yoyopod_cli").mkdir()
+    (fake_repo / "yoyopod_cli" / "__init__.py").write_text("")
+    (fake_repo / "pyproject.toml").write_text("[project]\nname='x'\nversion='0.0.1'\n")
+    (fake_repo / "deploy" / "scripts").mkdir(parents=True)
+    launch = fake_repo / "deploy" / "scripts" / "launch.sh"
+    launch.write_text("#!/bin/sh\nexit 0\n")
+    launch.chmod(0o755)
+    (fake_repo / "config" / "app").mkdir(parents=True)
+    (fake_repo / "config" / "app" / "core.yaml").write_text("test: true\n")
+    for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
+        target = fake_repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("shim\n")
+
+    def _fake_resolve_venv(dest_venv: Path, requirements_path: Path, python_version: str) -> None:
+        del requirements_path, python_version
+        python_bin = dest_venv / "bin" / "python"
+        python_bin.parent.mkdir(parents=True, exist_ok=True)
+        python_bin.write_text("#!/bin/sh\nexit 0\n")
+        python_bin.chmod(0o755)
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(build_release, "_resolve_venv", _fake_resolve_venv)
+        slot = build_release.build(
+            repo_root=fake_repo,
+            output_root=tmp_path / "out",
+            version="2026.04.22-self-contained",
+            channel="dev",
+            skip_venv=False,
+        )
+
+    assert (slot / SLOT_VENV_PYTHON).is_file()
+    for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
+        assert (slot / "app" / relative).is_file()
