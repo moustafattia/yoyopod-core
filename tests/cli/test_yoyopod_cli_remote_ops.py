@@ -14,6 +14,7 @@ from yoyopod_cli.remote_ops import (
     _build_startup_verification,
     _build_screenshot_alive_check,
     _build_screenshot_clear,
+    _build_screenshot_ready_check,
     _build_screenshot_signal,
     _build_screenshot_wait,
 )
@@ -198,6 +199,21 @@ def test_build_screenshot_alive_check_uses_pid_file() -> None:
     assert "DEAD" in shell
 
 
+def test_build_screenshot_ready_check_waits_for_current_pid_handlers() -> None:
+    pi = PiPaths()
+    shell = _build_screenshot_ready_check(pi, attempts=7)
+
+    assert "for _ in $(seq 1 7)" in shell
+    assert pi.pid_file in shell
+    assert pi.log_file in shell
+    assert pi.startup_marker in shell
+    assert "pid=$pid_value" in shell
+    assert "Screenshot handlers installed" in shell
+    assert "awk" in shell
+    assert "READY" in shell
+    assert "NOT_READY" in shell
+
+
 def test_build_screenshot_clear_removes_screenshot_path() -> None:
     pi = PiPaths()
     shell = _build_screenshot_clear(pi)
@@ -230,8 +246,8 @@ def test_build_screenshot_wait_polls_for_file() -> None:
     assert "MISSING" in shell
 
 
-def test_screenshot_aborts_when_app_is_dead(monkeypatch) -> None:
-    """Full CLI: app DEAD -> exit code 1, no SCP attempt."""
+def test_screenshot_aborts_when_app_is_not_ready(monkeypatch) -> None:
+    """Full CLI: app not ready -> exit code 1, no SCP attempt."""
     import types
 
     capture_calls: list[str] = []
@@ -239,7 +255,7 @@ def test_screenshot_aborts_when_app_is_dead(monkeypatch) -> None:
 
     def fake_capture(conn, cmd):
         capture_calls.append(cmd)
-        return types.SimpleNamespace(returncode=0, stdout="DEAD\n", stderr="")
+        return types.SimpleNamespace(returncode=1, stdout="NOT_READY\n", stderr="")
 
     def fake_scp(argv, check=False):
         scp_calls.append(list(argv))
@@ -252,13 +268,14 @@ def test_screenshot_aborts_when_app_is_dead(monkeypatch) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["screenshot"])
     assert result.exit_code == 1, result.output
-    # Only the alive-check ran; no scp
+    # Only the readiness check ran; no scp
     assert len(capture_calls) == 1
+    assert "Screenshot handlers installed" in capture_calls[0]
     assert len(scp_calls) == 0
 
 
 def test_screenshot_sends_sigusr2_by_default_and_scps_back(monkeypatch, tmp_path) -> None:
-    """Happy path: app ALIVE, clear ok, signal ok, file READY, scp succeeds."""
+    """Happy path: app ready, clear ok, signal ok, file READY, scp succeeds."""
     import types
 
     capture_calls: list[str] = []
@@ -266,8 +283,8 @@ def test_screenshot_sends_sigusr2_by_default_and_scps_back(monkeypatch, tmp_path
 
     def fake_capture(conn, cmd):
         capture_calls.append(cmd)
-        if "kill -0" in cmd:
-            return types.SimpleNamespace(returncode=0, stdout="ALIVE\n", stderr="")
+        if "Screenshot handlers installed" in cmd:
+            return types.SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
         if cmd.startswith("rm -f"):
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
         if "kill -USR" in cmd:
@@ -288,7 +305,7 @@ def test_screenshot_sends_sigusr2_by_default_and_scps_back(monkeypatch, tmp_path
     runner = CliRunner()
     result = runner.invoke(app, ["screenshot", "--out", str(out_path)])
     assert result.exit_code == 0, result.output
-    # 4 capture steps: alive, clear, signal, wait
+    # 4 capture steps: readiness, clear, signal, wait
     assert len(capture_calls) == 4
     # Default signal is USR2 (shadow buffer)
     assert any("kill -USR2" in c for c in capture_calls)
@@ -306,8 +323,8 @@ def test_screenshot_readback_uses_sigusr1(monkeypatch, tmp_path) -> None:
 
     def fake_capture(conn, cmd):
         capture_calls.append(cmd)
-        if "kill -0" in cmd:
-            return types.SimpleNamespace(returncode=0, stdout="ALIVE\n", stderr="")
+        if "Screenshot handlers installed" in cmd:
+            return types.SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
         if cmd.startswith("rm -f"):
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
         if "kill -USR" in cmd:

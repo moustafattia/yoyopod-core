@@ -19,6 +19,8 @@ from yoyopod_cli.remote_transport import (
 
 app = build_remote_app("ops", "Runtime ops on the Pi via SSH.")
 
+SCREENSHOT_HANDLERS_MARKER = "Screenshot handlers installed"
+
 
 # ---- shell builders (private, single-file) ----------------------------------
 
@@ -157,6 +159,29 @@ def _build_screenshot_alive_check(pi: PiPaths) -> str:
     return f"test -f {pid} && kill -0 $(cat {pid}) 2>/dev/null " "&& echo ALIVE || echo DEAD"
 
 
+def _build_screenshot_ready_check(pi: PiPaths, *, attempts: int = 30) -> str:
+    """Wait until the current app PID has installed screenshot signal handlers."""
+    pid = shell_quote(pi.pid_file)
+    log = shell_quote(pi.log_file)
+    startup_marker = shell_quote(pi.startup_marker)
+    screenshot_marker = shell_quote(SCREENSHOT_HANDLERS_MARKER)
+    return (
+        f"for _ in $(seq 1 {attempts}); do "
+        f'pid_value="$(cat {pid} 2>/dev/null || true)"; '
+        'if test -n "$pid_value" && kill -0 "$pid_value" 2>/dev/null && '
+        f"test -f {log} && "
+        f'awk -v pid="pid=$pid_value" -v start={startup_marker} '
+        f"-v marker={screenshot_marker} "
+        "'index($0, start) && index($0, pid) { seen=1; ready=0 } "
+        "seen && index($0, marker) { ready=1 } "
+        "END { exit ready ? 0 : 1 }' "
+        f"{log}; then echo READY; exit 0; fi; "
+        "sleep 1; "
+        "done; "
+        "echo NOT_READY; exit 1"
+    )
+
+
 def _build_screenshot_clear(pi: PiPaths) -> str:
     """Remote shell that removes any stale screenshot file."""
     return f"rm -f {shell_quote(pi.screenshot_path)}"
@@ -270,15 +295,16 @@ def screenshot(
     validate_config(conn)
     pi = load_pi_paths()
 
-    # 1. Verify app is alive
-    alive = run_remote_capture(conn, _build_screenshot_alive_check(pi))
-    if alive.returncode != 0 or alive.stdout.strip() != "ALIVE":
+    # 1. Verify the current app process has installed its signal handlers.
+    ready = run_remote_capture(conn, _build_screenshot_ready_check(pi))
+    if ready.returncode != 0 or ready.stdout.strip() != "READY":
         typer.echo(
-            "Remote app is not running; start/restart it before requesting a screenshot.",
+            "Remote app is not ready for screenshot capture; "
+            "wait for startup to finish or restart it before requesting a screenshot.",
             err=True,
         )
-        if alive.stderr.strip():
-            typer.echo(alive.stderr.strip(), err=True)
+        if ready.stderr.strip():
+            typer.echo(ready.stderr.strip(), err=True)
         raise typer.Exit(1)
 
     # 2. Clear stale screenshot
