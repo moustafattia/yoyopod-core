@@ -205,11 +205,13 @@ def test_build_screenshot_ready_check_waits_for_current_pid_handlers() -> None:
 
     assert "for _ in $(seq 1 7)" in shell
     assert pi.pid_file in shell
-    assert pi.log_file in shell
-    assert pi.startup_marker in shell
-    assert "pid=$pid_value" in shell
-    assert "Screenshot handlers installed" in shell
-    assert "awk" in shell
+    assert "/proc/${pid_value}/status" in shell
+    assert "SigCgt" in shell
+    assert "0x200" in shell
+    assert "0x800" in shell
+    assert pi.log_file not in shell
+    assert pi.startup_marker not in shell
+    assert "Screenshot handlers installed" not in shell
     assert "READY" in shell
     assert "NOT_READY" in shell
 
@@ -251,10 +253,12 @@ def test_screenshot_aborts_when_app_is_not_ready(monkeypatch) -> None:
     import types
 
     capture_calls: list[str] = []
+    capture_workdirs: list[str | None] = []
     scp_calls: list[list[str]] = []
 
-    def fake_capture(conn, cmd):
+    def fake_capture(conn, cmd, *, workdir=None):
         capture_calls.append(cmd)
+        capture_workdirs.append(workdir)
         return types.SimpleNamespace(returncode=1, stdout="NOT_READY\n", stderr="")
 
     def fake_scp(argv, check=False):
@@ -270,7 +274,7 @@ def test_screenshot_aborts_when_app_is_not_ready(monkeypatch) -> None:
     assert result.exit_code == 1, result.output
     # Only the readiness check ran; no scp
     assert len(capture_calls) == 1
-    assert "Screenshot handlers installed" in capture_calls[0]
+    assert capture_workdirs == [None]
     assert len(scp_calls) == 0
 
 
@@ -279,11 +283,13 @@ def test_screenshot_sends_sigusr2_by_default_and_scps_back(monkeypatch, tmp_path
     import types
 
     capture_calls: list[str] = []
+    capture_workdirs: list[str | None] = []
     scp_calls: list[list[str]] = []
 
-    def fake_capture(conn, cmd):
+    def fake_capture(conn, cmd, *, workdir=None):
         capture_calls.append(cmd)
-        if "Screenshot handlers installed" in cmd:
+        capture_workdirs.append(workdir)
+        if "SigCgt" in cmd:
             return types.SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
         if cmd.startswith("rm -f"):
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -307,6 +313,7 @@ def test_screenshot_sends_sigusr2_by_default_and_scps_back(monkeypatch, tmp_path
     assert result.exit_code == 0, result.output
     # 4 capture steps: readiness, clear, signal, wait
     assert len(capture_calls) == 4
+    assert capture_workdirs == [None, None, None, None]
     # Default signal is USR2 (shadow buffer)
     assert any("kill -USR2" in c for c in capture_calls)
     assert not any("kill -USR1" in c for c in capture_calls)
@@ -320,10 +327,12 @@ def test_screenshot_readback_uses_sigusr1(monkeypatch, tmp_path) -> None:
     import types
 
     capture_calls: list[str] = []
+    capture_workdirs: list[str | None] = []
 
-    def fake_capture(conn, cmd):
+    def fake_capture(conn, cmd, *, workdir=None):
         capture_calls.append(cmd)
-        if "Screenshot handlers installed" in cmd:
+        capture_workdirs.append(workdir)
+        if "SigCgt" in cmd:
             return types.SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
         if cmd.startswith("rm -f"):
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -343,5 +352,6 @@ def test_screenshot_readback_uses_sigusr1(monkeypatch, tmp_path) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["screenshot", "--readback", "--out", str(tmp_path / "out.png")])
     assert result.exit_code == 0, result.output
+    assert capture_workdirs == [None, None, None, None]
     assert any("kill -USR1" in c for c in capture_calls)
     assert not any("kill -USR2" in c for c in capture_calls)

@@ -324,7 +324,7 @@ elif command -v systemctl >/dev/null 2>&1; then
     if ! systemctl restart "${SERVICE_NAME}"; then
         if [ -x "${ROOT}/bin/rollback.sh" ] && [ -L "${ROOT}/previous" ]; then
             echo "install-release: restart failed, attempting rollback" >&2
-            if ! "${ROOT}/bin/rollback.sh"; then
+            if ! YOYOPOD_SERVICE_NAME="${SERVICE_NAME}" "${ROOT}/bin/rollback.sh"; then
                 echo "install-release: rollback also failed; system state unknown" >&2
             fi
         fi
@@ -333,7 +333,7 @@ elif command -v systemctl >/dev/null 2>&1; then
     if ! _live_probe "${ROOT}" "${VERSION}"; then
         if [ -x "${ROOT}/bin/rollback.sh" ] && [ -L "${ROOT}/previous" ]; then
             echo "install-release: live probe failed, attempting rollback" >&2
-            if ! "${ROOT}/bin/rollback.sh"; then
+            if ! YOYOPOD_SERVICE_NAME="${SERVICE_NAME}" "${ROOT}/bin/rollback.sh"; then
                 echo "install-release: rollback also failed; system state unknown" >&2
             fi
         fi

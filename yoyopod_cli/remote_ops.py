@@ -19,8 +19,6 @@ from yoyopod_cli.remote_transport import (
 
 app = build_remote_app("ops", "Runtime ops on the Pi via SSH.")
 
-SCREENSHOT_HANDLERS_MARKER = "Screenshot handlers installed"
-
 
 # ---- shell builders (private, single-file) ----------------------------------
 
@@ -160,22 +158,21 @@ def _build_screenshot_alive_check(pi: PiPaths) -> str:
 
 
 def _build_screenshot_ready_check(pi: PiPaths, *, attempts: int = 30) -> str:
-    """Wait until the current app PID has installed screenshot signal handlers."""
+    """Wait until the current app PID catches both screenshot signals."""
     pid = shell_quote(pi.pid_file)
-    log = shell_quote(pi.log_file)
-    startup_marker = shell_quote(pi.startup_marker)
-    screenshot_marker = shell_quote(SCREENSHOT_HANDLERS_MARKER)
     return (
         f"for _ in $(seq 1 {attempts}); do "
         f'pid_value="$(cat {pid} 2>/dev/null || true)"; '
         'if test -n "$pid_value" && kill -0 "$pid_value" 2>/dev/null && '
-        f"test -f {log} && "
-        f'awk -v pid="pid=$pid_value" -v start={startup_marker} '
-        f"-v marker={screenshot_marker} "
-        "'index($0, start) && index($0, pid) { seen=1; ready=0 } "
-        "seen && index($0, marker) { ready=1 } "
-        "END { exit ready ? 0 : 1 }' "
-        f"{log}; then echo READY; exit 0; fi; "
+        'test -r "/proc/${pid_value}/status"; then '
+        'sigcgt="$(awk \'/^SigCgt:/ {print $2}\' "/proc/${pid_value}/status")"; '
+        'if test -n "$sigcgt"; then '
+        "mask=$((16#$sigcgt)); "
+        "if (( (mask & 0x200) != 0 && (mask & 0x800) != 0 )); then "
+        "echo READY; exit 0; "
+        "fi; "
+        "fi; "
+        "fi; "
         "sleep 1; "
         "done; "
         "echo NOT_READY; exit 1"
@@ -296,7 +293,7 @@ def screenshot(
     pi = load_pi_paths()
 
     # 1. Verify the current app process has installed its signal handlers.
-    ready = run_remote_capture(conn, _build_screenshot_ready_check(pi))
+    ready = run_remote_capture(conn, _build_screenshot_ready_check(pi), workdir=None)
     if ready.returncode != 0 or ready.stdout.strip() != "READY":
         typer.echo(
             "Remote app is not ready for screenshot capture; "
@@ -308,7 +305,7 @@ def screenshot(
         raise typer.Exit(1)
 
     # 2. Clear stale screenshot
-    clear = run_remote_capture(conn, _build_screenshot_clear(pi))
+    clear = run_remote_capture(conn, _build_screenshot_clear(pi), workdir=None)
     if clear.returncode != 0:
         typer.echo("Failed to clear the previous screenshot on the Pi.", err=True)
         if clear.stderr.strip():
@@ -316,7 +313,9 @@ def screenshot(
         raise typer.Exit(clear.returncode)
 
     # 3. Signal the app to capture
-    signal_result = run_remote_capture(conn, _build_screenshot_signal(pi, readback=readback))
+    signal_result = run_remote_capture(
+        conn, _build_screenshot_signal(pi, readback=readback), workdir=None
+    )
     if signal_result.returncode != 0:
         typer.echo("Failed to trigger screenshot capture on the Pi.", err=True)
         if signal_result.stderr.strip():
@@ -324,7 +323,7 @@ def screenshot(
         raise typer.Exit(signal_result.returncode)
 
     # 4. Wait for the file to appear
-    verify = run_remote_capture(conn, _build_screenshot_wait(pi))
+    verify = run_remote_capture(conn, _build_screenshot_wait(pi), workdir=None)
     if verify.returncode != 0 or verify.stdout.strip() != "READY":
         typer.echo(
             "Screenshot was not created on the Pi within the timeout. "
