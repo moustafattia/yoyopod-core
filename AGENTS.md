@@ -49,7 +49,7 @@ Pi lanes and bootstrap
 - Dev lane: mutable hardware-testing checkout at `/opt/yoyopod-dev/checkout`, venv at `/opt/yoyopod-dev/venv`, service `yoyopod-dev.service`.
 - Prod lane: immutable packaged slots under `/opt/yoyopod-prod`, service `yoyopod-prod.service`; use `remote release ...`, not `remote sync`.
 - Check lane ownership first with `yoyopod remote mode status`; dev/prod services should not own hardware together.
-- Fresh board: from a temporary Pi checkout run `sudo -E ./deploy/scripts/bootstrap_pi.sh`; add `--release-url=<artifact-url>` for first prod install.
+- Fresh board: run the curl installer: `curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s --`; add `--release-url=<artifact-url>` for first prod install.
 - Migration: `--migrate` preserves old config/logs for reference only. It does not copy old `~/yoyopod-core` into dev; live dev truth is `/opt/yoyopod-dev/checkout`.
 - Hard cut: supported runtime owners are only `yoyopod-dev.service` and `yoyopod-prod.service`; `yoyopod@*.service`, `yoyopod-slot.service`, unmanaged `python yoyopod.py`, and `remote service ...` are legacy contamination paths.
 - Dev deploy loop: `yoyopod remote mode activate dev`, then `yoyopod remote setup` once, then `yoyopod remote sync --branch <branch>`; add `--clean-native` after native/CMake/lib changes or branch switches.

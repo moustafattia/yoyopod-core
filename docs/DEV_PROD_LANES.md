@@ -107,24 +107,29 @@ uv run yoyopod remote mode deactivate prod
 
 ## Fresh Board Bootstrap
 
-Bootstrap installs the prod and dev lane folders plus their systemd units:
+Bootstrap installs the prod and dev lane folders plus their systemd units.
+Use the installer directly on the Pi; do not clone a bootstrap checkout:
 
 ```bash
 ssh <user>@<pi>
-git clone <repo-url> /tmp/yoyopod-bootstrap
-cd /tmp/yoyopod-bootstrap
-sudo -E ./deploy/scripts/bootstrap_pi.sh
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s --
 ```
 
 If you already have a published prod artifact:
 
 ```bash
-sudo -E ./deploy/scripts/bootstrap_pi.sh --release-url=<artifact-url> --migrate
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s -- --release-url=<artifact-url>
 ```
 
-After bootstrap, prod release commands do not need the bootstrap checkout. Dev
-commands do need `/opt/yoyopod-dev/checkout`; for a fresh board, seed it before
-using `remote sync`:
+For PR/testing a non-main installer, pin the source ref explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/<ref>/deploy/scripts/install_pi.sh | sudo env YOYOPOD_INSTALL_REF=<ref> bash -s --
+```
+
+After bootstrap, prod release commands do not need a repo checkout. Dev commands
+do need `/opt/yoyopod-dev/checkout`; for a fresh board, seed it before using
+`remote sync`:
 
 ```bash
 sudo chown -R <user>:<user> /opt/yoyopod-dev
@@ -139,11 +144,9 @@ For a board that already has the old `~/yoyopod-core` checkout:
 
 ```bash
 ssh <user>@<pi>
-cd ~/yoyopod-core
-sudo -E ./deploy/scripts/bootstrap_pi.sh --migrate
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s -- --migrate
 ```
 
-Use the old checkout only as a convenient place to run the bootstrap script.
 `--migrate` preserves old config/log files under prod state for reference, but
 it does not copy the legacy checkout into the dev lane. After migration, treat
 the old `~/yoyopod-core` checkout as an archive only; the live dev truth is

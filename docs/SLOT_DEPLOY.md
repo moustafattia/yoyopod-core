@@ -42,25 +42,22 @@ hardware.
 
 ## Fresh Board Install
 
-On the Pi, run bootstrap from any temporary checkout:
+On the Pi, run the installer directly. Do not clone a bootstrap checkout:
 
 ```bash
-git clone <repo-url> /tmp/yoyopod-bootstrap
-cd /tmp/yoyopod-bootstrap
-sudo -E ./deploy/scripts/bootstrap_pi.sh
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s --
 ```
 
-Bootstrap installs the prod and dev lane folders and systemd units. It does not
-need the temporary checkout afterward unless you also want to use it as a dev
-checkout.
+The installer downloads the matching source payload, runs the board bootstrap,
+and removes its installer workspace afterward.
 
 If you already have a published artifact URL:
 
 ```bash
-sudo -E ./deploy/scripts/bootstrap_pi.sh --release-url=<artifact-url>
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s -- --release-url=<artifact-url>
 ```
 
-The bootstrap script forwards first-deploy semantics to the installer.
+The installer forwards first-deploy semantics to the bootstrap/release installer.
 
 ## First Release
 
@@ -144,8 +141,7 @@ systemd skips OTA work unless the prod lane owns the board.
 For an old board with `~/yoyopod-core`, run:
 
 ```bash
-cd ~/yoyopod-core
-sudo -E ./deploy/scripts/bootstrap_pi.sh --migrate
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s -- --migrate
 ```
 
 Then either activate dev:

@@ -12,9 +12,8 @@
 # - Optional: migrates config + logs from ~/yoyopod-core/ to /opt/yoyopod-prod/state/
 # - Optional: installs a first release artifact after bootstrap
 #
-# Requires sudo. Invoke as the user who will run the app:
-#   sudo -E deploy/scripts/bootstrap_pi.sh --migrate
-# (The -E preserves $USER so the unit runs as the right account.)
+# Normally invoked by install_pi.sh, which downloads the source payload and
+# calls this script with sudo -E so the unit runs as the invoking user.
 
 set -euo pipefail
 
