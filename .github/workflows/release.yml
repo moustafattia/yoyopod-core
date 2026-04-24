@@ -48,11 +48,29 @@ jobs:
       - name: Build release artifacts
         run: uv run yoyopod release build --check-tag "$RELEASE_TAG"
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ARM64 slot artifact
+        run: |
+          SLOT_VERSION="${RELEASE_TAG#v}"
+          ./scripts/build_slot_artifact_ci.sh \
+            --channel=stable \
+            --version="${SLOT_VERSION}" \
+            --dest=dist \
+            --cache-from=type=gha,scope=yoyopod-slot-arm64 \
+            --cache-to=type=gha,mode=max,scope=yoyopod-slot-arm64,ignore-error=true
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: yoyopod-release-${{ env.RELEASE_TAG }}
-          path: dist/*
+          path: dist/**/*
           if-no-files-found: error
 
       - name: Publish GitHub release

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import typer
 
-from yoyopod_cli.common import configure_logging
+from yoyopod_cli.common import checkout_module_command, configure_logging
+from yoyopod_cli.paths import load_pi_paths
 from yoyopod_cli.remote_shared import build_remote_app, pi_conn
 from yoyopod_cli.remote_transport import (
     run_local,
@@ -105,6 +106,7 @@ def _require_local_revision_ready(branch: str, sha: str) -> None:
 def _build_validate(
     *,
     branch: str,
+    venv_relpath: str = ".venv",
     sha: str = "",
     with_music: bool,
     with_voip: bool,
@@ -134,21 +136,22 @@ def _build_validate(
     else:
         steps.append(f"git reset --hard {origin_br}")
     steps.append("git clean -fd")
-    smoke_cmd = "uv run yoyopod pi validate smoke"
+    validate_deploy_cmd = checkout_module_command(venv_relpath, "pi", "validate", "deploy")
+    smoke_cmd = checkout_module_command(venv_relpath, "pi", "validate", "smoke")
     if with_power:
         smoke_cmd += " --with-power"
     if with_rtc:
         smoke_cmd += " --with-rtc"
-    steps.extend(["uv run yoyopod pi validate deploy", smoke_cmd])
+    steps.extend([validate_deploy_cmd, smoke_cmd])
     if with_music:
-        steps.append("uv run yoyopod pi validate music")
+        steps.append(checkout_module_command(venv_relpath, "pi", "validate", "music"))
     if with_voip:
-        steps.append("uv run yoyopod pi validate voip")
-    steps.append("uv run yoyopod pi validate stability")
+        steps.append(checkout_module_command(venv_relpath, "pi", "validate", "voip"))
+    steps.append(checkout_module_command(venv_relpath, "pi", "validate", "stability"))
     if with_lvgl_soak:
-        steps.append("uv run yoyopod pi validate lvgl")
+        steps.append(checkout_module_command(venv_relpath, "pi", "validate", "lvgl"))
     if with_navigation:
-        steps.append("uv run yoyopod pi validate navigation")
+        steps.append(checkout_module_command(venv_relpath, "pi", "validate", "navigation"))
     return " && ".join(steps)
 
 
@@ -183,8 +186,10 @@ def validate(
     conn = pi_conn(ctx)
     validate_config(conn)
     _require_local_revision_ready(conn.branch, sha)
+    pi = load_pi_paths()
     cmd = _build_validate(
         branch=conn.branch,
+        venv_relpath=pi.venv,
         sha=sha,
         with_music=with_music,
         with_voip=with_voip,

@@ -38,3 +38,12 @@ rsync_exclude:
   - models/
   - node_modules/
   - "*.egg-info/"
+
+# Slot-deploy layout on the Pi. Override fields in pi-deploy.local.yaml.
+slot:
+  root: /opt/yoyopod
+  releases_subdir: releases
+  state_subdir: state
+  bin_subdir: bin
+  current_link: current
+  previous_link: previous

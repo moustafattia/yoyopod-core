@@ -43,7 +43,7 @@ def test_build_restart_uses_configured_processes() -> None:
     assert "sudo systemctl start" in shell
     assert "nohup python yoyopod.py --simulate" in shell
     assert _activate_script_path(pi.venv) in shell
-    assert "uv run yoyopod build ensure-native" in shell
+    assert "venv/bin/python -m yoyopod_cli.main build ensure-native" in shell
     assert pi.pid_file in shell
     assert pi.log_file in shell
     assert pi.startup_marker in shell
@@ -52,8 +52,8 @@ def test_build_restart_uses_configured_processes() -> None:
 def test_build_native_shim_refresh_rebuilds_lvgl_and_liblinphone_when_stale() -> None:
     pi = PiPaths(venv="venv")
     shell = _build_native_shim_refresh(pi)
-    assert _activate_script_path(pi.venv) in shell
-    assert "uv run yoyopod build ensure-native" in shell
+    assert "venv/bin/python -m yoyopod_cli.main build ensure-native" in shell
+    assert "uv run" not in shell
 
 
 def test_build_startup_verification_waits_for_pid_and_marker() -> None:

@@ -87,3 +87,6 @@ Desktop.ini
 # Hardware/Device specific
 *.pid
 *.sock
+
+# Local git worktrees for parallel feature work
+.worktrees/

@@ -25,6 +25,7 @@ def test_build_preflight_steps_include_git_and_quality() -> None:
 def test_build_validate_minimal() -> None:
     shell = _build_validate(
         branch="main",
+        venv_relpath=".venv",
         sha="",
         with_music=False,
         with_voip=False,
@@ -38,11 +39,13 @@ def test_build_validate_minimal() -> None:
     assert "git checkout --force -B main origin/main" in shell or (
         "git checkout --force -B 'main' 'origin/main'" in shell
     )
-    assert "uv run yoyopod pi validate deploy" in shell
-    assert "uv run yoyopod pi validate smoke" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate deploy" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate smoke" in shell
     assert "--with-power" not in shell
     assert "--with-rtc" not in shell
-    assert "voip" not in shell or "uv run yoyopod pi validate voip" not in shell
+    assert (
+        "voip" not in shell or ".venv/bin/python -m yoyopod_cli.main pi validate voip" not in shell
+    )
     assert "lvgl" not in shell
     assert "navigation" not in shell
 
@@ -50,6 +53,7 @@ def test_build_validate_minimal() -> None:
 def test_build_validate_all_flags() -> None:
     shell = _build_validate(
         branch="main",
+        venv_relpath=".venv",
         sha="",
         with_music=True,
         with_voip=True,
@@ -58,16 +62,17 @@ def test_build_validate_all_flags() -> None:
         with_lvgl_soak=True,
         with_navigation=True,
     )
-    assert "uv run yoyopod pi validate smoke --with-power --with-rtc" in shell
-    assert "uv run yoyopod pi validate music" in shell
-    assert "uv run yoyopod pi validate voip" in shell
-    assert "uv run yoyopod pi validate lvgl" in shell
-    assert "uv run yoyopod pi validate navigation" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate smoke --with-power --with-rtc" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate music" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate voip" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate lvgl" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate navigation" in shell
 
 
 def test_build_validate_only_music() -> None:
     shell = _build_validate(
         branch="main",
+        venv_relpath=".venv",
         sha="",
         with_music=True,
         with_voip=False,
@@ -76,13 +81,14 @@ def test_build_validate_only_music() -> None:
         with_lvgl_soak=False,
         with_navigation=False,
     )
-    assert "uv run yoyopod pi validate music" in shell
-    assert "uv run yoyopod pi validate voip" not in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate music" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate voip" not in shell
 
 
 def test_build_validate_syncs_branch_before_validation_stages() -> None:
     shell = _build_validate(
         branch="feature-x",
+        venv_relpath=".venv",
         sha="",
         with_music=False,
         with_voip=False,
@@ -97,7 +103,7 @@ def test_build_validate_syncs_branch_before_validation_stages() -> None:
         shell.find("git reset --hard origin/feature-x"),
         shell.find("git reset --hard origin/'feature-x'"),
     )
-    deploy_idx = shell.find("uv run yoyopod pi validate deploy")
+    deploy_idx = shell.find(".venv/bin/python -m yoyopod_cli.main pi validate deploy")
     assert sync_idx >= 0, f"sync step missing from: {shell}"
     assert deploy_idx >= 0
     assert sync_idx < deploy_idx, "sync must happen before validation"
@@ -106,6 +112,7 @@ def test_build_validate_syncs_branch_before_validation_stages() -> None:
 def test_build_validate_cleans_untracked_files_before_and_after_checkout() -> None:
     shell = _build_validate(
         branch="feature-x",
+        venv_relpath=".venv",
         sha="",
         with_music=False,
         with_voip=False,
@@ -133,6 +140,7 @@ def test_build_validate_cleans_untracked_files_before_and_after_checkout() -> No
 def test_build_validate_force_resets_branch_before_validation() -> None:
     shell = _build_validate(
         branch="feature-x",
+        venv_relpath=".venv",
         sha="",
         with_music=False,
         with_voip=False,
@@ -169,13 +177,14 @@ def test_validate_has_all_with_flags() -> None:
         assert flag in names
 
 
-# --- Fix 2: checkout-local uv run invocation ---
+# --- Fix 2: checkout-local module invocation ---
 
 
-def test_build_validate_uses_uv_run_for_checkout_local_invocations() -> None:
-    """Remote validate must use `uv run yoyopod` instead of a potentially stale installed script."""
+def test_build_validate_uses_checkout_python_for_checkout_local_invocations() -> None:
+    """Remote validate must use the checkout venv instead of a stale installed script."""
     shell = _build_validate(
         branch="main",
+        venv_relpath=".venv",
         sha="",
         with_music=False,
         with_voip=False,
@@ -184,9 +193,10 @@ def test_build_validate_uses_uv_run_for_checkout_local_invocations() -> None:
         with_lvgl_soak=False,
         with_navigation=False,
     )
-    assert "uv run yoyopod pi validate deploy" in shell
-    assert "uv run yoyopod pi validate smoke" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate deploy" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main pi validate smoke" in shell
     assert "source " not in shell
+    assert "uv run" not in shell
 
 
 # --- Fix 3: SHA pinning ---
@@ -195,6 +205,7 @@ def test_build_validate_uses_uv_run_for_checkout_local_invocations() -> None:
 def test_build_validate_with_sha_pins_and_checks_ancestry() -> None:
     shell = _build_validate(
         branch="main",
+        venv_relpath=".venv",
         sha="abc123def",
         with_music=False,
         with_voip=False,
@@ -216,6 +227,7 @@ def test_build_validate_with_sha_pins_and_checks_ancestry() -> None:
 def test_build_validate_without_sha_uses_branch_tip() -> None:
     shell = _build_validate(
         branch="main",
+        venv_relpath=".venv",
         sha="",
         with_music=False,
         with_voip=False,

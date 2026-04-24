@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-from yoyopod_cli.common import configure_logging
+from yoyopod_cli.common import checkout_module_command, configure_logging
 from yoyopod_cli.paths import HOST, PiPaths, load_pi_paths
 from yoyopod_cli.remote_shared import build_remote_app, pi_conn
 from yoyopod_cli.remote_transport import (
@@ -71,8 +71,7 @@ def _build_startup_verification(pi: PiPaths, *, attempts: int = 20) -> str:
 
 def _build_native_shim_refresh(pi: PiPaths) -> str:
     """Build the shell that rebuilds missing or stale native shims before restart."""
-    activate = shell_quote(_activate_script_path(pi.venv))
-    return "{ " f"source {activate} && uv run yoyopod build ensure-native" " ; }"
+    return "{ " f"{checkout_module_command(pi.venv, 'build', 'ensure-native')}" " ; }"
 
 
 def _build_restart(pi: PiPaths) -> str:

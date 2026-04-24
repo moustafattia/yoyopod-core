@@ -10,6 +10,7 @@ pytest.importorskip("typer")
 
 import yoyopod_cli.setup as setup_cli_module
 from yoyopod.core import RUNTIME_REQUIRED_CONFIG_FILES
+from yoyopod_cli.paths import PiPaths
 from yoyopod_cli.setup import (
     SetupCheck,
     build_host_setup_commands,
@@ -22,6 +23,7 @@ from yoyopod_cli.setup import (
 
 def test_pi_package_list_splits_core_and_feature_packages() -> None:
     assert pi_package_list(with_voice=False, with_network=False, with_pisugar=False) == (
+        "python3-venv",
         "mpv",
         "ffmpeg",
         "liblinphone-dev",
@@ -31,6 +33,7 @@ def test_pi_package_list_splits_core_and_feature_packages() -> None:
         "i2c-tools",
     )
     assert pi_package_list(with_voice=True, with_network=True, with_pisugar=True) == (
+        "python3-venv",
         "mpv",
         "ffmpeg",
         "liblinphone-dev",
@@ -66,6 +69,7 @@ def test_build_pi_setup_commands_include_install_sync_and_builds() -> None:
         "apt",
         "install",
         "-y",
+        "python3-venv",
         "mpv",
         "ffmpeg",
         "liblinphone-dev",
@@ -77,9 +81,32 @@ def test_build_pi_setup_commands_include_install_sync_and_builds() -> None:
         "ppp",
         "pisugar-server",
     )
-    assert commands[2].command == ("uv", "sync", "--extra", "dev")
-    assert commands[3].command == ("uv", "run", "yoyopod", "build", "liblinphone")
-    assert commands[4].command == ("uv", "run", "yoyopod", "build", "lvgl")
+    assert commands[2].command == ("python3", "-m", "venv", ".venv")
+    assert commands[3].command == (
+        ".venv/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "pip",
+        "setuptools",
+        "wheel",
+    )
+    assert commands[4].command == (".venv/bin/python", "-m", "pip", "install", "-e", ".[dev]")
+    assert commands[5].command == (
+        ".venv/bin/python",
+        "-m",
+        "yoyopod_cli.main",
+        "build",
+        "liblinphone",
+    )
+    assert commands[6].command == (
+        ".venv/bin/python",
+        "-m",
+        "yoyopod_cli.main",
+        "build",
+        "lvgl",
+    )
 
 
 def test_collect_host_setup_checks_cover_required_tools_modules_and_config(
@@ -148,16 +175,18 @@ def test_collect_pi_setup_checks_require_packages_native_artifacts_and_service(
         tmp_path / "build" / "libyoyopod_lvgl_shim.so",
         tmp_path / "build" / "libyoyopod_liblinphone_shim.so",
     )
-    for path in (*tracked_config, *native_artifacts):
+    venv_python = tmp_path / ".venv" / "bin" / "python"
+    for path in (*tracked_config, *native_artifacts, venv_python):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("ok\n", encoding="utf-8")
 
     monkeypatch.setattr(setup_cli_module, "TRACKED_CONFIG_PATHS", tracked_config)
     monkeypatch.setattr(setup_cli_module, "NATIVE_ARTIFACTS", native_artifacts)
+    monkeypatch.setattr(setup_cli_module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(
         setup_cli_module.shutil,
         "which",
-        lambda program: "/usr/bin/uv" if program == "uv" else None,
+        lambda program: "/usr/bin/python3" if program == "python3" else None,
     )
 
     def fake_run(command, check=False, capture_output=False, text=False):
@@ -172,9 +201,77 @@ def test_collect_pi_setup_checks_require_packages_native_artifacts_and_service(
     checks = collect_pi_setup_checks(with_voice=True, with_network=True, with_pisugar=True)
 
     assert all(check.ok for check in checks)
+    assert any(check.label == "python3" for check in checks)
     assert any(check.label == "apt:mpv" for check in checks)
     assert any(check.label == "apt:pisugar-server" for check in checks)
     assert any(check.label == "service:pisugar-server" for check in checks)
+
+
+def test_collect_pi_setup_checks_uses_configured_venv_path(tmp_path, monkeypatch) -> None:
+    custom_python = tmp_path / "custom-venv" / "bin" / "python"
+    custom_python.parent.mkdir(parents=True)
+    custom_python.write_text("ok\n", encoding="utf-8")
+
+    monkeypatch.setattr(setup_cli_module, "TRACKED_CONFIG_PATHS", ())
+    monkeypatch.setattr(setup_cli_module, "NATIVE_ARTIFACTS", ())
+    monkeypatch.setattr(setup_cli_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(setup_cli_module, "load_pi_paths", lambda: PiPaths(venv="custom-venv"))
+    monkeypatch.setattr(
+        setup_cli_module.shutil,
+        "which",
+        lambda program: "/usr/bin/python3" if program == "python3" else None,
+    )
+    monkeypatch.setattr(
+        setup_cli_module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="install ok installed",
+            stderr="",
+        ),
+    )
+
+    checks = collect_pi_setup_checks(with_voice=False, with_network=False, with_pisugar=False)
+
+    assert any(
+        "custom-venv" in check.label and check.label.endswith("python") and check.ok
+        for check in checks
+    )
+
+
+def test_collect_pi_setup_checks_expands_home_relative_venv_path(tmp_path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    custom_python = home / ".venv" / "bin" / "python"
+    custom_python.parent.mkdir(parents=True)
+    custom_python.write_text("ok\n", encoding="utf-8")
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setattr(setup_cli_module, "TRACKED_CONFIG_PATHS", ())
+    monkeypatch.setattr(setup_cli_module, "NATIVE_ARTIFACTS", ())
+    monkeypatch.setattr(setup_cli_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(setup_cli_module, "load_pi_paths", lambda: PiPaths(venv="~/.venv"))
+    monkeypatch.setattr(
+        setup_cli_module.shutil,
+        "which",
+        lambda program: "/usr/bin/python3" if program == "python3" else None,
+    )
+    monkeypatch.setattr(
+        setup_cli_module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="install ok installed",
+            stderr="",
+        ),
+    )
+
+    checks = collect_pi_setup_checks(with_voice=False, with_network=False, with_pisugar=False)
+
+    assert any(
+        check.label.replace("\\", "/").endswith("home/.venv/bin/python") and check.ok
+        for check in checks
+    )
 
 
 def test_collect_host_setup_checks_fail_when_power_backend_config_is_missing(

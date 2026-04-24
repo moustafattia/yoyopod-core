@@ -66,6 +66,10 @@ from yoyopod_cli import build as _build  # noqa: E402
 
 app.add_typer(_build.app, name="build")
 
+from yoyopod_cli import health as _health  # noqa: E402
+
+app.add_typer(_health.app, name="health")
+
 from yoyopod_cli import release as _release  # noqa: E402
 
 app.add_typer(_release.app, name="release")
@@ -79,6 +83,7 @@ from yoyopod_cli import (  # noqa: E402
     remote_config as _remote_config,
     remote_infra as _remote_infra,
     remote_ops as _remote_ops,
+    remote_release as _remote_release,
     remote_setup as _remote_setup,
     remote_validate as _remote_validate,
 )
@@ -108,6 +113,9 @@ remote_app.command(name="verify-setup")(_remote_setup.verify_setup)
 
 # config (operates on local files — its own subgroup)
 remote_app.add_typer(_remote_config.app, name="config")
+
+# release (slot-deploy push/rollback/status)
+remote_app.add_typer(_remote_release.app, name="release")
 
 app.add_typer(remote_app, name="remote")
 

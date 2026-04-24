@@ -84,6 +84,36 @@ CONFIGS = ConfigFiles()
 PROCS = ProcessNames()
 
 
+@dataclass(frozen=True)
+class SlotPaths:
+    """Slot-deploy paths on the Pi (overridable via pi-deploy.local.yaml)."""
+
+    root: str = "/opt/yoyopod"
+    releases_subdir: str = "releases"
+    state_subdir: str = "state"
+    bin_subdir: str = "bin"
+    current_link: str = "current"
+    previous_link: str = "previous"
+
+    def releases_dir(self) -> str:
+        return f"{self.root}/{self.releases_subdir}"
+
+    def state_dir(self) -> str:
+        return f"{self.root}/{self.state_subdir}"
+
+    def bin_dir(self) -> str:
+        return f"{self.root}/{self.bin_subdir}"
+
+    def current_path(self) -> str:
+        return f"{self.root}/{self.current_link}"
+
+    def previous_path(self) -> str:
+        return f"{self.root}/{self.previous_link}"
+
+
+SLOT_DEFAULTS = SlotPaths()
+
+
 def _load_yaml(path: Path) -> dict[str, object]:
     """Load one YAML mapping from disk; return {} if missing."""
     if not path.exists():
@@ -152,4 +182,31 @@ def load_pi_paths(
         startup_marker=_str_field(merged.get("startup_marker"), PI_DEFAULTS.startup_marker),
         kill_processes=_as_str_tuple(merged.get("kill_processes"), PI_DEFAULTS.kill_processes),
         rsync_exclude=_as_str_tuple(merged.get("rsync_exclude"), PI_DEFAULTS.rsync_exclude),
+    )
+
+
+def load_slot_paths(
+    *,
+    base_path: Path | None = None,
+    local_path: Path | None = None,
+) -> SlotPaths:
+    """Return SlotPaths with base + local YAML overrides applied to the `slot:` section."""
+    base = base_path if base_path is not None else HOST.deploy_config
+    local = local_path if local_path is not None else HOST.deploy_config_local
+
+    merged: dict[str, object] = {}
+    for yaml_path in (base, local):
+        data = _load_yaml(yaml_path)
+        slot_section = data.get("slot", {})
+        if isinstance(slot_section, dict):
+            merged.update(slot_section)
+
+    return replace(
+        SLOT_DEFAULTS,
+        root=_str_field(merged.get("root"), SLOT_DEFAULTS.root),
+        releases_subdir=_str_field(merged.get("releases_subdir"), SLOT_DEFAULTS.releases_subdir),
+        state_subdir=_str_field(merged.get("state_subdir"), SLOT_DEFAULTS.state_subdir),
+        bin_subdir=_str_field(merged.get("bin_subdir"), SLOT_DEFAULTS.bin_subdir),
+        current_link=_str_field(merged.get("current_link"), SLOT_DEFAULTS.current_link),
+        previous_link=_str_field(merged.get("previous_link"), SLOT_DEFAULTS.previous_link),
     )

@@ -86,6 +86,7 @@ For remote deploy, Pi sync, and troubleshooting, use the `yoyopod remote ...` an
 - [Contributor Workflow](docs/CONTRIBUTOR_WORKFLOW.md)
 - [Development Guide](docs/DEVELOPMENT_GUIDE.md)
 - [Release Process](docs/RELEASE_PROCESS.md)
+- [Slot Deploy](docs/SLOT_DEPLOY.md)
 - [Pi Dev Workflow](docs/PI_DEV_WORKFLOW.md)
 - [Pi Smoke Validation](docs/RPI_SMOKE_VALIDATION.md)
 - [System Architecture](docs/SYSTEM_ARCHITECTURE.md)

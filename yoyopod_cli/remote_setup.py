@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import typer
 
-from yoyopod_cli.common import configure_logging
+from yoyopod_cli.common import (
+    checkout_module_command,
+    configure_logging,
+    shell_join_preserving_home,
+)
 from yoyopod_cli.paths import load_pi_paths
 from yoyopod_cli.remote_shared import build_remote_app, pi_conn
+from yoyopod_cli.setup import SetupCommand, build_pi_setup_commands
 from yoyopod_cli.remote_transport import run_remote, validate_config
 
 app = build_remote_app("setup_remote", "Run setup on the Pi via SSH.")
+
+
+def _render_remote_setup_shell(*, commands: tuple[SetupCommand, ...]) -> str:
+    """Render setup command tuples into one remote shell pipeline."""
+
+    return " && ".join(shell_join_preserving_home(step.command) for step in commands)
 
 
 def _build_setup(
@@ -22,20 +33,20 @@ def _build_setup(
     skip_builds: bool,
     dry_run: bool,
 ) -> str:
-    cmd = "uv run yoyopod setup pi"
-    if with_voice:
-        cmd += " --with-voice"
-    if with_network:
-        cmd += " --with-network"
-    if with_pisugar:
-        cmd += " --with-pisugar"
-    if skip_uv_sync:
-        cmd += " --skip-uv-sync"
-    if skip_builds:
-        cmd += " --skip-builds"
+    commands = build_pi_setup_commands(
+        with_voice=with_voice,
+        with_network=with_network,
+        with_pisugar=with_pisugar,
+        venv_dir=venv_relpath,
+        skip_uv_sync=skip_uv_sync,
+        skip_builds=skip_builds,
+    )
+    shell = _render_remote_setup_shell(commands=commands)
     if dry_run:
-        cmd += " --dry-run"
-    return cmd
+        import shlex
+
+        return f"printf '%s\\n' {shlex.quote(shell)}"
+    return shell
 
 
 def _build_verify_setup(
@@ -45,7 +56,7 @@ def _build_verify_setup(
     with_network: bool,
     with_pisugar: bool,
 ) -> str:
-    cmd = "uv run yoyopod setup verify-pi"
+    cmd = checkout_module_command(venv_relpath, "setup", "verify-pi")
     if with_voice:
         cmd += " --with-voice"
     if with_network:

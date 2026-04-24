@@ -4,7 +4,7 @@ YoYoPod now uses one explicit release contract:
 
 - package version source: `yoyopod/_version.py`
 - release tag format: `vMAJOR.MINOR.PATCH`
-- release artifacts: Python package distributions plus a full repo release bundle
+- release artifacts: Python package distributions, full repo bundles, and an ARM64 slot tarball
 - release automation: `.github/workflows/release.yml`
 
 ## Versioning
@@ -72,8 +72,21 @@ The workflow:
 3. runs `uv run python scripts/quality.py gate`
 4. runs `uv run pytest -q`
 5. runs `uv run yoyopod release build --check-tag <tag>`
-6. uploads the built artifacts
-7. creates or updates the matching GitHub Release
+6. builds a Linux ARM64 self-contained slot artifact via `deploy/docker/slot-builder.Dockerfile`
+7. uploads the built artifacts
+8. creates or updates the matching GitHub Release
+
+On pull requests, the expensive ARM64 slot build is label-gated. Add the
+`build-arm-slot` label when you need a PR commit to produce a slot artifact.
+Normal PR commits still run the `quality` and `test` jobs, but they skip the
+roughly 20-minute ARM builder unless that label is present. Tagged releases and
+`main` pushes continue to build the ARM64 slot automatically.
+
+The published ARM64 slot artifact is intended to be installed directly under
+`/opt/yoyopod/releases/<version>/` and consumed by:
+
+- `deploy/scripts/install_release.sh`
+- `yoyopod remote release install-url <artifact-url>`
 
 ## Recommended Release Flow
 
@@ -104,3 +117,9 @@ The workflow:
 
 - The Python package artifacts are useful for packaging and inspection.
 - The repo bundles are the more complete release asset for hardware-oriented YoYoPod workflows because they include the broader repo surface the device and deploy tooling rely on.
+- The ARM64 slot tarball is the OTA-style deploy asset. It already contains the
+  bundled config tree, native `.so` shims, launcher, manifest, and slot-local
+  runtime venv expected by the slot installer.
+- The slot tarball is published with a `.sha256` sidecar for the archive bytes.
+  The embedded `manifest.json` records the unpacked slot payload digest instead
+  of the digest of the tarball that contains the manifest.

@@ -90,6 +90,7 @@ Use the baseline command for local-only work. Add `--with-remote-tools` before u
 
 Current core system packages and services expected by the active stack:
 
+- `python3-venv`
 - `mpv`
 - `ffmpeg`
 - `liblinphone-dev`
@@ -107,6 +108,9 @@ uv run yoyopod setup pi
 
 This bootstraps the baseline package/build contract only. It does not yet solve
 Vosk model provisioning, board/modem permissions, or non-Debian portability.
+On the Pi, this flow now creates or refreshes the repo checkout `.venv` with
+`python3 -m venv` and `pip install -e '.[dev]'`, so the board does not need
+`uv` installed locally.
 
 Feature extras are opt-in:
 
@@ -121,7 +125,9 @@ uv run yoyopod setup verify-pi
 ```
 
 This verifies presence and basic build state. It does not perform deeper
-artifact health checks for every native/runtime dependency.
+artifact health checks for every native/runtime dependency. The current baseline
+checks the tracked config files, `python3`, the checkout venv Python, required
+apt packages, and the built native shim artifacts.
 
 Use flags that match the actual target you are bringing up:
 
@@ -204,7 +210,7 @@ uv run yoyopod setup verify-pi --with-pisugar
 yoyopod pi validate deploy
 yoyopod pi validate smoke
 yoyopod pi validate smoke --with-power --with-rtc
-uv run python yoyopod.py
+.venv/bin/python yoyopod.py
 ```
 
 This does not yet provision non-apt assets such as Vosk models or encode every
@@ -225,7 +231,8 @@ yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voi
 These remote helpers mirror the same baseline contract. They still rely on
 feature-specific follow-up for assets and unusual hardware bringup. Add
 `--with-voice` and/or `--with-network` to the setup commands when the target
-needs those feature paths.
+needs those feature paths. They now invoke the checkout-local `.venv/bin/python`
+instead of requiring `uv` on the board.
 
 ## Verification before blaming product code
 
