@@ -216,6 +216,13 @@ class WorkerSupervisor:
         slot: _WorkerSlot,
         message: WorkerEnvelope,
     ) -> None:
+        if (
+            message.request_id is not None
+            and self._is_timeout_cancel_ack(domain, message)
+            and message.request_id in slot.request_deadlines
+            and message.request_id not in slot.stale_request_ids
+        ):
+            return
         if message.request_id is not None and message.request_id in slot.stale_request_ids:
             if not self._is_timeout_cancel_ack(domain, message):
                 return
