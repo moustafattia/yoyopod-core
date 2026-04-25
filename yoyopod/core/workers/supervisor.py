@@ -114,11 +114,11 @@ class WorkerSupervisor:
             runtime = slot.runtime
             if runtime is None:
                 continue
+            self._expire_requests(domain, slot, now=now)
             messages = runtime.drain_messages()
             processed += len(messages)
             for message in messages:
                 self._publish_message(domain, slot, message)
-            self._expire_requests(domain, slot, now=now)
             if not runtime.running and slot.state == "running":
                 self._handle_exit(domain, slot, now=now)
             if (

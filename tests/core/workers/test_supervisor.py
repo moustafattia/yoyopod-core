@@ -215,6 +215,42 @@ def test_supervisor_drops_late_result_after_request_timeout() -> None:
     assert message_events == []
 
 
+def test_supervisor_expires_request_before_processing_late_result_in_same_poll() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    sent_commands: list[dict[str, object]] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda: [
+                make_envelope(
+                    kind="result",
+                    type="voice.transcribe",
+                    request_id="req-late",
+                    payload={"text": "late"},
+                )
+            ],
+            send_command=lambda **kwargs: sent_commands.append(kwargs) is None or True,
+        ),
+    )
+    slot = supervisor._workers["voice"]
+    slot.runtime = runtime
+    slot.state = "running"
+    slot.request_deadlines["req-late"] = 1.0
+
+    supervisor.poll(monotonic_now=2.0)
+    bus.drain()
+
+    assert message_events == []
+    assert slot.request_timeouts == 1
+    assert sent_commands[0]["type"] == "voice.cancel"
+
+
 def test_supervisor_accepts_retry_with_same_request_id_after_timeout() -> None:
     bus = Bus()
     scheduler = MainThreadScheduler()
