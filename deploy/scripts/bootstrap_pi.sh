@@ -1,26 +1,27 @@
 #!/usr/bin/env bash
 # deploy/scripts/bootstrap_pi.sh
 #
-# One-shot Pi bootstrap for slot deploys. Idempotent: safe to re-run.
+# One-shot Pi bootstrap for dev/prod lane deploys. Idempotent: safe to re-run.
 #
-# - Creates /opt/yoyopod/{releases,state,bin}
-# - Installs yoyopod-slot.service + yoyopod-rollback.service
-# - Writes /etc/default/yoyopod-slot with the invoking user/group
-# - Copies deploy/scripts/rollback.sh to /opt/yoyopod/bin/rollback.sh
-# - Copies deploy/scripts/install_release.sh to /opt/yoyopod/bin/install-release.sh
-# - Optional: migrates config + data from ~/yoyopod-core/ to /opt/yoyopod/state/
+# - Creates /opt/yoyopod-prod/{releases,state,bin}
+# - Creates /opt/yoyopod-dev/{checkout,venv,state,logs,tmp,bin}
+# - Installs yoyopod-prod.service, yoyopod-prod-rollback.service, and yoyopod-dev.service
+# - Writes /etc/default/yoyopod-prod and /etc/default/yoyopod-dev
+# - Copies deploy/scripts/rollback.sh to /opt/yoyopod-prod/bin/rollback.sh
+# - Copies deploy/scripts/install_release.sh to /opt/yoyopod-prod/bin/install-release.sh
+# - Optional: migrates config + logs from ~/yoyopod-core/ to /opt/yoyopod-prod/state/
 # - Optional: installs a first release artifact after bootstrap
 #
-# Requires sudo. Invoke as the user who will run the app:
-#   sudo -E deploy/scripts/bootstrap_pi.sh --migrate
-# (The -E preserves $USER so the unit runs as the right account.)
+# Normally invoked by install_pi.sh, which downloads the source payload and
+# calls this script with sudo -E so the unit runs as the invoking user.
 
 set -euo pipefail
 
 UNIT_DIR="/etc/systemd/system"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-ROOT="/opt/yoyopod"
+ROOT="/opt/yoyopod-prod"
+DEV_ROOT="/opt/yoyopod-dev"
 MIGRATE=0
 RELEASE_ARCHIVE=""
 RELEASE_URL=""
@@ -28,11 +29,13 @@ for arg in "$@"; do
     case "$arg" in
         --migrate) MIGRATE=1 ;;
         --root=*) ROOT="${arg#--root=}" ;;
+        --dev-root=*) DEV_ROOT="${arg#--dev-root=}" ;;
         --release-archive=*) RELEASE_ARCHIVE="${arg#--release-archive=}" ;;
         --release-url=*) RELEASE_URL="${arg#--release-url=}" ;;
         --root) echo "use --root=<path> form" >&2; exit 2 ;;
+        --dev-root) echo "use --dev-root=<path> form" >&2; exit 2 ;;
         --help|-h)
-            echo "Usage: $0 [--migrate] [--root=<path>] [--release-archive=<path>] [--release-url=<url>]"
+            echo "Usage: $0 [--migrate] [--root=<path>] [--dev-root=<path>] [--release-archive=<path>] [--release-url=<url>]"
             exit 0
             ;;
         *) echo "unknown arg: $arg" >&2; exit 2 ;;
@@ -52,13 +55,16 @@ fi
 INVOKING_USER="${SUDO_USER:-${USER:-pi}}"
 INVOKING_GROUP="$(id -gn "${INVOKING_USER}")"
 
-echo "bootstrap: user=${INVOKING_USER} group=${INVOKING_GROUP} root=${ROOT}"
+echo "bootstrap: user=${INVOKING_USER} group=${INVOKING_GROUP} prod_root=${ROOT} dev_root=${DEV_ROOT}"
 
 # 1. Create directory skeleton.
 install -d -m 0755 -o root -g root \
-    "${ROOT}" "${ROOT}/bin"
+    "${ROOT}" "${ROOT}/bin" "${DEV_ROOT}" "${DEV_ROOT}/bin"
 install -d -m 0755 -o "${INVOKING_USER}" -g "${INVOKING_GROUP}" \
     "${ROOT}/releases" "${ROOT}/state" "${ROOT}/state/tmp"
+install -d -m 0755 -o "${INVOKING_USER}" -g "${INVOKING_GROUP}" \
+    "${DEV_ROOT}/checkout" "${DEV_ROOT}/venv" "${DEV_ROOT}/state" \
+    "${DEV_ROOT}/logs" "${DEV_ROOT}/tmp"
 
 # 2. Install rollback helper (owned by root, invoked by systemd).
 install -m 0755 -o root -g root \
@@ -67,30 +73,62 @@ install -m 0755 -o root -g root \
 install -m 0755 -o root -g root \
     "${REPO_ROOT}/deploy/scripts/install_release.sh" \
     "${ROOT}/bin/install-release.sh"
+install -m 0755 -o root -g root \
+    "${REPO_ROOT}/deploy/scripts/prod_ota_guard.sh" \
+    "${ROOT}/bin/prod-ota-guard.sh"
 
 # 3. Install systemd units.
 install -m 0644 -o root -g root \
-    "${REPO_ROOT}/deploy/systemd/yoyopod-slot.service" \
-    "${UNIT_DIR}/yoyopod-slot.service"
+    "${REPO_ROOT}/deploy/systemd/yoyopod-prod.service" \
+    "${UNIT_DIR}/yoyopod-prod.service"
 install -m 0644 -o root -g root \
-    "${REPO_ROOT}/deploy/systemd/yoyopod-rollback.service" \
-    "${UNIT_DIR}/yoyopod-rollback.service"
+    "${REPO_ROOT}/deploy/systemd/yoyopod-prod-rollback.service" \
+    "${UNIT_DIR}/yoyopod-prod-rollback.service"
+install -m 0644 -o root -g root \
+    "${REPO_ROOT}/deploy/systemd/yoyopod-dev.service" \
+    "${UNIT_DIR}/yoyopod-dev.service"
 
-# 4. EnvironmentFile with the user/group the slot service should run as.
-cat > "/etc/default/yoyopod-slot" <<EOF
-# /etc/default/yoyopod-slot - written by bootstrap_pi.sh
+# 4. EnvironmentFiles with the lane roots.
+cat > "/etc/default/yoyopod-prod" <<EOF
+# /etc/default/yoyopod-prod - written by bootstrap_pi.sh
 YOYOPOD_ROOT=${ROOT}
 YOYOPOD_STATE_DIR=${ROOT}/state
+YOYOPOD_SERVICE_NAME=yoyopod-prod.service
+EOF
+
+cat > "/etc/default/yoyopod-dev" <<EOF
+# /etc/default/yoyopod-dev - written by bootstrap_pi.sh
+YOYOPOD_DEV_ROOT=${DEV_ROOT}
+YOYOPOD_DEV_CHECKOUT=${DEV_ROOT}/checkout
+YOYOPOD_DEV_VENV=${DEV_ROOT}/venv
+YOYOPOD_STATE_DIR=${DEV_ROOT}/state
 EOF
 
 # Patch User=/Group= into the unit (only if not already present).
 # Guard makes re-runs idempotent: a second bootstrap won't inject duplicates.
-if ! grep -q "^User=" "${UNIT_DIR}/yoyopod-slot.service"; then
-    sed -i \
-        -e "/^\[Service\]/a User=${INVOKING_USER}\nGroup=${INVOKING_GROUP}" \
-        "${UNIT_DIR}/yoyopod-slot.service"
-fi
+for unit in yoyopod-prod.service yoyopod-dev.service; do
+    if ! grep -q "^User=" "${UNIT_DIR}/${unit}"; then
+        sed -i \
+            -e "/^\[Service\]/a User=${INVOKING_USER}\nGroup=${INVOKING_GROUP}" \
+            "${UNIT_DIR}/${unit}"
+    fi
+done
 
+systemctl daemon-reload
+systemctl disable --now yoyopod-slot.service >/dev/null 2>&1 || true
+legacy_template_units="$(
+    {
+        systemctl list-units --type=service --all --plain --no-legend 'yoyopod@*.service' 2>/dev/null || true
+        systemctl list-unit-files --type=service --plain --no-legend 'yoyopod@*.service' 2>/dev/null || true
+    } | awk '{print $1}' | sort -u
+)"
+if [ -n "${legacy_template_units}" ]; then
+    systemctl disable --now ${legacy_template_units} >/dev/null 2>&1 || true
+fi
+rm -f \
+    /etc/systemd/system/yoyopod@.service \
+    /etc/systemd/system/yoyopod-slot.service \
+    /etc/default/yoyopod
 systemctl daemon-reload
 
 if [ -n "${RELEASE_ARCHIVE}" ] || [ -n "${RELEASE_URL}" ]; then
@@ -103,14 +141,15 @@ if [ -n "${RELEASE_ARCHIVE}" ] || [ -n "${RELEASE_URL}" ]; then
     fi
     echo "bootstrap: install initial release"
     "${INSTALL_CMD[@]}"
-    systemctl enable --now yoyopod-slot.service
+    systemctl enable --now yoyopod-prod.service
 fi
 
-# 5. Optional migration from ~/yoyopod-core/ -> /opt/yoyopod/state/
+# 5. Optional migration from old config/logs -> /opt/yoyopod-prod/state/
 if [ "${MIGRATE}" -eq 1 ]; then
     OLD="/home/${INVOKING_USER}/yoyopod-core"
     if [ -d "${OLD}" ]; then
         echo "bootstrap: migrating from ${OLD} -> ${ROOT}/state/"
+        echo "bootstrap: legacy checkout is not copied; clone the repo into ${DEV_ROOT}/checkout before remote sync"
         for sub in config logs; do
             if [ -d "${OLD}/${sub}" ]; then
                 install -d -o "${INVOKING_USER}" -g "${INVOKING_GROUP}" \
@@ -125,7 +164,10 @@ fi
 
 cat <<EOF
 
-bootstrap complete.  slot root: ${ROOT}
+bootstrap complete.
+
+Prod lane root: ${ROOT}
+Dev lane root:  ${DEV_ROOT}
 
 Next steps on the dev machine:
   uv run yoyopod remote release build-pi --output ./build/releases --channel dev
@@ -135,11 +177,11 @@ Or install a published CI/release artifact directly:
   yoyopod remote release install-url <artifact-url> --first-deploy
 
 Then on the Pi:
-  sudo systemctl enable --now yoyopod-slot.service
+  sudo systemctl enable --now yoyopod-prod.service
 
-After bootstrap, 'yoyopod remote release ...' talks directly to ${ROOT}
-and does not require this repo checkout to stay on the Pi. Keep the checkout
-only if you still use 'remote sync', 'remote validate', or 'remote setup'.
+After bootstrap, 'yoyopod remote release ...' talks directly to the prod
+lane at ${ROOT}. The dev lane uses ${DEV_ROOT}/checkout for 'remote sync',
+'remote validate', and 'remote setup'.
 
 NOTE: the running app does not yet honour YOYOPOD_STATE_DIR/config/ -
 the config loader still reads from the slot's relative ./config dir.
@@ -150,5 +192,10 @@ into the repo's tracked config/ tree before the first slot build.
 
 If you used a non-default --root, ensure slot.root in pi-deploy.local.yaml
 matches: slot.root: ${ROOT}
+
+If you used a non-default --dev-root, ensure the dev lane config matches:
+  lane.dev_root: ${DEV_ROOT}
+  lane.dev_checkout: ${DEV_ROOT}/checkout
+  lane.dev_venv: ${DEV_ROOT}/venv
 
 EOF

@@ -10,7 +10,7 @@ argument-hint: "[line_count] [--errors] [--filter <subsystem>] [--follow]"
 
 ## Config
 
-Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `yoyopod remote` merges them directly, and `yoyopod remote config edit` is the preferred way to create or update the local override.
+Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, dev lane checkout, and branch. The tracked dev default is `/opt/yoyopod-dev/checkout`; prod slots live under `/opt/yoyopod-prod`. `yoyopod remote` merges the files directly, and `yoyopod remote config edit` is the preferred way to create or update the local override.
 
 If the file does not exist yet, run `yoyopod remote config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
@@ -33,6 +33,11 @@ Multiple flags can be combined.
    ```
    Add `--lines`, `--errors`, `--filter`, and `--follow` based on the parsed arguments.
 
-2. **Present the log output.** Return the raw log lines directly. Do not summarize or truncate unless the user explicitly asks.
+2. **If lane ownership matters, also run:**
+   ```bash
+   yoyopod remote mode status
+   ```
+
+3. **Present the log output.** Return the raw log lines directly. Do not summarize or truncate unless the user explicitly asks.
 
 After presenting the logs, remind the user they can ask follow-up questions about the log content, such as "why did the call drop?" or "what errors happened in the last minute?"

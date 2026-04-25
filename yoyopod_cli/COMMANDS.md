@@ -7,7 +7,7 @@ For live help, use `yoyopod <cmd> --help`.
 
 | Command | What it does |
 |---|---|
-| `yoyopod deploy` | Sync code to the Pi and restart (alias for `remote sync`). |
+| `yoyopod deploy` | Update the dev lane checkout and restart (alias for `remote sync`). |
 | `yoyopod logs` | Tail yoyopod logs on the Pi (alias for `remote logs`). |
 | `yoyopod restart` | Restart the yoyopod app on the Pi (alias for `remote restart`). |
 | `yoyopod status` | Show Pi health dashboard (alias for `remote status`). |
@@ -20,6 +20,9 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod remote config edit` | Open deploy/pi-deploy.local.yaml in $EDITOR. |
 | `yoyopod remote config show` | Print the effective pi-deploy config (base merged with local override). |
 | `yoyopod remote logs` | Tail yoyopod logs on the Pi. |
+| `yoyopod remote mode activate` | Activate dev or prod, stopping conflicting app and legacy services first. |
+| `yoyopod remote mode deactivate` | Deactivate one lane without enabling the other. |
+| `yoyopod remote mode status` | Show active lane, legacy services, manual processes, and OTA conflicts. |
 | `yoyopod remote power` | Query PiSugar state remotely. |
 | `yoyopod remote preflight` | Run host-side preflight checks (dirty tree + quality gate) before any remote work. |
 | `yoyopod remote release build-pi` | Build a self-contained release artifact on the Pi checkout and download it locally. |
@@ -30,10 +33,10 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod remote restart` | Restart the yoyopod app on the Pi. |
 | `yoyopod remote rtc` | Inspect or control PiSugar RTC remotely. |
 | `yoyopod remote screenshot` | Capture a screenshot from the Pi's display and copy it locally. |
-| `yoyopod remote service` | Manage the yoyopod@<user> systemd unit on the Pi. |
+| `yoyopod remote service` | Unsupported legacy yoyopod@ service manager. |
 | `yoyopod remote setup` | Run full Pi setup remotely. Flags forward to `yoyopod setup pi` on the target. |
 | `yoyopod remote status` | Show repo SHA, processes, and log tail on the Pi. |
-| `yoyopod remote sync` | Fetch + hard-reset branch on the Pi and restart the app (fast deploy). |
+| `yoyopod remote sync` | Update the dev lane checkout from Git and restart the dev app service. |
 | `yoyopod remote validate` | Run staged Pi validation. Pass --with-* to add optional stages. |
 | `yoyopod remote verify-setup` | Verify Pi setup remotely. Flags forward to `yoyopod setup verify-pi` on the target. |
 
@@ -63,6 +66,7 @@ For live help, use `yoyopod <cmd> --help`.
 
 | Command | What it does |
 |---|---|
+| `yoyopod build clean-native` | Remove mutable native CMake build dirs before a clean rebuild. |
 | `yoyopod build ensure-native` | Build missing or stale native shims required by the app. |
 | `yoyopod build liblinphone` | Build the native Liblinphone shim for the current platform. |
 | `yoyopod build lvgl` | Build the pinned LVGL shim for the current platform. |

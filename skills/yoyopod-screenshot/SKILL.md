@@ -10,7 +10,7 @@ argument-hint: "[--readback]"
 
 ## Config
 
-Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `yoyopod remote` merges them directly, and `yoyopod remote config edit` is the preferred way to create or update the local override.
+Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, dev lane checkout, and branch. Screenshots target the currently running lane; dev normally runs from `/opt/yoyopod-dev/checkout`, and prod runs from `/opt/yoyopod-prod/current`. `yoyopod remote` merges the config files directly.
 
 If the file does not exist yet, run `yoyopod remote config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
@@ -22,21 +22,26 @@ Parse the arguments string provided after `/yoyopod-screenshot`:
 
 ## Steps
 
-1. **Capture the screenshot to a temporary local PNG.** Run:
+1. **Check which lane owns the display.**
+   ```bash
+   yoyopod remote mode status
+   ```
+
+2. **Capture the screenshot to a temporary local PNG.** Run:
    ```bash
    yoyopod remote screenshot [--readback] --output <local_temp_path>
    ```
    Use a temporary local path such as `./pi_screenshot.png`.
 
-2. **Display the PNG.** Use the agent's local image viewing tool to show the saved screenshot in the conversation.
+3. **Display the PNG.** Use the agent's local image viewing tool to show the saved screenshot in the conversation.
 
-3. **Explain what was captured.** After showing the image:
+4. **Explain what was captured.** After showing the image:
    - Default mode: "This is the shadow buffer - what the app sent to the display."
    - `--readback`: "This is the requested LVGL readback path - what LVGL actually rendered if the native snapshot succeeded."
 
    Remind the user they can ask follow-up questions about what they see, such as "why is the status bar missing?" or "what screen is this?"
 
-4. **If the user is debugging screenshot fidelity, verify the capture path in logs.** Run:
+5. **If the user is debugging screenshot fidelity, verify the capture path in logs.** Run:
    ```bash
    yoyopod remote logs --lines 20
    ```
@@ -44,4 +49,4 @@ Parse the arguments string provided after `/yoyopod-screenshot`:
    - `Saved screenshot via LVGL readback` means the readback path succeeded.
    - `Saved screenshot via shadow buffer` means the capture used the shadow path instead.
 
-5. **Clean up.** Delete the temporary local screenshot file after displaying it.
+6. **Clean up.** Delete the temporary local screenshot file after displaying it.

@@ -82,6 +82,7 @@ app.add_typer(_setup.app, name="setup")
 from yoyopod_cli import (  # noqa: E402
     remote_config as _remote_config,
     remote_infra as _remote_infra,
+    remote_mode as _remote_mode,
     remote_ops as _remote_ops,
     remote_release as _remote_release,
     remote_setup as _remote_setup,
@@ -116,6 +117,9 @@ remote_app.add_typer(_remote_config.app, name="config")
 
 # release (slot-deploy push/rollback/status)
 remote_app.add_typer(_remote_release.app, name="release")
+
+# mode (dev/prod lane switch)
+remote_app.add_typer(_remote_mode.app, name="mode")
 
 app.add_typer(remote_app, name="remote")
 
@@ -161,10 +165,19 @@ def _deploy_shortcut(
     user: str = typer.Option("", "--user", envvar="YOYOPOD_PI_USER"),
     project_dir: str = typer.Option("", "--project-dir", envvar="YOYOPOD_PI_PROJECT_DIR"),
     branch: str = typer.Option("", "--branch", envvar="YOYOPOD_PI_BRANCH"),
+    clean_native: bool = typer.Option(
+        False,
+        "--clean-native",
+        help="Remove dev lane native build dirs before rebuilding after a branch switch.",
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """Sync code to the Pi and restart (alias for `remote sync`)."""
-    _remote_ops.sync(ctx=_with_connection(host, user, project_dir, branch), verbose=verbose)
+    """Update the dev lane checkout and restart (alias for `remote sync`)."""
+    _remote_ops.sync(
+        ctx=_with_connection(host, user, project_dir, branch),
+        clean_native=clean_native,
+        verbose=verbose,
+    )
 
 
 @app.command(name="status")
@@ -265,3 +278,7 @@ def docs() -> None:
     md = generate_commands_md(app)
     (HOST.repo_root / "yoyopod_cli" / "COMMANDS.md").write_text(md, encoding="utf-8")
     typer.echo("yoyopod_cli/COMMANDS.md regenerated.")
+
+
+if __name__ == "__main__":
+    run()

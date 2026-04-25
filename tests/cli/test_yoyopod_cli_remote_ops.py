@@ -6,7 +6,6 @@ from typer.testing import CliRunner
 
 from yoyopod_cli.remote_ops import (
     app,
-    _activate_script_path,
     _build_native_shim_refresh,
     _build_status,
     _build_restart,
@@ -15,10 +14,14 @@ from yoyopod_cli.remote_ops import (
     _build_startup_verification,
     _build_screenshot_alive_check,
     _build_screenshot_clear,
+    _build_screenshot_ready_check,
     _build_screenshot_signal,
     _build_screenshot_wait,
 )
 from yoyopod_cli.paths import PiPaths
+
+
+STALE_APP_PATTERN = r"pkill -f '[p]ython(3)? .*yoyopod(\.py|\.main)' || true"
 
 
 def test_build_status_includes_repo_sha_and_log_tail() -> None:
@@ -27,26 +30,69 @@ def test_build_status_includes_repo_sha_and_log_tail() -> None:
     assert "git rev-parse HEAD" in shell
     assert pi.log_file in shell
     assert pi.pid_file in shell
+    assert "linphonec" not in shell
 
 
-def test_build_restart_uses_configured_processes() -> None:
+def test_build_restart_uses_safe_stale_app_cleanup() -> None:
     pi = PiPaths(
         venv="venv",
         start_cmd="python yoyopod.py --simulate",
-        kill_processes=("python", "linphonec"),
+        kill_processes=("python", "stale-helper"),
     )
     shell = _build_restart(pi)
     assert "python" in shell
-    assert "linphonec" in shell
-    assert "pkill" in shell
+    assert "stale-helper" not in shell
+    assert STALE_APP_PATTERN in shell
     assert "systemctl cat" in shell
     assert "sudo systemctl start" in shell
-    assert "nohup python yoyopod.py --simulate" in shell
-    assert _activate_script_path(pi.venv) in shell
+    assert "nohup" not in shell
+    assert "source venv" not in shell
+    assert "python yoyopod.py --simulate" not in shell
     assert "venv/bin/python -m yoyopod_cli.main build ensure-native" in shell
     assert pi.pid_file in shell
     assert pi.log_file in shell
     assert pi.startup_marker in shell
+
+
+def test_build_restart_does_not_kill_remote_shell_with_broad_python_pattern() -> None:
+    shell = _build_restart(PiPaths(kill_processes=("python",)))
+
+    assert "pkill -f python" not in shell
+    assert "pkill -f 'python'" not in shell
+    assert STALE_APP_PATTERN in shell
+
+
+def test_build_restart_requires_dev_lane_service() -> None:
+    shell = _build_restart(PiPaths())
+
+    dev_probe = shell.index("systemctl cat yoyopod-dev.service")
+    dev_start = shell.index("sudo systemctl start yoyopod-dev.service")
+
+    assert dev_probe < dev_start
+    assert "dev lane service is not installed" in shell
+    assert "sudo systemctl reset-failed yoyopod-dev.service" in shell
+    assert "yoyopod@" not in shell
+
+
+def test_build_restart_only_starts_managed_service_for_selected_checkout() -> None:
+    shell = _build_restart(PiPaths())
+
+    assert 'selected_checkout="$(pwd -P)"' in shell
+    assert "/etc/default/yoyopod-dev" in shell
+    assert "YOYOPOD_DEV_CHECKOUT" in shell
+    assert "[ -f /etc/default/yoyopod ]" not in shell
+    assert "YOYOPOD_PROJECT_DIR" not in shell
+    assert '[ "$selected_checkout" != "$dev_service_checkout" ]' in shell
+    assert "selected checkout" in shell
+
+
+def test_build_restart_has_no_legacy_checkout_fallbacks() -> None:
+    shell = _build_restart(PiPaths())
+
+    assert "$HOME/yoyopod-core" not in shell
+    assert "$HOME/YoyoPod_Core" not in shell
+    assert "$HOME/yoyo-py" not in shell
+    assert "legacy_service_checkout" not in shell
 
 
 def test_build_native_shim_refresh_rebuilds_lvgl_and_liblinphone_when_stale() -> None:
@@ -108,8 +154,18 @@ def test_build_sync_includes_branch_and_restart() -> None:
         or "git checkout --force -B main origin/main" in shell
     )
     # sync ends with a restart pipeline
-    assert "pkill" in shell
+    assert STALE_APP_PATTERN in shell
     assert "grep -F" in shell
+
+
+def test_build_sync_can_clean_native_build_dirs_before_restart() -> None:
+    pi = PiPaths(venv="/opt/yoyopod-dev/venv")
+    shell = _build_sync(pi, branch="feature-x", clean_native=True)
+
+    clean_pos = shell.index("/opt/yoyopod-dev/venv/bin/python -m yoyopod_cli.main build clean-native")
+    ensure_pos = shell.index("/opt/yoyopod-dev/venv/bin/python -m yoyopod_cli.main build ensure-native")
+
+    assert clean_pos < ensure_pos
 
 
 def test_status_cli_invokes_run_remote(monkeypatch) -> None:
@@ -141,6 +197,23 @@ def test_build_screenshot_alive_check_uses_pid_file() -> None:
     assert "kill -0" in shell
     assert "ALIVE" in shell
     assert "DEAD" in shell
+
+
+def test_build_screenshot_ready_check_waits_for_current_pid_handlers() -> None:
+    pi = PiPaths()
+    shell = _build_screenshot_ready_check(pi, attempts=7)
+
+    assert "for _ in $(seq 1 7)" in shell
+    assert pi.pid_file in shell
+    assert "/proc/${pid_value}/status" in shell
+    assert "SigCgt" in shell
+    assert "0x200" in shell
+    assert "0x800" in shell
+    assert pi.log_file not in shell
+    assert pi.startup_marker not in shell
+    assert "Screenshot handlers installed" not in shell
+    assert "READY" in shell
+    assert "NOT_READY" in shell
 
 
 def test_build_screenshot_clear_removes_screenshot_path() -> None:
@@ -175,16 +248,18 @@ def test_build_screenshot_wait_polls_for_file() -> None:
     assert "MISSING" in shell
 
 
-def test_screenshot_aborts_when_app_is_dead(monkeypatch) -> None:
-    """Full CLI: app DEAD -> exit code 1, no SCP attempt."""
+def test_screenshot_aborts_when_app_is_not_ready(monkeypatch) -> None:
+    """Full CLI: app not ready -> exit code 1, no SCP attempt."""
     import types
 
     capture_calls: list[str] = []
+    capture_workdirs: list[str | None] = []
     scp_calls: list[list[str]] = []
 
-    def fake_capture(conn, cmd):
+    def fake_capture(conn, cmd, *, workdir=None):
         capture_calls.append(cmd)
-        return types.SimpleNamespace(returncode=0, stdout="DEAD\n", stderr="")
+        capture_workdirs.append(workdir)
+        return types.SimpleNamespace(returncode=1, stdout="NOT_READY\n", stderr="")
 
     def fake_scp(argv, check=False):
         scp_calls.append(list(argv))
@@ -197,22 +272,25 @@ def test_screenshot_aborts_when_app_is_dead(monkeypatch) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["screenshot"])
     assert result.exit_code == 1, result.output
-    # Only the alive-check ran; no scp
+    # Only the readiness check ran; no scp
     assert len(capture_calls) == 1
+    assert capture_workdirs == [None]
     assert len(scp_calls) == 0
 
 
 def test_screenshot_sends_sigusr2_by_default_and_scps_back(monkeypatch, tmp_path) -> None:
-    """Happy path: app ALIVE, clear ok, signal ok, file READY, scp succeeds."""
+    """Happy path: app ready, clear ok, signal ok, file READY, scp succeeds."""
     import types
 
     capture_calls: list[str] = []
+    capture_workdirs: list[str | None] = []
     scp_calls: list[list[str]] = []
 
-    def fake_capture(conn, cmd):
+    def fake_capture(conn, cmd, *, workdir=None):
         capture_calls.append(cmd)
-        if "kill -0" in cmd:
-            return types.SimpleNamespace(returncode=0, stdout="ALIVE\n", stderr="")
+        capture_workdirs.append(workdir)
+        if "SigCgt" in cmd:
+            return types.SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
         if cmd.startswith("rm -f"):
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
         if "kill -USR" in cmd:
@@ -233,8 +311,9 @@ def test_screenshot_sends_sigusr2_by_default_and_scps_back(monkeypatch, tmp_path
     runner = CliRunner()
     result = runner.invoke(app, ["screenshot", "--out", str(out_path)])
     assert result.exit_code == 0, result.output
-    # 4 capture steps: alive, clear, signal, wait
+    # 4 capture steps: readiness, clear, signal, wait
     assert len(capture_calls) == 4
+    assert capture_workdirs == [None, None, None, None]
     # Default signal is USR2 (shadow buffer)
     assert any("kill -USR2" in c for c in capture_calls)
     assert not any("kill -USR1" in c for c in capture_calls)
@@ -248,11 +327,13 @@ def test_screenshot_readback_uses_sigusr1(monkeypatch, tmp_path) -> None:
     import types
 
     capture_calls: list[str] = []
+    capture_workdirs: list[str | None] = []
 
-    def fake_capture(conn, cmd):
+    def fake_capture(conn, cmd, *, workdir=None):
         capture_calls.append(cmd)
-        if "kill -0" in cmd:
-            return types.SimpleNamespace(returncode=0, stdout="ALIVE\n", stderr="")
+        capture_workdirs.append(workdir)
+        if "SigCgt" in cmd:
+            return types.SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
         if cmd.startswith("rm -f"):
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
         if "kill -USR" in cmd:
@@ -271,5 +352,6 @@ def test_screenshot_readback_uses_sigusr1(monkeypatch, tmp_path) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["screenshot", "--readback", "--out", str(tmp_path / "out.png")])
     assert result.exit_code == 0, result.output
+    assert capture_workdirs == [None, None, None, None]
     assert any("kill -USR1" in c for c in capture_calls)
     assert not any("kill -USR2" in c for c in capture_calls)

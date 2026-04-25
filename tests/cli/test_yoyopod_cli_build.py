@@ -31,6 +31,13 @@ def test_ensure_native_help() -> None:
     assert "native" in result.output.lower()
 
 
+def test_clean_native_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["clean-native", "--help"])
+    assert result.exit_code == 0
+    assert "native" in result.output.lower()
+
+
 def test_simulation_help() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["simulation", "--help"])
@@ -207,3 +214,24 @@ def test_ensure_native_shims_skips_current_artifacts(
     rebuilt = build_cli._ensure_native_shims()
 
     assert rebuilt == ()
+
+
+def test_clean_native_build_dirs_removes_mutable_cmake_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lvgl_native = tmp_path / "lvgl-native"
+    lib_native = tmp_path / "liblinphone-native"
+    for native_dir in (lvgl_native, lib_native):
+        build_dir = native_dir / "build"
+        build_dir.mkdir(parents=True)
+        (build_dir / "CMakeCache.txt").write_text("stale\n", encoding="utf-8")
+
+    monkeypatch.setattr(build_cli, "_resolve_lvgl_native_dir", lambda: lvgl_native)
+    monkeypatch.setattr(build_cli, "_resolve_liblinphone_native_dir", lambda: lib_native)
+
+    removed = build_cli._clean_native_build_dirs()
+
+    assert removed == (lvgl_native / "build", lib_native / "build")
+    assert not (lvgl_native / "build").exists()
+    assert not (lib_native / "build").exists()

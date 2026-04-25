@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import subprocess
 import types
 
 from typer.testing import CliRunner
@@ -23,6 +24,20 @@ def test_version_flag_present() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert __version__ in result.output
+
+
+def test_module_invocation_dispatches_cli_subcommands() -> None:
+    """Pi-side `python -m yoyopod_cli.main ...` must not silently no-op."""
+    result = subprocess.run(
+        [sys.executable, "-m", "yoyopod_cli.main", "build", "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0
+    assert "ensure-native" in result.stdout
 
 
 def test_bare_invocation_propagates_launch_app_exit_code(monkeypatch) -> None:

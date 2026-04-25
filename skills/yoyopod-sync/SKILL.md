@@ -9,7 +9,7 @@ allowed-tools:
 
 ## Config
 
-Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, and the stable Pi `project_dir`. `yoyopod remote` merges them directly, and `yoyopod remote config edit` is the preferred way to create or update the local override.
+Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, and the dev lane checkout. The tracked dev default is `project_dir: /opt/yoyopod-dev/checkout`; prod slots live under `/opt/yoyopod-prod`. `yoyopod remote` merges the files directly, and `yoyopod remote config edit` is the preferred way to create or update the local override.
 
 If the file does not exist yet, run `yoyopod remote config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
@@ -17,20 +17,31 @@ If the file does not exist yet, run `yoyopod remote config edit` first. That com
 
 1. **Confirm this is really a dirty-tree override.** Only use this skill if the user explicitly wants to validate uncommitted local state or asks for a dirty-tree debugging shortcut. Otherwise stop and recommend `/yoyopod-deploy`.
 
-2. **Sync the dirty working tree.** Run:
+2. **Switch the board into the dev lane.** Run:
+   ```bash
+   yoyopod remote mode status
+   yoyopod remote mode activate dev
+   ```
+
+3. **Sync the dirty working tree into `/opt/yoyopod-dev/checkout`.** Run:
    ```bash
    yoyopod remote sync
    ```
 
-3. **If the user explicitly wants sync without restart,** run:
+4. **If branch switching may have stale native CMake caches,** run:
+   ```bash
+   yoyopod remote sync --clean-native
+   ```
+
+5. **If the user explicitly wants sync without restart,** run:
    ```bash
    yoyopod remote sync --skip-restart
    ```
 
-4. **Handle failures.** If the sync or restart step fails, run:
+6. **Handle failures.** If the sync or restart step fails, run:
    ```bash
    yoyopod remote logs --lines 20
    ```
    Include the relevant error output in your response.
 
-5. **Report the result clearly.** Say that this was a dirty-tree validation override, not the normal committed branch/SHA workflow.
+7. **Report the result clearly.** Say that this mutated the dev lane checkout, was a dirty-tree validation override, and was not the normal committed branch/SHA workflow.

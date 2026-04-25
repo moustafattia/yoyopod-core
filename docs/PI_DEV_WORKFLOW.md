@@ -3,9 +3,10 @@
 This guide covers the normal dev-machine-to-board loop for YoYoPod.
 
 If the board is already on the slot-deploy path, read
-[`docs/SLOT_DEPLOY.md`](SLOT_DEPLOY.md) alongside this file. That document covers
-fresh-board bootstrap, migration from `~/yoyopod-core`, rollback, and the
-operator-facing release flow under `/opt/yoyopod`.
+[`docs/DEV_PROD_LANES.md`](DEV_PROD_LANES.md) and
+[`docs/SLOT_DEPLOY.md`](SLOT_DEPLOY.md) alongside this file. Those documents
+cover fresh-board bootstrap, migration from `~/yoyopod-core`, rollback, and the
+operator-facing release flow under `/opt/yoyopod-prod`.
 
 The default contract is:
 
@@ -17,14 +18,22 @@ The default contract is:
 
 Dirty-tree sync still exists, but only as a rare debugging override.
 
+Terminology in this guide is intentional:
+
+- `remote sync` updates the **dev lane** checkout and restarts `yoyopod-dev.service`.
+- `remote release ...` updates the **prod lane** slot tree under `/opt/yoyopod-prod`.
+- `remote mode status` should be checked before lane flips or hardware debugging.
+
 ## Stable Board Checkout
 
-The Raspberry Pi should reuse one stable checkout path, configured by `project_dir` in `deploy/pi-deploy.yaml`.
+The Raspberry Pi should reuse one stable dev checkout path, configured by
+`project_dir` in `deploy/pi-deploy.yaml`. The tracked default is
+`/opt/yoyopod-dev/checkout`.
 
 Exception: `yoyopod remote release ...` no longer needs that checkout after the
 board has been bootstrapped for slot deploy. The checkout is still required for
-the legacy `remote sync`, `remote validate`, and `remote setup` flows described
-in this guide, but those legacy flows now use the checkout-local `.venv`
+the dev-lane `remote sync`, `remote validate`, and `remote setup` flows
+described in this guide, but those flows use the checkout-local `.venv`
 directly and do not require `uv` to be installed on the Pi.
 
 Why this is the default:
@@ -85,19 +94,18 @@ Optional environment defaults:
 
 ```bash
 export YOYOPOD_PI_HOST=rpi-zero
-export YOYOPOD_PI_PROJECT_DIR=~/yoyopod-core
+export YOYOPOD_PI_PROJECT_DIR=/opt/yoyopod-dev/checkout
 ```
 
 On Windows PowerShell:
 
 ```powershell
 $env:YOYOPOD_PI_HOST="rpi-zero"
-$env:YOYOPOD_PI_PROJECT_DIR="~/yoyopod-core"
+$env:YOYOPOD_PI_PROJECT_DIR="/opt/yoyopod-dev/checkout"
 ```
 
 If your actual deployed board uses a different stable checkout path, set that in
-your local override instead of assuming the repo default. For example, the live
-`piz` board in this environment uses `~/yoyopod-core`.
+your local override instead of assuming the repo default.
 
 ## Default Validate-On-Board Flow
 
@@ -126,6 +134,16 @@ Use this when validating a feature branch or PR on target hardware.
    ```bash
    yoyopod remote validate --branch <branch> --sha <commit>
    ```
+
+If you are switching across branches that touch native LVGL or Liblinphone shim
+sources, clean mutable native CMake caches before the dev restart:
+
+```bash
+yoyopod remote sync --branch <branch> --clean-native
+```
+
+If `yoyopod remote mode status` reports `active_lane=conflict`, resolve the
+listed legacy/manual owner before trusting audio, display, or VoIP behavior.
 
 Useful variations:
 
@@ -298,16 +316,17 @@ input side is still alive and the stall is likely between input delivery and the
 thread. If both are stale and `loop_heartbeat_age_seconds` is also stale, treat it as a broader
 runtime stall.
 
-### Production systemd service
+### Lane systemd services
 
 ```bash
-yoyopod remote service status
-yoyopod remote service install
-yoyopod remote service restart
-yoyopod remote service logs --lines 150
+yoyopod remote mode status
+yoyopod remote mode activate dev
+yoyopod remote mode activate prod
 ```
 
-This installs `deploy/systemd/yoyopod@.service` onto the Pi as `yoyopod@<remote-user>.service`, enables it at boot, and records the merged `project_dir` in `/etc/default/yoyopod` so the service follows the same stable checkout path.
+`yoyopod remote service ...` is intentionally unsupported now. Use
+`yoyopod-dev.service` for mutable hardware testing and `yoyopod-prod.service`
+for packaged slot releases.
 
 ### PiSugar helpers
 
@@ -388,6 +407,6 @@ yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-nav
 
 - `yoyopod remote validate` is the default board-validation contract for branches and PRs.
 - `yoyopod remote preflight` is intentionally non-launching.
-- `yoyopod remote service install` expects passwordless `sudo` or an interactive sudo policy on the Pi.
+- `yoyopod remote service ...` is a hard-cut legacy command; bootstrap and lane activation own systemd now.
 - `yoyopod remote sync` used as a dirty-tree override is a debugging escape hatch, not the normal deploy story.
 - For deeper hardware debugging, use `docs/RPI_SMOKE_VALIDATION.md`.

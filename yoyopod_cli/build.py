@@ -223,6 +223,27 @@ def _native_artifacts() -> tuple[NativeArtifact, ...]:
     )
 
 
+def _native_build_dirs() -> tuple[Path, ...]:
+    """Return mutable CMake build directories for native shims."""
+
+    return (
+        _resolve_lvgl_native_dir() / "build",
+        _resolve_liblinphone_native_dir() / "build",
+    )
+
+
+def _clean_native_build_dirs() -> tuple[Path, ...]:
+    """Remove mutable native CMake build dirs and return the dirs removed."""
+
+    removed: list[Path] = []
+    for build_dir in _native_build_dirs():
+        if not build_dir.exists():
+            continue
+        shutil.rmtree(build_dir)
+        removed.append(build_dir)
+    return tuple(removed)
+
+
 def _ensure_native_shims(*, skip_lvgl_fetch: bool = False) -> tuple[str, ...]:
     """Build missing or stale native shims and return the labels that were rebuilt."""
 
@@ -315,6 +336,18 @@ def ensure_native(
         typer.echo(f"Ensured native shims: {', '.join(rebuilt)}")
         return
     typer.echo("Native shims already current")
+
+
+@app.command("clean-native")
+def clean_native() -> None:
+    """Remove mutable native CMake build dirs before a clean rebuild."""
+
+    removed = _clean_native_build_dirs()
+    if removed:
+        for path in removed:
+            typer.echo(f"Removed native build dir: {path}")
+        return
+    typer.echo("Native build dirs already clean")
 
 
 @app.command("simulation")
