@@ -1,0 +1,149 @@
+"""Round-trip and error-path tests for the sidecar wire protocol."""
+
+from __future__ import annotations
+
+import multiprocessing
+from multiprocessing.connection import Connection
+
+import pytest
+
+from yoyopod.integrations.call.sidecar_protocol import (
+    Accept,
+    CallStateChanged,
+    Dial,
+    Error,
+    Hangup,
+    Hello,
+    IncomingCall,
+    Log,
+    MediaStateChanged,
+    Ping,
+    Pong,
+    PROTOCOL_VERSION,
+    ProtocolError,
+    Ready,
+    Register,
+    RegistrationStateChanged,
+    Reject,
+    SetMute,
+    SetVolume,
+    Shutdown,
+    Unregister,
+    decode_command,
+    decode_event,
+    encode,
+    recv_command,
+    recv_event,
+    send_message,
+)
+
+
+def test_protocol_version_is_pinned() -> None:
+    assert PROTOCOL_VERSION == 1
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        Hello(version=1, capabilities=("voip", "messaging")),
+        Register(server="sip.example.com", user="alice", password="hunter2", cmd_id=7),
+        Unregister(),
+        Dial(uri="sip:bob@example.com", cmd_id=42),
+        Accept(call_id="c-1", cmd_id=8),
+        Reject(call_id="c-2"),
+        Hangup(call_id="c-3", cmd_id=9),
+        SetMute(call_id="c-4", on=True),
+        SetVolume(call_id="c-5", level=0.6, cmd_id=10),
+        Ping(cmd_id=11),
+        Shutdown(),
+    ],
+)
+def test_command_round_trip(message: object) -> None:
+    decoded = decode_command(encode(message))
+    assert decoded == message
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        Hello(version=1, capabilities=()),
+        Ready(),
+        RegistrationStateChanged(state="registered", reason=None),
+        RegistrationStateChanged(state="failed", reason="invalid_credentials"),
+        IncomingCall(call_id="c-1", from_uri="sip:bob@example.com", from_display="Bob"),
+        CallStateChanged(call_id="c-2", state="active"),
+        MediaStateChanged(call_id="c-3", mic_muted=True, speaker_volume=0.8),
+        Pong(cmd_id=11),
+        Error(code="invalid_state", message="not registered", cmd_id=42),
+        Log(level="WARNING", message="degraded media"),
+    ],
+)
+def test_event_round_trip(message: object) -> None:
+    decoded = decode_event(encode(message))
+    assert decoded == message
+
+
+def test_unknown_command_type_raises() -> None:
+    payload = encode(Ready())  # Ready is an event, not a command
+    with pytest.raises(ProtocolError, match="Unknown command type"):
+        decode_command(payload)
+
+
+def test_unknown_event_type_raises() -> None:
+    payload = encode(Register(server="x", user="y", password="z"))
+    with pytest.raises(ProtocolError, match="Unknown event type"):
+        decode_event(payload)
+
+
+def test_malformed_payload_raises() -> None:
+    import msgpack
+
+    junk = msgpack.packb({"not_a_message": True})
+    with pytest.raises(ProtocolError, match="Malformed"):
+        decode_command(junk)
+
+
+def test_send_and_recv_command_over_pipe() -> None:
+    parent_conn: Connection
+    child_conn: Connection
+    parent_conn, child_conn = multiprocessing.Pipe(duplex=True)
+    try:
+        send_message(parent_conn, Register(server="s", user="u", password="p", cmd_id=1))
+        send_message(parent_conn, Dial(uri="sip:peer@s", cmd_id=2))
+
+        first = recv_command(child_conn)
+        second = recv_command(child_conn)
+
+        assert first == Register(server="s", user="u", password="p", cmd_id=1)
+        assert second == Dial(uri="sip:peer@s", cmd_id=2)
+    finally:
+        parent_conn.close()
+        child_conn.close()
+
+
+def test_send_and_recv_event_over_pipe() -> None:
+    parent_conn: Connection
+    child_conn: Connection
+    parent_conn, child_conn = multiprocessing.Pipe(duplex=True)
+    try:
+        send_message(child_conn, Ready())
+        send_message(
+            child_conn,
+            RegistrationStateChanged(state="registered", reason=None),
+        )
+
+        first = recv_event(parent_conn)
+        second = recv_event(parent_conn)
+
+        assert first == Ready()
+        assert second == RegistrationStateChanged(state="registered", reason=None)
+    finally:
+        parent_conn.close()
+        child_conn.close()
+
+
+def test_hello_capabilities_preserves_tuple_type() -> None:
+    payload = encode(Hello(version=1, capabilities=("voip", "messaging")))
+    decoded = decode_command(payload)
+    assert isinstance(decoded.capabilities, tuple)
+    assert decoded.capabilities == ("voip", "messaging")
