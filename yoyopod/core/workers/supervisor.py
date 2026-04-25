@@ -119,13 +119,12 @@ class WorkerSupervisor:
             if runtime is None:
                 continue
             self._expire_requests(domain, slot, now=now)
-            if remaining_message_budget <= 0:
-                continue
-            messages = runtime.drain_messages(limit=remaining_message_budget)
-            processed += len(messages)
-            remaining_message_budget -= len(messages)
-            for message in messages:
-                self._publish_message(domain, slot, message)
+            if remaining_message_budget > 0:
+                messages = runtime.drain_messages(limit=remaining_message_budget)
+                processed += len(messages)
+                remaining_message_budget -= len(messages)
+                for message in messages:
+                    self._publish_message(domain, slot, message)
             if not runtime.running and slot.state == "running":
                 self._handle_exit(domain, slot, now=now)
             if (

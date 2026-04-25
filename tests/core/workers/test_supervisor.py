@@ -443,6 +443,106 @@ def test_supervisor_caps_published_worker_messages_per_poll() -> None:
     assert [message.payload["index"] for message in worker_messages] == [2]
 
 
+def test_supervisor_checks_exit_and_restart_even_when_message_budget_is_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    restart_calls: list[tuple[str, float]] = []
+    supervisor = WorkerSupervisor(
+        scheduler=scheduler,
+        bus=bus,
+        max_messages_per_poll=1,
+    )
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    supervisor.register("network", WorkerProcessConfig(name="network", argv=["unused"]))
+    supervisor.register("cloud", WorkerProcessConfig(name="cloud", argv=["unused"]))
+
+    voice_messages = [
+        make_envelope(
+            kind="event",
+            type="voice.event",
+            request_id=None,
+            payload={"index": 0},
+        )
+    ]
+    voice_runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: voice_messages[: (limit or len(voice_messages))],
+            send_command=lambda **_kwargs: True,
+            start=lambda: None,
+            snapshot=lambda: SimpleNamespace(
+                running=True,
+                pid=1,
+                received_messages=1,
+                protocol_errors=0,
+                dropped_messages=0,
+                sent_messages=0,
+                queued_sends=0,
+                dropped_sends=0,
+                send_failures=0,
+            ),
+        ),
+    )
+    exited_runtime = cast(
+        object,
+        SimpleNamespace(
+            running=False,
+            drain_messages=lambda limit=None: [],
+            send_command=lambda **_kwargs: True,
+            snapshot=lambda: SimpleNamespace(
+                running=False,
+                pid=2,
+                received_messages=0,
+                protocol_errors=0,
+                dropped_messages=0,
+                sent_messages=0,
+                queued_sends=0,
+                dropped_sends=0,
+                send_failures=0,
+            ),
+        ),
+    )
+    degraded_runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [],
+            send_command=lambda **_kwargs: True,
+            snapshot=lambda: SimpleNamespace(
+                running=True,
+                pid=3,
+                received_messages=0,
+                protocol_errors=0,
+                dropped_messages=0,
+                sent_messages=0,
+                queued_sends=0,
+                dropped_sends=0,
+                send_failures=0,
+            ),
+        ),
+    )
+    supervisor._workers["voice"].runtime = voice_runtime
+    supervisor._workers["voice"].state = "running"
+    supervisor._workers["network"].runtime = exited_runtime
+    supervisor._workers["network"].state = "running"
+    supervisor._workers["cloud"].runtime = degraded_runtime
+    supervisor._workers["cloud"].state = "degraded"
+    supervisor._workers["cloud"].next_restart_at = 1.0
+
+    def restart_if_allowed(domain: str, slot, *, now: float) -> None:
+        restart_calls.append((domain, now))
+
+    monkeypatch.setattr(supervisor, "_restart_if_allowed", restart_if_allowed)
+
+    supervisor.poll(monotonic_now=1.0)
+
+    assert supervisor._workers["network"].state == "degraded"
+    assert restart_calls == [("cloud", 1.0)]
+
+
 def test_supervisor_rejects_duplicate_start_without_replacing_runtime(tmp_path: Path) -> None:
     worker = _write_worker(
         tmp_path,
