@@ -23,6 +23,7 @@ class _WorkerSlot:
     state: str = "stopped"
     restart_count: int = 0
     next_restart_at: float = 0.0
+    request_types: dict[str, str] = field(default_factory=dict)
     request_deadlines: dict[str, float] = field(default_factory=dict)
     request_attempts: dict[str, int] = field(default_factory=dict)
     stale_request_ids: dict[str, float] = field(default_factory=dict)
@@ -91,12 +92,14 @@ class WorkerSupervisor:
             runtime.start()
         except Exception:
             slot.next_restart_at = 0.0
+            slot.request_types.clear()
             slot.request_attempts.clear()
             slot.stale_request_ids.clear()
             self._set_state(domain, slot, "degraded", failure_reason)
             return False
         slot.runtime = runtime
         slot.next_restart_at = 0.0
+        slot.request_types.clear()
         slot.request_attempts.clear()
         slot.stale_request_ids.clear()
         self._set_state(domain, slot, "running", state_reason)
@@ -108,6 +111,7 @@ class WorkerSupervisor:
         for domain, slot in self._workers.items():
             if slot.runtime is not None:
                 slot.runtime.stop(grace_seconds=grace_seconds)
+            slot.request_types.clear()
             slot.request_deadlines.clear()
             slot.request_attempts.clear()
             slot.stale_request_ids.clear()
@@ -191,6 +195,7 @@ class WorkerSupervisor:
             deadline_ms=int(timeout_seconds * 1000),
         )
         if sent:
+            slot.request_types[request_id] = type
             slot.request_attempts[request_id] = request_attempt
             slot.stale_request_ids.pop(request_id, None)
             slot.request_deadlines[request_id] = time.monotonic() + timeout_seconds
@@ -257,17 +262,13 @@ class WorkerSupervisor:
     ) -> None:
         if not self._matches_active_request_attempt(slot, message):
             return
-        if (
-            message.request_id is not None
-            and self._is_timeout_cancel_ack(domain, message)
-            and message.request_id in slot.request_deadlines
-            and message.request_id not in slot.stale_request_ids
-        ):
+        if self._should_drop_active_cancel_ack(domain, slot, message):
             return
         if message.request_id is not None and message.request_id in slot.stale_request_ids:
             if not self._is_timeout_cancel_ack(domain, message):
                 return
         if message.request_id is not None and self._is_terminal_request_reply(domain, message):
+            slot.request_types.pop(message.request_id, None)
             slot.request_deadlines.pop(message.request_id, None)
             slot.request_attempts.pop(message.request_id, None)
         self._bus.publish(
@@ -299,6 +300,7 @@ class WorkerSupervisor:
                 )
 
     def _handle_exit(self, domain: str, slot: _WorkerSlot, *, now: float) -> None:
+        slot.request_types.clear()
         slot.request_deadlines.clear()
         slot.request_attempts.clear()
         slot.stale_request_ids.clear()
@@ -314,6 +316,7 @@ class WorkerSupervisor:
         for request_id in expired_stale_ids:
             slot.stale_request_ids.pop(request_id, None)
             if request_id not in slot.request_deadlines:
+                slot.request_types.pop(request_id, None)
                 slot.request_attempts.pop(request_id, None)
 
     def _is_timeout_cancel_ack(self, domain: str, message: WorkerEnvelope) -> bool:
@@ -323,6 +326,19 @@ class WorkerSupervisor:
         if self._is_timeout_cancel_ack(domain, message):
             return True
         return message.kind in {"result", "error"}
+
+    def _should_drop_active_cancel_ack(
+        self,
+        domain: str,
+        slot: _WorkerSlot,
+        message: WorkerEnvelope,
+    ) -> bool:
+        request_id = message.request_id
+        if request_id is None or not self._is_timeout_cancel_ack(domain, message):
+            return False
+        if request_id not in slot.request_deadlines or request_id in slot.stale_request_ids:
+            return False
+        return slot.request_types.get(request_id) != f"{domain}.cancel"
 
     def _rotate_worker_items(
         self, worker_items: list[tuple[str, _WorkerSlot]]
@@ -344,8 +360,8 @@ class WorkerSupervisor:
         if active_attempt is None:
             return True
         message_attempt = message.payload.get(self._REQUEST_ATTEMPT_PAYLOAD_KEY)
-        if active_attempt <= 1:
-            return message_attempt is None or message_attempt == active_attempt
+        if message_attempt is None:
+            return True
         return message_attempt == active_attempt
 
     def _public_payload(self, message: WorkerEnvelope) -> dict[str, Any]:

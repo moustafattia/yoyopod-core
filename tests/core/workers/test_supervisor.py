@@ -352,6 +352,68 @@ def test_supervisor_accepts_retry_with_same_request_id_after_timeout() -> None:
     assert slot.stale_request_ids == {}
 
 
+def test_supervisor_accepts_retry_reply_without_private_attempt_marker() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    sent_commands: list[dict[str, object]] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [],
+            send_command=lambda **kwargs: sent_commands.append(kwargs) or True,
+        ),
+    )
+    slot = supervisor._workers["voice"]
+    slot.runtime = runtime
+    slot.state = "running"
+    slot.request_deadlines["req-retry"] = 1.0
+
+    supervisor.poll(monotonic_now=2.0)
+
+    assert supervisor.send_request(
+        "voice",
+        type="voice.transcribe",
+        payload={"path": "/tmp/retry.wav"},
+        request_id="req-retry",
+        timeout_seconds=10.0,
+    )
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [
+                make_envelope(
+                    kind="result",
+                    type="voice.transcribe",
+                    request_id="req-retry",
+                    payload={"text": "retry ok"},
+                )
+            ],
+            send_command=lambda **_kwargs: True,
+        ),
+    )
+
+    supervisor.poll(monotonic_now=2.1)
+    bus.drain()
+
+    assert message_events == [
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="result",
+            type="voice.transcribe",
+            request_id="req-retry",
+            payload={"text": "retry ok"},
+        )
+    ]
+    assert "req-retry" not in slot.request_deadlines
+    assert "req-retry" not in slot.request_attempts
+
+
 def test_supervisor_ignores_late_cancel_ack_after_retry_reuses_request_id() -> None:
     bus = Bus()
     scheduler = MainThreadScheduler()
@@ -559,6 +621,55 @@ def test_supervisor_keeps_request_tracking_for_non_terminal_worker_event() -> No
     ]
     assert slot.request_deadlines["req-progress"] == pytest.approx(10.0)
     assert slot.request_attempts["req-progress"] == 1
+
+
+def test_supervisor_delivers_active_cancel_ack_for_explicit_cancel_request() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    slot = supervisor._workers["voice"]
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [
+                make_envelope(
+                    kind="result",
+                    type="voice.cancelled",
+                    request_id="req-cancel",
+                    payload={"cancelled": True},
+                )
+            ],
+            send_command=lambda **_kwargs: True,
+        ),
+    )
+    slot.state = "running"
+
+    assert supervisor.send_request(
+        "voice",
+        type="voice.cancel",
+        payload={"request_id": "req-target"},
+        request_id="req-cancel",
+        timeout_seconds=10.0,
+    )
+
+    supervisor.poll(monotonic_now=1.0)
+    bus.drain()
+
+    assert message_events == [
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="result",
+            type="voice.cancelled",
+            request_id="req-cancel",
+            payload={"cancelled": True},
+        )
+    ]
+    assert "req-cancel" not in slot.request_deadlines
+    assert "req-cancel" not in slot.request_attempts
 
 
 def test_supervisor_caps_published_worker_messages_per_poll() -> None:
