@@ -66,6 +66,7 @@ class ScreenManager:
         action_scheduler: Optional[Callable[[Callable[[], None]], None]] = None,
         on_action_handled: Optional[Callable[[Optional[str], float], None]] = None,
         on_visible_refresh: Optional[Callable[[float], None]] = None,
+        is_screen_visible: Optional[Callable[[], bool]] = None,
     ) -> None:
         """
         Initialize the screen manager.
@@ -84,6 +85,7 @@ class ScreenManager:
         self.action_scheduler = action_scheduler
         self.on_action_handled = on_action_handled
         self.on_visible_refresh = on_visible_refresh
+        self.is_screen_visible = is_screen_visible
         self._navigation_refresh_pending = False
         self._input_dispatch_registered = False
 
@@ -219,7 +221,7 @@ class ScreenManager:
             if callable(refresh_for_visible_tick):
                 refresh_for_visible_tick()
             self.current_screen.render()
-            if self.on_visible_refresh is not None:
+            if self.on_visible_refresh is not None and self._is_screen_visible():
                 self.on_visible_refresh(refreshed_at=time.monotonic())
             self._warn_if_slow(
                 "refresh_current_screen",
@@ -367,6 +369,12 @@ class ScreenManager:
             return
         route_name = self.current_screen.route_name if self.current_screen else None
         self.on_screen_changed(route_name)
+
+    def _is_screen_visible(self) -> bool:
+        """Return whether a refresh can be counted as visible to the user."""
+        if self.is_screen_visible is None:
+            return True
+        return self.is_screen_visible()
 
     def _refresh_after_navigation(self) -> None:
         """Refresh immediately or defer to the LVGL pump after a navigation change."""

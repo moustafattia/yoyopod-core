@@ -281,6 +281,37 @@ def test_screen_manager_reports_actual_action_and_visible_refresh() -> None:
         display.cleanup()
 
 
+def test_screen_manager_skips_visible_refresh_metric_when_display_asleep() -> None:
+    """A render while asleep should not consume the pending visible-refresh marker."""
+    display = Display(simulate=True)
+    input_manager = InputManager()
+    visible_refreshes: list[float] = []
+
+    def record_visible_refresh(*, refreshed_at: float) -> None:
+        visible_refreshes.append(refreshed_at)
+
+    screen_manager = ScreenManager(
+        display,
+        input_manager,
+        on_visible_refresh=record_visible_refresh,
+        is_screen_visible=lambda: False,
+    )
+    screen = _ActionRecordingScreen(display)
+    screen_manager.register_screen("action", screen)
+
+    try:
+        screen_manager.replace_screen("action")
+        visible_refreshes.clear()
+
+        input_manager.simulate_action(InputAction.SELECT)
+
+        assert screen.select_calls == 1
+        assert visible_refreshes == []
+        assert screen.render_calls >= 2
+    finally:
+        display.cleanup()
+
+
 def test_screen_base_requires_semantic_handlers_only() -> None:
     """The base Screen contract should not expose legacy button-named handlers."""
     display = Display(simulate=True)

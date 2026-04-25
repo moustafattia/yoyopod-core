@@ -215,6 +215,38 @@ def test_supervisor_drops_late_result_after_request_timeout() -> None:
     assert message_events == []
 
 
+def test_supervisor_drops_stale_cancelled_payload_without_cancel_ack_type() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    slot = supervisor._workers["voice"]
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda: [
+                make_envelope(
+                    kind="result",
+                    type="voice.transcribe",
+                    request_id="req-timeout",
+                    payload={"cancelled": True, "text": "late"},
+                )
+            ],
+            send_command=lambda **_kwargs: False,
+        ),
+    )
+    slot.state = "running"
+    slot.stale_request_ids["req-timeout"] = 30.0
+
+    supervisor.poll(monotonic_now=2.0)
+    bus.drain()
+
+    assert message_events == []
+
+
 def test_supervisor_expires_request_before_processing_late_result_in_same_poll() -> None:
     bus = Bus()
     scheduler = MainThreadScheduler()

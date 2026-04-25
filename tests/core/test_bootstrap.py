@@ -142,6 +142,7 @@ class _FakeApp:
         self.call_interruption_policy = None
         self._lvgl_backend = None
         self._lvgl_input_bridge = None
+        self._screen_awake = True
 
     def note_input_activity(self, _data=None) -> None:
         return None
@@ -254,18 +255,21 @@ def test_init_core_components_schedules_screen_actions_for_lvgl_backend(monkeypa
         action_scheduler=None,
         on_action_handled=None,
         on_visible_refresh=None,
+        is_screen_visible=None,
     ):
         captured["display"] = display
         captured["input_manager"] = input_manager
         captured["action_scheduler"] = action_scheduler
         captured["on_action_handled"] = on_action_handled
         captured["on_visible_refresh"] = on_visible_refresh
+        captured["is_screen_visible"] = is_screen_visible
         return SimpleNamespace(
             display=display,
             input_manager=input_manager,
             action_scheduler=action_scheduler,
             on_action_handled=on_action_handled,
             on_visible_refresh=on_visible_refresh,
+            is_screen_visible=is_screen_visible,
         )
 
     monkeypatch.setattr(boot_module, "ScreenManager", _capture_screen_manager)
@@ -280,6 +284,7 @@ def test_init_core_components_schedules_screen_actions_for_lvgl_backend(monkeypa
     assert captured["on_action_handled"].__func__ is _FakeApp.note_handled_input
     assert captured["on_visible_refresh"].__self__ is app
     assert captured["on_visible_refresh"].__func__ is _FakeApp.note_visible_refresh
+    assert captured["is_screen_visible"]() is True
     assert fake_input_manager.started is True
 
 

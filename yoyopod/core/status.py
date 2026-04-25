@@ -24,6 +24,12 @@ class RuntimeLatencySample:
     recorded_at: float
 
 
+@dataclass(frozen=True, slots=True)
+class _InputActivityMarker:
+    action_name: str | None
+    captured_at: float
+
+
 class RuntimeMetricsStore:
     """Track small runtime markers that status and diagnostics need to read."""
 
@@ -39,6 +45,7 @@ class RuntimeMetricsStore:
         self.last_responsiveness_capture_artifacts: dict[str, str] = {}
         self._input_to_action_samples: deque[RuntimeLatencySample] = deque(maxlen=256)
         self._action_to_visible_samples: deque[RuntimeLatencySample] = deque(maxlen=256)
+        self._pending_input_activities: deque[_InputActivityMarker] = deque(maxlen=256)
         self._last_handled_input_for_refresh_at = 0.0
         self._last_handled_input_for_refresh_action_name: str | None = None
 
@@ -53,6 +60,12 @@ class RuntimeMetricsStore:
 
         self.last_input_activity_at = time.monotonic() if captured_at is None else captured_at
         self.last_input_activity_action_name = getattr(action, "value", None)
+        self._pending_input_activities.append(
+            _InputActivityMarker(
+                action_name=self.last_input_activity_action_name,
+                captured_at=self.last_input_activity_at,
+            )
+        )
 
     def note_handled_input(
         self,
@@ -66,10 +79,15 @@ class RuntimeMetricsStore:
         self.last_input_handled_action_name = action_name
         self._last_handled_input_for_refresh_at = handled_at
         self._last_handled_input_for_refresh_action_name = action_name
-        if self.last_input_activity_at <= 0.0:
+        if self._pending_input_activities:
+            input_marker = self._pending_input_activities.popleft()
+            input_activity_at = input_marker.captured_at
+        else:
+            input_activity_at = self.last_input_activity_at
+        if input_activity_at <= 0.0:
             return
 
-        duration_seconds = max(0.0, handled_at - self.last_input_activity_at)
+        duration_seconds = max(0.0, handled_at - input_activity_at)
         self._input_to_action_samples.append(
             RuntimeLatencySample(
                 kind="input_to_action",

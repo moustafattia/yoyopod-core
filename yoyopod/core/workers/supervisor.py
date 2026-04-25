@@ -265,9 +265,7 @@ class WorkerSupervisor:
             slot.stale_request_ids.pop(request_id, None)
 
     def _is_timeout_cancel_ack(self, domain: str, message: WorkerEnvelope) -> bool:
-        if message.type == f"{domain}.cancelled":
-            return True
-        return bool(message.payload.get("cancelled"))
+        return message.type == f"{domain}.cancelled"
 
     def _restart_if_allowed(self, domain: str, slot: _WorkerSlot, *, now: float) -> None:
         if slot.restart_count >= self._max_restarts:
