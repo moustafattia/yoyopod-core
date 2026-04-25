@@ -21,7 +21,12 @@ The goal is to capture responsiveness and PSS/RSS with the current
 single-supervisor runtime so Phase 2/3 changes can be compared against a real
 target-hardware baseline.
 
-Enable responsiveness captures for the dev-lane run:
+Enable responsiveness captures for the dev-lane run in the Pi service/runtime
+environment. These exports are examples of the values the service must see;
+running them only in the local shell before `yoyopod remote sync` does not
+guarantee they will be present in the systemd service environment. Apply the
+same values through the Pi runtime environment or config used by the dev-lane
+service:
 
 ```bash
 export YOYOPOD_RESPONSIVENESS_WATCHDOG_ENABLED=true
@@ -37,14 +42,16 @@ yoyopod remote sync --branch <branch>
 yoyopod remote status
 ```
 
-Capture a status snapshot and recent logs after the exercise:
+Capture recent logs and a status snapshot after the exercise:
 
 ```bash
 yoyopod remote logs --lines 200
+yoyopod remote status
 ```
 
 Record these fields from logs, status output, and any generated responsiveness
-captures:
+captures. Keep null or missing values in the baseline notes too, because some
+fields may be absent until enough samples or captures exist:
 
 - `responsiveness_input_to_action_p95_ms`
 - `responsiveness_action_to_visible_p95_ms`
