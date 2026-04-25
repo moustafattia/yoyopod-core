@@ -24,6 +24,7 @@ class _WorkerSlot:
     restart_count: int = 0
     next_restart_at: float = 0.0
     request_deadlines: dict[str, float] = field(default_factory=dict)
+    request_attempts: dict[str, int] = field(default_factory=dict)
     stale_request_ids: dict[str, float] = field(default_factory=dict)
     request_timeouts: int = 0
     last_reason: str = ""
@@ -38,6 +39,7 @@ class WorkerSupervisor:
 
     _STALE_REQUEST_RETENTION_SECONDS = 30.0
     _DEFAULT_MAX_MESSAGES_PER_POLL = 8
+    _REQUEST_ATTEMPT_PAYLOAD_KEY = "_yoyopod_request_attempt"
 
     def __init__(
         self,
@@ -54,6 +56,7 @@ class WorkerSupervisor:
         self._max_restarts = max(0, max_restarts)
         self._max_messages_per_poll = max(1, int(max_messages_per_poll))
         self._workers: dict[str, _WorkerSlot] = {}
+        self._poll_start_index = 0
 
     def register(self, domain: str, config: WorkerProcessConfig) -> None:
         """Register one worker domain before it is started."""
@@ -88,11 +91,13 @@ class WorkerSupervisor:
             runtime.start()
         except Exception:
             slot.next_restart_at = 0.0
+            slot.request_attempts.clear()
             slot.stale_request_ids.clear()
             self._set_state(domain, slot, "degraded", failure_reason)
             return False
         slot.runtime = runtime
         slot.next_restart_at = 0.0
+        slot.request_attempts.clear()
         slot.stale_request_ids.clear()
         self._set_state(domain, slot, "running", state_reason)
         return True
@@ -104,6 +109,7 @@ class WorkerSupervisor:
             if slot.runtime is not None:
                 slot.runtime.stop(grace_seconds=grace_seconds)
             slot.request_deadlines.clear()
+            slot.request_attempts.clear()
             slot.stale_request_ids.clear()
             slot.next_restart_at = 0.0
             self._set_state(domain, slot, "stopped", "stop_all")
@@ -113,18 +119,41 @@ class WorkerSupervisor:
 
         now = time.monotonic() if monotonic_now is None else monotonic_now
         processed = 0
-        remaining_message_budget = self._max_messages_per_poll
-        for domain, slot in self._workers.items():
+        worker_items = list(self._workers.items())
+        if not worker_items:
+            return 0
+
+        for domain, slot in worker_items:
             runtime = slot.runtime
             if runtime is None:
                 continue
             self._expire_requests(domain, slot, now=now)
-            if remaining_message_budget > 0:
-                messages = runtime.drain_messages(limit=remaining_message_budget)
-                processed += len(messages)
-                remaining_message_budget -= len(messages)
-                for message in messages:
-                    self._publish_message(domain, slot, message)
+
+        remaining_message_budget = self._max_messages_per_poll
+        ordered_worker_items = self._rotate_worker_items(worker_items)
+        remaining_runtime_count = sum(
+            1 for _domain, slot in ordered_worker_items if slot.runtime is not None
+        )
+        for domain, slot in ordered_worker_items:
+            runtime = slot.runtime
+            if runtime is None:
+                continue
+            if remaining_message_budget <= 0:
+                break
+            share = max(1, remaining_message_budget // remaining_runtime_count)
+            messages = runtime.drain_messages(limit=share)
+            processed += len(messages)
+            remaining_message_budget -= len(messages)
+            for message in messages:
+                self._publish_message(domain, slot, message)
+            remaining_runtime_count -= 1
+
+        self._poll_start_index = (self._poll_start_index + 1) % len(worker_items)
+
+        for domain, slot in worker_items:
+            runtime = slot.runtime
+            if runtime is None:
+                continue
             if not runtime.running and slot.state == "running":
                 self._handle_exit(domain, slot, now=now)
             if (
@@ -151,14 +180,18 @@ class WorkerSupervisor:
         if runtime is None:
             return False
         timeout_seconds = max(0.0, timeout_seconds)
+        request_attempt = slot.request_attempts.get(request_id, 0) + 1
+        command_payload = dict(payload)
+        command_payload[self._REQUEST_ATTEMPT_PAYLOAD_KEY] = request_attempt
         sent = runtime.send_command(
             type=type,
-            payload=payload,
+            payload=command_payload,
             request_id=request_id,
             timestamp_ms=int(time.time() * 1000),
             deadline_ms=int(timeout_seconds * 1000),
         )
         if sent:
+            slot.request_attempts[request_id] = request_attempt
             slot.stale_request_ids.pop(request_id, None)
             slot.request_deadlines[request_id] = time.monotonic() + timeout_seconds
         return sent
@@ -222,6 +255,8 @@ class WorkerSupervisor:
         slot: _WorkerSlot,
         message: WorkerEnvelope,
     ) -> None:
+        if not self._matches_active_request_attempt(slot, message):
+            return
         if (
             message.request_id is not None
             and self._is_timeout_cancel_ack(domain, message)
@@ -234,13 +269,14 @@ class WorkerSupervisor:
                 return
         if message.request_id is not None:
             slot.request_deadlines.pop(message.request_id, None)
+            slot.request_attempts.pop(message.request_id, None)
         self._bus.publish(
             WorkerMessageReceivedEvent(
                 domain=domain,
                 kind=message.kind,
                 type=message.type,
                 request_id=message.request_id,
-                payload=message.payload,
+                payload=self._public_payload(message),
             )
         )
 
@@ -264,6 +300,7 @@ class WorkerSupervisor:
 
     def _handle_exit(self, domain: str, slot: _WorkerSlot, *, now: float) -> None:
         slot.request_deadlines.clear()
+        slot.request_attempts.clear()
         slot.stale_request_ids.clear()
         slot.next_restart_at = now + self._restart_backoff_seconds
         self._set_state(domain, slot, "degraded", "process_exited")
@@ -279,6 +316,35 @@ class WorkerSupervisor:
 
     def _is_timeout_cancel_ack(self, domain: str, message: WorkerEnvelope) -> bool:
         return message.type == f"{domain}.cancelled"
+
+    def _rotate_worker_items(
+        self, worker_items: list[tuple[str, _WorkerSlot]]
+    ) -> list[tuple[str, _WorkerSlot]]:
+        if not worker_items:
+            return []
+        start_index = self._poll_start_index % len(worker_items)
+        return worker_items[start_index:] + worker_items[:start_index]
+
+    def _matches_active_request_attempt(
+        self,
+        slot: _WorkerSlot,
+        message: WorkerEnvelope,
+    ) -> bool:
+        request_id = message.request_id
+        if request_id is None:
+            return True
+        active_attempt = slot.request_attempts.get(request_id)
+        if active_attempt is None:
+            return True
+        message_attempt = message.payload.get(self._REQUEST_ATTEMPT_PAYLOAD_KEY)
+        if active_attempt <= 1:
+            return message_attempt is None or message_attempt == active_attempt
+        return message_attempt == active_attempt
+
+    def _public_payload(self, message: WorkerEnvelope) -> dict[str, Any]:
+        payload = dict(message.payload)
+        payload.pop(self._REQUEST_ATTEMPT_PAYLOAD_KEY, None)
+        return payload
 
     def _restart_if_allowed(self, domain: str, slot: _WorkerSlot, *, now: float) -> None:
         if slot.restart_count >= self._max_restarts:

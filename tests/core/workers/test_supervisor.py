@@ -287,6 +287,7 @@ def test_supervisor_accepts_retry_with_same_request_id_after_timeout() -> None:
     bus = Bus()
     scheduler = MainThreadScheduler()
     message_events: list[WorkerMessageReceivedEvent] = []
+    sent_commands: list[dict[str, object]] = []
     bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
     supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
     supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
@@ -295,7 +296,7 @@ def test_supervisor_accepts_retry_with_same_request_id_after_timeout() -> None:
         SimpleNamespace(
             running=True,
             drain_messages=lambda limit=None: [],
-            send_command=lambda **_kwargs: True,
+            send_command=lambda **kwargs: sent_commands.append(kwargs) or True,
         ),
     )
     slot = supervisor._workers["voice"]
@@ -312,6 +313,12 @@ def test_supervisor_accepts_retry_with_same_request_id_after_timeout() -> None:
         request_id="req-retry",
         timeout_seconds=10.0,
     )
+    retry_attempt = cast(
+        int,
+        cast(dict[str, object], sent_commands[-1])["payload"][
+            supervisor._REQUEST_ATTEMPT_PAYLOAD_KEY
+        ],
+    )
     slot.runtime = cast(
         object,
         SimpleNamespace(
@@ -321,7 +328,10 @@ def test_supervisor_accepts_retry_with_same_request_id_after_timeout() -> None:
                     kind="result",
                     type="voice.transcribe",
                     request_id="req-retry",
-                    payload={"text": "retry ok"},
+                    payload={
+                        "text": "retry ok",
+                        supervisor._REQUEST_ATTEMPT_PAYLOAD_KEY: retry_attempt,
+                    },
                 )
             ],
             send_command=lambda **_kwargs: True,
@@ -346,6 +356,7 @@ def test_supervisor_ignores_late_cancel_ack_after_retry_reuses_request_id() -> N
     bus = Bus()
     scheduler = MainThreadScheduler()
     message_events: list[WorkerMessageReceivedEvent] = []
+    sent_commands: list[dict[str, object]] = []
     bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
     supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
     supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
@@ -354,7 +365,7 @@ def test_supervisor_ignores_late_cancel_ack_after_retry_reuses_request_id() -> N
         SimpleNamespace(
             running=True,
             drain_messages=lambda limit=None: [],
-            send_command=lambda **_kwargs: True,
+            send_command=lambda **kwargs: sent_commands.append(kwargs) or True,
         ),
     )
     slot = supervisor._workers["voice"]
@@ -370,6 +381,12 @@ def test_supervisor_ignores_late_cancel_ack_after_retry_reuses_request_id() -> N
         request_id="req-retry",
         timeout_seconds=10.0,
     )
+    retry_attempt = cast(
+        int,
+        cast(dict[str, object], sent_commands[-1])["payload"][
+            supervisor._REQUEST_ATTEMPT_PAYLOAD_KEY
+        ],
+    )
     retry_deadline = slot.request_deadlines["req-retry"]
     slot.runtime = cast(
         object,
@@ -380,10 +397,92 @@ def test_supervisor_ignores_late_cancel_ack_after_retry_reuses_request_id() -> N
                     kind="result",
                     type="voice.cancelled",
                     request_id="req-retry",
-                    payload={"cancelled": True},
+                    payload={
+                        "cancelled": True,
+                        supervisor._REQUEST_ATTEMPT_PAYLOAD_KEY: retry_attempt - 1,
+                    },
                 )
             ],
             send_command=lambda **_kwargs: True,
+        ),
+    )
+
+    supervisor.poll(monotonic_now=2.1)
+    bus.drain()
+
+    assert message_events == []
+    assert slot.request_deadlines["req-retry"] == pytest.approx(retry_deadline)
+    assert len(slot.request_deadlines) == 1
+
+
+def test_supervisor_ignores_late_non_cancel_result_after_retry_reuses_request_id() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    sent_commands: list[dict[str, object]] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [],
+            send_command=lambda **kwargs: sent_commands.append(kwargs) or True,
+        ),
+    )
+    slot = supervisor._workers["voice"]
+    slot.runtime = runtime
+    slot.state = "running"
+
+    assert supervisor.send_request(
+        "voice",
+        type="voice.transcribe",
+        payload={"path": "/tmp/first.wav"},
+        request_id="req-retry",
+        timeout_seconds=10.0,
+    )
+    first_attempt = cast(
+        int,
+        cast(dict[str, object], sent_commands[-1])["payload"][
+            supervisor._REQUEST_ATTEMPT_PAYLOAD_KEY
+        ],
+    )
+    slot.request_deadlines["req-retry"] = 1.0
+
+    supervisor.poll(monotonic_now=2.0)
+
+    assert supervisor.send_request(
+        "voice",
+        type="voice.transcribe",
+        payload={"path": "/tmp/retry.wav"},
+        request_id="req-retry",
+        timeout_seconds=10.0,
+    )
+    retry_attempt = cast(
+        int,
+        cast(dict[str, object], sent_commands[-1])["payload"][
+            supervisor._REQUEST_ATTEMPT_PAYLOAD_KEY
+        ],
+    )
+    retry_deadline = slot.request_deadlines["req-retry"]
+    assert retry_attempt == first_attempt + 1
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [
+                make_envelope(
+                    kind="result",
+                    type="voice.transcribe",
+                    request_id="req-retry",
+                    payload={
+                        "text": "late stale result",
+                        supervisor._REQUEST_ATTEMPT_PAYLOAD_KEY: first_attempt,
+                    },
+                )
+            ],
+            send_command=lambda **kwargs: sent_commands.append(kwargs) or True,
         ),
     )
 
@@ -441,6 +540,75 @@ def test_supervisor_caps_published_worker_messages_per_poll() -> None:
     assert drain_limits == [2]
     assert [event.payload["index"] for event in message_events] == [0, 1]
     assert [message.payload["index"] for message in worker_messages] == [2]
+
+
+def test_supervisor_rotates_message_budget_across_worker_domains() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(
+        scheduler=scheduler,
+        bus=bus,
+        max_messages_per_poll=1,
+    )
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    supervisor.register("network", WorkerProcessConfig(name="network", argv=["unused"]))
+
+    voice_messages = [
+        make_envelope(
+            kind="event",
+            type="voice.event",
+            request_id=None,
+            payload={"domain": "voice", "index": 0},
+        ),
+        make_envelope(
+            kind="event",
+            type="voice.event",
+            request_id=None,
+            payload={"domain": "voice", "index": 1},
+        ),
+    ]
+    network_messages = [
+        make_envelope(
+            kind="event",
+            type="network.event",
+            request_id=None,
+            payload={"domain": "network", "index": 0},
+        )
+    ]
+
+    def make_runtime(messages: list[WorkerEnvelope]) -> object:
+        def drain_messages(limit: int | None = None) -> list[WorkerEnvelope]:
+            count = len(messages) if limit is None else min(limit, len(messages))
+            drained = messages[:count]
+            del messages[:count]
+            return drained
+
+        return cast(
+            object,
+            SimpleNamespace(
+                running=True,
+                drain_messages=drain_messages,
+                send_command=lambda **_kwargs: True,
+            ),
+        )
+
+    supervisor._workers["voice"].runtime = make_runtime(voice_messages)
+    supervisor._workers["voice"].state = "running"
+    supervisor._workers["network"].runtime = make_runtime(network_messages)
+    supervisor._workers["network"].state = "running"
+
+    assert supervisor.poll(monotonic_now=1.0) == 1
+    assert supervisor.poll(monotonic_now=2.0) == 1
+    bus.drain()
+
+    assert [(event.domain, event.payload["index"]) for event in message_events] == [
+        ("voice", 0),
+        ("network", 0),
+    ]
+    assert [message.payload["index"] for message in voice_messages] == [1]
+    assert network_messages == []
 
 
 def test_supervisor_checks_exit_and_restart_even_when_message_budget_is_exhausted(
