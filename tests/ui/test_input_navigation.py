@@ -48,6 +48,27 @@ class _ModeTrackingAdapter(InputHAL):
         self.double_tap_select_enabled = bool(enabled)
 
 
+class _TrackingInputManager(InputManager):
+    """Record callback registration and clearing across screen navigation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.registration_calls: list[InputAction] = []
+        self.clear_calls = 0
+
+    def on_action(
+        self,
+        action: InputAction,
+        callback: Callable[[Optional[Any]], None],
+    ) -> None:
+        self.registration_calls.append(action)
+        super().on_action(action, callback)
+
+    def clear_callbacks(self) -> None:
+        self.clear_calls += 1
+        super().clear_callbacks()
+
+
 class _SimpleSetupScreen(Screen):
     """Minimal screen double that requests simple one-button navigation."""
 
@@ -63,6 +84,24 @@ class _PassiveScreen(Screen):
 
     def render(self) -> None:
         return None
+
+
+class _DynamicModeScreen(Screen):
+    """Minimal screen double with mutable per-screen input mode flags."""
+
+    def __init__(self, display: Display, context: AppContext) -> None:
+        super().__init__(display, context, "DynamicMode")
+        self.raw_ptt_passthrough = False
+        self.simple_one_button_navigation = False
+
+    def render(self) -> None:
+        return None
+
+    def wants_ptt_passthrough(self) -> bool:
+        return self.raw_ptt_passthrough
+
+    def prefers_simple_one_button_navigation(self) -> bool:
+        return self.simple_one_button_navigation
 
 
 def test_semantic_input_navigation() -> None:
@@ -133,6 +172,60 @@ def test_screen_manager_configures_simple_one_button_navigation() -> None:
         screen_manager.replace_screen("simple")
         assert adapter.raw_ptt_passthrough is False
         assert adapter.double_tap_select_enabled is False
+    finally:
+        display.cleanup()
+
+
+def test_screen_manager_registers_semantic_dispatch_once() -> None:
+    """Navigation should not clear and re-register semantic input callbacks."""
+    display = Display(simulate=True)
+    input_manager = _TrackingInputManager()
+    screen_manager = ScreenManager(display, input_manager)
+    first = _PassiveScreen(display, AppContext())
+    second = _PassiveScreen(display, AppContext())
+    first.render = lambda: None
+    second.render = lambda: None
+
+    screen_manager.register_screen("first", first)
+    screen_manager.register_screen("second", second)
+
+    try:
+        assert input_manager.registration_calls == list(InputAction)
+
+        screen_manager.replace_screen("first")
+        screen_manager.push_screen("second")
+        assert screen_manager.pop_screen() is True
+
+        assert input_manager.registration_calls == list(InputAction)
+        assert input_manager.clear_calls == 0
+        assert all(len(input_manager.callbacks[action]) == 1 for action in InputAction)
+    finally:
+        display.cleanup()
+
+
+def test_screen_manager_refreshes_input_modes_without_rebinding_callbacks() -> None:
+    """Dynamic screen mode changes should only reconfigure adapters, not callbacks."""
+    display = Display(simulate=True)
+    input_manager = _TrackingInputManager()
+    adapter = _ModeTrackingAdapter()
+    input_manager.add_adapter(adapter)
+    screen_manager = ScreenManager(display, input_manager)
+    screen = _DynamicModeScreen(display, AppContext())
+    screen_manager.register_screen("dynamic", screen)
+
+    try:
+        screen_manager.replace_screen("dynamic")
+        assert adapter.raw_ptt_passthrough is False
+        assert adapter.double_tap_select_enabled is True
+
+        screen.raw_ptt_passthrough = True
+        screen.simple_one_button_navigation = True
+        screen_manager.refresh_current_screen_input_modes()
+
+        assert adapter.raw_ptt_passthrough is True
+        assert adapter.double_tap_select_enabled is False
+        assert input_manager.registration_calls == list(InputAction)
+        assert input_manager.clear_calls == 0
     finally:
         display.cleanup()
 

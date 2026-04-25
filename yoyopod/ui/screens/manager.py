@@ -60,6 +60,9 @@ class ScreenManager:
         self.on_screen_changed = on_screen_changed
         self.action_scheduler = action_scheduler
         self._navigation_refresh_pending = False
+        self._input_dispatch_registered = False
+
+        self._register_input_dispatch()
 
         logger.info("ScreenManager initialized")
 
@@ -88,16 +91,15 @@ class ScreenManager:
             logger.error(f"Screen not found: {screen_name}")
             return
 
-        # Exit current screen and remove button handlers
+        # Exit current screen before pushing it onto the back stack.
         if self.current_screen:
-            self._disconnect_buttons()
             self.current_screen.exit()
             self.screen_stack.append(self.current_screen)
 
-        # Enter new screen and set up button handlers
+        # Enter the next screen and refresh any adapter-specific input modes.
         self.current_screen = self.screens[screen_name]
         self.current_screen.enter()
-        self._connect_buttons()
+        self._configure_screen_input_modes()
         self._refresh_after_navigation()
         self._notify_screen_changed()
 
@@ -121,15 +123,14 @@ class ScreenManager:
             logger.warning("Cannot pop: screen stack is empty")
             return False
 
-        # Exit current screen and remove button handlers
+        # Exit the visible screen before revealing the previous stack entry.
         if self.current_screen:
-            self._disconnect_buttons()
             self.current_screen.exit()
 
-        # Return to previous screen and reconnect button handlers
+        # Restore the previous screen and refresh any adapter-specific input modes.
         self.current_screen = self.screen_stack.pop()
         self.current_screen.enter()
-        self._connect_buttons()
+        self._configure_screen_input_modes()
         self._refresh_after_navigation()
         self._notify_screen_changed()
 
@@ -154,15 +155,14 @@ class ScreenManager:
             logger.error(f"Screen not found: {screen_name}")
             return
 
-        # Exit current screen and remove button handlers
+        # Exit the visible screen before replacing it.
         if self.current_screen:
-            self._disconnect_buttons()
             self.current_screen.exit()
 
-        # Enter new screen and connect button handlers (don't push old one to stack)
+        # Enter the replacement screen and refresh any adapter-specific input modes.
         self.current_screen = self.screens[screen_name]
         self.current_screen.enter()
-        self._connect_buttons()
+        self._configure_screen_input_modes()
         self._refresh_after_navigation()
         self._notify_screen_changed()
 
@@ -230,7 +230,9 @@ class ScreenManager:
         """Pop all call-related screens from the stack."""
 
         call_route_names = {"in_call", "incoming_call", "outgoing_call"}
-        while self.current_screen is not None and self.current_screen.route_name in call_route_names:
+        while (
+            self.current_screen is not None and self.current_screen.route_name in call_route_names
+        ):
             self.pop_screen()
             if not self.screen_stack:
                 break
@@ -346,76 +348,59 @@ class ScreenManager:
         logger.warning(f"Unsupported navigation request: {resolved_request}")
         return False
 
-    def _connect_inputs(self) -> None:
-        """Connect input action handlers for the current screen."""
-        if not self.current_screen:
+    def _register_input_dispatch(self) -> None:
+        """Register one semantic dispatcher per input action for the process lifetime."""
+        if self._input_dispatch_registered:
             return
 
-        # Skip if no input manager
         if not self.input_manager:
-            logger.debug("No input manager available - skipping input connection")
+            logger.debug("No input manager available - skipping input dispatch registration")
             return
 
-        # Import InputAction if available
         if InputAction is None:
-            logger.warning("InputAction not available - cannot connect inputs")
+            logger.warning("InputAction not available - cannot register input dispatch")
             return
-
-        self._configure_screen_input_modes()
-
-        # Helper function to dispatch an action and then refresh or route
-        def dispatch_action(action: "InputAction", data=None) -> None:
-            started_at = time.monotonic()
-            previous_screen = self.current_screen
-            if previous_screen is None:
-                return
-
-            previous_screen.handle_action(action, data)
-            navigation_request = previous_screen.consume_navigation_request()
-            if navigation_request is not None:
-                self.apply_navigation_request(navigation_request, source_screen=previous_screen)
-            if self.current_screen is previous_screen:
-                self.refresh_current_screen()
-            self._warn_if_slow(
-                "screen action",
-                started_at=started_at,
-                threshold_seconds=self._SLOW_INPUT_ACTION_WARNING_SECONDS,
-                detail=(
-                    f"action={action.value} "
-                    f"screen={previous_screen.route_name or previous_screen.name}"
-                ),
-            )
-
-        def wrap_with_refresh(action: "InputAction"):
-            """Wrap action handler to automatically refresh display after execution."""
-
-            def wrapper(data=None):
-                if self.action_scheduler is not None:
-                    self.action_scheduler(lambda: dispatch_action(action, data))
-                    return
-                dispatch_action(action, data)
-
-            return wrapper
 
         for action in InputAction:
-            self.input_manager.on_action(action, wrap_with_refresh(action))
+            self.input_manager.on_action(action, self._wrap_action_dispatch(action))
 
-        logger.debug("Connected input actions for {}", self.current_screen.name)
+        self._input_dispatch_registered = True
+        logger.debug("Registered screen-manager input dispatch")
 
-    def _disconnect_inputs(self) -> None:
-        """Disconnect input action handlers for the current screen."""
-        if not self.current_screen:
+    def _wrap_action_dispatch(self, action: "InputAction") -> Callable[[object | None], None]:
+        """Wrap a semantic action with optional main-thread scheduling."""
+
+        def wrapper(data: object | None = None) -> None:
+            if self.action_scheduler is not None:
+                self.action_scheduler(lambda: self._dispatch_action(action, data))
+                return
+            self._dispatch_action(action, data)
+
+        return wrapper
+
+    def _dispatch_action(self, action: "InputAction", data: object | None = None) -> None:
+        """Send a semantic action to the active screen and process any navigation it requests."""
+
+        started_at = time.monotonic()
+        previous_screen = self.current_screen
+        if previous_screen is None:
             return
 
-        # Skip if no input manager
-        if not self.input_manager:
-            logger.debug("No input manager available - skipping input disconnection")
-            return
-
-        # Clear all action callbacks
-        self.input_manager.clear_callbacks()
-
-        logger.debug("Disconnected input actions for {}", self.current_screen.name)
+        previous_screen.handle_action(action, data)
+        navigation_request = previous_screen.consume_navigation_request()
+        if navigation_request is not None:
+            self.apply_navigation_request(navigation_request, source_screen=previous_screen)
+        if self.current_screen is previous_screen:
+            self.refresh_current_screen()
+        self._warn_if_slow(
+            "screen action",
+            started_at=started_at,
+            threshold_seconds=self._SLOW_INPUT_ACTION_WARNING_SECONDS,
+            detail=(
+                f"action={action.value} "
+                f"screen={previous_screen.route_name or previous_screen.name}"
+            ),
+        )
 
     def _configure_screen_input_modes(self) -> None:
         """Adjust adapter-specific modes based on the active screen."""
@@ -444,21 +429,11 @@ class ScreenManager:
             if callable(configure_double_tap):
                 configure_double_tap(not prefers_simple_nav)
 
-    def rebind_current_screen_inputs(self) -> None:
-        """Re-apply input bindings for the active screen after its mode changes."""
+    def refresh_current_screen_input_modes(self) -> None:
+        """Re-apply adapter-specific input modes for the active screen."""
         if self.current_screen is None:
             return
-        self._disconnect_inputs()
-        self._connect_inputs()
-
-    # Legacy method names for backward compatibility
-    def _connect_buttons(self) -> None:
-        """Legacy method - redirects to _connect_inputs()."""
-        self._connect_inputs()
-
-    def _disconnect_buttons(self) -> None:
-        """Legacy method - redirects to _disconnect_inputs()."""
-        self._disconnect_inputs()
+        self._configure_screen_input_modes()
 
     def _warn_if_slow(
         self,

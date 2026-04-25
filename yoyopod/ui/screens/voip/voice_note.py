@@ -160,13 +160,15 @@ class VoiceNoteScreen(Screen):
                 self.context.update_active_voice_note(send_state="idle")
 
     def _refresh_input_mode(self) -> None:
-        """Rebind active input handlers when the voice-note interaction mode changes."""
+        """Refresh active adapter modes when the voice-note interaction mode changes."""
 
         if self.screen_manager is None:
             return
-        rebind = getattr(self.screen_manager, "rebind_current_screen_inputs", None)
-        if callable(rebind):
-            rebind()
+        refresh_input_modes = getattr(
+            self.screen_manager, "refresh_current_screen_input_modes", None
+        )
+        if callable(refresh_input_modes):
+            refresh_input_modes()
 
     def actions(self) -> list[VoiceNoteAction]:
         """Return the selectable actions for the current voice-note state."""
