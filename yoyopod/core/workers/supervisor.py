@@ -267,7 +267,7 @@ class WorkerSupervisor:
         if message.request_id is not None and message.request_id in slot.stale_request_ids:
             if not self._is_timeout_cancel_ack(domain, message):
                 return
-        if message.request_id is not None:
+        if message.request_id is not None and self._is_terminal_request_reply(domain, message):
             slot.request_deadlines.pop(message.request_id, None)
             slot.request_attempts.pop(message.request_id, None)
         self._bus.publish(
@@ -318,6 +318,11 @@ class WorkerSupervisor:
 
     def _is_timeout_cancel_ack(self, domain: str, message: WorkerEnvelope) -> bool:
         return message.type == f"{domain}.cancelled"
+
+    def _is_terminal_request_reply(self, domain: str, message: WorkerEnvelope) -> bool:
+        if self._is_timeout_cancel_ack(domain, message):
+            return True
+        return message.kind in {"result", "error"}
 
     def _rotate_worker_items(
         self, worker_items: list[tuple[str, _WorkerSlot]]

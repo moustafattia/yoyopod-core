@@ -518,6 +518,49 @@ def test_supervisor_prunes_request_attempt_when_stale_timeout_retention_expires(
     assert slot.request_attempts == {}
 
 
+def test_supervisor_keeps_request_tracking_for_non_terminal_worker_event() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    slot = supervisor._workers["voice"]
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [
+                make_envelope(
+                    kind="event",
+                    type="voice.progress",
+                    request_id="req-progress",
+                    payload={"state": "streaming"},
+                )
+            ],
+            send_command=lambda **_kwargs: True,
+        ),
+    )
+    slot.state = "running"
+    slot.request_deadlines["req-progress"] = 10.0
+    slot.request_attempts["req-progress"] = 1
+
+    supervisor.poll(monotonic_now=1.0)
+    bus.drain()
+
+    assert message_events == [
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="event",
+            type="voice.progress",
+            request_id="req-progress",
+            payload={"state": "streaming"},
+        )
+    ]
+    assert slot.request_deadlines["req-progress"] == pytest.approx(10.0)
+    assert slot.request_attempts["req-progress"] == 1
+
+
 def test_supervisor_caps_published_worker_messages_per_poll() -> None:
     bus = Bus()
     scheduler = MainThreadScheduler()
