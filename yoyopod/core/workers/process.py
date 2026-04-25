@@ -248,7 +248,7 @@ class WorkerProcessRuntime:
             try:
                 process.stdin.write(encode_envelope(envelope))
                 process.stdin.flush()
-            except (BrokenPipeError, OSError, ValueError):
+            except (BrokenPipeError, OSError, TypeError, ValueError):
                 return False
         self._sent_messages += 1
         return True

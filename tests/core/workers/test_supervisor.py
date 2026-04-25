@@ -215,6 +215,65 @@ def test_supervisor_drops_late_result_after_request_timeout() -> None:
     assert message_events == []
 
 
+def test_supervisor_accepts_retry_with_same_request_id_after_timeout() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    message_events: list[WorkerMessageReceivedEvent] = []
+    bus.subscribe(WorkerMessageReceivedEvent, message_events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda: [],
+            send_command=lambda **_kwargs: True,
+        ),
+    )
+    slot = supervisor._workers["voice"]
+    slot.runtime = runtime
+    slot.state = "running"
+    slot.request_deadlines["req-retry"] = 1.0
+
+    supervisor.poll(monotonic_now=2.0)
+
+    assert supervisor.send_request(
+        "voice",
+        type="voice.transcribe",
+        payload={"path": "/tmp/retry.wav"},
+        request_id="req-retry",
+        timeout_seconds=10.0,
+    )
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda: [
+                make_envelope(
+                    kind="result",
+                    type="voice.transcribe",
+                    request_id="req-retry",
+                    payload={"text": "retry ok"},
+                )
+            ],
+            send_command=lambda **_kwargs: True,
+        ),
+    )
+    supervisor.poll(monotonic_now=2.1)
+    bus.drain()
+
+    assert message_events == [
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="result",
+            type="voice.transcribe",
+            request_id="req-retry",
+            payload={"text": "retry ok"},
+        )
+    ]
+    assert slot.stale_request_ids == {}
+
+
 def test_supervisor_rejects_duplicate_start_without_replacing_runtime(tmp_path: Path) -> None:
     worker = _write_worker(
         tmp_path,

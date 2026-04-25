@@ -404,7 +404,8 @@ def _percentile_ms(samples: list[RuntimeLatencySample], ratio: float) -> float |
     if not samples:
         return None
     ordered = sorted(sample.duration_seconds for sample in samples)
-    index = int(round((len(ordered) - 1) * ratio))
+    position = (len(ordered) - 1) * min(1.0, max(0.0, ratio))
+    index = int(position + 0.5)
     return round(ordered[index] * 1000.0, 3)
 
 

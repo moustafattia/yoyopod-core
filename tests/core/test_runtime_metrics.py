@@ -49,6 +49,19 @@ def test_runtime_metrics_records_input_to_action_latency() -> None:
     assert snapshot["responsiveness_last_input_to_action_name"] == "select"
 
 
+def test_runtime_metrics_percentile_uses_half_up_indexing() -> None:
+    store = RuntimeMetricsStore()
+
+    store.note_input_activity(SimpleNamespace(value="first"), captured_at=10.0)
+    store.note_handled_input(action_name="first", handled_at=10.010)
+    store.note_input_activity(SimpleNamespace(value="second"), captured_at=20.0)
+    store.note_handled_input(action_name="second", handled_at=20.050)
+
+    snapshot = store.responsiveness_snapshot(now=21.0)
+
+    assert snapshot["responsiveness_input_to_action_p50_ms"] == 50.0
+
+
 def test_runtime_metrics_records_action_to_visible_refresh_latency() -> None:
     store = RuntimeMetricsStore()
 

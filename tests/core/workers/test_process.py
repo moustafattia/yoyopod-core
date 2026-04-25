@@ -29,11 +29,23 @@ class _BlockingStdin:
         return None
 
 
+class _RecordingStdin:
+    def __init__(self) -> None:
+        self.writes: list[str] = []
+
+    def write(self, data: str) -> int:
+        self.writes.append(data)
+        return len(data)
+
+    def flush(self) -> None:
+        return None
+
+
 class _FakeProcess:
     pid = 1234
 
-    def __init__(self) -> None:
-        self.stdin = _BlockingStdin()
+    def __init__(self, stdin: object | None = None) -> None:
+        self.stdin = _BlockingStdin() if stdin is None else stdin
         self.returncode: int | None = None
         self.terminated = False
         self.killed = False
@@ -238,6 +250,43 @@ def test_worker_process_send_uses_bounded_outbound_queue_when_stdin_blocks() -> 
     assert elapsed_seconds < 0.1
     assert snapshot.dropped_sends == 1
     assert snapshot.queued_sends == 1
+
+
+def test_worker_process_writer_survives_json_encoding_failure() -> None:
+    stdin = _RecordingStdin()
+    process = _FakeProcess(stdin=stdin)
+    runtime = WorkerProcessRuntime(WorkerProcessConfig(name="encoding", argv=["unused"]))
+    runtime._process = cast(Any, process)
+    runtime._start_writer()
+
+    try:
+        assert runtime.send_command(
+            type="voice.transcribe",
+            payload={"raw": b"not-json"},
+            request_id="bad",
+        )
+        assert runtime.send_command(
+            type="voice.transcribe",
+            payload={"path": "/tmp/audio.wav"},
+            request_id="good",
+        )
+
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline:
+            snapshot = runtime.snapshot()
+            if snapshot.send_failures == 1 and snapshot.sent_messages == 1:
+                break
+            time.sleep(0.01)
+        else:
+            snapshot = runtime.snapshot()
+    finally:
+        runtime._request_writer_shutdown()
+        runtime._join_writer(timeout_seconds=0.5)
+
+    assert snapshot.send_failures == 1
+    assert snapshot.sent_messages == 1
+    assert len(stdin.writes) == 1
+    assert '"request_id":"good"' in stdin.writes[0]
 
 
 def test_worker_process_writer_exits_after_process_exit() -> None:

@@ -153,6 +153,7 @@ class WorkerSupervisor:
             deadline_ms=int(timeout_seconds * 1000),
         )
         if sent:
+            slot.stale_request_ids.pop(request_id, None)
             slot.request_deadlines[request_id] = time.monotonic() + timeout_seconds
         return sent
 
