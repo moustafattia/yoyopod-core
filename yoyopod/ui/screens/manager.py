@@ -5,6 +5,7 @@ Handles screen transitions, route resolution, and the navigation stack.
 """
 
 import time
+from enum import Enum, auto
 from typing import Callable, Optional, Dict, TYPE_CHECKING
 from loguru import logger
 
@@ -22,6 +23,26 @@ else:
         # Fallback for gradual migration
         InputManager = None
         InputAction = None
+
+
+class VisibleTickRefreshResult(Enum):
+    """Outcome of one periodic visible-tick refresh attempt."""
+
+    NOT_ELIGIBLE = auto()
+    CLEAN = auto()
+    RENDERED = auto()
+
+    @property
+    def eligible(self) -> bool:
+        """Return True when the screen participates in visible-tick refreshes."""
+
+        return self is not VisibleTickRefreshResult.NOT_ELIGIBLE
+
+    @property
+    def rendered(self) -> bool:
+        """Return True when the visible-tick refresh produced a render."""
+
+        return self is VisibleTickRefreshResult.RENDERED
 
 
 class ScreenManager:
@@ -199,12 +220,16 @@ class ScreenManager:
             refresh_for_visible_tick()
         self._render_screen(self.current_screen, started_at=started_at)
 
-    def refresh_current_screen_for_visible_tick(self) -> bool:
-        """Refresh the current screen when it opts into periodic visible ticks."""
+    def refresh_current_screen_for_visible_tick(self) -> VisibleTickRefreshResult:
+        """Refresh the current screen when it opts into periodic visible ticks.
+
+        Returns a result that distinguishes ineligible screens from eligible
+        screens that stayed clean across the visible tick.
+        """
 
         screen = self.current_screen
         if screen is None:
-            return False
+            return VisibleTickRefreshResult.NOT_ELIGIBLE
 
         wants_visible_tick_refresh = getattr(
             screen,
@@ -216,14 +241,17 @@ class ScreenManager:
             "refresh_for_visible_tick",
             None,
         )
+        refresh_for_visible_tick_callback = (
+            refresh_for_visible_tick if callable(refresh_for_visible_tick) else None
+        )
         if callable(wants_visible_tick_refresh):
             if not wants_visible_tick_refresh():
-                return False
-        elif not callable(refresh_for_visible_tick):
-            return False
+                return VisibleTickRefreshResult.NOT_ELIGIBLE
+        elif refresh_for_visible_tick_callback is None:
+            return VisibleTickRefreshResult.NOT_ELIGIBLE
 
-        if callable(refresh_for_visible_tick):
-            refresh_for_visible_tick()
+        if refresh_for_visible_tick_callback is not None:
+            refresh_for_visible_tick_callback()
 
         should_render_for_visible_tick = getattr(
             screen,
@@ -231,10 +259,10 @@ class ScreenManager:
             None,
         )
         if callable(should_render_for_visible_tick) and not should_render_for_visible_tick():
-            return False
+            return VisibleTickRefreshResult.CLEAN
 
         self._render_screen(screen)
-        return True
+        return VisibleTickRefreshResult.RENDERED
 
     def pop_call_screens(self) -> None:
         """Pop all call-related screens from the stack."""

@@ -16,7 +16,7 @@ from yoyopod.core.loop import RuntimeLoopService
 from yoyopod.ui.display import Display
 from yoyopod.ui.input import InputAction, InputManager
 from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.manager import ScreenManager
+from yoyopod.ui.screens.manager import ScreenManager, VisibleTickRefreshResult
 from yoyopod.ui.screens.navigation.ask import AskScreen
 from yoyopod.ui.screens.navigation.home import HomeScreen
 from yoyopod.ui.screens.navigation.hub import HubScreen
@@ -289,10 +289,16 @@ def test_screen_manager_only_refreshes_visible_ticks_for_opted_in_screen(
     screen_manager.register_screen("power", power)
 
     screen_manager.replace_screen("menu")
-    assert screen_manager.refresh_current_screen_for_visible_tick() is False
+    assert (
+        screen_manager.refresh_current_screen_for_visible_tick()
+        is VisibleTickRefreshResult.NOT_ELIGIBLE
+    )
 
     screen_manager.replace_screen("power")
-    assert screen_manager.refresh_current_screen_for_visible_tick() is True
+    assert (
+        screen_manager.refresh_current_screen_for_visible_tick()
+        is VisibleTickRefreshResult.RENDERED
+    )
     assert power.render_calls == 2
     assert power.refresh_for_visible_tick_calls == 2
 
@@ -311,7 +317,10 @@ def test_screen_manager_skips_visible_tick_render_when_screen_stays_clean(
 
     assert power.render_calls == 1
     assert power.refresh_for_visible_tick_calls == 1
-    assert screen_manager.refresh_current_screen_for_visible_tick() is False
+    assert (
+        screen_manager.refresh_current_screen_for_visible_tick()
+        is VisibleTickRefreshResult.CLEAN
+    )
     assert power.render_calls == 1
     assert power.refresh_for_visible_tick_calls == 2
 

@@ -139,7 +139,11 @@ class InCallScreen(Screen):
 
     @staticmethod
     def should_render_for_visible_tick() -> bool:
-        """Keep rendering while call duration remains time-driven."""
+        """Keep rendering while call duration remains time-driven.
+
+        This intentionally bypasses dirty gating because the visible timer can
+        advance without a matching state-change event.
+        """
 
         return True
 

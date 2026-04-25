@@ -353,7 +353,11 @@ class NowPlayingScreen(Screen):
 
     @staticmethod
     def should_render_for_visible_tick() -> bool:
-        """Keep rendering while playback progress remains time-driven."""
+        """Keep rendering while playback progress remains time-driven.
+
+        This intentionally bypasses dirty gating because progress advances even
+        when no state-change event fires.
+        """
 
         return True
 
