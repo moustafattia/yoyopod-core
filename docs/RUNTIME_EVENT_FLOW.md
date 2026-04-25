@@ -110,7 +110,7 @@ Owns:
 
 Owns screen navigation plus the small screen-stack and render helpers used by the domain runtimes:
 - push/pop call screens
-- refresh visible screens when other coordinators decide they should change
+- refresh visible screens when other runtime owners decide they should change
 
 It is a UI helper and routing authority for screens, not a domain-behavior owner.
 
@@ -341,7 +341,7 @@ This works, but it is not especially obvious. A future cleanup probably wants ei
 
 ### 5. Power behavior is split across multiple runtime services
 
-`PowerCoordinator` owns telemetry application and safety-policy evaluation, while `ScreenPowerService` owns overlays and `core.shutdown.ShutdownLifecycleService` owns actual shutdown execution. The division is workable, but a reader must cross service boundaries to understand the full low-battery path.
+`PowerRuntimeService` owns telemetry application and safety-policy evaluation, while `ScreenPowerService` owns overlays and `core.shutdown.ShutdownLifecycleService` owns actual shutdown execution. The division is workable, but a reader must cross service boundaries to understand the full low-battery path.
 
 ### 6. Event timing depends on scheduler backlog, not mixed bus semantics
 
@@ -361,10 +361,10 @@ If ordering looks inconsistent, check scheduler backlog first and bus backlog se
 - `yoyopod/core/loop.py`
 - `yoyopod/core/recovery.py`
 - `yoyopod/core/app_state.py`
-- `yoyopod/integrations/call/coordinator.py`
-- `yoyopod/integrations/music/coordinator.py`
-- `yoyopod/integrations/power/coordinator.py`
-- `yoyopod/ui/screens/coordinator.py`
+- `yoyopod/integrations/call/runtime.py`
+- `yoyopod/integrations/music/runtime.py`
+- `yoyopod/integrations/power/service.py`
+- `yoyopod/ui/screens/manager.py`
 - `yoyopod/core/bus.py`
 - `yoyopod/core/scheduler.py`
 - `yoyopod/core/events.py`
@@ -374,7 +374,7 @@ If ordering looks inconsistent, check scheduler backlog first and bus backlog se
 
 The current architecture is a partial extraction around a single coordinator-thread event loop.
 
-- Call, playback, and power now have explicit coordinators.
+- Call, playback, and power now have explicit runtime owners.
 - Screen refresh and screen-power behavior are split helpers, not one unified screen owner.
 - Network status still routes through `YoyoPodApp` directly.
 - `AppStateRuntime` is the derived-state authority, but `AppContext` is still the broad user-facing state sink.
