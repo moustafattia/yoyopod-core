@@ -30,13 +30,15 @@ def collect_process_memory(
     smaps_path = proc_dir / "smaps_rollup"
     status_path = proc_dir / "status"
 
-    if smaps_path.exists():
-        return parse_smaps_rollup(smaps_path.read_text(encoding="utf-8"), pid=actual_pid)
+    smaps_text = _safe_read_text(smaps_path)
+    if smaps_text is not None:
+        return parse_smaps_rollup(smaps_text, pid=actual_pid)
 
-    if status_path.exists():
+    status_text = _safe_read_text(status_path)
+    if status_text is not None:
         return ProcessMemorySnapshot(
             pid=actual_pid,
-            rss_kb=parse_status_rss_kb(status_path.read_text(encoding="utf-8")),
+            rss_kb=parse_status_rss_kb(status_text),
             pss_kb=None,
             private_dirty_kb=None,
             source="status",
@@ -68,6 +70,15 @@ def parse_status_rss_kb(text: str) -> int | None:
     """Parse VmRSS from /proc/<pid>/status."""
 
     return _parse_kb_fields(text).get("VmRSS")
+
+
+def _safe_read_text(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return None
 
 
 def _parse_kb_fields(text: str) -> dict[str, int]:
