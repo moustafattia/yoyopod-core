@@ -15,6 +15,7 @@ from yoyopod.core.audio_volume import AudioVolumeController
 from yoyopod.backends.music import MpvBackend
 from yoyopod.config import ConfigManager, MediaConfig, YoyoPodConfig
 from yoyopod.core.app_context import AppContext
+from yoyopod.core.background import BackgroundExecutor
 from yoyopod.core.bus import Bus
 from yoyopod.core.audio_volume import OutputVolumeController
 from yoyopod.core.events import LifecycleEvent
@@ -108,6 +109,7 @@ class YoyoPodApp:
         self.log_buffer: LogBuffer[dict[str, object]] = LogBuffer(maxlen=log_buffer_size)
         self.bus = Bus(main_thread_id=self.main_thread_id, strict=strict_bus)
         self.scheduler = MainThreadScheduler(main_thread_id=self.main_thread_id)
+        self.background = BackgroundExecutor(self.scheduler, diagnostics_log=self.log_buffer)
         self.services = Services(self.bus, diagnostics_log=self.log_buffer)
         self.states = States(self.bus)
         self.config: object | None = None
@@ -312,6 +314,7 @@ class YoyoPodApp:
         self.running = False
         self._stopped = True
         self.bus.publish(LifecycleEvent(phase="stopped"))
+        self.background.shutdown()
         self.scheduler.drain()
         self.bus.drain()
 

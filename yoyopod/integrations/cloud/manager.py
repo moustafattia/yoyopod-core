@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -306,7 +305,9 @@ class CloudManager:
             self.status.provisioning_state = "invalid_provisioning"
             self.status.cloud_state = "degraded"
             self.status.config_source = "none"
-            self.status.last_error_summary = "Provisioning file must contain device_id and device_secret"
+            self.status.last_error_summary = (
+                "Provisioning file must contain device_id and device_secret"
+            )
             self.status.unapplied_keys = []
             self.status.config_version = 0
             self._sync_context_state()
@@ -429,7 +430,9 @@ class CloudManager:
         assert token is not None
         self._access_token = token
         self.status.backend_reachable = True
-        self.status.cloud_state = "ready" if self.status.config_source != "none" else "authenticating"
+        self.status.cloud_state = (
+            "ready" if self.status.config_source != "none" else "authenticating"
+        )
         self._schedule_refresh(token, now=completed_at)
         self._next_config_poll_at = completed_at
         self._network_retry_index = 0
@@ -507,7 +510,9 @@ class CloudManager:
         self._persist_status()
         self._sync_context_state()
 
-    def _run_fetch_remote_config(self, *, access_token: str, device_id: str, generation: int) -> None:
+    def _run_fetch_remote_config(
+        self, *, access_token: str, device_id: str, generation: int
+    ) -> None:
         try:
             payload = self.client.fetch_config(access_token=access_token, device_id=device_id)
         except CloudClientError as exc:
@@ -579,9 +584,7 @@ class CloudManager:
         assert payload is not None
         config_version = int(payload.get("config_version") or 0)
         self._apply_cloud_contacts(payload)
-        runtime_payload = {
-            key: value for key, value in payload.items() if key != "contacts"
-        }
+        runtime_payload = {key: value for key, value in payload.items() if key != "contacts"}
         unapplied_keys = self.config_manager.apply_cloud_overrides(runtime_payload)
         self._apply_runtime_side_effects(payload)
         self.status.backend_reachable = True
@@ -605,11 +608,15 @@ class CloudManager:
         self._persist_status()
         self._sync_context_state()
         from yoyopod import __version__
+
         self.publish_heartbeat(firmware_version=__version__)
         self._maybe_bootstrap_local_contacts(payload=payload, completed_at=completed_at)
 
     def _start_worker(self, *, name: str, work: Callable[[], None]) -> None:
-        threading.Thread(target=work, daemon=True, name=name).start()
+        """Run one cloud worker on the shared background pool for centralized shutdown."""
+
+        del name  # Background pool uses its own thread names; the label aids only diagnostics.
+        self.app.background.io.submit(work)
 
     def _matches_current_provisioning(self, *, device_id: str, generation: int) -> bool:
         return (
@@ -767,7 +774,9 @@ class CloudManager:
         entries = contacts_payload.get("entries", [])
         return isinstance(entries, list) and len(entries) > 0
 
-    def _maybe_bootstrap_local_contacts(self, *, payload: dict[str, Any], completed_at: float) -> None:
+    def _maybe_bootstrap_local_contacts(
+        self, *, payload: dict[str, Any], completed_at: float
+    ) -> None:
         """Upload local seeded contacts once when the backend still has none."""
 
         if self._contacts_bootstrap_attempted:
@@ -909,9 +918,7 @@ class CloudManager:
             return
 
         self._apply_cloud_contacts(raw_payload)
-        runtime_payload = {
-            key: value for key, value in raw_payload.items() if key != "contacts"
-        }
+        runtime_payload = {key: value for key, value in raw_payload.items() if key != "contacts"}
         unapplied_keys = self.config_manager.apply_cloud_overrides(runtime_payload)
         self._apply_runtime_side_effects(raw_payload)
         self.status.config_source = "cache"
@@ -1152,9 +1159,9 @@ class CloudManager:
         if self._remote_playback_session is None or track is None:
             return
 
-        if self._remote_playback_session.get("activation_pending") and not self._remote_playback_session.get(
-            "cached_path"
-        ):
+        if self._remote_playback_session.get(
+            "activation_pending"
+        ) and not self._remote_playback_session.get("cached_path"):
             return
 
         current_uri = getattr(track, "uri", None)
@@ -1207,7 +1214,11 @@ class CloudManager:
         if session is None:
             return
 
-        if state == "stopped" and session.get("activation_pending") and not session.get("cached_path"):
+        if (
+            state == "stopped"
+            and session.get("activation_pending")
+            and not session.get("cached_path")
+        ):
             return
 
         position_ms = self._current_playback_position_ms()
@@ -1530,9 +1541,9 @@ class CloudManager:
         uploads_dir = music_dir / "dashboard_uploads"
         uploads_dir.mkdir(parents=True, exist_ok=True)
 
-        preferred_name = (
-            str(payload.get("filename") or payload.get("originalFilename") or payload.get("title") or "").strip()
-        )
+        preferred_name = str(
+            payload.get("filename") or payload.get("originalFilename") or payload.get("title") or ""
+        ).strip()
         source_suffix = cached_path.suffix or ".mp3"
         display_stem = self._safe_media_stem(preferred_name, default_stem=track_id)
         unique_stem = self._safe_media_stem(track_id, default_stem="track")
