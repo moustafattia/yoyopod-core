@@ -126,9 +126,26 @@ class BackgroundPool:
         self._pool_name = pool_name
 
     def submit(self, fn: Callable[..., _T], *args: Any, **kwargs: Any) -> Future[_T]:
-        """Submit work to the pool; the caller owns the returned `Future`."""
+        """Submit work to the pool; the caller owns the returned `Future`.
 
-        return self._executor.submit(fn, *args, **kwargs)
+        After :meth:`BackgroundExecutor.shutdown` has closed the underlying
+        executor, ``submit`` will not raise — it logs the dropped work and
+        returns an already-cancelled ``Future`` so call sites do not need
+        defensive try/except. ``submit_and_post`` consumers still receive
+        their ``on_done`` callback via the existing cancelled-future path.
+        """
+
+        try:
+            return self._executor.submit(fn, *args, **kwargs)
+        except RuntimeError:
+            logger.warning(
+                "Dropping submit to background pool {!r} after shutdown: {}",
+                self._pool_name,
+                _callable_name(fn),
+            )
+            cancelled: Future[_T] = Future()
+            cancelled.cancel()
+            return cancelled
 
     def submit_and_post(
         self,
@@ -139,7 +156,7 @@ class BackgroundPool:
     ) -> Future[_T]:
         """Submit work and deliver the completed `Future` back via the main-thread scheduler."""
 
-        future = self._executor.submit(fn, *args, **kwargs)
+        future = self.submit(fn, *args, **kwargs)
         future.add_done_callback(self._build_post_callback(fn, on_done))
         return future
 

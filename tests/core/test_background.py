@@ -351,6 +351,59 @@ def test_power_pool_isolated_from_io_pool() -> None:
     executor.shutdown()
 
 
+def test_submit_after_shutdown_returns_cancelled_future_without_raising() -> None:
+    """Late submissions during shutdown must not raise ``RuntimeError``.
+
+    Cloud completion handlers (e.g. ``_complete_fetch_remote_config`` ->
+    ``_maybe_bootstrap_local_contacts`` -> ``_start_worker``) can fire on the
+    scheduler during shutdown drain. A closed ``ThreadPoolExecutor`` would
+    raise ``RuntimeError`` on submit; the pool must instead drop the work,
+    log it, and return a cancelled Future.
+    """
+
+    scheduler = MainThreadScheduler()
+    executor = BackgroundExecutor(scheduler)
+    executor.shutdown()
+
+    future = executor.io.submit(lambda: "should-not-run")
+    assert future.cancelled(), "post-shutdown submit must return a cancelled Future"
+
+    # And the same for every other named pool (they all share the wrapper).
+    for pool in (executor.media, executor.subprocess, executor.watchdog, executor.power):
+        f = pool.submit(lambda: "x")
+        assert f.cancelled()
+
+
+def test_submit_and_post_after_shutdown_still_invokes_on_done() -> None:
+    """submit_and_post during shutdown must run on_done so callers can clean up.
+
+    Caller cleanup (e.g. clearing ``_request_in_flight``, ``_power_refresh_in_flight``)
+    lives in on_done. If late submissions silently dropped without firing
+    on_done, in-flight bookkeeping would be stuck on True forever.
+    """
+
+    scheduler = MainThreadScheduler()
+    diagnostics: list[dict[str, Any]] = []
+    executor = BackgroundExecutor(scheduler, diagnostics_log=diagnostics)
+    executor.shutdown()
+
+    cleanup_called: list[bool] = []
+
+    def on_done(_fut: Future[Any]) -> None:
+        cleanup_called.append(True)
+
+    future = executor.io.submit_and_post(lambda: "x", on_done=on_done)
+    assert future.cancelled()
+
+    _wait_for_pending(scheduler, timeout_seconds=2.0)
+    scheduler.drain()
+
+    assert cleanup_called == [True], "on_done was not invoked for post-shutdown submit"
+
+    cancelled_entries = [e for e in diagnostics if e.get("kind") == "background_cancelled"]
+    assert cancelled_entries, f"no background_cancelled entry; saw {diagnostics}"
+
+
 def test_invoke_handler_runs_on_done_on_cancelled_future_without_crashing() -> None:
     """Cancelled queued futures must not crash ``_invoke_handler``.
 

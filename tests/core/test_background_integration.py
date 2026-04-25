@@ -71,6 +71,44 @@ def test_app_stop_shuts_down_background_executor() -> None:
     assert app.background.is_shutdown() is True
 
 
+def test_app_stop_handles_completion_callbacks_that_submit_more_work() -> None:
+    """Regression: scheduler callbacks that submit follow-up background work
+    during shutdown drain must not hit a closed pool.
+
+    Cloud completion paths (e.g. ``_complete_fetch_remote_config`` ->
+    ``_maybe_bootstrap_local_contacts`` -> ``_start_worker``) can enqueue
+    scheduler callbacks that submit new background work. If ``app.stop()``
+    closed the pools before draining the scheduler, those submits would raise
+    ``RuntimeError`` and follow-up work would be lost — leaving in-flight
+    bookkeeping inconsistent.
+    """
+
+    app = YoyoPodApp(strict_bus=True)
+    app.start()
+
+    submit_outcomes: list[str] = []
+
+    def follow_up() -> None:
+        pass
+
+    def cloud_completion_callback() -> None:
+        try:
+            app.background.io.submit(follow_up)
+            submit_outcomes.append("ok")
+        except RuntimeError as exc:
+            submit_outcomes.append(f"raised:{exc}")
+
+    app.scheduler.post(cloud_completion_callback)
+
+    # Must not raise.
+    app.stop()
+
+    assert submit_outcomes == ["ok"], (
+        "completion_callback either did not run or submit raised RuntimeError: "
+        f"submit_outcomes={submit_outcomes}"
+    )
+
+
 def test_app_background_joins_registered_long_running_thread() -> None:
     app = YoyoPodApp(strict_bus=True)
     app.start()

@@ -314,6 +314,14 @@ class YoyoPodApp:
         self.running = False
         self._stopped = True
         self.bus.publish(LifecycleEvent(phase="stopped"))
+        # Drain main-thread queues BEFORE closing the background pools so that
+        # completion callbacks running on the scheduler (e.g. cloud
+        # _complete_fetch_remote_config -> _maybe_bootstrap_local_contacts ->
+        # _start_worker) can submit follow-up background work without hitting
+        # a closed executor. After background.shutdown() we drain again to
+        # absorb any done-callbacks fired by cancel_futures.
+        self.scheduler.drain()
+        self.bus.drain()
         self.background.shutdown()
         self.scheduler.drain()
         self.bus.drain()
