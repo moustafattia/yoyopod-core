@@ -1,15 +1,18 @@
 """Central background-work executor for off-thread I/O and subprocess operations.
 
-Two named `ThreadPoolExecutor` pools (`io`, `subprocess`) run blocking work
-off the coordinator thread, and a registry of long-running poller threads
-provides centralized shutdown discipline. All Future results return to the
-coordinator via :meth:`MainThreadScheduler.post` so call sites never touch
-threading primitives directly.
+Three named `ThreadPoolExecutor` pools (`io`, `subprocess`, `watchdog`) run
+blocking work off the coordinator thread, and a registry of long-running
+poller threads provides centralized shutdown discipline. All Future results
+return to the coordinator via :meth:`MainThreadScheduler.post` so call sites
+never touch threading primitives directly. The `watchdog` pool is reserved
+for safety-critical work (e.g. PiSugar watchdog feeds) and never shares
+workers with the general-purpose `io` pool.
 """
 
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol, TypeVar
@@ -30,6 +33,7 @@ class _DiagnosticsLog(Protocol):
 _T = TypeVar("_T")
 _DEFAULT_IO_WORKERS = 4
 _DEFAULT_SUBPROCESS_WORKERS = 2
+_DEFAULT_WATCHDOG_WORKERS = 1
 _DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 
 
@@ -156,12 +160,16 @@ class BackgroundExecutor:
         diagnostics_log: _DiagnosticsLog | None = None,
         io_workers: int = _DEFAULT_IO_WORKERS,
         subprocess_workers: int = _DEFAULT_SUBPROCESS_WORKERS,
+        watchdog_workers: int = _DEFAULT_WATCHDOG_WORKERS,
     ) -> None:
         self._scheduler = scheduler
         self._diagnostics_log = diagnostics_log
         self._io_executor = ThreadPoolExecutor(max_workers=io_workers, thread_name_prefix="yp-io")
         self._subprocess_executor = ThreadPoolExecutor(
             max_workers=subprocess_workers, thread_name_prefix="yp-sub"
+        )
+        self._watchdog_executor = ThreadPoolExecutor(
+            max_workers=watchdog_workers, thread_name_prefix="yp-wd"
         )
         self.io = BackgroundPool(
             executor=self._io_executor,
@@ -174,6 +182,12 @@ class BackgroundExecutor:
             scheduler=scheduler,
             diagnostics_log=diagnostics_log,
             pool_name="subprocess",
+        )
+        self.watchdog = BackgroundPool(
+            executor=self._watchdog_executor,
+            scheduler=scheduler,
+            diagnostics_log=diagnostics_log,
+            pool_name="watchdog",
         )
         self._long_running: list[_LongRunningEntry] = []
         self._shutdown = False
@@ -201,6 +215,7 @@ class BackgroundExecutor:
         self._diagnostics_log = diagnostics_log
         self.io._set_diagnostics_log(diagnostics_log)
         self.subprocess._set_diagnostics_log(diagnostics_log)
+        self.watchdog._set_diagnostics_log(diagnostics_log)
 
     def long_running_thread_names(self) -> list[str]:
         """Return the names of currently registered long-running threads."""
@@ -215,7 +230,13 @@ class BackgroundExecutor:
             return self._shutdown
 
     def shutdown(self, *, timeout: float = _DEFAULT_SHUTDOWN_TIMEOUT_SECONDS) -> None:
-        """Cancel pending Futures, join workers, and join registered long-running threads."""
+        """Cancel pending Futures, bound-wait pool drain, and join long-running threads.
+
+        Total time is bounded by ``timeout``: each pool is shut down via a daemon
+        helper thread so a stuck in-flight task cannot block shutdown indefinitely.
+        Pending futures are cancelled; running tasks continue in their daemon worker
+        threads (which die with the process if the wait times out).
+        """
 
         with self._shutdown_lock:
             if self._shutdown:
@@ -223,16 +244,41 @@ class BackgroundExecutor:
             self._shutdown = True
             entries = list(self._long_running)
 
-        self._io_executor.shutdown(wait=True, cancel_futures=True)
-        self._subprocess_executor.shutdown(wait=True, cancel_futures=True)
+        deadline = time.monotonic() + max(0.0, timeout)
+        self._shutdown_pool_bounded(self._io_executor, "io", deadline)
+        self._shutdown_pool_bounded(self._subprocess_executor, "subprocess", deadline)
+        self._shutdown_pool_bounded(self._watchdog_executor, "watchdog", deadline)
         for entry in entries:
-            entry.thread.join(timeout=timeout)
+            remaining = max(0.0, deadline - time.monotonic())
+            entry.thread.join(timeout=remaining)
             if entry.thread.is_alive():
                 logger.warning(
-                    "Long-running background thread {!r} did not exit within {}s",
+                    "Long-running background thread {!r} did not exit within shutdown budget",
                     entry.name,
-                    timeout,
                 )
+
+    def _shutdown_pool_bounded(
+        self,
+        executor: ThreadPoolExecutor,
+        name: str,
+        deadline: float,
+    ) -> None:
+        """Shut one pool down with a bounded wait against the shared deadline."""
+
+        waiter = threading.Thread(
+            target=lambda: executor.shutdown(wait=True, cancel_futures=True),
+            daemon=True,
+            name=f"yp-{name}-shutdown",
+        )
+        waiter.start()
+        remaining = max(0.0, deadline - time.monotonic())
+        waiter.join(timeout=remaining)
+        if waiter.is_alive():
+            logger.warning(
+                "Background pool {!r} did not finish shutdown within budget; "
+                "in-flight tasks may still be running",
+                name,
+            )
 
 
 def _callable_name(fn: Callable[..., Any]) -> str:

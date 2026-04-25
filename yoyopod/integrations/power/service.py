@@ -267,7 +267,7 @@ class PowerRuntimeService:
             return
 
         self.app._watchdog_feed_in_flight = True
-        self.app.background.io.submit(self.run_watchdog_feed_attempt)
+        self.app.background.watchdog.submit(self.run_watchdog_feed_attempt)
 
     def run_watchdog_feed_attempt(self) -> None:
         """Feed the watchdog off the coordinator thread and report the outcome."""

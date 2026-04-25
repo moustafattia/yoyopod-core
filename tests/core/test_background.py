@@ -138,6 +138,33 @@ def test_shutdown_returns_when_long_running_thread_misses_timeout() -> None:
     thread.join(timeout=2.0)
 
 
+def test_shutdown_completes_within_timeout_when_pool_task_blocks() -> None:
+    """Shutdown must honor its timeout even when an in-flight pool task blocks indefinitely."""
+
+    scheduler = MainThreadScheduler()
+    executor = BackgroundExecutor(scheduler, io_workers=1)
+    io_started = threading.Event()
+    io_release = threading.Event()
+
+    def slow_io() -> None:
+        io_started.set()
+        # Hold for far longer than the shutdown budget; released in cleanup below.
+        io_release.wait(timeout=5.0)
+
+    executor.io.submit(slow_io)
+    assert io_started.wait(timeout=1.0), "io task did not start before shutdown"
+
+    started_at = time.monotonic()
+    executor.shutdown(timeout=0.1)
+    elapsed = time.monotonic() - started_at
+    # Without the bounded-shutdown helper, this would block on the running task
+    # (cancel_futures only cancels queued work) and elapsed would be ~5s.
+    assert elapsed < 1.0, f"shutdown took {elapsed:.2f}s, expected within budget"
+
+    # Cleanup: let the daemon worker exit so it does not linger across tests.
+    io_release.set()
+
+
 def test_shutdown_is_idempotent() -> None:
     scheduler = MainThreadScheduler()
     executor = BackgroundExecutor(scheduler)
@@ -177,6 +204,34 @@ def test_set_diagnostics_log_propagates_to_pools() -> None:
     executor.shutdown()
 
 
+def test_set_diagnostics_log_propagates_to_watchdog_pool() -> None:
+    """Diagnostics sink must reach the dedicated watchdog pool too."""
+
+    scheduler = MainThreadScheduler()
+    executor = BackgroundExecutor(scheduler)
+    diagnostics: list[dict[str, Any]] = []
+    executor.set_diagnostics_log(diagnostics)
+
+    def boom() -> None:
+        raise RuntimeError("watchdog-attached")
+
+    future = executor.watchdog.submit_and_post(boom, on_done=lambda fut: None)
+    with pytest.raises(RuntimeError):
+        future.result(timeout=2.0)
+
+    _wait_for_pending(scheduler)
+    scheduler.drain()
+
+    matching = [
+        entry
+        for entry in diagnostics
+        if entry["pool"] == "watchdog" and "watchdog-attached" in entry["exc"]
+    ]
+    assert matching, f"no watchdog-pool error recorded; saw {diagnostics}"
+
+    executor.shutdown()
+
+
 def test_subprocess_pool_isolated_from_io_pool() -> None:
     scheduler = MainThreadScheduler()
     executor = BackgroundExecutor(scheduler, io_workers=1, subprocess_workers=1)
@@ -194,6 +249,32 @@ def test_subprocess_pool_isolated_from_io_pool() -> None:
     # Subprocess pool should still process work in parallel.
     sub_done = executor.subprocess.submit(lambda: "sub-ok")
     assert sub_done.result(timeout=1.0) == "sub-ok"
+
+    io_release.set()
+    blocker.result(timeout=2.0)
+    executor.shutdown()
+
+
+def test_watchdog_pool_isolated_from_io_pool() -> None:
+    """Watchdog feeds must run on workers that cloud/io work cannot saturate."""
+
+    scheduler = MainThreadScheduler()
+    executor = BackgroundExecutor(scheduler, io_workers=1)
+    io_started = threading.Event()
+    io_release = threading.Event()
+
+    def slow_io() -> None:
+        io_started.set()
+        io_release.wait(timeout=2.0)
+
+    # Saturate the io pool with a long-blocked task that mirrors a stuck
+    # CloudManager HTTP call.
+    blocker = executor.io.submit(slow_io)
+    assert io_started.wait(timeout=1.0)
+
+    # The watchdog pool must run independently and complete promptly.
+    wd_done = executor.watchdog.submit(lambda: "wd-ok")
+    assert wd_done.result(timeout=1.0) == "wd-ok"
 
     io_release.set()
     blocker.result(timeout=2.0)

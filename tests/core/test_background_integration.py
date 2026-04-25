@@ -104,3 +104,36 @@ def test_app_background_subprocess_pool_isolated_from_io_pool() -> None:
     assert app.background.io is not app.background.subprocess
 
     app.stop()
+
+
+def test_app_background_watchdog_pool_isolated_from_io_pool() -> None:
+    """``app.background.watchdog`` must run independently of cloud-saturated io."""
+
+    app = YoyoPodApp(strict_bus=True)
+    app.start()
+    io_started = threading.Event()
+    io_release = threading.Event()
+
+    def slow_io() -> None:
+        io_started.set()
+        io_release.wait(timeout=2.0)
+
+    # Saturate every io worker so a queued submission would have to wait.
+    blockers = [
+        app.background.io.submit(slow_io)
+        for _ in range(4)  # default _DEFAULT_IO_WORKERS = 4
+    ]
+    assert io_started.wait(timeout=1.0)
+
+    # Watchdog feeds must complete promptly even while io is saturated.
+    wd_future: Future[str] = app.background.watchdog.submit(lambda: "wd-ok")
+    assert wd_future.result(timeout=1.0) == "wd-ok"
+    assert app.background.watchdog is not app.background.io
+
+    io_release.set()
+    for blocker in blockers:
+        try:
+            blocker.result(timeout=2.0)
+        except Exception:
+            pass
+    app.stop()
