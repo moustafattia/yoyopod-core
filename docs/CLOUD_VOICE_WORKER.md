@@ -12,7 +12,8 @@ For the dev lane, edit the systemd environment file on the Pi:
 ```bash
 ssh rpi-zero
 sudo touch /etc/default/yoyopod-dev
-sudo chmod 600 /etc/default/yoyopod-dev
+sudo chgrp "$USER" /etc/default/yoyopod-dev
+sudo chmod 640 /etc/default/yoyopod-dev
 sudoedit /etc/default/yoyopod-dev
 ```
 
@@ -28,6 +29,10 @@ YOYOPOD_TTS_BACKEND=cloud-worker
 ```
 
 For the prod lane, use `/etc/default/yoyopod-prod` instead.
+
+The file is group-readable because the remote dev workflow sources lane
+defaults as the SSH deploy user before systemd starts the root-owned service.
+Do not make this file world-readable.
 
 After editing the environment file, restart the active lane:
 
@@ -86,4 +91,3 @@ or from the dev machine:
 ```bash
 uv run yoyopod remote --host rpi-zero --branch <branch> validate --sha <commit>
 ```
-
