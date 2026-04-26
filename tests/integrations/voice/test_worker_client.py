@@ -243,6 +243,71 @@ def test_messages_from_other_domain_and_unknown_request_are_ignored() -> None:
     assert client.pending_count == 0
 
 
+def test_same_request_unrelated_error_kind_message_is_ignored() -> None:
+    scheduler = _Scheduler()
+    supervisor = _Supervisor()
+    client = VoiceWorkerClient(
+        scheduler=scheduler,
+        worker_supervisor=supervisor,
+        request_timeout_seconds=0.25,
+    )
+    results: list[VoiceWorkerTranscribeResult] = []
+    errors: list[BaseException] = []
+
+    thread = threading.Thread(
+        target=lambda: _capture_error(
+            errors,
+            lambda: results.append(
+                client.transcribe(
+                    audio_path=Path("/tmp/input.wav"),
+                    sample_rate_hz=16000,
+                    language="en",
+                    max_audio_seconds=5.0,
+                )
+            ),
+        )
+    )
+    thread.start()
+
+    _wait_until(lambda: len(scheduler.callbacks) == 1)
+    scheduler.drain()
+    request_id = str(supervisor.requests[0]["request_id"])
+
+    client.handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="error",
+            type="voice.progress",
+            request_id=request_id,
+            payload={
+                "code": "progress_parse_failure",
+                "message": "progress event failed upstream",
+            },
+        )
+    )
+
+    assert results == []
+    assert errors == []
+    assert client.pending_count == 1
+    assert thread.is_alive()
+
+    client.handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="result",
+            type="voice.transcribe.result",
+            request_id=request_id,
+            payload={"text": "correct", "confidence": 0.8, "is_final": True},
+        )
+    )
+    thread.join(timeout=1.0)
+
+    assert not thread.is_alive()
+    assert errors == []
+    assert results == [VoiceWorkerTranscribeResult(text="correct", confidence=0.8, is_final=True)]
+    assert client.pending_count == 0
+
+
 def test_speak_schedules_request_on_main_and_resolves_result() -> None:
     scheduler = _Scheduler()
     supervisor = _Supervisor()

@@ -149,7 +149,7 @@ class VoiceWorkerClient:
         if event.type == pending.expected_type:
             self._complete_with_result(pending, event)
             return
-        if event.type == "voice.error" or event.kind == "error":
+        if event.type == "voice.error":
             self._complete_with_worker_error(pending, event.payload)
             return
         if event.type == "voice.cancelled":
