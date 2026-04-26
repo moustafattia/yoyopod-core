@@ -78,15 +78,22 @@ class ScreensBoot:
                 and getattr(voice_cfg.assistant, "mode", "local") == "cloud"
                 and voice_worker_client is not None
             ):
+
                 def voice_service_factory(settings: VoiceSettings) -> VoiceManager:
+                    stt_backend = (
+                        CloudWorkerSpeechToTextBackend(client=voice_worker_client)
+                        if settings.stt_backend == "cloud-worker"
+                        else None
+                    )
+                    tts_backend = (
+                        CloudWorkerTextToSpeechBackend(client=voice_worker_client)
+                        if settings.tts_backend == "cloud-worker"
+                        else None
+                    )
                     return VoiceManager(
                         settings=settings,
-                        stt_backend=CloudWorkerSpeechToTextBackend(
-                            client=voice_worker_client,
-                        ),
-                        tts_backend=CloudWorkerTextToSpeechBackend(
-                            client=voice_worker_client,
-                        ),
+                        stt_backend=stt_backend,
+                        tts_backend=tts_backend,
                     )
 
             self.app.voice_runtime = VoiceRuntimeCoordinator(
@@ -374,4 +381,3 @@ class ScreensBoot:
         if self.get_interaction_profile() == InteractionProfile.ONE_BUTTON:
             return "hub"
         return "menu"
-

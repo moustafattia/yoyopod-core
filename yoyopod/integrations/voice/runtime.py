@@ -7,6 +7,7 @@ import threading
 import wave
 from dataclasses import replace
 from pathlib import Path
+from queue import Queue
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Callable
 
@@ -46,6 +47,9 @@ class VoiceRuntimeCoordinator:
         self._state_listener: Callable[[VoiceInteractionState], None] | None = None
         self._outcome_listener: Callable[[VoiceCommandOutcome], None] | None = None
         self._dispatcher: Callable[[Callable[[], None]], None] | None = None
+        self._tts_queue: Queue[str] = Queue()
+        self._tts_thread: threading.Thread | None = None
+        self._tts_thread_lock = threading.Lock()
 
     @property
     def state(self) -> VoiceInteractionState:
@@ -394,18 +398,32 @@ class VoiceRuntimeCoordinator:
     def _speak_outcome_async(self, text: str) -> None:
         """Speak an outcome outside the main-thread UI path."""
 
-        def run() -> None:
+        self._ensure_tts_worker()
+        self._tts_queue.put(text)
+
+    def _ensure_tts_worker(self) -> None:
+        """Start the serialized outcome-speech worker once."""
+
+        with self._tts_thread_lock:
+            if self._tts_thread is not None and self._tts_thread.is_alive():
+                return
+            self._tts_thread = threading.Thread(
+                target=self._run_tts_worker,
+                daemon=True,
+                name="VoiceRuntimeTTS",
+            )
+            self._tts_thread.start()
+
+    def _run_tts_worker(self) -> None:
+        while True:
+            text = self._tts_queue.get()
             try:
                 if not self._voice_service().speak(text):
                     logger.debug("Voice response not spoken: {}", text)
             except Exception:
                 logger.exception("Voice response speech failed")
-
-        threading.Thread(
-            target=run,
-            daemon=True,
-            name="VoiceRuntimeTTS",
-        ).start()
+            finally:
+                self._tts_queue.task_done()
 
     def _set_state(
         self,

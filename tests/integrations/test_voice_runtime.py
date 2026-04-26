@@ -449,3 +449,53 @@ def test_voice_outcome_speaks_on_background_thread_and_returns_quickly() -> None
     assert thread_names == ["VoiceRuntimeTTS"]
     release.set()
     assert finished.wait(timeout=1.0)
+
+
+def test_voice_outcome_speech_is_serialized_without_overlap() -> None:
+    first_started = threading.Event()
+    first_release = threading.Event()
+    second_started = threading.Event()
+    second_finished = threading.Event()
+    lock = threading.Lock()
+    active_speakers = 0
+    max_active_speakers = 0
+    speak_calls: list[str] = []
+
+    class _BlockingVoiceService:
+        def speak(self, text: str) -> bool:
+            nonlocal active_speakers, max_active_speakers
+            with lock:
+                active_speakers += 1
+                max_active_speakers = max(max_active_speakers, active_speakers)
+                speak_calls.append(text)
+            try:
+                if text == "First":
+                    first_started.set()
+                    first_release.wait(timeout=1.0)
+                if text == "Second":
+                    second_started.set()
+                    second_finished.set()
+                return True
+            finally:
+                with lock:
+                    active_speakers -= 1
+
+    service = _BlockingVoiceService()
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(context=None),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda _settings: service,
+        output_player=_FakeOutputPlayer(),
+    )
+
+    coordinator._apply_outcome(VoiceCommandOutcome("One", "First", should_speak=True))
+    assert first_started.wait(timeout=1.0)
+    coordinator._apply_outcome(VoiceCommandOutcome("Two", "Second", should_speak=True))
+
+    assert not second_started.wait(timeout=0.1)
+    first_release.set()
+    assert second_finished.wait(timeout=1.0)
+
+    assert speak_calls == ["First", "Second"]
+    assert max_active_speakers == 1
