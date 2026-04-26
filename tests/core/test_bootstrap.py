@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import sys
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import yoyopod.core.bootstrap as boot_module
-from yoyopod.core.audio_volume import OutputVolumeController
+from yoyopod.core.bootstrap import components_boot as components_boot_module
 from yoyopod.core import AppContext
+from yoyopod.core.audio_volume import OutputVolumeController
+from yoyopod.core.bootstrap.components_boot import ComponentsBoot
 from yoyopod.core.bootstrap import RuntimeBootService
+from yoyopod.core.bootstrap.screens_boot import ScreensBoot
 from yoyopod.core.bootstrap.managers_boot import ManagersBoot
+from yoyopod.core.bus import Bus
+from yoyopod.core.events import WorkerDomainStateChangedEvent
+from yoyopod.core.scheduler import MainThreadScheduler
+from yoyopod.core.workers import WorkerProcessConfig
+from yoyopod.integrations.voice import VoiceSettings
+from yoyopod.backends.voice import (
+    CloudWorkerSpeechToTextBackend,
+    CloudWorkerTextToSpeechBackend,
+)
 
 
 class _FakeDisplay:
@@ -233,6 +245,417 @@ class _FakeMusicRuntime:
 
     def handle_availability_change(self, *_args) -> None:
         return None
+
+
+class _DummyScreen:
+    def __init__(self, *_args, **_kwargs) -> None:
+        return None
+
+
+class _FakeScreenManager:
+    def __init__(self) -> None:
+        self.registered: list[str] = []
+        self.pushed: list[str] = []
+
+    def register_screen(self, name: str, _screen: object) -> None:
+        self.registered.append(name)
+
+    def push_screen(self, name: str) -> None:
+        self.pushed.append(name)
+
+
+def _components_boot_for(app: object) -> ComponentsBoot:
+    return ComponentsBoot(
+        app,
+        logger=SimpleNamespace(
+            info=lambda *_args, **_kwargs: None,
+            warning=lambda *_args, **_kwargs: None,
+            error=lambda *_args, **_kwargs: None,
+            exception=lambda *_args, **_kwargs: None,
+        ),
+        display_cls=None,
+        get_input_manager_fn=None,
+        screen_manager_cls=None,
+        lvgl_input_bridge_cls=None,
+        contract_error_cls=RuntimeError,
+        build_contract_message_fn=lambda message: message,
+    )
+
+
+def _quiet_logger() -> SimpleNamespace:
+    return SimpleNamespace(
+        info=lambda *_args, **_kwargs: None,
+        warning=lambda *_args, **_kwargs: None,
+        error=lambda *_args, **_kwargs: None,
+        exception=lambda *_args, **_kwargs: None,
+    )
+
+
+def _install_dummy_screen_modules(monkeypatch) -> None:
+    screens = {
+        "yoyopod.ui.screens.music.now_playing": "NowPlayingScreen",
+        "yoyopod.ui.screens.music.playlist": "PlaylistScreen",
+        "yoyopod.ui.screens.music.recent": "RecentTracksScreen",
+        "yoyopod.ui.screens.navigation.ask": "AskScreen",
+        "yoyopod.ui.screens.navigation.home": "HomeScreen",
+        "yoyopod.ui.screens.navigation.hub": "HubScreen",
+        "yoyopod.ui.screens.navigation.listen": "ListenScreen",
+        "yoyopod.ui.screens.navigation.menu": "MenuScreen",
+        "yoyopod.ui.screens.system.power": "PowerScreen",
+        "yoyopod.ui.screens.voip.call_history": "CallHistoryScreen",
+        "yoyopod.ui.screens.voip.contact_list": "ContactListScreen",
+        "yoyopod.ui.screens.voip.in_call": "InCallScreen",
+        "yoyopod.ui.screens.voip.incoming_call": "IncomingCallScreen",
+        "yoyopod.ui.screens.voip.outgoing_call": "OutgoingCallScreen",
+        "yoyopod.ui.screens.voip.quick_call": "CallScreen",
+        "yoyopod.ui.screens.voip.talk_contact": "TalkContactScreen",
+        "yoyopod.ui.screens.voip.voice_note": "VoiceNoteScreen",
+    }
+    for module_name, class_name in screens.items():
+        module = ModuleType(module_name)
+        setattr(module, class_name, _DummyScreen)
+        monkeypatch.setitem(sys.modules, module_name, module)
+
+
+def _cloud_voice_config(*, stt_backend: str, tts_backend: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        assistant=SimpleNamespace(
+            mode="cloud",
+            commands_enabled=True,
+            ai_requests_enabled=True,
+            screen_read_enabled=False,
+            stt_enabled=True,
+            tts_enabled=True,
+            stt_backend=stt_backend,
+            tts_backend=tts_backend,
+            vosk_model_path="models/vosk-model-small-en-us",
+            vosk_model_keep_loaded=True,
+            sample_rate_hz=16000,
+            record_seconds=4,
+            tts_rate_wpm=155,
+            tts_voice="en",
+        ),
+        audio=SimpleNamespace(
+            speaker_device_id="",
+            capture_device_id="",
+        ),
+        worker=SimpleNamespace(
+            enabled=True,
+            domain="voice",
+            provider="mock",
+            request_timeout_seconds=12.0,
+            max_audio_seconds=30.0,
+            stt_model="gpt-4o-mini-transcribe",
+            tts_model="gpt-4o-mini-tts",
+            tts_voice="alloy",
+            tts_instructions="Speak clearly and briefly for a small handheld device.",
+            local_feedback_enabled=True,
+        ),
+    )
+
+
+def _build_cloud_screen_app(*, stt_backend: str, tts_backend: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        display=SimpleNamespace(),
+        context=AppContext(),
+        screen_manager=_FakeScreenManager(),
+        audio_volume_controller=SimpleNamespace(
+            get_output_volume=lambda: 61,
+            volume_up=lambda _step: 66,
+            volume_down=lambda _step: 56,
+        ),
+        config_manager=SimpleNamespace(
+            get_voice_settings=lambda: _cloud_voice_config(
+                stt_backend=stt_backend,
+                tts_backend=tts_backend,
+            )
+        ),
+        voice_worker_client=object(),
+        input_manager=None,
+        people_directory=None,
+        voip_manager=None,
+        local_music_service=None,
+    )
+
+
+def test_setup_voice_worker_registers_starts_and_subscribes_when_cloud_enabled(
+    monkeypatch,
+) -> None:
+    """Cloud voice mode should wire the worker process and client exactly once."""
+
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-from-process")
+    scheduler = MainThreadScheduler()
+    bus = Bus(main_thread_id=scheduler.main_thread_id)
+    registered: list[tuple[str, WorkerProcessConfig]] = []
+    started: list[str] = []
+    health_probes: list[object] = []
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.components_boot._start_voice_worker_health_probe",
+        lambda client, logger, scheduler: health_probes.append((client, scheduler)),
+    )
+
+    class _FakeWorkerSupervisor:
+        def register(self, domain: str, config: WorkerProcessConfig) -> None:
+            registered.append((domain, config))
+
+        def start(self, domain: str) -> bool:
+            started.append(domain)
+            return True
+
+    app = SimpleNamespace(
+        config_manager=SimpleNamespace(
+            get_voice_settings=lambda: SimpleNamespace(
+                assistant=SimpleNamespace(mode="cloud"),
+                worker=SimpleNamespace(
+                    enabled=True,
+                    domain="voice",
+                    provider="openai",
+                    argv=["python", "fake_worker.py"],
+                    request_timeout_seconds=3.5,
+                    stt_model="stt-from-yaml",
+                    tts_model="tts-from-yaml",
+                    tts_voice="voice-from-yaml",
+                    tts_instructions="instructions from yaml",
+                ),
+            )
+        ),
+        scheduler=scheduler,
+        bus=bus,
+        worker_supervisor=_FakeWorkerSupervisor(),
+        voice_worker_client=None,
+    )
+    boot = _components_boot_for(app)
+
+    assert boot.setup_voice_worker() is True
+
+    assert app.voice_worker_client is not None
+    assert len(registered) == 1
+    domain, worker_config = registered[0]
+    assert domain == "voice"
+    assert worker_config.name == "voice"
+    assert worker_config.argv == ["python", "fake_worker.py"]
+    assert worker_config.cwd is None
+    assert worker_config.env is not None
+    assert worker_config.env["OPENAI_API_KEY"] == "secret-from-process"
+    assert worker_config.env["YOYOPOD_VOICE_WORKER_PROVIDER"] == "openai"
+    assert worker_config.env["YOYOPOD_CLOUD_STT_MODEL"] == "stt-from-yaml"
+    assert worker_config.env["YOYOPOD_CLOUD_TTS_MODEL"] == "tts-from-yaml"
+    assert worker_config.env["YOYOPOD_CLOUD_TTS_VOICE"] == "voice-from-yaml"
+    assert worker_config.env["YOYOPOD_CLOUD_TTS_INSTRUCTIONS"] == "instructions from yaml"
+    assert started == ["voice"]
+    assert bus.subscription_counts()["WorkerMessageReceivedEvent"] == 1
+    assert bus.subscription_counts()["WorkerDomainStateChangedEvent"] == 1
+    assert health_probes == [(app.voice_worker_client, scheduler)]
+
+    first_client = app.voice_worker_client
+    assert boot.setup_voice_worker() is False
+
+    assert app.voice_worker_client is first_client
+    assert len(registered) == 1
+    assert started == ["voice"]
+
+
+def test_setup_voice_worker_clears_client_when_start_fails(monkeypatch) -> None:
+    """A failed worker start should leave cloud STT/TTS unavailable at setup time."""
+
+    scheduler = MainThreadScheduler()
+    bus = Bus(main_thread_id=scheduler.main_thread_id)
+    health_probes: list[object] = []
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.components_boot._start_voice_worker_health_probe",
+        lambda client, logger, scheduler: health_probes.append((client, scheduler)),
+    )
+
+    class _FailingWorkerSupervisor:
+        def register(self, domain: str, config: WorkerProcessConfig) -> None:
+            return None
+
+        def start(self, domain: str) -> bool:
+            return False
+
+    app = SimpleNamespace(
+        config_manager=SimpleNamespace(
+            get_voice_settings=lambda: SimpleNamespace(
+                assistant=SimpleNamespace(mode="cloud"),
+                worker=SimpleNamespace(
+                    enabled=True,
+                    domain="voice",
+                    provider="mock",
+                    argv=["python", "fake_worker.py"],
+                    request_timeout_seconds=3.5,
+                ),
+            )
+        ),
+        scheduler=scheduler,
+        bus=bus,
+        worker_supervisor=_FailingWorkerSupervisor(),
+        voice_worker_client=None,
+    )
+
+    assert _components_boot_for(app).setup_voice_worker() is False
+    assert app.voice_worker_client is None
+    assert health_probes == []
+
+
+def test_voice_worker_running_state_schedules_health_probe_after_restart(monkeypatch) -> None:
+    """A restarted worker should re-probe health so cloud voice can recover."""
+
+    scheduler = MainThreadScheduler()
+    bus = Bus(main_thread_id=scheduler.main_thread_id)
+    health_probes: list[object] = []
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.components_boot._start_voice_worker_health_probe",
+        lambda client, logger, scheduler: health_probes.append((client, scheduler)),
+    )
+
+    class _FakeWorkerSupervisor:
+        def register(self, domain: str, config: WorkerProcessConfig) -> None:
+            return None
+
+        def start(self, domain: str) -> bool:
+            return True
+
+    app = SimpleNamespace(
+        config_manager=SimpleNamespace(
+            get_voice_settings=lambda: SimpleNamespace(
+                assistant=SimpleNamespace(mode="cloud"),
+                worker=SimpleNamespace(
+                    enabled=True,
+                    domain="voice",
+                    provider="mock",
+                    argv=["python", "fake_worker.py"],
+                    request_timeout_seconds=3.5,
+                ),
+            )
+        ),
+        scheduler=scheduler,
+        bus=bus,
+        worker_supervisor=_FakeWorkerSupervisor(),
+        voice_worker_client=None,
+    )
+
+    assert _components_boot_for(app).setup_voice_worker() is True
+    client = app.voice_worker_client
+    assert client is not None
+    health_probes.clear()
+
+    client.mark_unavailable("process_exited")
+    bus.publish(
+        WorkerDomainStateChangedEvent(domain="voice", state="degraded", reason="process_exited")
+    )
+    bus.drain()
+    bus.publish(WorkerDomainStateChangedEvent(domain="voice", state="running", reason="started"))
+    bus.drain()
+
+    assert health_probes == [(client, scheduler)]
+
+
+def test_voice_worker_health_probe_starts_after_scheduler_drains(monkeypatch) -> None:
+    """The provider health timeout must not start while boot is still blocking the loop."""
+
+    callbacks = []
+    health_calls = 0
+
+    class _Scheduler:
+        def post(self, callback) -> None:
+            callbacks.append(callback)
+
+        def run_on_main(self, callback) -> None:
+            raise AssertionError("post should be preferred")
+
+    class _Client:
+        def health(self):
+            nonlocal health_calls
+            health_calls += 1
+            return SimpleNamespace(provider="mock")
+
+    class _Thread:
+        def __init__(self, *, target, daemon, name) -> None:
+            self.target = target
+            self.daemon = daemon
+            self.name = name
+
+        def start(self) -> None:
+            self.target()
+
+    monkeypatch.setattr(components_boot_module.threading, "Thread", _Thread)
+
+    components_boot_module._start_voice_worker_health_probe(
+        _Client(),
+        logger=SimpleNamespace(info=lambda *_args, **_kwargs: None),
+        scheduler=_Scheduler(),
+    )
+
+    assert health_calls == 0
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert health_calls == 1
+
+
+def test_cloud_voice_factory_preserves_local_stt_when_only_tts_uses_worker(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    _install_dummy_screen_modules(monkeypatch)
+
+    class _CapturingVoiceRuntime:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.screens_boot.VoiceRuntimeCoordinator",
+        _CapturingVoiceRuntime,
+    )
+    app = _build_cloud_screen_app(stt_backend="vosk", tts_backend="cloud-worker")
+
+    assert ScreensBoot(app, logger=_quiet_logger()).setup_screens() is True
+
+    factory = captured["voice_service_factory"]
+    assert callable(factory)
+    manager = factory(
+        VoiceSettings(
+            mode="cloud",
+            stt_backend="vosk",
+            tts_backend="cloud-worker",
+            cloud_worker_enabled=True,
+        )
+    )
+
+    assert manager.settings.stt_backend == "vosk"
+    assert manager.settings.tts_backend == "cloud-worker"
+    assert not isinstance(manager.stt_backend, CloudWorkerSpeechToTextBackend)
+    assert isinstance(manager.tts_backend, CloudWorkerTextToSpeechBackend)
+
+
+def test_cloud_voice_factory_preserves_local_tts_when_only_stt_uses_worker(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    _install_dummy_screen_modules(monkeypatch)
+
+    class _CapturingVoiceRuntime:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.screens_boot.VoiceRuntimeCoordinator",
+        _CapturingVoiceRuntime,
+    )
+    app = _build_cloud_screen_app(stt_backend="cloud-worker", tts_backend="espeak-ng")
+
+    assert ScreensBoot(app, logger=_quiet_logger()).setup_screens() is True
+
+    factory = captured["voice_service_factory"]
+    assert callable(factory)
+    manager = factory(
+        VoiceSettings(
+            mode="cloud",
+            stt_backend="cloud-worker",
+            tts_backend="espeak-ng",
+            cloud_worker_enabled=True,
+        )
+    )
+
+    assert manager.settings.stt_backend == "cloud-worker"
+    assert manager.settings.tts_backend == "espeak-ng"
+    assert isinstance(manager.stt_backend, CloudWorkerSpeechToTextBackend)
+    assert not isinstance(manager.tts_backend, CloudWorkerTextToSpeechBackend)
 
 
 def test_init_core_components_schedules_screen_actions_for_lvgl_backend(monkeypatch) -> None:

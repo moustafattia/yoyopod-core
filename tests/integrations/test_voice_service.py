@@ -9,8 +9,10 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 import types
 
+import yoyopod.backends.voice.output as voice_output
 from yoyopod.backends.voice import (
     AlsaOutputPlayer,
     EspeakNgTextToSpeechBackend,
@@ -38,7 +40,13 @@ class FakeSttBackend:
     def is_available(self, settings: VoiceSettings) -> bool:
         return settings.stt_enabled
 
-    def transcribe(self, audio_path: Path, settings: VoiceSettings) -> VoiceTranscript:
+    def transcribe(
+        self,
+        audio_path: Path,
+        settings: VoiceSettings,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> VoiceTranscript:
         self.calls.append((audio_path, settings))
         return VoiceTranscript(text="call mom", confidence=0.91)
 
@@ -103,6 +111,13 @@ def test_match_voice_command_handles_basic_device_actions() -> None:
     assert match_voice_command("volume up").intent is VoiceCommandIntent.VOLUME_UP
     assert match_voice_command("mute microphone").intent is VoiceCommandIntent.MUTE_MIC
     assert match_voice_command("what time is it").intent is VoiceCommandIntent.UNKNOWN
+
+
+def test_match_voice_command_handles_cloud_stt_script_transliterated_controls() -> None:
+    """Cloud STT can return English command words in Arabic/Persian script."""
+
+    assert match_voice_command("وولیوم اپ").intent is VoiceCommandIntent.VOLUME_UP
+    assert match_voice_command("پلی موزیک").intent is VoiceCommandIntent.PLAY_MUSIC
 
 
 def test_match_voice_command_accepts_fuzzy_basic_phrases() -> None:
@@ -338,6 +353,52 @@ def test_subprocess_audio_capture_backend_falls_back_to_discovered_device(monkey
     assert popen_calls[0][popen_calls[0].index("-D") + 1] == "plughw:CARD=wm8960soundcard,DEV=0"
 
 
+def test_subprocess_audio_capture_backend_prefers_shared_capture_facade(monkeypatch) -> None:
+    """Pi audio facade routes should be preferred over direct card capture devices."""
+
+    pcm = _make_pcm(100, 3) + _make_pcm(800, 4) + _make_pcm(100, 6)
+    popen_calls: list[list[str]] = []
+
+    def fake_popen(args: list[str], **_kwargs) -> _FakePopen:
+        popen_calls.append(args)
+        if "-D" in args and args[args.index("-D") + 1] == "capture":
+            return _FakePopen(args, data=pcm, returncode=0)
+        return _FakePopen(args, data=b"", returncode=1)
+
+    def fake_run(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        if args == ["arecord", "-L"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                (
+                    "default\n"
+                    "playback\n"
+                    "capture\n"
+                    "array\n"
+                    "plughw:CARD=wm8960soundcard,DEV=0\n"
+                    "hw:CARD=wm8960soundcard,DEV=0\n"
+                ),
+                "",
+            )
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.capture.shutil.which",
+        lambda b: "/usr/bin/arecord" if b == "arecord" else None,
+    )
+    monkeypatch.setattr("yoyopod.backends.voice.capture.subprocess.run", fake_run)
+    monkeypatch.setattr("yoyopod.backends.voice.capture.subprocess.Popen", fake_popen)
+
+    backend = SubprocessAudioCaptureBackend()
+    result = backend.capture(
+        VoiceCaptureRequest(mode="voice_commands", timeout_seconds=2.0),
+        VoiceSettings(capture_device_id="ALSA: wm8960-soundcard"),
+    )
+
+    assert result.recorded is True
+    assert popen_calls[0][popen_calls[0].index("-D") + 1] == "capture"
+
+
 def test_subprocess_audio_capture_backend_falls_back_when_preferred_device_breaks(
     monkeypatch,
 ) -> None:
@@ -524,6 +585,99 @@ def test_alsa_output_player_prefers_usb_card_routes(monkeypatch, tmp_path) -> No
 
     assert player.play_wav(audio_path) is True
     assert calls[1][:4] == ["aplay", "-q", "-D", "plughw:CARD=SE,DEV=0"]
+
+
+def test_alsa_output_player_prefers_shared_playback_facade(monkeypatch, tmp_path) -> None:
+    """Pi audio facade routes should be preferred over direct card playback devices."""
+
+    calls: list[list[str]] = []
+    audio_path = tmp_path / "tone.wav"
+    audio_path.write_bytes(b"RIFF")
+
+    def fake_run(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args == ["aplay", "-L"]:
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout=(
+                    "default\n"
+                    "playback\n"
+                    "capture\n"
+                    "dmixed\n"
+                    "plughw:CARD=wm8960soundcard,DEV=0\n"
+                    "sysdefault:CARD=wm8960soundcard\n"
+                ),
+                stderr="",
+            )
+        if args[:4] == ["aplay", "-q", "-D", "playback"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="busy")
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
+    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
+
+    player = AlsaOutputPlayer()
+
+    assert player.play_wav(audio_path, device_id="ALSA: wm8960-soundcard") is True
+    assert calls[1][:4] == ["aplay", "-q", "-D", "playback"]
+
+
+def test_alsa_output_player_can_skip_when_playback_lock_is_busy(monkeypatch, tmp_path) -> None:
+    """Local feedback should be able to avoid blocking behind an active TTS playback."""
+
+    audio_path = tmp_path / "tone.wav"
+    audio_path.write_bytes(b"RIFF")
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
+
+    assert voice_output._PLAYBACK_LOCK.acquire(blocking=False)
+    try:
+        player = AlsaOutputPlayer()
+        started_at = time.monotonic()
+
+        assert player.play_wav(audio_path, block_if_busy=False) is False
+        assert time.monotonic() - started_at < 0.1
+    finally:
+        voice_output._PLAYBACK_LOCK.release()
+
+
+def test_alsa_output_player_does_not_retry_after_playback_timeout(monkeypatch, tmp_path) -> None:
+    """A timeout should not replay the same prompt through every ALSA fallback route."""
+
+    calls: list[list[str]] = []
+    audio_path = tmp_path / "tone.wav"
+    audio_path.write_bytes(b"RIFF")
+
+    def fake_run(args: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args == ["aplay", "-L"]:
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout="playback\nplughw:CARD=wm8960soundcard,DEV=0\n",
+                stderr="",
+            )
+        raise subprocess.TimeoutExpired(args, kwargs.get("timeout"))
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
+    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
+
+    player = AlsaOutputPlayer()
+
+    assert player.play_wav(audio_path, device_id="playback", timeout_seconds=0.01) is False
+    assert calls == [
+        ["aplay", "-L"],
+        ["aplay", "-q", "-D", "playback", str(audio_path)],
+    ]
 
 
 def test_vosk_backend_requires_module_and_model(tmp_path, monkeypatch) -> None:

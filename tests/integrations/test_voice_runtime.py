@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -43,6 +46,7 @@ class _FakeConfigManager:
         self._contacts = contacts
         self._voice_settings = SimpleNamespace(
             assistant=SimpleNamespace(
+                mode="local",
                 commands_enabled=True,
                 ai_requests_enabled=True,
                 screen_read_enabled=False,
@@ -60,7 +64,19 @@ class _FakeConfigManager:
             audio=SimpleNamespace(
                 speaker_device_id="",
                 capture_device_id="",
-            )
+            ),
+            worker=SimpleNamespace(
+                enabled=False,
+                domain="voice",
+                provider="mock",
+                request_timeout_seconds=12.0,
+                max_audio_seconds=30.0,
+                stt_model="gpt-4o-mini-transcribe",
+                tts_model="gpt-4o-mini-tts",
+                tts_voice="alloy",
+                tts_instructions="Speak clearly and briefly for a small handheld device.",
+                local_feedback_enabled=True,
+            ),
         )
 
     def get_contacts(self) -> list[_FakeContact]:
@@ -144,7 +160,12 @@ class _FakeVoiceService:
         path.write_bytes(b"RIFF")
         return VoiceCaptureResult(audio_path=path, recorded=True)
 
-    def transcribe(self, audio_path: Path) -> VoiceTranscript:
+    def transcribe(
+        self,
+        audio_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> VoiceTranscript:
         return VoiceTranscript(text=self.transcript, confidence=0.91)
 
     def speak(self, text: str) -> bool:
@@ -167,6 +188,15 @@ class _NoAudioVoiceService(_FakeVoiceService):
 class _FakeOutputPlayer:
     def play_wav(self, path: Path, **kwargs) -> None:
         return None
+
+
+def _wait_until(predicate: Callable[[], bool], *, timeout_seconds: float = 1.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.001)
+    assert predicate()
 
 
 def _build_executor(
@@ -259,6 +289,7 @@ def test_voice_runtime_coordinator_runs_capture_and_emits_route() -> None:
     coordinator.begin_listening(async_capture=False)
 
     assert service.capture_calls == 1
+    _wait_until(lambda: service.speak_calls == ["Starting local music."])
     assert service.speak_calls == ["Starting local music."]
     assert outcomes == [
         VoiceCommandOutcome(
@@ -271,6 +302,70 @@ def test_voice_runtime_coordinator_runs_capture_and_emits_route() -> None:
     assert context.voice.last_spoken_text == "Starting local music."
     assert context.voice.interaction.phase == "reply"
     assert context.voice.interaction.headline == "Playing"
+
+
+def test_listening_cycle_uses_cloud_worker_transcript(tmp_path: Path) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"RIFF")
+    outcomes: list[VoiceCommandOutcome] = []
+
+    class _WorkerLikeVoiceService:
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return True
+
+        def tts_available(self) -> bool:
+            return False
+
+        def capture_audio(self, _request) -> VoiceCaptureResult:
+            return VoiceCaptureResult(audio_path=audio_path, recorded=True)
+
+        def transcribe(
+            self,
+            path: Path,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> VoiceTranscript:
+            assert path == audio_path
+            return VoiceTranscript(text="play music", confidence=1.0, is_final=True)
+
+        def speak(self, _text: str) -> bool:
+            return False
+
+    class _CommandExecutor:
+        def __init__(self) -> None:
+            self.transcripts: list[str] = []
+
+        def execute(self, transcript: str) -> VoiceCommandOutcome:
+            self.transcripts.append(transcript)
+            return VoiceCommandOutcome("Done", "play music", should_speak=False)
+
+    command_executor = _CommandExecutor()
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=command_executor,
+        voice_service_factory=lambda _settings: _WorkerLikeVoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+    coordinator.bind(
+        state_listener=None,
+        outcome_listener=outcomes.append,
+        dispatcher=lambda callback: callback(),
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert outcomes
+    assert command_executor.transcripts == ["play music"]
+    assert outcomes[-1] == VoiceCommandOutcome("Done", "play music", should_speak=False)
+    assert coordinator._tts_thread is None
+    assert not audio_path.exists()
 
 
 def test_voice_runtime_coordinator_handles_disabled_voice_without_capture() -> None:
@@ -290,6 +385,266 @@ def test_voice_runtime_coordinator_handles_disabled_voice_without_capture() -> N
     assert service.capture_calls == 0
     assert context.voice.interaction.phase == "reply"
     assert context.voice.interaction.headline == "Voice Off"
+
+
+def test_cloud_voice_unavailable_keeps_local_feedback_message() -> None:
+    class _VoiceService:
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return False
+
+        def tts_available(self) -> bool:
+            return False
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda _settings: _VoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+    outcomes: list[VoiceCommandOutcome] = []
+    coordinator.bind(
+        state_listener=None,
+        outcome_listener=outcomes.append,
+        dispatcher=lambda callback: callback(),
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert outcomes
+    assert coordinator.state.headline == "Speech Offline"
+    assert "Local controls still work" in coordinator.state.body
+
+
+def test_cloud_voice_unavailable_uses_service_settings_snapshot() -> None:
+    class _VoiceService:
+        def __init__(self, settings: VoiceSettings) -> None:
+            self.settings = settings
+
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return False
+
+        def tts_available(self) -> bool:
+            return False
+
+    settings_calls = 0
+    service_settings: list[VoiceSettings] = []
+
+    def settings_provider() -> VoiceSettings:
+        nonlocal settings_calls
+        settings_calls += 1
+        return VoiceSettings(mode="cloud" if settings_calls == 1 else "local")
+
+    def voice_service_factory(settings: VoiceSettings) -> _VoiceService:
+        service_settings.append(settings)
+        return _VoiceService(settings)
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=settings_provider,
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=voice_service_factory,
+        output_player=_FakeOutputPlayer(),
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert settings_calls == 1
+    assert service_settings == [VoiceSettings(mode="cloud")]
+    assert coordinator.state.headline == "Speech Offline"
+    assert "Cloud speech is unavailable" in coordinator.state.body
+
+
+def test_local_feedback_disabled_skips_attention_tone() -> None:
+    play_calls: list[Path] = []
+
+    class _RecordingOutputPlayer:
+        def play_wav(self, path: Path, **kwargs) -> None:
+            play_calls.append(path)
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(local_feedback_enabled=False),
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        output_player=_RecordingOutputPlayer(),
+    )
+
+    coordinator._play_attention_tone()
+
+    assert play_calls == []
+
+
+def test_local_feedback_skips_busy_playback_lock() -> None:
+    play_calls: list[dict[str, object]] = []
+
+    class _RecordingOutputPlayer:
+        def play_wav(self, path: Path, **kwargs) -> None:
+            play_calls.append({"path": path, **kwargs})
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(local_feedback_enabled=True),
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        output_player=_RecordingOutputPlayer(),
+    )
+
+    coordinator._play_attention_tone()
+
+    assert play_calls
+    assert play_calls[0]["block_if_busy"] is False
+
+
+def test_runtime_cancel_reaches_in_flight_cloud_transcription(tmp_path: Path) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"RIFF")
+    transcribe_started = threading.Event()
+    cancel_seen = threading.Event()
+    outcomes: list[VoiceCommandOutcome] = []
+
+    class _CancellableVoiceService:
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return True
+
+        def tts_available(self) -> bool:
+            return False
+
+        def capture_audio(self, _request) -> VoiceCaptureResult:
+            return VoiceCaptureResult(audio_path=audio_path, recorded=True)
+
+        def transcribe(
+            self,
+            path: Path,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> VoiceTranscript:
+            assert path == audio_path
+            assert cancel_event is not None
+            transcribe_started.set()
+            if cancel_event.wait(timeout=1.0):
+                cancel_seen.set()
+            return VoiceTranscript(text="play music", confidence=1.0, is_final=True)
+
+        def speak(self, _text: str) -> bool:
+            return False
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda _settings: _CancellableVoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+    coordinator.bind(
+        state_listener=None,
+        outcome_listener=outcomes.append,
+        dispatcher=lambda callback: callback(),
+    )
+
+    coordinator.begin_listening(async_capture=True)
+    assert transcribe_started.wait(timeout=1.0)
+    coordinator.cancel()
+
+    assert cancel_seen.wait(timeout=1.0)
+    _wait_until(lambda: not audio_path.exists())
+    assert outcomes == []
+
+
+def test_ptt_release_transcribes_with_fresh_cancel_event(tmp_path: Path) -> None:
+    audio_path = tmp_path / "ptt.wav"
+    audio_path.write_bytes(b"RIFF")
+    capture_started = threading.Event()
+    release_seen = threading.Event()
+    transcribe_cancel_events: list[threading.Event] = []
+    transcripts: list[str] = []
+    outcomes: list[VoiceCommandOutcome] = []
+
+    class _PTTReleaseVoiceService:
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return True
+
+        def tts_available(self) -> bool:
+            return False
+
+        def capture_audio(self, request) -> VoiceCaptureResult:
+            capture_started.set()
+            assert request.cancel_event is not None
+            assert request.cancel_event.wait(timeout=1.0)
+            release_seen.set()
+            return VoiceCaptureResult(audio_path=audio_path, recorded=True)
+
+        def transcribe(
+            self,
+            path: Path,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> VoiceTranscript:
+            assert path == audio_path
+            assert cancel_event is not None
+            transcribe_cancel_events.append(cancel_event)
+            return VoiceTranscript(text="play music", confidence=1.0, is_final=True)
+
+        def speak(self, _text: str) -> bool:
+            return False
+
+    class _CommandExecutor:
+        def execute(self, transcript: str) -> VoiceCommandOutcome:
+            transcripts.append(transcript)
+            return VoiceCommandOutcome("Done", transcript, should_speak=False)
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=_CommandExecutor(),
+        voice_service_factory=lambda _settings: _PTTReleaseVoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+    coordinator.bind(
+        state_listener=None,
+        outcome_listener=outcomes.append,
+        dispatcher=lambda callback: callback(),
+    )
+
+    coordinator.begin_ptt_capture()
+    assert capture_started.wait(timeout=1.0)
+    coordinator.finish_ptt_capture()
+
+    _wait_until(lambda: outcomes)
+    assert release_seen.is_set()
+    assert transcripts == ["play music"]
+    assert len(transcribe_cancel_events) == 1
+    assert not transcribe_cancel_events[0].is_set()
+    assert outcomes[-1] == VoiceCommandOutcome("Done", "play music", should_speak=False)
+    assert not audio_path.exists()
 
 
 def test_voice_runtime_coordinator_ptt_no_audio_resolves_to_no_speech() -> None:
@@ -351,3 +706,172 @@ def test_voice_runtime_coordinator_releases_cached_service_when_settings_change(
     assert second is created_services[1]
     assert created_services[0].released is True
     assert created_services[1].released is False
+
+
+def test_voice_settings_resolver_includes_cloud_worker_config() -> None:
+    config_manager = _FakeConfigManager([])
+    voice_cfg = config_manager.get_voice_settings()
+    voice_cfg.assistant.mode = "cloud"
+    voice_cfg.assistant.stt_backend = "cloud-worker"
+    voice_cfg.assistant.tts_backend = "cloud-worker"
+    voice_cfg.worker.enabled = True
+    voice_cfg.worker.domain = "voice"
+    voice_cfg.worker.provider = "openai"
+    voice_cfg.worker.request_timeout_seconds = 8.5
+    voice_cfg.worker.max_audio_seconds = 21.0
+    voice_cfg.worker.stt_model = "test-transcribe"
+    voice_cfg.worker.tts_model = "test-tts"
+    voice_cfg.worker.tts_voice = "verse"
+    voice_cfg.worker.tts_instructions = "Keep it tiny."
+    voice_cfg.worker.local_feedback_enabled = False
+
+    settings = VoiceSettingsResolver(
+        context=None,
+        config_manager=config_manager,
+    ).defaults()
+
+    assert settings.mode == "cloud"
+    assert settings.stt_backend == "cloud-worker"
+    assert settings.tts_backend == "cloud-worker"
+    assert settings.cloud_worker_enabled is True
+    assert settings.cloud_worker_domain == "voice"
+    assert settings.cloud_worker_provider == "openai"
+    assert settings.cloud_worker_request_timeout_seconds == 8.5
+    assert settings.cloud_worker_max_audio_seconds == 21.0
+    assert settings.cloud_worker_stt_model == "test-transcribe"
+    assert settings.cloud_worker_tts_model == "test-tts"
+    assert settings.cloud_worker_tts_voice == "verse"
+    assert settings.cloud_worker_tts_instructions == "Keep it tiny."
+    assert settings.local_feedback_enabled is False
+
+
+def test_spoken_outcome_does_not_block_main_thread() -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    class _VoiceService:
+        def speak(self, _text: str) -> bool:
+            started.set()
+            release.wait(timeout=2.0)
+            return True
+
+    runtime = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(context=None),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda _settings: _VoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+
+    started_at = time.monotonic()
+    runtime._apply_outcome(VoiceCommandOutcome("Done", "Playing music", should_speak=True))
+    elapsed = time.monotonic() - started_at
+
+    assert elapsed < 0.2
+    assert started.wait(timeout=1.0)
+    release.set()
+
+
+def test_spoken_outcome_failure_does_not_change_successful_command_outcome() -> None:
+    class _VoiceService:
+        def speak(self, _text: str) -> bool:
+            return False
+
+    runtime = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(context=None),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda _settings: _VoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+
+    runtime._apply_outcome(VoiceCommandOutcome("Done", "Playing music", should_speak=True))
+
+    runtime._tts_queue.join()
+    assert runtime.state.headline == "Done"
+    assert runtime.state.body == "Playing music"
+
+
+def test_voice_outcome_speaks_on_background_thread_and_returns_quickly() -> None:
+    context = AppContext()
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    thread_names: list[str] = []
+
+    class _BlockingVoiceService:
+        def speak(self, _text: str) -> bool:
+            thread_names.append(threading.current_thread().name)
+            started.set()
+            release.wait(timeout=0.5)
+            finished.set()
+            return True
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(context=context),
+        command_executor=VoiceCommandExecutor(context=context),
+        voice_service_factory=lambda _settings: _BlockingVoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+
+    started_at = time.monotonic()
+    coordinator._apply_outcome(VoiceCommandOutcome("Done", "Playing music", should_speak=True))
+    elapsed = time.monotonic() - started_at
+
+    assert elapsed < 0.2
+    assert context.voice.last_spoken_text == "Playing music"
+    assert started.wait(timeout=1.0)
+    assert thread_names == ["VoiceRuntimeTTS"]
+    release.set()
+    assert finished.wait(timeout=1.0)
+
+
+def test_voice_outcome_speech_is_serialized_without_overlap() -> None:
+    first_started = threading.Event()
+    first_release = threading.Event()
+    second_started = threading.Event()
+    second_finished = threading.Event()
+    lock = threading.Lock()
+    active_speakers = 0
+    max_active_speakers = 0
+    speak_calls: list[str] = []
+
+    class _BlockingVoiceService:
+        def speak(self, text: str) -> bool:
+            nonlocal active_speakers, max_active_speakers
+            with lock:
+                active_speakers += 1
+                max_active_speakers = max(max_active_speakers, active_speakers)
+                speak_calls.append(text)
+            try:
+                if text == "First":
+                    first_started.set()
+                    first_release.wait(timeout=1.0)
+                if text == "Second":
+                    second_started.set()
+                    second_finished.set()
+                return True
+            finally:
+                with lock:
+                    active_speakers -= 1
+
+    service = _BlockingVoiceService()
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(context=None),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda _settings: service,
+        output_player=_FakeOutputPlayer(),
+    )
+
+    coordinator._apply_outcome(VoiceCommandOutcome("One", "First", should_speak=True))
+    assert first_started.wait(timeout=1.0)
+    coordinator._apply_outcome(VoiceCommandOutcome("Two", "Second", should_speak=True))
+
+    assert not second_started.wait(timeout=0.1)
+    first_release.set()
+    assert second_finished.wait(timeout=1.0)
+
+    assert speak_calls == ["First", "Second"]
+    assert max_active_speakers == 1

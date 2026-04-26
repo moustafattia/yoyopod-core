@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 from typing import TYPE_CHECKING, Any
+
+from yoyopod.core.events import WorkerDomainStateChangedEvent, WorkerMessageReceivedEvent
+from yoyopod.core.workers import WorkerProcessConfig
+from yoyopod.integrations.voice.worker_client import VoiceWorkerClient
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp
@@ -63,6 +69,60 @@ class ComponentsBoot:
             "Build the native shim with `yoyopod build simulation` "
             "(or `yoyopod build ensure-native`) and try again."
         )
+
+    def setup_voice_worker(self) -> bool:
+        """Register and start the cloud voice worker when configured."""
+
+        if self.app.config_manager is None:
+            return False
+
+        voice_cfg = self.app.config_manager.get_voice_settings()
+        assistant_cfg = getattr(voice_cfg, "assistant", None)
+        worker_cfg = getattr(voice_cfg, "worker", None)
+        if getattr(assistant_cfg, "mode", "local") != "cloud":
+            return False
+        if not bool(getattr(worker_cfg, "enabled", False)):
+            return False
+        if getattr(self.app, "voice_worker_client", None) is not None:
+            return False
+
+        domain = str(getattr(worker_cfg, "domain", "voice"))
+        timeout_seconds = float(getattr(worker_cfg, "request_timeout_seconds", 12.0))
+        worker_env = _voice_worker_env(worker_cfg)
+        client = VoiceWorkerClient(
+            scheduler=self.app.scheduler,
+            worker_supervisor=self.app.worker_supervisor,
+            domain=domain,
+            request_timeout_seconds=timeout_seconds,
+        )
+        self.app.voice_worker_client = client
+        self.app.bus.subscribe(WorkerMessageReceivedEvent, client.handle_worker_message)
+        lifecycle_handler = _VoiceWorkerLifecycleHandler(
+            client,
+            domain=domain,
+            logger=self.logger,
+            scheduler=self.app.scheduler,
+        )
+        self.app.bus.subscribe(
+            WorkerDomainStateChangedEvent,
+            lifecycle_handler.handle,
+        )
+        self.app.worker_supervisor.register(
+            domain,
+            WorkerProcessConfig(
+                name=domain,
+                argv=list(getattr(worker_cfg, "argv", [])),
+                cwd=None,
+                env=worker_env,
+            ),
+        )
+        started = self.app.worker_supervisor.start(domain)
+        if not started:
+            client.mark_unavailable("start_failed")
+            self.app.voice_worker_client = None
+            return False
+        lifecycle_handler.schedule_health_probe()
+        return True
 
     def init_core_components(self) -> bool:
         """Initialize display, context, orchestration models, input, and screen manager."""
@@ -146,6 +206,7 @@ class ComponentsBoot:
                     capture_device_id=capture_device_id,
                 )
                 self.app.voice_note_events.sync_talk_summary_context()
+                self.setup_voice_worker()
             self.app.screen_power_service.update_screen_runtime_metrics(time.monotonic())
 
             self.logger.info("  - Orchestration Models")
@@ -188,3 +249,89 @@ class ComponentsBoot:
         except Exception:
             self.logger.exception("Failed to initialize core components")
             return False
+
+
+def _voice_worker_env(worker_cfg: Any) -> dict[str, str]:
+    """Return process env with config-derived cloud worker settings applied."""
+
+    env = dict(os.environ)
+    config_env = {
+        "YOYOPOD_VOICE_WORKER_PROVIDER": getattr(worker_cfg, "provider", "mock"),
+        "YOYOPOD_CLOUD_STT_MODEL": getattr(worker_cfg, "stt_model", ""),
+        "YOYOPOD_CLOUD_TTS_MODEL": getattr(worker_cfg, "tts_model", ""),
+        "YOYOPOD_CLOUD_TTS_VOICE": getattr(worker_cfg, "tts_voice", ""),
+        "YOYOPOD_CLOUD_TTS_INSTRUCTIONS": getattr(worker_cfg, "tts_instructions", ""),
+    }
+    for key, value in config_env.items():
+        normalized = str(value).strip()
+        if normalized:
+            env[key] = normalized
+    return env
+
+
+class _VoiceWorkerLifecycleHandler:
+    """Keep voice-worker client availability in sync with process lifecycle."""
+
+    def __init__(
+        self,
+        client: VoiceWorkerClient,
+        *,
+        domain: str,
+        logger: Any,
+        scheduler: Any,
+    ) -> None:
+        self._client = client
+        self._domain = domain
+        self._logger = logger
+        self._scheduler = scheduler
+        self._health_probe_requested = False
+
+    def handle(self, event: WorkerDomainStateChangedEvent) -> None:
+        if event.domain != self._domain:
+            return
+        if event.state == "running":
+            self.schedule_health_probe()
+            return
+        if event.state in {"degraded", "disabled", "stopped"}:
+            self._health_probe_requested = False
+            self._client.fail_pending_requests(event.reason or event.state)
+
+    def schedule_health_probe(self) -> None:
+        if self._health_probe_requested:
+            return
+        self._health_probe_requested = True
+        _start_voice_worker_health_probe(
+            self._client,
+            logger=self._logger,
+            scheduler=self._scheduler,
+        )
+
+
+def _start_voice_worker_health_probe(
+    client: VoiceWorkerClient,
+    *,
+    logger: Any,
+    scheduler: Any,
+) -> None:
+    """Probe provider health off the main thread once the loop drains scheduled work."""
+
+    def probe() -> None:
+        try:
+            result = client.health()
+        except Exception as exc:
+            logger.warning("Cloud voice worker health probe failed: {}", exc)
+            return
+        logger.info("Cloud voice worker ready: provider={}", result.provider)
+
+    def start_probe() -> None:
+        threading.Thread(
+            target=probe,
+            daemon=True,
+            name="VoiceWorkerHealthProbe",
+        ).start()
+
+    post = getattr(scheduler, "post", None)
+    if callable(post):
+        post(start_probe)
+        return
+    scheduler.run_on_main(start_probe)

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from yoyopod.backends.voice import (
+    CloudWorkerSpeechToTextBackend,
+    CloudWorkerTextToSpeechBackend,
+)
 from yoyopod.integrations.voice import (
     VoiceCommandExecutor,
+    VoiceManager,
     VoiceRuntimeCoordinator,
     VoiceSettings,
     VoiceSettingsResolver,
@@ -65,12 +70,43 @@ class ScreensBoot:
                 if self.app.config_manager is not None
                 else None
             )
+            worker_cfg = getattr(voice_cfg, "worker", None) if voice_cfg is not None else None
+            voice_worker_client = getattr(self.app, "voice_worker_client", None)
+            voice_service_factory = None
+            if (
+                voice_cfg is not None
+                and getattr(voice_cfg.assistant, "mode", "local") == "cloud"
+                and voice_worker_client is not None
+            ):
+
+                def voice_service_factory(settings: VoiceSettings) -> VoiceManager:
+                    stt_backend = (
+                        CloudWorkerSpeechToTextBackend(client=voice_worker_client)
+                        if settings.stt_backend == "cloud-worker"
+                        else None
+                    )
+                    tts_backend = (
+                        CloudWorkerTextToSpeechBackend(client=voice_worker_client)
+                        if settings.tts_backend == "cloud-worker"
+                        else None
+                    )
+                    return VoiceManager(
+                        settings=settings,
+                        stt_backend=stt_backend,
+                        tts_backend=tts_backend,
+                    )
+
             self.app.voice_runtime = VoiceRuntimeCoordinator(
                 context=context,
                 settings_resolver=VoiceSettingsResolver(
                     context=context,
                     config_manager=self.app.config_manager,
                     settings_provider=lambda: VoiceSettings(
+                        mode=(
+                            getattr(voice_cfg.assistant, "mode", "local")
+                            if voice_cfg is not None
+                            else "local"
+                        ),
                         commands_enabled=(
                             self.app.context.voice.commands_enabled
                             if self.app.context is not None
@@ -155,6 +191,60 @@ class ScreensBoot:
                             voice_cfg.assistant.tts_rate_wpm if voice_cfg is not None else 155
                         ),
                         tts_voice=voice_cfg.assistant.tts_voice if voice_cfg is not None else "en",
+                        cloud_worker_enabled=(
+                            getattr(worker_cfg, "enabled", False)
+                            if worker_cfg is not None
+                            else False
+                        ),
+                        cloud_worker_domain=(
+                            getattr(worker_cfg, "domain", "voice")
+                            if worker_cfg is not None
+                            else "voice"
+                        ),
+                        cloud_worker_provider=(
+                            getattr(worker_cfg, "provider", "mock")
+                            if worker_cfg is not None
+                            else "mock"
+                        ),
+                        cloud_worker_request_timeout_seconds=(
+                            getattr(worker_cfg, "request_timeout_seconds", 12.0)
+                            if worker_cfg is not None
+                            else 12.0
+                        ),
+                        cloud_worker_max_audio_seconds=(
+                            getattr(worker_cfg, "max_audio_seconds", 30.0)
+                            if worker_cfg is not None
+                            else 30.0
+                        ),
+                        cloud_worker_stt_model=(
+                            getattr(worker_cfg, "stt_model", "gpt-4o-mini-transcribe")
+                            if worker_cfg is not None
+                            else "gpt-4o-mini-transcribe"
+                        ),
+                        cloud_worker_tts_model=(
+                            getattr(worker_cfg, "tts_model", "gpt-4o-mini-tts")
+                            if worker_cfg is not None
+                            else "gpt-4o-mini-tts"
+                        ),
+                        cloud_worker_tts_voice=(
+                            getattr(worker_cfg, "tts_voice", "alloy")
+                            if worker_cfg is not None
+                            else "alloy"
+                        ),
+                        cloud_worker_tts_instructions=(
+                            getattr(
+                                worker_cfg,
+                                "tts_instructions",
+                                "Speak clearly and briefly for a small handheld device.",
+                            )
+                            if worker_cfg is not None
+                            else "Speak clearly and briefly for a small handheld device."
+                        ),
+                        local_feedback_enabled=(
+                            getattr(worker_cfg, "local_feedback_enabled", True)
+                            if worker_cfg is not None
+                            else True
+                        ),
                     ),
                 ),
                 command_executor=VoiceCommandExecutor(
@@ -176,6 +266,7 @@ class ScreensBoot:
                         else None
                     ),
                 ),
+                voice_service_factory=voice_service_factory,
             )
             self.app.ask_screen = AskScreen(
                 display,
@@ -290,4 +381,3 @@ class ScreensBoot:
         if self.get_interaction_profile() == InteractionProfile.ONE_BUTTON:
             return "hub"
         return "menu"
-

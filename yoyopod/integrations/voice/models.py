@@ -11,6 +11,7 @@ from threading import Event
 class VoiceSettings:
     """Voice-related runtime settings passed into backends."""
 
+    mode: str = "local"
     commands_enabled: bool = True
     ai_requests_enabled: bool = True
     screen_read_enabled: bool = False
@@ -28,6 +29,16 @@ class VoiceSettings:
     record_seconds: int = 4
     tts_rate_wpm: int = 155
     tts_voice: str = "en"
+    cloud_worker_enabled: bool = False
+    cloud_worker_domain: str = "voice"
+    cloud_worker_provider: str = "mock"
+    cloud_worker_request_timeout_seconds: float = 12.0
+    cloud_worker_max_audio_seconds: float = 30.0
+    cloud_worker_stt_model: str = "gpt-4o-mini-transcribe"
+    cloud_worker_tts_model: str = "gpt-4o-mini-tts"
+    cloud_worker_tts_voice: str = "alloy"
+    cloud_worker_tts_instructions: str = "Speak clearly and briefly for a small handheld device."
+    local_feedback_enabled: bool = True
 
 
 @dataclass(slots=True, frozen=True)

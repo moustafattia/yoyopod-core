@@ -1,6 +1,7 @@
 # Local voice policy and assistant defaults.
 
 assistant:
+  mode: "local"
   commands_enabled: true
   ai_requests_enabled: true
   screen_read_enabled: false
@@ -14,3 +15,17 @@ assistant:
   sample_rate_hz: 16000
   tts_rate_wpm: 155
   tts_voice: "en"
+
+worker:
+  enabled: false
+  domain: "voice"
+  provider: "mock"
+  argv:
+    - "workers/voice/go/build/yoyopod-voice-worker"
+  request_timeout_seconds: 12.0
+  max_audio_seconds: 30.0
+  stt_model: "gpt-4o-mini-transcribe"
+  tts_model: "gpt-4o-mini-tts"
+  tts_voice: "alloy"
+  tts_instructions: "Speak clearly and briefly for a small handheld device."
+  local_feedback_enabled: true

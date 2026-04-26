@@ -8,6 +8,7 @@ from enum import StrEnum
 import re
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
+_SCRIPT_COMMAND_TOKEN_RE = re.compile(r"[\u0600-\u06ff]+")
 _POLITE_PREFIX_TOKENS = frozenset(
     {
         "please",
@@ -23,6 +24,31 @@ _POLITE_PREFIX_TOKENS = frozenset(
     }
 )
 _SLOT_FILLER_TOKENS = frozenset({"a", "an", "the", "to", "for", "my", "please", "now"})
+_SCRIPT_COMMAND_ALIASES = {
+    "\u0648\u0648\u0644\u06cc\u0648\u0645": "volume",
+    "\u0648\u0648\u0644\u064a\u0648\u0645": "volume",
+    "\u0648\u0644\u06cc\u0648\u0645": "volume",
+    "\u0648\u0644\u064a\u0648\u0645": "volume",
+    "\u0648\u0627\u0644\u06cc\u0648\u0645": "volume",
+    "\u0648\u0627\u0644\u064a\u0648\u0645": "volume",
+    "\u0627\u067e": "up",
+    "\u0622\u067e": "up",
+    "\u062f\u0627\u0648\u0646": "down",
+    "\u062f\u0627\u0646": "down",
+    "\u067e\u0644\u06cc": "play",
+    "\u067e\u0644\u064a": "play",
+    "\u0645\u0648\u0632\u06cc\u06a9": "music",
+    "\u0645\u0648\u0632\u064a\u0643": "music",
+    "\u0645\u06cc\u0648\u0632\u06cc\u06a9": "music",
+    "\u0645\u064a\u0648\u0632\u064a\u0643": "music",
+}
+_SCRIPT_CHAR_TRANSLATION = str.maketrans(
+    {
+        "\u064a": "\u06cc",
+        "\u0643": "\u06a9",
+        "\u0622": "\u0627",
+    }
+)
 
 
 class VoiceCommandIntent(StrEnum):
@@ -133,7 +159,8 @@ VOICE_COMMAND_GRAMMAR: tuple[VoiceCommandTemplate, ...] = (
 def match_voice_command(transcript: str) -> VoiceCommandMatch:
     """Map a transcript to the first supported local voice command."""
 
-    tokens = _strip_polite_prefix(_tokenize(transcript))
+    normalized_transcript = _expand_script_command_aliases(transcript)
+    tokens = _strip_polite_prefix(_tokenize(normalized_transcript))
     if not tokens:
         return VoiceCommandMatch(VoiceCommandIntent.UNKNOWN, transcript=transcript)
 
@@ -146,6 +173,21 @@ def match_voice_command(transcript: str) -> VoiceCommandMatch:
         return fixed_match
 
     return VoiceCommandMatch(VoiceCommandIntent.UNKNOWN, transcript=transcript)
+
+
+def _expand_script_command_aliases(transcript: str) -> str:
+    """Expand common cloud-STT script transliterations into command words."""
+
+    normalized = transcript.translate(_SCRIPT_CHAR_TRANSLATION)
+
+    def replace_token(match: re.Match[str]) -> str:
+        token = match.group(0)
+        replacement = _SCRIPT_COMMAND_ALIASES.get(token)
+        if replacement is None:
+            return token
+        return f" {replacement} "
+
+    return _SCRIPT_COMMAND_TOKEN_RE.sub(replace_token, normalized)
 
 
 def _match_slot_command(tokens: tuple[str, ...], transcript: str) -> VoiceCommandMatch | None:

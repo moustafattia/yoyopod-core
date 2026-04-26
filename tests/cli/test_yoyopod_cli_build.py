@@ -45,6 +45,27 @@ def test_simulation_help() -> None:
     assert "simulate" in result.output.lower()
 
 
+def test_voice_worker_build_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["voice-worker", "--help"])
+
+    assert result.exit_code == 0
+    assert "go cloud voice worker" in result.output.lower()
+
+
+def test_voice_worker_build_command_invokes_builder(monkeypatch: pytest.MonkeyPatch) -> None:
+    output = Path("/tmp/yoyopod-voice-worker")
+    monkeypatch.setattr(build_cli, "build_voice_worker", lambda: output)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["voice-worker"])
+
+    assert result.exit_code == 0
+    assert "Built Go voice worker:" in result.output
+    assert str(output) in result.output
+    assert output.name in result.output
+
+
 def test_resolve_lvgl_native_dir_points_at_package_root() -> None:
     native_dir = build_cli._resolve_lvgl_native_dir()
 
@@ -152,6 +173,48 @@ def test_build_simulation_builds_lvgl_shim(
     }
 
 
+def test_build_voice_worker_invokes_go_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GOFLAGS", raising=False)
+    monkeypatch.delenv("GOMAXPROCS", raising=False)
+    monkeypatch.setattr(build_cli, "_native_build_jobs", lambda: "1")
+    calls: list[tuple[list[str], Path | None, dict[str, str] | None]] = []
+    monkeypatch.setattr(
+        build_cli,
+        "_run",
+        lambda command, cwd=None, env=None: calls.append((command, cwd, env)),
+    )
+
+    output = build_cli.build_voice_worker()
+
+    assert output.name.startswith("yoyopod-voice-worker")
+    assert len(calls) == 1
+    command, cwd, env = calls[0]
+    assert command == [
+        "go",
+        "build",
+        "-o",
+        str(output),
+        "./cmd/yoyopod-voice-worker",
+    ]
+    assert cwd == build_cli._REPO_ROOT / "workers" / "voice" / "go"
+    assert env is not None
+    assert env["GOMAXPROCS"] == "1"
+    assert env["GOFLAGS"] == "-p=1"
+
+
+def test_voice_worker_build_env_preserves_explicit_go_parallelism(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOMAXPROCS", "3")
+    monkeypatch.setenv("GOFLAGS", "-mod=mod -p=4")
+    monkeypatch.setattr(build_cli, "_native_build_jobs", lambda: "1")
+
+    env = build_cli._voice_worker_build_env()
+
+    assert env["GOMAXPROCS"] == "3"
+    assert env["GOFLAGS"] == "-mod=mod -p=4"
+
+
 def test_ensure_native_shims_rebuilds_missing_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -177,6 +240,12 @@ def test_ensure_native_shims_rebuilds_missing_artifacts(
         "_build_liblinphone",
         lambda native_dir, build_dir: calls.append(("liblinphone", native_dir, build_dir)),
     )
+    monkeypatch.setattr(build_cli.shutil, "which", lambda _command: None)
+    monkeypatch.setattr(
+        build_cli,
+        "build_voice_worker",
+        lambda: pytest.fail("Go voice worker build not expected"),
+    )
 
     rebuilt = build_cli._ensure_native_shims()
 
@@ -184,6 +253,72 @@ def test_ensure_native_shims_rebuilds_missing_artifacts(
     assert ("fetch", tmp_path / "lvgl-source", None) in calls
     assert ("lvgl", lvgl_native, lvgl_native / "build") in calls
     assert ("liblinphone", lib_native, lib_native / "build") in calls
+
+
+def test_ensure_native_builds_missing_voice_worker_when_go_available(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    worker_dir = tmp_path / "workers" / "voice" / "go"
+    source_dir = worker_dir / "cmd" / "yoyopod-voice-worker"
+    source_dir.mkdir(parents=True)
+    (worker_dir / "go.mod").write_text("module test\n", encoding="utf-8")
+    (source_dir / "main.go").write_text("package main\n", encoding="utf-8")
+    calls: list[str] = []
+
+    monkeypatch.setattr(build_cli, "_native_artifacts", lambda: ())
+    monkeypatch.setattr(build_cli, "_resolve_lvgl_native_dir", lambda: tmp_path / "lvgl-native")
+    monkeypatch.setattr(
+        build_cli,
+        "_resolve_liblinphone_native_dir",
+        lambda: tmp_path / "liblinphone-native",
+    )
+    monkeypatch.setattr(build_cli, "_voice_worker_dir", lambda: worker_dir)
+    monkeypatch.setattr(
+        build_cli.shutil,
+        "which",
+        lambda command: "/usr/bin/go" if command == "go" else None,
+    )
+    monkeypatch.setattr(
+        build_cli,
+        "build_voice_worker",
+        lambda: calls.append("worker") or worker_dir / "build" / "yoyopod-voice-worker",
+    )
+
+    rebuilt = build_cli._ensure_native_shims()
+
+    assert rebuilt == ("Go voice worker",)
+    assert calls == ["worker"]
+
+
+def test_ensure_native_skips_missing_voice_worker_when_go_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    worker_dir = tmp_path / "workers" / "voice" / "go"
+    source_dir = worker_dir / "cmd" / "yoyopod-voice-worker"
+    source_dir.mkdir(parents=True)
+    (worker_dir / "go.mod").write_text("module test\n", encoding="utf-8")
+    (source_dir / "main.go").write_text("package main\n", encoding="utf-8")
+
+    monkeypatch.setattr(build_cli, "_native_artifacts", lambda: ())
+    monkeypatch.setattr(build_cli, "_resolve_lvgl_native_dir", lambda: tmp_path / "lvgl-native")
+    monkeypatch.setattr(
+        build_cli,
+        "_resolve_liblinphone_native_dir",
+        lambda: tmp_path / "liblinphone-native",
+    )
+    monkeypatch.setattr(build_cli, "_voice_worker_dir", lambda: worker_dir)
+    monkeypatch.setattr(build_cli.shutil, "which", lambda _command: None)
+    monkeypatch.setattr(
+        build_cli,
+        "build_voice_worker",
+        lambda: pytest.fail("Go voice worker build not expected"),
+    )
+
+    rebuilt = build_cli._ensure_native_shims()
+
+    assert rebuilt == ()
 
 
 def test_ensure_native_shims_skips_current_artifacts(
@@ -209,6 +344,12 @@ def test_ensure_native_shims_skips_current_artifacts(
         build_cli,
         "_build_liblinphone",
         lambda *_args, **_kwargs: pytest.fail("Liblinphone rebuild not expected"),
+    )
+    monkeypatch.setattr(build_cli.shutil, "which", lambda _command: None)
+    monkeypatch.setattr(
+        build_cli,
+        "build_voice_worker",
+        lambda: pytest.fail("Go voice worker build not expected"),
     )
 
     rebuilt = build_cli._ensure_native_shims()

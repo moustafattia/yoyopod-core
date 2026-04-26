@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from yoyopod.config import (
@@ -141,6 +142,118 @@ def test_voice_config_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> N
     assert settings.assistant.tts_rate_wpm == 155
     assert settings.audio.speaker_device_id == ""
     assert settings.audio.capture_device_id == ""
+
+
+def test_voice_config_includes_cloud_worker_defaults(tmp_path, monkeypatch) -> None:
+    """Cloud voice settings should have safe defaults without requiring credentials."""
+
+    for key in [
+        "YOYOPOD_VOICE_MODE",
+        "YOYOPOD_VOICE_WORKER_ENABLED",
+        "YOYOPOD_VOICE_WORKER_DOMAIN",
+        "YOYOPOD_VOICE_WORKER_PROVIDER",
+        "YOYOPOD_VOICE_WORKER_ARGV",
+        "YOYOPOD_VOICE_WORKER_TIMEOUT_SECONDS",
+        "YOYOPOD_VOICE_WORKER_MAX_AUDIO_SECONDS",
+        "YOYOPOD_CLOUD_STT_MODEL",
+        "YOYOPOD_CLOUD_TTS_MODEL",
+        "YOYOPOD_CLOUD_TTS_VOICE",
+        "YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
+        "YOYOPOD_VOICE_LOCAL_FEEDBACK_ENABLED",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+    config_file = tmp_path / "voice" / "assistant.yaml"
+    settings = load_config_model_from_yaml(VoiceConfig, config_file)
+
+    assert settings.assistant.mode == "local"
+    assert settings.worker.enabled is False
+    assert settings.worker.domain == "voice"
+    assert settings.worker.provider == "mock"
+    assert settings.worker.argv == ["workers/voice/go/build/yoyopod-voice-worker"]
+    assert settings.worker.request_timeout_seconds == 12.0
+    assert settings.worker.max_audio_seconds == 30.0
+    assert settings.worker.stt_model == "gpt-4o-mini-transcribe"
+    assert settings.worker.tts_model == "gpt-4o-mini-tts"
+    assert settings.worker.tts_voice == "alloy"
+    assert settings.worker.local_feedback_enabled is True
+
+
+def test_voice_worker_argv_env_override_parses_json_list(tmp_path, monkeypatch) -> None:
+    """Worker argv env overrides should use deterministic JSON-array syntax."""
+
+    monkeypatch.setenv("YOYOPOD_VOICE_WORKER_ARGV", '["python", "-m", "worker"]')
+
+    config_file = tmp_path / "voice" / "assistant.yaml"
+    settings = load_config_model_from_yaml(VoiceConfig, config_file)
+
+    assert settings.worker.argv == ["python", "-m", "worker"]
+
+
+def test_voice_worker_argv_env_override_rejects_non_string_items(tmp_path, monkeypatch) -> None:
+    """Worker argv env overrides should reject non-string list items."""
+
+    monkeypatch.setenv("YOYOPOD_VOICE_WORKER_ARGV", '["python", 7]')
+
+    config_file = tmp_path / "voice" / "assistant.yaml"
+    with pytest.raises(ValueError, match="list item"):
+        load_config_model_from_yaml(VoiceConfig, config_file)
+
+
+@pytest.mark.parametrize(
+    "env_value",
+    [
+        "python -m worker",
+        '"python -m worker"',
+    ],
+)
+def test_voice_worker_argv_env_override_requires_json_list(
+    tmp_path,
+    monkeypatch,
+    env_value: str,
+) -> None:
+    """Invalid list env overrides should fail with a list-parsing error."""
+
+    monkeypatch.setenv("YOYOPOD_VOICE_WORKER_ARGV", env_value)
+
+    config_file = tmp_path / "voice" / "assistant.yaml"
+    with pytest.raises(ValueError, match="list parsing"):
+        load_config_model_from_yaml(VoiceConfig, config_file)
+
+
+def test_authored_voice_config_includes_cloud_worker_defaults(monkeypatch) -> None:
+    """Repo-authored voice YAML should include cloud worker defaults."""
+
+    for key in [
+        "YOYOPOD_VOICE_MODE",
+        "YOYOPOD_VOICE_WORKER_ENABLED",
+        "YOYOPOD_VOICE_WORKER_DOMAIN",
+        "YOYOPOD_VOICE_WORKER_PROVIDER",
+        "YOYOPOD_VOICE_WORKER_ARGV",
+        "YOYOPOD_CLOUD_STT_MODEL",
+        "YOYOPOD_CLOUD_TTS_MODEL",
+        "YOYOPOD_CLOUD_TTS_VOICE",
+        "YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
+        "YOYOPOD_VOICE_LOCAL_FEEDBACK_ENABLED",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+    settings = load_config_model_from_yaml(VoiceConfig, Path("config/voice/assistant.yaml"))
+
+    assert settings.assistant.mode == "local"
+    assert settings.worker.enabled is False
+    assert settings.worker.domain == "voice"
+    assert settings.worker.provider == "mock"
+    assert settings.worker.argv == ["workers/voice/go/build/yoyopod-voice-worker"]
+    assert settings.worker.request_timeout_seconds == 12.0
+    assert settings.worker.max_audio_seconds == 30.0
+    assert settings.worker.stt_model == "gpt-4o-mini-transcribe"
+    assert settings.worker.tts_model == "gpt-4o-mini-tts"
+    assert settings.worker.tts_voice == "alloy"
+    assert (
+        settings.worker.tts_instructions == "Speak clearly and briefly for a small handheld device."
+    )
+    assert settings.worker.local_feedback_enabled is True
 
 
 def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) -> None:

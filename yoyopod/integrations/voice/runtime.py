@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 import wave
 from dataclasses import replace
 from pathlib import Path
+from queue import Queue
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Callable
 
@@ -46,6 +48,9 @@ class VoiceRuntimeCoordinator:
         self._state_listener: Callable[[VoiceInteractionState], None] | None = None
         self._outcome_listener: Callable[[VoiceCommandOutcome], None] | None = None
         self._dispatcher: Callable[[Callable[[], None]], None] | None = None
+        self._tts_queue: Queue[str] = Queue()
+        self._tts_thread: threading.Thread | None = None
+        self._tts_thread_lock = threading.Lock()
 
     @property
     def state(self) -> VoiceInteractionState:
@@ -96,8 +101,8 @@ class VoiceRuntimeCoordinator:
 
         if self._state.capture_in_flight:
             return
-        voice_service = self._voice_service()
-        readiness_error = self._prepare_capture(voice_service=voice_service)
+        voice_service, settings = self._voice_service_with_settings()
+        readiness_error = self._prepare_capture(voice_service=voice_service, settings=settings)
         if readiness_error is not None:
             self._apply_outcome(readiness_error)
             return
@@ -125,8 +130,12 @@ class VoiceRuntimeCoordinator:
     def begin_ptt_capture(self) -> None:
         """Start an open-ended PTT capture that ends on release."""
 
-        voice_service = self._voice_service()
-        readiness_error = self._prepare_capture(voice_service=voice_service, ptt_mode=True)
+        voice_service, settings = self._voice_service_with_settings()
+        readiness_error = self._prepare_capture(
+            voice_service=voice_service,
+            settings=settings,
+            ptt_mode=True,
+        )
         if readiness_error is not None:
             self._apply_outcome(readiness_error)
             return
@@ -186,6 +195,14 @@ class VoiceRuntimeCoordinator:
 
         self._set_state("thinking", "Thinking", "Just a moment...")
         outcome = self._command_executor.execute(transcript)
+        logger.info(
+            "Voice command outcome headline={} should_speak={} route={} auto_return={} transcript={}",
+            outcome.headline,
+            outcome.should_speak,
+            outcome.route_name or "",
+            outcome.auto_return,
+            _preview_voice_text(transcript),
+        )
         self._apply_outcome(outcome)
         return outcome
 
@@ -202,6 +219,14 @@ class VoiceRuntimeCoordinator:
             if generation != self._state.generation:
                 return
             self._active_capture_cancel = None
+            logger.info(
+                "Voice listen result applying generation={} capture_failed={} transcript_chars={} "
+                "transcript={}",
+                generation,
+                capture_failed,
+                len(transcript.strip()),
+                _preview_voice_text(transcript),
+            )
             if capture_failed:
                 self._apply_outcome(
                     VoiceCommandOutcome(
@@ -224,6 +249,7 @@ class VoiceRuntimeCoordinator:
         self,
         *,
         voice_service: VoiceManager,
+        settings: VoiceSettings,
         ptt_mode: bool = False,
     ) -> VoiceCommandOutcome | None:
         if self._context is not None and not self._context.voice.commands_enabled:
@@ -254,6 +280,12 @@ class VoiceRuntimeCoordinator:
             )
             return VoiceCommandOutcome("Mic Unavailable", body, should_speak=False)
         if not voice_service.stt_available():
+            if settings.mode == "cloud":
+                return VoiceCommandOutcome(
+                    "Speech Offline",
+                    "Cloud speech is unavailable. Local controls still work.",
+                    should_speak=False,
+                )
             return VoiceCommandOutcome(
                 "Speech Offline",
                 "The offline speech model is not installed yet.",
@@ -262,16 +294,19 @@ class VoiceRuntimeCoordinator:
         return None
 
     def _voice_service(self) -> VoiceManager:
+        return self._voice_service_with_settings()[0]
+
+    def _voice_service_with_settings(self) -> tuple[VoiceManager, VoiceSettings]:
         settings = self._settings_resolver.current()
         if self._voice_service_factory is not None:
-            return self._voice_service_factory(settings)
+            return self._voice_service_factory(settings), settings
         if self._cached_voice_service is None:
             self._cached_voice_service = VoiceManager(settings=settings)
-            return self._cached_voice_service
+            return self._cached_voice_service, settings
         if self._cached_voice_service.settings != settings:
             self._cached_voice_service.release_resources()
             self._cached_voice_service = VoiceManager(settings=settings)
-        return self._cached_voice_service
+        return self._cached_voice_service, settings
 
     def _next_generation(self) -> int:
         self._state.generation += 1
@@ -299,7 +334,10 @@ class VoiceRuntimeCoordinator:
             return
 
         try:
-            transcript = voice_service.transcribe(capture_result.audio_path)
+            transcript = voice_service.transcribe(
+                capture_result.audio_path,
+                cancel_event=cancel_event,
+            )
         except Exception as exc:
             logger.warning("Voice command transcription failed: {}", exc)
             self.dispatch_listen_result("", capture_failed=True, generation=generation)
@@ -353,30 +391,55 @@ class VoiceRuntimeCoordinator:
                 "PTT release finalized capture; starting transcription (generation={})",
                 generation,
             )
+            transcription_cancel_event = threading.Event()
+            self._active_capture_cancel = transcription_cancel_event
             try:
-                transcript = voice_service.transcribe(capture_result.audio_path)
+                transcript = voice_service.transcribe(
+                    capture_result.audio_path,
+                    cancel_event=transcription_cancel_event,
+                )
             except Exception as exc:
+                if (
+                    transcription_cancel_event.is_set()
+                    or generation != self._state.generation
+                ):
+                    logger.info(
+                        "PTT transcription cancelled (generation={})",
+                        generation,
+                    )
+                    return
                 logger.warning("PTT transcription failed: {}", exc)
                 self.dispatch_listen_result("", capture_failed=True, generation=generation)
                 return
             finally:
                 capture_result.audio_path.unlink(missing_ok=True)
 
+            if transcription_cancel_event.is_set() or generation != self._state.generation:
+                return
             self.dispatch_listen_result(
                 transcript.text.strip(),
                 capture_failed=False,
                 generation=generation,
             )
             logger.info(
-                "PTT transcription complete (generation={}, transcript_chars={})",
+                "PTT transcription complete (generation={}, transcript_chars={}, transcript={})",
                 generation,
                 len(transcript.text.strip()),
+                _preview_voice_text(transcript.text),
             )
             return
 
         capture_result.audio_path.unlink(missing_ok=True)
 
     def _apply_outcome(self, outcome: VoiceCommandOutcome) -> None:
+        logger.info(
+            "Voice outcome applied headline={} should_speak={} route={} auto_return={} body_chars={}",
+            outcome.headline,
+            outcome.should_speak,
+            outcome.route_name or "",
+            outcome.auto_return,
+            len(outcome.body),
+        )
         self._set_state(
             "reply",
             outcome.headline,
@@ -386,10 +449,52 @@ class VoiceRuntimeCoordinator:
         )
         if self._context is not None and outcome.should_speak:
             self._context.record_voice_response(outcome.body)
-        if outcome.should_speak and not self._voice_service().speak(outcome.body):
-            logger.debug("Voice response not spoken: {}", outcome.body)
+        if outcome.should_speak:
+            self._speak_outcome_async(outcome.body)
         if self._outcome_listener is not None:
             self._dispatch(lambda: self._outcome_listener(outcome))
+
+    def _speak_outcome_async(self, text: str) -> None:
+        """Speak an outcome outside the main-thread UI path."""
+
+        self._ensure_tts_worker()
+        self._tts_queue.put(text)
+
+    def _ensure_tts_worker(self) -> None:
+        """Start the serialized outcome-speech worker once."""
+
+        with self._tts_thread_lock:
+            if self._tts_thread is not None and self._tts_thread.is_alive():
+                return
+            self._tts_thread = threading.Thread(
+                target=self._run_tts_worker,
+                daemon=True,
+                name="VoiceRuntimeTTS",
+            )
+            self._tts_thread.start()
+
+    def _run_tts_worker(self) -> None:
+        while True:
+            text = self._tts_queue.get()
+            started_at = time.monotonic()
+            try:
+                logger.info(
+                    "Voice response speech started chars={} text={}",
+                    len(text.strip()),
+                    _preview_voice_text(text),
+                )
+                spoken = self._voice_service().speak(text)
+                if not spoken:
+                    logger.debug("Voice response not spoken: {}", text)
+                logger.info(
+                    "Voice response speech finished spoken={} elapsed_ms={:.1f}",
+                    spoken,
+                    (time.monotonic() - started_at) * 1000,
+                )
+            except Exception:
+                logger.exception("Voice response speech failed")
+            finally:
+                self._tts_queue.task_done()
 
     def _set_state(
         self,
@@ -434,13 +539,22 @@ class VoiceRuntimeCoordinator:
         callback()
 
     def _play_attention_tone(self) -> None:
+        try:
+            if not self._settings_resolver.current().local_feedback_enabled:
+                return
+        except Exception:
+            logger.debug("Voice local feedback setting unavailable")
+
         beep_path: Path | None = None
         try:
             with NamedTemporaryFile(prefix="yoyopod-beep-", suffix=".wav", delete=False) as handle:
                 beep_path = Path(handle.name)
             self._write_beep_wav(beep_path)
             device_id = self._context.voice.speaker_device_id if self._context is not None else None
-            play_kwargs: dict[str, object] = {"timeout_seconds": 2.0}
+            play_kwargs: dict[str, object] = {
+                "timeout_seconds": 2.0,
+                "block_if_busy": False,
+            }
             if device_id:
                 play_kwargs["device_id"] = device_id
             self._output_player.play_wav(beep_path, **play_kwargs)
@@ -472,3 +586,10 @@ class VoiceRuntimeCoordinator:
                 )
                 frames.extend(sample.to_bytes(2, byteorder="little", signed=True))
             handle.writeframes(bytes(frames))
+
+
+def _preview_voice_text(text: str, *, limit: int = 96) -> str:
+    normalized = " ".join(text.strip().split())
+    if len(normalized) <= limit:
+        return repr(normalized)
+    return repr(normalized[: limit - 3] + "...")

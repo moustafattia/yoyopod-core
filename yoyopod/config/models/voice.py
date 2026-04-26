@@ -11,6 +11,7 @@ from yoyopod.config.models.core import config_value
 class VoiceAssistantConfig:
     """Local voice-command and spoken-response policy."""
 
+    mode: str = config_value(default="local", env="YOYOPOD_VOICE_MODE")
     commands_enabled: bool = config_value(default=True, env="YOYOPOD_VOICE_COMMANDS_ENABLED")
     ai_requests_enabled: bool = config_value(default=True, env="YOYOPOD_AI_REQUESTS_ENABLED")
     screen_read_enabled: bool = config_value(default=False, env="YOYOPOD_SCREEN_READ_ENABLED")
@@ -41,8 +42,44 @@ class VoiceAudioConfig:
 
 
 @dataclass(slots=True)
+class VoiceWorkerConfig:
+    """Cloud voice worker process and model policy."""
+
+    enabled: bool = config_value(default=False, env="YOYOPOD_VOICE_WORKER_ENABLED")
+    domain: str = config_value(default="voice", env="YOYOPOD_VOICE_WORKER_DOMAIN")
+    provider: str = config_value(default="mock", env="YOYOPOD_VOICE_WORKER_PROVIDER")
+    argv: list[str] = config_value(
+        default_factory=lambda: ["workers/voice/go/build/yoyopod-voice-worker"],
+        env="YOYOPOD_VOICE_WORKER_ARGV",
+    )
+    request_timeout_seconds: float = config_value(
+        default=12.0,
+        env="YOYOPOD_VOICE_WORKER_TIMEOUT_SECONDS",
+    )
+    max_audio_seconds: float = config_value(
+        default=30.0,
+        env="YOYOPOD_VOICE_WORKER_MAX_AUDIO_SECONDS",
+    )
+    stt_model: str = config_value(
+        default="gpt-4o-mini-transcribe",
+        env="YOYOPOD_CLOUD_STT_MODEL",
+    )
+    tts_model: str = config_value(default="gpt-4o-mini-tts", env="YOYOPOD_CLOUD_TTS_MODEL")
+    tts_voice: str = config_value(default="alloy", env="YOYOPOD_CLOUD_TTS_VOICE")
+    tts_instructions: str = config_value(
+        default="Speak clearly and briefly for a small handheld device.",
+        env="YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
+    )
+    local_feedback_enabled: bool = config_value(
+        default=True,
+        env="YOYOPOD_VOICE_LOCAL_FEEDBACK_ENABLED",
+    )
+
+
+@dataclass(slots=True)
 class VoiceConfig:
     """Composed voice domain config built from voice and device layers."""
 
     assistant: VoiceAssistantConfig = config_value(default_factory=VoiceAssistantConfig)
     audio: VoiceAudioConfig = config_value(default_factory=VoiceAudioConfig)
+    worker: VoiceWorkerConfig = config_value(default_factory=VoiceWorkerConfig)
