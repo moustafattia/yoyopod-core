@@ -33,6 +33,11 @@ if TYPE_CHECKING:
     )
     from yoyopod.integrations.voice.runtime import VoiceRuntimeCoordinator
     from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
+    from yoyopod.integrations.voice.worker_client import (
+        VoiceWorkerClient,
+        VoiceWorkerTimeout,
+        VoiceWorkerUnavailable,
+    )
 
 
 _PUBLIC_EXPORTS = {
@@ -51,13 +56,19 @@ _PUBLIC_EXPORTS = {
     "VoiceSettingsResolver": ("yoyopod.integrations.voice.settings", "VoiceSettingsResolver"),
     "VoiceTranscript": ("yoyopod.integrations.voice.models", "VoiceTranscript"),
     "VoiceWorkerError": ("yoyopod.integrations.voice.worker_contract", "VoiceWorkerError"),
+    "VoiceWorkerClient": ("yoyopod.integrations.voice.worker_client", "VoiceWorkerClient"),
     "VoiceWorkerSpeakResult": (
         "yoyopod.integrations.voice.worker_contract",
         "VoiceWorkerSpeakResult",
     ),
+    "VoiceWorkerTimeout": ("yoyopod.integrations.voice.worker_client", "VoiceWorkerTimeout"),
     "VoiceWorkerTranscribeResult": (
         "yoyopod.integrations.voice.worker_contract",
         "VoiceWorkerTranscribeResult",
+    ),
+    "VoiceWorkerUnavailable": (
+        "yoyopod.integrations.voice.worker_client",
+        "VoiceWorkerUnavailable",
     ),
     "build_speak_payload": ("yoyopod.integrations.voice.worker_contract", "build_speak_payload"),
     "build_transcribe_payload": (
@@ -101,9 +112,12 @@ __all__ = [
     "VoiceSettings",
     "VoiceSettingsResolver",
     "VoiceTranscript",
+    "VoiceWorkerClient",
     "VoiceWorkerError",
     "VoiceWorkerSpeakResult",
+    "VoiceWorkerTimeout",
     "VoiceWorkerTranscribeResult",
+    "VoiceWorkerUnavailable",
     "build_speak_payload",
     "build_transcribe_payload",
     "match_voice_command",
