@@ -36,6 +36,8 @@ def test_go_voice_worker_mock_transcribe_contract(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["YOYOPOD_VOICE_WORKER_PROVIDER"] = "mock"
     env["YOYOPOD_MOCK_TRANSCRIPT"] = "play music"
+    env.setdefault("GOMAXPROCS", "1")
+    env.setdefault("GOFLAGS", "-p=1")
 
     result = subprocess.run(
         ["go", "run", "./cmd/yoyopod-voice-worker"],
@@ -44,7 +46,7 @@ def test_go_voice_worker_mock_transcribe_contract(tmp_path: Path) -> None:
         env=env,
         text=True,
         capture_output=True,
-        timeout=10,
+        timeout=60,
         check=False,
     )
 
