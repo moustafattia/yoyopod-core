@@ -30,18 +30,24 @@ class AlsaOutputPlayer:
         *,
         device_id: str | None = None,
         timeout_seconds: float = 6.0,
+        block_if_busy: bool = True,
     ) -> bool:
         """Play one WAV file, retrying through likely ALSA devices."""
 
         if not self.is_available():
             return False
 
-        with _PLAYBACK_LOCK:
+        if not _PLAYBACK_LOCK.acquire(blocking=block_if_busy):
+            logger.debug("ALSA playback skipped because another playback is active")
+            return False
+        try:
             return self._play_wav_locked(
                 audio_path,
                 device_id=device_id,
                 timeout_seconds=timeout_seconds,
             )
+        finally:
+            _PLAYBACK_LOCK.release()
 
     def _play_wav_locked(
         self,
@@ -65,6 +71,13 @@ class AlsaOutputPlayer:
                     timeout=timeout_seconds,
                     check=False,
                 )
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "ALSA playback timed out for {} after {:.1f}s",
+                    device or "default",
+                    timeout_seconds,
+                )
+                return False
             except Exception as exc:
                 logger.debug("ALSA playback failed for {}: {}", device or "default", exc)
                 continue

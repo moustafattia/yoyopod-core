@@ -9,8 +9,10 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 import types
 
+import yoyopod.backends.voice.output as voice_output
 from yoyopod.backends.voice import (
     AlsaOutputPlayer,
     EspeakNgTextToSpeechBackend,
@@ -615,6 +617,60 @@ def test_alsa_output_player_prefers_shared_playback_facade(monkeypatch, tmp_path
 
     assert player.play_wav(audio_path, device_id="ALSA: wm8960-soundcard") is True
     assert calls[1][:4] == ["aplay", "-q", "-D", "playback"]
+
+
+def test_alsa_output_player_can_skip_when_playback_lock_is_busy(monkeypatch, tmp_path) -> None:
+    """Local feedback should be able to avoid blocking behind an active TTS playback."""
+
+    audio_path = tmp_path / "tone.wav"
+    audio_path.write_bytes(b"RIFF")
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
+
+    assert voice_output._PLAYBACK_LOCK.acquire(blocking=False)
+    try:
+        player = AlsaOutputPlayer()
+        started_at = time.monotonic()
+
+        assert player.play_wav(audio_path, block_if_busy=False) is False
+        assert time.monotonic() - started_at < 0.1
+    finally:
+        voice_output._PLAYBACK_LOCK.release()
+
+
+def test_alsa_output_player_does_not_retry_after_playback_timeout(monkeypatch, tmp_path) -> None:
+    """A timeout should not replay the same prompt through every ALSA fallback route."""
+
+    calls: list[list[str]] = []
+    audio_path = tmp_path / "tone.wav"
+    audio_path.write_bytes(b"RIFF")
+
+    def fake_run(args: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args == ["aplay", "-L"]:
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout="playback\nplughw:CARD=wm8960soundcard,DEV=0\n",
+                stderr="",
+            )
+        raise subprocess.TimeoutExpired(args, kwargs.get("timeout"))
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
+    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
+
+    player = AlsaOutputPlayer()
+
+    assert player.play_wav(audio_path, device_id="playback", timeout_seconds=0.01) is False
+    assert calls == [
+        ["aplay", "-L"],
+        ["aplay", "-q", "-D", "playback", str(audio_path)],
+    ]
 
 
 def test_vosk_backend_requires_module_and_model(tmp_path, monkeypatch) -> None:

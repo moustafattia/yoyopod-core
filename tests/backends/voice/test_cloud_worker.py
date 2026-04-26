@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import threading
+import wave
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict, Unpack
@@ -433,6 +434,27 @@ def test_tts_passes_configured_speaker_device_to_playback() -> None:
 
     assert backend.speak("Hello", cloud_settings(speaker_device_id="plughw:CARD=Headset"))
     assert play_wav.calls[0]["device_id"] == "plughw:CARD=Headset"
+
+
+def test_tts_playback_timeout_tracks_generated_wav_duration(tmp_path: Path) -> None:
+    audio_path = tmp_path / "long-response.wav"
+    with wave.open(str(audio_path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(16000)
+        handle.writeframes(b"\x00\x00" * 16000 * 9)
+    client = FakeVoiceWorkerClient(
+        speech=VoiceWorkerSpeakResult(
+            audio_path=audio_path,
+            format="wav",
+            sample_rate_hz=16000,
+        )
+    )
+    play_wav = FakeWavPlayer()
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
+
+    assert backend.speak("This is a longer response.", cloud_settings())
+    assert play_wav.calls[0]["timeout_seconds"] == 11.0
 
 
 def test_package_level_backend_exports_work() -> None:

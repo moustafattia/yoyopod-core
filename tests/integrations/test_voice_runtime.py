@@ -489,6 +489,29 @@ def test_local_feedback_disabled_skips_attention_tone() -> None:
     assert play_calls == []
 
 
+def test_local_feedback_skips_busy_playback_lock() -> None:
+    play_calls: list[dict[str, object]] = []
+
+    class _RecordingOutputPlayer:
+        def play_wav(self, path: Path, **kwargs) -> None:
+            play_calls.append({"path": path, **kwargs})
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(local_feedback_enabled=True),
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        output_player=_RecordingOutputPlayer(),
+    )
+
+    coordinator._play_attention_tone()
+
+    assert play_calls
+    assert play_calls[0]["block_if_busy"] is False
+
+
 def test_runtime_cancel_reaches_in_flight_cloud_transcription(tmp_path: Path) -> None:
     audio_path = tmp_path / "input.wav"
     audio_path.write_bytes(b"RIFF")

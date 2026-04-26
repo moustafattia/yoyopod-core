@@ -513,7 +513,10 @@ class VoiceRuntimeCoordinator:
                 beep_path = Path(handle.name)
             self._write_beep_wav(beep_path)
             device_id = self._context.voice.speaker_device_id if self._context is not None else None
-            play_kwargs: dict[str, object] = {"timeout_seconds": 2.0}
+            play_kwargs: dict[str, object] = {
+                "timeout_seconds": 2.0,
+                "block_if_busy": False,
+            }
             if device_id:
                 play_kwargs["device_id"] = device_id
             self._output_player.play_wav(beep_path, **play_kwargs)

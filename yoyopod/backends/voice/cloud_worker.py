@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import threading
+import wave
 from pathlib import Path
 from typing import Protocol
 
@@ -15,6 +16,10 @@ from yoyopod.integrations.voice.worker_contract import (
     VoiceWorkerSpeakResult,
     VoiceWorkerTranscribeResult,
 )
+
+_TTS_PLAYBACK_TIMEOUT_MIN_SECONDS = 6.0
+_TTS_PLAYBACK_TIMEOUT_MAX_SECONDS = 20.0
+_TTS_PLAYBACK_TIMEOUT_MARGIN_SECONDS = 2.0
 
 
 class _VoiceWorkerClient(Protocol):
@@ -146,7 +151,7 @@ class CloudWorkerTextToSpeechBackend:
                 played = self._play_wav(
                     result.audio_path,
                     device_id=settings.speaker_device_id,
-                    timeout_seconds=6.0,
+                    timeout_seconds=_playback_timeout_seconds(result.audio_path),
                 )
             except Exception as exc:
                 logger.warning("Cloud worker speech playback failed: {}", exc)
@@ -162,6 +167,32 @@ class CloudWorkerTextToSpeechBackend:
 
 def _empty_transcript() -> VoiceTranscript:
     return VoiceTranscript(text="", confidence=0.0, is_final=True)
+
+
+def _playback_timeout_seconds(audio_path: Path) -> float:
+    """Return a bounded timeout long enough for the generated WAV to finish."""
+
+    duration_seconds = _wav_duration_seconds(audio_path)
+    if duration_seconds is None:
+        return _TTS_PLAYBACK_TIMEOUT_MIN_SECONDS
+    return max(
+        _TTS_PLAYBACK_TIMEOUT_MIN_SECONDS,
+        min(
+            _TTS_PLAYBACK_TIMEOUT_MAX_SECONDS,
+            duration_seconds + _TTS_PLAYBACK_TIMEOUT_MARGIN_SECONDS,
+        ),
+    )
+
+
+def _wav_duration_seconds(audio_path: Path) -> float | None:
+    try:
+        with wave.open(str(audio_path), "rb") as handle:
+            frame_rate = handle.getframerate()
+            if frame_rate <= 0:
+                return None
+            return handle.getnframes() / float(frame_rate)
+    except (EOFError, OSError, wave.Error):
+        return None
 
 
 def _unlink_output_audio(path: Path) -> None:
