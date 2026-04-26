@@ -53,6 +53,19 @@ def test_voice_worker_build_help() -> None:
     assert "go cloud voice worker" in result.output.lower()
 
 
+def test_voice_worker_build_command_invokes_builder(monkeypatch: pytest.MonkeyPatch) -> None:
+    output = Path("/tmp/yoyopod-voice-worker")
+    monkeypatch.setattr(build_cli, "build_voice_worker", lambda: output)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["voice-worker"])
+
+    assert result.exit_code == 0
+    assert "Built Go voice worker:" in result.output
+    assert str(output) in result.output
+    assert output.name in result.output
+
+
 def test_resolve_lvgl_native_dir_points_at_package_root() -> None:
     native_dir = build_cli._resolve_lvgl_native_dir()
 
