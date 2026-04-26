@@ -4,6 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from yoyopod.integrations.voice.worker_contract import (
+    VoiceWorkerError,
+    VoiceWorkerSpeakResult,
+    VoiceWorkerTranscribeResult,
+    build_speak_payload,
+    build_transcribe_payload,
+    parse_speak_result,
+    parse_transcribe_result,
+    parse_worker_error,
+)
+
 if TYPE_CHECKING:
     from yoyopod.integrations.voice.commands import (
         VOICE_COMMAND_GRAMMAR,
@@ -39,7 +50,27 @@ _PUBLIC_EXPORTS = {
     "VoiceSettings": ("yoyopod.integrations.voice.models", "VoiceSettings"),
     "VoiceSettingsResolver": ("yoyopod.integrations.voice.settings", "VoiceSettingsResolver"),
     "VoiceTranscript": ("yoyopod.integrations.voice.models", "VoiceTranscript"),
+    "VoiceWorkerError": ("yoyopod.integrations.voice.worker_contract", "VoiceWorkerError"),
+    "VoiceWorkerSpeakResult": (
+        "yoyopod.integrations.voice.worker_contract",
+        "VoiceWorkerSpeakResult",
+    ),
+    "VoiceWorkerTranscribeResult": (
+        "yoyopod.integrations.voice.worker_contract",
+        "VoiceWorkerTranscribeResult",
+    ),
+    "build_speak_payload": ("yoyopod.integrations.voice.worker_contract", "build_speak_payload"),
+    "build_transcribe_payload": (
+        "yoyopod.integrations.voice.worker_contract",
+        "build_transcribe_payload",
+    ),
     "match_voice_command": ("yoyopod.integrations.voice.commands", "match_voice_command"),
+    "parse_speak_result": ("yoyopod.integrations.voice.worker_contract", "parse_speak_result"),
+    "parse_transcribe_result": (
+        "yoyopod.integrations.voice.worker_contract",
+        "parse_transcribe_result",
+    ),
+    "parse_worker_error": ("yoyopod.integrations.voice.worker_contract", "parse_worker_error"),
 }
 
 
@@ -70,5 +101,13 @@ __all__ = [
     "VoiceSettings",
     "VoiceSettingsResolver",
     "VoiceTranscript",
+    "VoiceWorkerError",
+    "VoiceWorkerSpeakResult",
+    "VoiceWorkerTranscribeResult",
+    "build_speak_payload",
+    "build_transcribe_payload",
     "match_voice_command",
+    "parse_speak_result",
+    "parse_transcribe_result",
+    "parse_worker_error",
 ]
