@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import threading
+import time
 import wave
 from pathlib import Path
 from typing import Protocol
@@ -134,6 +135,13 @@ class CloudWorkerTextToSpeechBackend:
         if not normalized_text or not self.is_available(settings):
             return False
 
+        synthesis_started_at = time.monotonic()
+        logger.info(
+            "Cloud worker speech synthesis started chars={} model={} voice={}",
+            len(normalized_text),
+            settings.cloud_worker_tts_model,
+            settings.cloud_worker_tts_voice,
+        )
         try:
             result = self._client.speak(
                 text=normalized_text,
@@ -147,11 +155,27 @@ class CloudWorkerTextToSpeechBackend:
             return False
 
         try:
+            duration_seconds = _wav_duration_seconds(result.audio_path)
+            timeout_seconds = _playback_timeout_seconds(result.audio_path)
             try:
+                byte_count = result.audio_path.stat().st_size
+            except OSError:
+                byte_count = -1
+            logger.info(
+                "Cloud worker speech synthesis completed audio={} bytes={} duration_s={} "
+                "synthesis_ms={:.1f} playback_timeout_s={:.1f}",
+                result.audio_path,
+                byte_count,
+                f"{duration_seconds:.2f}" if duration_seconds is not None else "unknown",
+                (time.monotonic() - synthesis_started_at) * 1000,
+                timeout_seconds,
+            )
+            try:
+                playback_started_at = time.monotonic()
                 played = self._play_wav(
                     result.audio_path,
                     device_id=settings.speaker_device_id,
-                    timeout_seconds=_playback_timeout_seconds(result.audio_path),
+                    timeout_seconds=timeout_seconds,
                 )
             except Exception as exc:
                 logger.warning("Cloud worker speech playback failed: {}", exc)
@@ -160,6 +184,10 @@ class CloudWorkerTextToSpeechBackend:
             if not played:
                 logger.warning("Cloud worker speech playback returned false")
                 return False
+            logger.info(
+                "Cloud worker speech playback completed in {:.1f}ms",
+                (time.monotonic() - playback_started_at) * 1000,
+            )
             return True
         finally:
             _unlink_output_audio(result.audio_path)

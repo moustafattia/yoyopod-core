@@ -63,12 +63,22 @@ class VoiceCommandExecutor:
 
         command = match_voice_command(normalized)
         if not command.is_command:
+            logger.info(
+                "Voice command not recognized transcript={}",
+                _preview_voice_text(normalized),
+            )
             return VoiceCommandOutcome(
                 "Not Recognized",
                 "I heard "
                 f"'{normalized}'"
                 " but that is not a voice command. Try: call mom, play music, or volume up.",
             )
+        logger.info(
+            "Voice command matched intent={} transcript={} contact={}",
+            command.intent.value,
+            _preview_voice_text(normalized),
+            command.contact_name or "",
+        )
 
         if command.intent is VoiceCommandIntent.CALL_CONTACT:
             return self._handle_call_command(command.contact_name)
@@ -200,3 +210,10 @@ class VoiceCommandExecutor:
             return
         self._context.media.playback.volume = volume
         self._context.voice.output_volume = volume
+
+
+def _preview_voice_text(text: str, *, limit: int = 96) -> str:
+    normalized = " ".join(text.strip().split())
+    if len(normalized) <= limit:
+        return repr(normalized)
+    return repr(normalized[: limit - 3] + "...")

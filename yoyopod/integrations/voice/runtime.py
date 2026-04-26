@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 import wave
 from dataclasses import replace
 from pathlib import Path
@@ -194,6 +195,14 @@ class VoiceRuntimeCoordinator:
 
         self._set_state("thinking", "Thinking", "Just a moment...")
         outcome = self._command_executor.execute(transcript)
+        logger.info(
+            "Voice command outcome headline={} should_speak={} route={} auto_return={} transcript={}",
+            outcome.headline,
+            outcome.should_speak,
+            outcome.route_name or "",
+            outcome.auto_return,
+            _preview_voice_text(transcript),
+        )
         self._apply_outcome(outcome)
         return outcome
 
@@ -210,6 +219,14 @@ class VoiceRuntimeCoordinator:
             if generation != self._state.generation:
                 return
             self._active_capture_cancel = None
+            logger.info(
+                "Voice listen result applying generation={} capture_failed={} transcript_chars={} "
+                "transcript={}",
+                generation,
+                capture_failed,
+                len(transcript.strip()),
+                _preview_voice_text(transcript),
+            )
             if capture_failed:
                 self._apply_outcome(
                     VoiceCommandOutcome(
@@ -405,15 +422,24 @@ class VoiceRuntimeCoordinator:
                 generation=generation,
             )
             logger.info(
-                "PTT transcription complete (generation={}, transcript_chars={})",
+                "PTT transcription complete (generation={}, transcript_chars={}, transcript={})",
                 generation,
                 len(transcript.text.strip()),
+                _preview_voice_text(transcript.text),
             )
             return
 
         capture_result.audio_path.unlink(missing_ok=True)
 
     def _apply_outcome(self, outcome: VoiceCommandOutcome) -> None:
+        logger.info(
+            "Voice outcome applied headline={} should_speak={} route={} auto_return={} body_chars={}",
+            outcome.headline,
+            outcome.should_speak,
+            outcome.route_name or "",
+            outcome.auto_return,
+            len(outcome.body),
+        )
         self._set_state(
             "reply",
             outcome.headline,
@@ -450,9 +476,21 @@ class VoiceRuntimeCoordinator:
     def _run_tts_worker(self) -> None:
         while True:
             text = self._tts_queue.get()
+            started_at = time.monotonic()
             try:
-                if not self._voice_service().speak(text):
+                logger.info(
+                    "Voice response speech started chars={} text={}",
+                    len(text.strip()),
+                    _preview_voice_text(text),
+                )
+                spoken = self._voice_service().speak(text)
+                if not spoken:
                     logger.debug("Voice response not spoken: {}", text)
+                logger.info(
+                    "Voice response speech finished spoken={} elapsed_ms={:.1f}",
+                    spoken,
+                    (time.monotonic() - started_at) * 1000,
+                )
             except Exception:
                 logger.exception("Voice response speech failed")
             finally:
@@ -548,3 +586,10 @@ class VoiceRuntimeCoordinator:
                 )
                 frames.extend(sample.to_bytes(2, byteorder="little", signed=True))
             handle.writeframes(bytes(frames))
+
+
+def _preview_voice_text(text: str, *, limit: int = 96) -> str:
+    normalized = " ".join(text.strip().split())
+    if len(normalized) <= limit:
+        return repr(normalized)
+    return repr(normalized[: limit - 3] + "...")

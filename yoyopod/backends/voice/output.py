@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 from loguru import logger
@@ -63,6 +64,7 @@ class AlsaOutputPlayer:
             if device:
                 command.extend(["-D", device])
             command.append(str(audio_path))
+            started_at = time.monotonic()
             try:
                 result = subprocess.run(
                     command,
@@ -81,9 +83,23 @@ class AlsaOutputPlayer:
             except Exception as exc:
                 logger.debug("ALSA playback failed for {}: {}", device or "default", exc)
                 continue
+            elapsed_ms = (time.monotonic() - started_at) * 1000
             if result.returncode == 0:
+                logger.info(
+                    "ALSA playback succeeded on {} in {:.1f}ms",
+                    device or "default",
+                    elapsed_ms,
+                )
                 self._preferred_device = device
                 return True
+            stderr = result.stderr.strip().replace("\n", " ")[:180]
+            logger.warning(
+                "ALSA playback failed on {} rc={} elapsed_ms={:.1f} stderr={}",
+                device or "default",
+                result.returncode,
+                elapsed_ms,
+                stderr or "<empty>",
+            )
         return False
 
     def _device_candidates(self, configured_device_id: str | None) -> list[str | None]:
