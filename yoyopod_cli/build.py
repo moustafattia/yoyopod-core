@@ -251,6 +251,8 @@ def _is_stale(binary: Path, sources: tuple[Path, ...]) -> bool:
 
     if not binary.exists():
         return True
+    if binary.stat().st_size == 0:
+        return True
     return _newest_mtime(sources) > binary.stat().st_mtime
 
 
