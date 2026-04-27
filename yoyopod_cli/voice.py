@@ -7,12 +7,19 @@ from typing import Any
 
 import typer
 
+from yoyopod.integrations.voice.dictionary_validator import validate_voice_command_dictionary
 from yoyopod.integrations.voice.trace import DEFAULT_VOICE_TRACE_PATH, VoiceTraceStore
 
 app = typer.Typer(name="voice", help="Voice diagnostics and validation.", no_args_is_help=True)
+dictionary_app = typer.Typer(
+    name="dictionary",
+    help="Validate voice command dictionaries.",
+    no_args_is_help=True,
+)
 trace_app = typer.Typer(
     name="trace", help="Inspect local voice trace entries.", no_args_is_help=True
 )
+app.add_typer(dictionary_app, name="dictionary")
 app.add_typer(trace_app, name="trace")
 
 
@@ -40,6 +47,30 @@ def _row(payload: dict[str, Any]) -> str:
         text,
     )
     return " ".join(_cell(value) for value in values).rstrip()
+
+
+@dictionary_app.command(name="validate")
+def dictionary_validate(
+    path: Path | None = typer.Option(None, "--path", help="Voice command dictionary YAML path."),
+    strict: bool = typer.Option(False, "--strict", help="Treat warnings as failures."),
+) -> None:
+    """Validate a mutable voice command dictionary YAML file."""
+
+    dictionary_path = path or Path("data/voice/commands.yaml")
+    result = validate_voice_command_dictionary(dictionary_path, allow_missing=path is None)
+
+    for issue in result.errors:
+        typer.echo(f"ERROR {issue.location}: {issue.message}", err=True)
+    for issue in result.warnings:
+        typer.echo(f"WARN {issue.location}: {issue.message}")
+
+    if result.has_errors or (strict and result.has_warnings):
+        raise typer.Exit(1)
+
+    suffix = ""
+    if path is None and not dictionary_path.exists():
+        suffix = " (built-ins only)"
+    typer.echo(f"OK voice dictionary {dictionary_path}{suffix}")
 
 
 @trace_app.command(name="last")

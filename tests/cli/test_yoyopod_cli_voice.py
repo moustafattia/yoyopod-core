@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import yaml
+from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
 from yoyopod.integrations.voice.trace import VoiceTraceEntry, VoiceTraceStore
@@ -79,3 +81,92 @@ def test_voice_trace_last_ignores_corrupt_lines(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "turn-1" in result.output
     assert "not-json" not in result.output
+
+
+def test_voice_dictionary_validate_accepts_valid_file(tmp_path: Path) -> None:
+    commands_file = tmp_path / "commands.yaml"
+    commands_file.write_text(
+        yaml.safe_dump(
+            {
+                "intents": {
+                    "volume_up": {
+                        "aliases": ["boost sound"],
+                        "examples": ["boost sound"],
+                    }
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["voice", "dictionary", "validate", "--path", str(commands_file)],
+    )
+
+    assert result.exit_code == 0
+    assert "OK voice dictionary" in result.output
+
+
+def test_voice_dictionary_validate_fails_on_errors(tmp_path: Path) -> None:
+    commands_file = tmp_path / "commands.yaml"
+    commands_file.write_text(
+        yaml.safe_dump(
+            {
+                "actions": {
+                    "shell": {
+                        "aliases": ["run update"],
+                        "route": "powershell",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["voice", "dictionary", "validate", "--path", str(commands_file)],
+    )
+
+    assert result.exit_code == 1
+    assert "unsafe route" in result.output
+
+
+def test_voice_dictionary_validate_strict_fails_on_warnings(tmp_path: Path) -> None:
+    commands_file = tmp_path / "commands.yaml"
+    commands_file.write_text(
+        yaml.safe_dump(
+            {
+                "intents": {
+                    "volume_up": {
+                        "aliases": ["up"],
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["voice", "dictionary", "validate", "--path", str(commands_file), "--strict"],
+    )
+
+    assert result.exit_code == 1
+    assert "WARN" in result.output
+
+
+def test_voice_dictionary_validate_default_missing_uses_builtins(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["voice", "dictionary", "validate"])
+
+    assert result.exit_code == 0
+    assert "built-ins only" in result.output

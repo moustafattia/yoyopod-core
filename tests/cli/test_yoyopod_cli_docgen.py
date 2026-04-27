@@ -47,8 +47,9 @@ def test_docgen_contains_release_commands() -> None:
 def test_docgen_contains_voice_commands() -> None:
     md = generate_commands_md(app)
 
-    assert "## `yoyopod voice" in md
+    assert "## `yoyopod voice`" in md
     assert "`yoyopod voice trace last`" in md
+    assert "`yoyopod voice dictionary validate`" in md
 
 
 def test_docgen_does_not_contain_cut_commands() -> None:

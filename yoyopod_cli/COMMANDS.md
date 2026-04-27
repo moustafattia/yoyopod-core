@@ -78,6 +78,7 @@ For live help, use `yoyopod <cmd> --help`.
 
 | Command | What it does |
 |---|---|
+| `yoyopod voice dictionary validate` | Validate a mutable voice command dictionary YAML file. |
 | `yoyopod voice trace last` | Show the most recent local voice trace entries. |
 
 ## `yoyopod release`
