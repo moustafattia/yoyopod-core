@@ -235,11 +235,11 @@ class HubScreen(Screen):
         self.request_route("select", payload=selected_card.title)
 
     def on_back(self, data=None) -> None:
-        """Open Ask in quick-command mode (hold-to-ask shortcut)."""
+        """Open Ask with the same command-plus-Ask behavior as the Ask card."""
         if self.screen_manager is not None:
             ask_screen = self.screen_manager.screens.get("ask")
             if ask_screen is not None and hasattr(ask_screen, "set_quick_command"):
-                ask_screen.set_quick_command(True)
+                ask_screen.set_quick_command(False)
         self.request_route("hold_ask")
 
     def _resolve_music_backend(self) -> "MusicBackend | None":

@@ -1342,14 +1342,15 @@ def test_ask_screen_exit_clears_quick_command() -> None:
     assert ask._quick_command is False
 
 
-def test_hub_back_triggers_hold_ask_route(display: Display) -> None:
-    """Holding on the Hub should push Ask via the hold_ask route."""
+def test_hub_back_triggers_full_ask_route(display: Display) -> None:
+    """Holding on Hub should open the same command-plus-Ask flow as Ask itself."""
     context = AppContext()
     input_manager = InputManager()
     screen_manager = ScreenManager(display, input_manager)
+    runtime = _StubVoiceRuntime()
 
     hub = HubScreen(display, context)
-    ask = AskScreen(display=display, context=context)
+    ask = AskScreen(display=display, context=context, voice_runtime=runtime)
     hub.render = lambda: None
     ask.render = lambda: None
 
@@ -1360,7 +1361,8 @@ def test_hub_back_triggers_hold_ask_route(display: Display) -> None:
     input_manager.simulate_action(InputAction.BACK)
 
     assert screen_manager.current_screen is ask
-    assert ask._quick_command is True
+    assert ask._quick_command is False
+    assert runtime.begin_entry_cycle_calls == [(False, True)]
 
 
 def test_hub_select_clears_stale_quick_command_for_normal_ask(display: Display) -> None:

@@ -333,7 +333,7 @@ class MpvBackend:
             for uri in uris[1:]:
                 if not self._command(["loadfile", uri, "append"]):
                     return False
-            return True
+            return self._set_property("pause", False)
         except Exception as exc:
             logger.error("Failed to load tracks: {}", exc)
             return False

@@ -116,6 +116,37 @@ def test_mock_backend_get_time_position() -> None:
     assert backend.get_time_position() == 5000
 
 
+def test_mpv_backend_load_tracks_unpauses_after_replacing_playlist() -> None:
+    """Loading tracks from voice/Ask should start audible playback even if mpv was paused."""
+
+    class FakeIpc:
+        connected = True
+
+        def __init__(self) -> None:
+            self.commands: list[list[object]] = []
+
+        def send_command(self, args: list[object]) -> dict[str, object]:
+            self.commands.append(args)
+            return {"error": "success"}
+
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
+    ipc = FakeIpc()
+    backend = MpvBackend(MusicConfig())
+    backend._connected = True
+    backend._ipc = ipc
+    backend._process = FakeProcess()
+
+    assert backend.load_tracks(["/music/a.mp3", "/music/b.mp3"]) is True
+    assert ipc.commands == [
+        ["loadfile", "/music/a.mp3", "replace"],
+        ["loadfile", "/music/b.mp3", "append"],
+        ["set_property", "pause", False],
+    ]
+
+
 def test_mpv_backend_waits_for_delayed_ipc_ready(monkeypatch) -> None:
     class FakeProcess:
         def spawn(self) -> bool:
