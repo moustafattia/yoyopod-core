@@ -173,8 +173,15 @@ class SidecarBackendAdapter:
             )
             return
 
-        # Replace any prior backend cleanly.
+        # Replace any prior backend cleanly. ``shutdown()`` joins the iterate
+        # thread and stops the old backend, but it does not clear tracked
+        # call state — a Configure issued during an active call would leave
+        # the adapter believing the call is still in progress and reject
+        # subsequent Dials with ``call_in_progress``. Reset explicitly so
+        # backend replacement is truly idempotent (matches the behaviour
+        # added to ``_handle_unregister``).
         self.shutdown()
+        self._reset_call_state()
         try:
             backend = self._backend_factory(config)
         except Exception as exc:
@@ -366,6 +373,14 @@ class SidecarBackendAdapter:
         # The current ``VoIPBackend`` protocol has no volume control; track
         # the requested value and surface it via :class:`MediaStateChanged`
         # so the main process keeps an accurate view of intended state.
+        # Validate the call id like the other call-scoped commands so a
+        # delayed SetVolume from a previous call cannot mutate the current
+        # call's media state. ``_require_backend`` and ``_verify_call_id``
+        # both emit Error events on rejection.
+        if self._require_backend(command.cmd_id) is None:
+            return
+        if not self._verify_call_id(command.call_id, command.cmd_id):
+            return
         self._speaker_volume = max(0.0, min(1.0, float(command.level)))
         self._emit_media_state_locked()
 
@@ -595,7 +610,20 @@ class SidecarBackendAdapter:
         return not thread.is_alive()
 
 
-_CALL_TERMINAL_STATES = frozenset({CallState.RELEASED, CallState.ERROR, CallState.IDLE})
+_CALL_TERMINAL_STATES = frozenset(
+    {
+        CallState.RELEASED,
+        CallState.END,
+        CallState.ERROR,
+        CallState.IDLE,
+    }
+)
+"""Liblinphone emits a native terminal that maps to ``CallState.END`` (state 13;
+see :file:`yoyopod/backends/voip/liblinphone.py`). Treat it as terminal here
+so a hangup that lands as END (with no later RELEASED) still clears the
+tracked ``_current_call_id`` instead of blocking subsequent Dials with
+``call_in_progress``. Mirrors the existing ``_TERMINAL_STATES`` set in
+:mod:`yoyopod.integrations.call.handlers`."""
 
 
 def _registration_state_value(state: RegistrationState) -> str:

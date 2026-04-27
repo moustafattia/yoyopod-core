@@ -161,6 +161,41 @@ def test_configure_with_unknown_field_returns_invalid_config_error(
     assert any(error.code == "invalid_config" and error.cmd_id == 42 for error in errors), events
 
 
+def test_configure_clears_active_call_state(
+    adapter: SidecarBackendAdapter,
+    parent_conn: Connection,
+    mock_backend: MockVoIPBackend,
+) -> None:
+    """A re-Configure during an active call must reset the tracked call id.
+
+    Codex follow-up review on #389 (P1): without this, a Configure issued
+    while a call is active leaves ``_current_call_id`` pinned to the old
+    backend's call. The subsequent Dial against the fresh backend is then
+    rejected with ``call_in_progress``.
+    """
+
+    adapter.handle_command(Configure(config=_config_dict()))
+    adapter.handle_command(Register(cmd_id=1))
+    _drain(parent_conn)
+
+    mock_backend.emit(IncomingCallDetected(caller_address="sip:caller@example.com"))
+    _drain(parent_conn)
+    assert adapter._current_call_id is not None
+
+    # Re-Configure: should drop the old backend, fresh-create, and clear call state.
+    adapter.handle_command(Configure(config=_config_dict()))
+    _drain(parent_conn)
+    assert adapter._current_call_id is None
+
+    # And a fresh Register + Dial cycle must succeed without ``call_in_progress``.
+    adapter.handle_command(Register(cmd_id=2))
+    _drain(parent_conn)
+    adapter.handle_command(Dial(uri="sip:carol@example.com", cmd_id=3))
+    events = _drain(parent_conn)
+    errors = [event for event in events if isinstance(event, Error)]
+    assert not any(error.code == "call_in_progress" for error in errors), errors
+
+
 # ---------------------------------------------------------------------------
 # Register / Unregister
 # ---------------------------------------------------------------------------
@@ -456,6 +491,43 @@ def test_set_volume_does_not_call_backend_but_emits_media_state(
     assert media and media[-1].speaker_volume == pytest.approx(0.4)
 
 
+def test_set_volume_with_unknown_call_id_returns_error(
+    adapter: SidecarBackendAdapter,
+    parent_conn: Connection,
+    mock_backend: MockVoIPBackend,
+) -> None:
+    """A delayed SetVolume from a previous call must not mutate the current call.
+
+    Codex follow-up review on #389 (P2): without call-id validation, a stale
+    SetVolume frame can flip the adapter's tracked volume mid-call. Now the
+    handler validates the id like other call-scoped commands.
+    """
+
+    adapter.handle_command(Configure(config=_config_dict()))
+    adapter.handle_command(Register(cmd_id=1))
+    _drain(parent_conn)
+    mock_backend.emit(IncomingCallDetected(caller_address="sip:bob@example.com"))
+    _drain(parent_conn)
+
+    adapter.handle_command(SetVolume(call_id="call-bogus", level=0.5, cmd_id=77))
+    events = _drain(parent_conn)
+    errors = [event for event in events if isinstance(event, Error)]
+    assert any(error.code == "unknown_call_id" and error.cmd_id == 77 for error in errors), events
+    # Volume must not have changed.
+    assert adapter._speaker_volume == 1.0
+
+
+def test_set_volume_without_backend_returns_not_configured(
+    adapter: SidecarBackendAdapter, parent_conn: Connection
+) -> None:
+    """SetVolume before Configure surfaces ``not_configured`` like other commands."""
+
+    adapter.handle_command(SetVolume(call_id="call-1", level=0.5, cmd_id=88))
+    events = _drain(parent_conn)
+    errors = [event for event in events if isinstance(event, Error)]
+    assert any(error.code == "not_configured" and error.cmd_id == 88 for error in errors), events
+
+
 # ---------------------------------------------------------------------------
 # Backend events -> protocol events
 # ---------------------------------------------------------------------------
@@ -510,6 +582,32 @@ def test_call_released_clears_current_call_id(
     _drain(parent_conn)
 
     mock_backend.emit(BackendCallStateChanged(state=CallState.RELEASED))
+    _drain(parent_conn)
+    assert adapter._current_call_id is None
+
+
+def test_call_end_state_is_terminal(
+    adapter: SidecarBackendAdapter,
+    parent_conn: Connection,
+    mock_backend: MockVoIPBackend,
+) -> None:
+    """``CallState.END`` must be treated as terminal alongside RELEASED.
+
+    Codex follow-up review on #389 (P1): liblinphone maps native state 13
+    to ``CallState.END`` and may emit it without a later ``RELEASED``
+    frame. The previous adapter only treated ``{RELEASED, ERROR, IDLE}``
+    as terminal, leaving the call id pinned and blocking subsequent Dials
+    with ``call_in_progress``.
+    """
+
+    adapter.handle_command(Configure(config=_config_dict()))
+    _drain(parent_conn)
+
+    mock_backend.emit(IncomingCallDetected(caller_address="sip:caller@example.com"))
+    _drain(parent_conn)
+    assert adapter._current_call_id is not None
+
+    mock_backend.emit(BackendCallStateChanged(state=CallState.END))
     _drain(parent_conn)
     assert adapter._current_call_id is None
 
