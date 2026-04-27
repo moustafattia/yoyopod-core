@@ -31,6 +31,7 @@ from yoyopod.integrations.voice.router import VoiceRouteKind, VoiceRouter
 from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
 
 if TYPE_CHECKING:
+    from yoyopod.backends.music import MusicBackend
     from yoyopod.core import AppContext
     from yoyopod.integrations.voice.commands import VoiceCommandMatch
 
@@ -44,6 +45,7 @@ class _QueuedSpeech:
     generation: int | None = None
     record_response: bool = False
     cancel_event: threading.Event | None = None
+    release_music_after: VoiceCommandOutcome | None = None
 
 
 class _AskClient(Protocol):
@@ -79,6 +81,8 @@ class VoiceRuntimeCoordinator:
         voice_service_factory: Callable[[VoiceSettings], VoiceManager] | None = None,
         output_player: AlsaOutputPlayer | None = None,
         ask_client: _AskClient | None = None,
+        music_backend: "MusicBackend | None" = None,
+        call_music_handoff: Callable[[], bool] | None = None,
     ) -> None:
         self._context = context
         self._settings_resolver = settings_resolver
@@ -86,6 +90,8 @@ class VoiceRuntimeCoordinator:
         self._voice_service_factory = voice_service_factory
         self._output_player = output_player or AlsaOutputPlayer()
         self._ask_client = ask_client
+        self._music_backend = music_backend
+        self._call_music_handoff = call_music_handoff
         self._ask_conversation = AskConversationState()
         self._cached_voice_service: VoiceManager | None = None
         self._state = VoiceInteractionState(headline="YoYo", body="How can I help?")
@@ -102,6 +108,9 @@ class VoiceRuntimeCoordinator:
         self._tts_idle.set()
         self._tts_cancel_events: set[threading.Event] = set()
         self._generation_scoped_tts_cancel_events: set[threading.Event] = set()
+        self._music_focus_lock = threading.Lock()
+        self._music_paused_for_voice = False
+        self._music_paused_generation: int | None = None
 
     @property
     def state(self) -> VoiceInteractionState:
@@ -175,6 +184,7 @@ class VoiceRuntimeCoordinator:
         generation = self._next_generation()
         cancel_event = threading.Event()
         self._active_capture_cancel = cancel_event
+        self._pause_music_for_voice(generation=generation, reason="ask")
         self._set_state(
             "listening",
             "Listening",
@@ -207,6 +217,7 @@ class VoiceRuntimeCoordinator:
         generation = self._next_generation()
         cancel_event = threading.Event()
         self._active_capture_cancel = cancel_event
+        self._pause_music_for_voice(generation=generation, reason="command")
         self._set_state(
             "listening",
             "Listening",
@@ -241,6 +252,7 @@ class VoiceRuntimeCoordinator:
         generation = self._next_generation()
         cancel_event = threading.Event()
         self._active_capture_cancel = cancel_event
+        self._pause_music_for_voice(generation=generation, reason="ptt")
         self._set_state(
             "listening",
             "Listening",
@@ -281,6 +293,7 @@ class VoiceRuntimeCoordinator:
             if self._active_capture_cancel is not None:
                 self._active_capture_cancel.set()
                 self._active_capture_cancel = None
+        self._resume_music_after_voice()
         self._set_state(
             self._state.phase,
             self._state.headline,
@@ -530,6 +543,101 @@ class VoiceRuntimeCoordinator:
             cancel_events = list(self._generation_scoped_tts_cancel_events)
         for cancel_event in cancel_events:
             cancel_event.set()
+
+    def _pause_music_for_voice(self, *, generation: int, reason: str) -> None:
+        """Pause active music while voice owns microphone/speaker focus."""
+
+        music_backend = self._music_backend
+        if music_backend is None:
+            return
+
+        with self._music_focus_lock:
+            if self._music_paused_for_voice:
+                return
+
+        if not getattr(music_backend, "is_connected", False):
+            logger.debug("Skipping voice music pause: music backend unavailable")
+            return
+
+        try:
+            playback_state = music_backend.get_playback_state()
+        except Exception as exc:
+            logger.warning("Cannot inspect music state before voice {}: {}", reason, exc)
+            return
+        if playback_state != "playing":
+            return
+
+        logger.info("Pausing music for voice {} session", reason)
+        try:
+            paused = music_backend.pause()
+        except Exception as exc:
+            logger.warning("Failed to pause music for voice {}: {}", reason, exc)
+            return
+        if not paused:
+            logger.warning("Music backend rejected voice {} pause request", reason)
+            return
+
+        with self._music_focus_lock:
+            self._music_paused_for_voice = True
+            self._music_paused_generation = generation
+        if self._context is not None:
+            self._context.pause()
+
+    def _resume_music_after_voice(self, outcome: VoiceCommandOutcome | None = None) -> None:
+        """Resume music that this voice session paused, unless another domain owns it."""
+
+        with self._music_focus_lock:
+            if not self._music_paused_for_voice:
+                return
+            self._music_paused_for_voice = False
+            self._music_paused_generation = None
+
+        if outcome is not None and self._should_handoff_music_pause_to_call(outcome):
+            if self._handoff_paused_music_to_call():
+                logger.info("Handed voice-paused music to call interruption policy")
+                return
+
+        music_backend = self._music_backend
+        if music_backend is None:
+            return
+        if not getattr(music_backend, "is_connected", False):
+            logger.warning("Cannot resume music after voice: music backend unavailable")
+            return
+
+        try:
+            playback_state = music_backend.get_playback_state()
+        except Exception as exc:
+            logger.warning("Cannot inspect music state after voice: {}", exc)
+            return
+        if playback_state == "playing":
+            return
+        if playback_state != "paused":
+            logger.info("Skipping voice music resume because playback is {}", playback_state)
+            return
+
+        logger.info("Resuming music after voice session")
+        try:
+            resumed = music_backend.play()
+        except Exception as exc:
+            logger.warning("Failed to resume music after voice: {}", exc)
+            return
+        if not resumed:
+            logger.warning("Music backend rejected voice resume request")
+            return
+        if self._context is not None:
+            self._context.resume()
+
+    def _should_handoff_music_pause_to_call(self, outcome: VoiceCommandOutcome) -> bool:
+        return outcome.headline == "Calling"
+
+    def _handoff_paused_music_to_call(self) -> bool:
+        if self._call_music_handoff is None:
+            return False
+        try:
+            return bool(self._call_music_handoff())
+        except Exception as exc:
+            logger.warning("Voice-to-call music handoff failed: {}", exc)
+            return False
 
     def _run_listening_cycle(
         self,
@@ -849,7 +957,9 @@ class VoiceRuntimeCoordinator:
         if self._context is not None and outcome.should_speak:
             self._context.record_voice_response(outcome.body)
         if outcome.should_speak:
-            self._speak_outcome_async(outcome.body)
+            self._speak_outcome_async(outcome.body, release_music_after=outcome)
+        else:
+            self._resume_music_after_voice(outcome)
         if self._outcome_listener is not None:
             self._dispatch(lambda: self._outcome_listener(outcome))
 
@@ -874,7 +984,10 @@ class VoiceRuntimeCoordinator:
                 outcome.body,
                 generation=generation,
                 record_response=True,
+                release_music_after=outcome,
             )
+        else:
+            self._resume_music_after_voice(outcome)
         if self._outcome_listener is not None:
             self._dispatch(lambda: self._outcome_listener(outcome))
 
@@ -884,6 +997,7 @@ class VoiceRuntimeCoordinator:
         *,
         generation: int | None = None,
         record_response: bool = False,
+        release_music_after: VoiceCommandOutcome | None = None,
     ) -> None:
         """Speak an outcome outside the main-thread UI path."""
 
@@ -900,6 +1014,7 @@ class VoiceRuntimeCoordinator:
                 generation=generation,
                 record_response=record_response,
                 cancel_event=cancel_event,
+                release_music_after=release_music_after,
             )
         )
 
@@ -961,6 +1076,12 @@ class VoiceRuntimeCoordinator:
             except Exception:
                 logger.exception("Voice response speech failed")
             finally:
+                if (
+                    item.release_music_after is not None
+                    and (item.generation is None or item.generation == self._state.generation)
+                    and not (item.cancel_event is not None and item.cancel_event.is_set())
+                ):
+                    self._resume_music_after_voice(item.release_music_after)
                 if item.cancel_event is not None:
                     with self._tts_cancel_lock:
                         self._tts_cancel_events.discard(item.cancel_event)

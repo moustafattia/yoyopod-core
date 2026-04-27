@@ -105,6 +105,17 @@ class ScreensBoot:
                     return str(summary_provider())
                 return "You are on Ask. Ask a question, or go back to exit."
 
+            def handoff_voice_music_pause_to_call() -> bool:
+                call_interruption_policy = getattr(self.app, "call_interruption_policy", None)
+                music_fsm = getattr(self.app, "music_fsm", None)
+                if call_interruption_policy is None or music_fsm is None:
+                    return False
+                call_interruption_policy.mark_paused_for_call(music_fsm)
+                app_state_runtime = getattr(self.app, "app_state_runtime", None)
+                if app_state_runtime is not None:
+                    app_state_runtime.sync_app_state("voice_call_handoff")
+                return True
+
             self.app.voice_runtime = VoiceRuntimeCoordinator(
                 context=context,
                 settings_resolver=VoiceSettingsResolver(
@@ -337,6 +348,8 @@ class ScreensBoot:
                 ),
                 voice_service_factory=voice_service_factory,
                 ask_client=voice_worker_client,
+                music_backend=getattr(self.app, "music_backend", None),
+                call_music_handoff=handoff_voice_music_pause_to_call,
             )
             self.app.ask_screen = AskScreen(
                 display,

@@ -238,6 +238,33 @@ class _FakeOutputPlayer:
         return None
 
 
+class _FakeMusicBackend:
+    def __init__(self, playback_state: str = "playing", *, connected: bool = True) -> None:
+        self._playback_state = playback_state
+        self.is_connected = connected
+        self.pause_calls = 0
+        self.play_calls = 0
+        self.pause_result = True
+        self.play_result = True
+
+    def get_playback_state(self) -> str:
+        return self._playback_state
+
+    def pause(self) -> bool:
+        self.pause_calls += 1
+        if not self.pause_result:
+            return False
+        self._playback_state = "paused"
+        return True
+
+    def play(self) -> bool:
+        self.play_calls += 1
+        if not self.play_result:
+            return False
+        self._playback_state = "playing"
+        return True
+
+
 class _FakeAskClient:
     def __init__(self, answers: list[str] | None = None, *, available: bool = True) -> None:
         self.is_available = available
@@ -728,6 +755,178 @@ def test_begin_ask_falls_back_to_ask_for_non_command() -> None:
         "Because sunlight scatters in the air.",
         auto_return=False,
     )
+
+
+def test_begin_ask_pauses_music_and_resumes_after_answer_speech() -> None:
+    """Ask should hold music focus until the spoken answer has finished."""
+
+    context = AppContext()
+    speak_started = threading.Event()
+    release_speech = threading.Event()
+
+    class _BlockingSpeechVoiceService(_FakeVoiceService):
+        def speak(
+            self,
+            text: str,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> bool:
+            self.speak_calls.append(text)
+            speak_started.set()
+            release_speech.wait(timeout=1.0)
+            return not (cancel_event is not None and cancel_event.is_set())
+
+    service = _BlockingSpeechVoiceService("hey yoyo why is the sky blue")
+    ask_client = _FakeAskClient(["Because sunlight scatters in the air."])
+    music_backend = _FakeMusicBackend("playing")
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(
+                mode="cloud",
+                activation_prefixes=("hey yoyo", "yoyo"),
+                ask_fallback_enabled=True,
+            ),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ask_client,
+        music_backend=music_backend,
+    )
+
+    coordinator.begin_ask(async_capture=False)
+
+    assert music_backend.pause_calls == 1
+    assert music_backend.get_playback_state() == "paused"
+    assert speak_started.wait(timeout=1.0)
+    assert music_backend.play_calls == 0
+
+    release_speech.set()
+    coordinator._tts_queue.join()
+
+    assert service.speak_calls == ["Because sunlight scatters in the air."]
+    assert music_backend.play_calls == 1
+    assert music_backend.get_playback_state() == "playing"
+
+
+def test_begin_ptt_capture_pauses_music_and_resumes_after_command_result(
+    tmp_path: Path,
+) -> None:
+    """Hold-to-Ask should pause active music for the PTT capture window."""
+
+    audio_path = tmp_path / "ptt.wav"
+    audio_path.write_bytes(b"RIFF")
+    capture_started = threading.Event()
+    music_backend = _FakeMusicBackend("playing")
+    outcomes: list[VoiceCommandOutcome] = []
+
+    class _PTTVoiceService:
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return True
+
+        def tts_available(self) -> bool:
+            return False
+
+        def capture_audio(self, request) -> VoiceCaptureResult:
+            capture_started.set()
+            assert request.cancel_event is not None
+            assert request.cancel_event.wait(timeout=1.0)
+            return VoiceCaptureResult(audio_path=audio_path, recorded=True)
+
+        def transcribe(
+            self,
+            path: Path,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> VoiceTranscript:
+            assert path == audio_path
+            del cancel_event
+            return VoiceTranscript(text="volume up", confidence=1.0, is_final=True)
+
+        def speak(
+            self,
+            _text: str,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> bool:
+            del cancel_event
+            return False
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(context=None),
+        command_executor=VoiceCommandExecutor(
+            context=None,
+            volume_up_action=lambda _step: 60,
+        ),
+        voice_service_factory=lambda _settings: _PTTVoiceService(),
+        output_player=_FakeOutputPlayer(),
+        music_backend=music_backend,
+    )
+    coordinator.bind(
+        state_listener=None,
+        outcome_listener=outcomes.append,
+        dispatcher=lambda callback: callback(),
+    )
+
+    coordinator.begin_ptt_capture()
+
+    assert capture_started.wait(timeout=1.0)
+    assert music_backend.pause_calls == 1
+    assert music_backend.get_playback_state() == "paused"
+
+    coordinator.finish_ptt_capture()
+
+    _wait_until(lambda: music_backend.play_calls == 1)
+    assert outcomes[-1].headline == "Volume"
+    assert music_backend.get_playback_state() == "playing"
+    assert not audio_path.exists()
+
+
+def test_calling_outcome_hands_paused_music_to_call_policy() -> None:
+    """Call commands should not resume music before the call runtime owns audio."""
+
+    context = AppContext()
+    service = _FakeVoiceService("call mama")
+    music_backend = _FakeMusicBackend("playing")
+    handoff_calls = 0
+
+    class _CallingExecutor:
+        def execute(self, transcript: str) -> VoiceCommandOutcome:
+            assert transcript == "call mama"
+            return VoiceCommandOutcome(
+                "Calling",
+                "Calling Mama.",
+                should_speak=False,
+                auto_return=False,
+            )
+
+    def handoff_to_call() -> bool:
+        nonlocal handoff_calls
+        handoff_calls += 1
+        return True
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(context=context),
+        command_executor=_CallingExecutor(),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        music_backend=music_backend,
+        call_music_handoff=handoff_to_call,
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert music_backend.pause_calls == 1
+    assert music_backend.play_calls == 0
+    assert music_backend.get_playback_state() == "paused"
+    assert handoff_calls == 1
 
 
 def test_begin_ask_reports_offline_after_routing_non_command() -> None:
