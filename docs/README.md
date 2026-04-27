@@ -79,6 +79,7 @@ These files are useful for context, but they are not all the same kind of docume
 
 - [`GLOBAL_AUDIO_DEVICE_FACADE_CONTRACT.md`](GLOBAL_AUDIO_DEVICE_FACADE_CONTRACT.md)
 - [`WHISPLAY_SIMULATION_PARITY_CONTRACT.md`](WHISPLAY_SIMULATION_PARITY_CONTRACT.md)
+- [`superpowers/specs/2026-04-27-cautious-unified-voice-design.md`](superpowers/specs/2026-04-27-cautious-unified-voice-design.md), current design for unified YoYo voice command and Ask routing
 - [`design-previews/`](design-previews/)
 
 If one of these conflicts with the current code or the current runtime docs above, trust the current code and the current runtime docs.
