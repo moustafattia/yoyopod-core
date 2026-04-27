@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from yoyopod_cli.pi_validate import cloud_voice as pi_validate_cv
-from yoyopod_cli.pi_validate import app as pi_validate_app
+from yoyopod_cli.pi.validate import cloud_voice as pi_validate_cv
+from yoyopod_cli.pi.validate import app as pi_validate_app
 
 
 def _collect_option_names(click_cmd: object) -> set[str]:

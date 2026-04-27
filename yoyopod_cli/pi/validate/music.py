@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 
 from yoyopod_cli.common import configure_logging, resolve_config_dir
-from yoyopod_cli.pi_validate._common import (
+from yoyopod_cli.pi.validate._common import (
     _CheckResult,
     _load_media_config,
     _print_summary,

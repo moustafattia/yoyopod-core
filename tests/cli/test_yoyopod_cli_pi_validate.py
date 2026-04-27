@@ -1,4 +1,4 @@
-"""Tests for yoyopod_cli.pi_validate."""
+"""Tests for yoyopod_cli.pi.validate."""
 from __future__ import annotations
 
 import sys
@@ -6,9 +6,9 @@ from types import ModuleType
 
 from typer.testing import CliRunner
 
-from yoyopod_cli import pi_validate
-from yoyopod_cli.pi_validate import app
-from yoyopod_cli.pi_validate import system as _system
+from yoyopod_cli.pi import validate as pi_validate
+from yoyopod_cli.pi.validate import app
+from yoyopod_cli.pi.validate import system as _system
 
 
 def _collect_option_names(click_cmd: object) -> set[str]:

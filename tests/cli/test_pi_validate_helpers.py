@@ -3,10 +3,10 @@ from __future__ import annotations
 import sys
 from types import ModuleType, SimpleNamespace
 
-from yoyopod_cli.pi_validate._navigation_soak import pump as helpers
-from yoyopod_cli.pi_validate._navigation_soak import handle as _handle
-from yoyopod_cli.pi_validate._navigation_soak import idle as _idle
-from yoyopod_cli.pi_validate._navigation_soak import (
+from yoyopod_cli.pi.validate._navigation_soak import pump as helpers
+from yoyopod_cli.pi.validate._navigation_soak import handle as _handle
+from yoyopod_cli.pi.validate._navigation_soak import idle as _idle
+from yoyopod_cli.pi.validate._navigation_soak import (
     NavigationSoakRunner,
     NavigationSoakStep,
     build_navigation_soak_plan,

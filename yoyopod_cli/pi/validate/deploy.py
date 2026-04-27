@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 import typer
 
-from yoyopod_cli.pi_validate._common import (
+from yoyopod_cli.pi.validate._common import (
     _CheckResult,
     _nearest_existing_parent,
     _print_summary,

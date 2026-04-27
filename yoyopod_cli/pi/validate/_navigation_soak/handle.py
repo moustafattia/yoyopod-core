@@ -176,7 +176,7 @@ class _YoyoPodAppNavigationSoakHandle:
     def voip_iterate_interval_seconds(self) -> float:
         runtime_loop = self.runtime_loop
         if runtime_loop is None:
-            from yoyopod_cli.pi_validate._navigation_soak.plan import NavigationSoakError
+            from yoyopod_cli.pi.validate._navigation_soak.plan import NavigationSoakError
 
             raise NavigationSoakError("runtime loop is unavailable for navigation soak")
         return float(runtime_loop.configured_voip_iterate_interval_seconds)

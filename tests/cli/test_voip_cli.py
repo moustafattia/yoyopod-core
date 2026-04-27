@@ -12,9 +12,9 @@ pytest.importorskip("typer")
 
 from typer.testing import CliRunner
 
-from yoyopod_cli.pi_validate import voip as voip_cli
-from yoyopod_cli.pi_validate import app as pi_validate_app
-import yoyopod_cli.pi_voip as voip_check_cli
+from yoyopod_cli.pi.validate import voip as voip_cli
+from yoyopod_cli.pi.validate import app as pi_validate_app
+import yoyopod_cli.pi.voip as voip_check_cli
 from yoyopod.integrations.call.models import CallState, RegistrationState
 
 runner = CliRunner()

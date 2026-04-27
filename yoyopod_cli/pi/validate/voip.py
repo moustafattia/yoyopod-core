@@ -12,7 +12,7 @@ from typing import Annotated, Any, Callable, Protocol, cast
 
 import typer
 
-from yoyopod_cli.pi_validate._common import _CheckResult, _print_summary
+from yoyopod_cli.pi.validate._common import _CheckResult, _print_summary
 from yoyopod_cli.common import REPO_ROOT, configure_logging, resolve_config_dir
 
 # ---------------------------------------------------------------------------

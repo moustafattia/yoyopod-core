@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 import typer
 
-from yoyopod_cli.pi_validate._common import (
+from yoyopod_cli.pi.validate._common import (
     _CheckResult,
     _load_app_config,
     _print_summary,

@@ -34,7 +34,7 @@ from yoyopod.integrations.voice.worker_contract import (
     parse_transcribe_result,
 )
 from yoyopod_cli.common import REPO_ROOT, configure_logging, resolve_config_dir
-from yoyopod_cli.pi_validate._common import _CheckResult, _print_summary
+from yoyopod_cli.pi.validate._common import _CheckResult, _print_summary
 
 
 def _load_cloud_voice_env_file(env_file: Path) -> list[str]:
