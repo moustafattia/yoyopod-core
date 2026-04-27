@@ -12,6 +12,8 @@ import threading
 import time
 import types
 
+import pytest
+
 import yoyopod.backends.voice.output as voice_output
 from yoyopod.backends.voice import (
     AlsaOutputPlayer,
@@ -109,6 +111,164 @@ def test_match_voice_command_extracts_contact_name() -> None:
     assert match.intent is VoiceCommandIntent.CALL_CONTACT
     assert match.contact_name == "mom"
     assert match.is_command is True
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected_contact_name"),
+    [
+        ("call mama", "mama"),
+        ("call mommy", "mommy"),
+        ("call my mama", "mama"),
+        ("please call my mom", "mom"),
+        ("ring mama", "mama"),
+        ("phone mom", "mom"),
+        ("call daddy", "daddy"),
+        ("call papa", "papa"),
+        ("ring papa", "papa"),
+    ],
+)
+def test_match_voice_command_handles_family_call_variations(
+    phrase: str, expected_contact_name: str
+) -> None:
+    """Family call variants should resolve to a contact-bearing call command."""
+
+    match = match_voice_command(phrase)
+
+    assert match.intent is VoiceCommandIntent.CALL_CONTACT
+    assert match.contact_name == expected_contact_name
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected_intent"),
+    [
+        ("play a song", VoiceCommandIntent.PLAY_MUSIC),
+        ("play songs", VoiceCommandIntent.PLAY_MUSIC),
+        ("put on music", VoiceCommandIntent.PLAY_MUSIC),
+        ("start songs", VoiceCommandIntent.PLAY_MUSIC),
+        ("play kids music", VoiceCommandIntent.PLAY_MUSIC),
+        ("louder", VoiceCommandIntent.VOLUME_UP),
+        ("make it louder", VoiceCommandIntent.VOLUME_UP),
+        ("too quiet", VoiceCommandIntent.VOLUME_UP),
+        ("quieter", VoiceCommandIntent.VOLUME_DOWN),
+        ("make it quieter", VoiceCommandIntent.VOLUME_DOWN),
+        ("too loud", VoiceCommandIntent.VOLUME_DOWN),
+    ],
+)
+def test_match_voice_command_handles_music_and_volume_variations(
+    phrase: str, expected_intent: VoiceCommandIntent
+) -> None:
+    """Common kid-friendly music and volume phrasings should match fixed commands."""
+
+    assert match_voice_command(phrase).intent is expected_intent
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected_intent"),
+    [
+        ("read this", VoiceCommandIntent.READ_SCREEN),
+        ("what is on the screen", VoiceCommandIntent.READ_SCREEN),
+        ("tell me what is on the screen", VoiceCommandIntent.READ_SCREEN),
+        ("turn off the mic", VoiceCommandIntent.MUTE_MIC),
+        ("turn off microphone", VoiceCommandIntent.MUTE_MIC),
+        ("turn off the microphone", VoiceCommandIntent.MUTE_MIC),
+        ("mute the mic", VoiceCommandIntent.MUTE_MIC),
+        ("mute the microphone", VoiceCommandIntent.MUTE_MIC),
+        ("turn on the mic", VoiceCommandIntent.UNMUTE_MIC),
+        ("turn on microphone", VoiceCommandIntent.UNMUTE_MIC),
+        ("turn on the microphone", VoiceCommandIntent.UNMUTE_MIC),
+        ("unmute the mic", VoiceCommandIntent.UNMUTE_MIC),
+        ("unmute the microphone", VoiceCommandIntent.UNMUTE_MIC),
+    ],
+)
+def test_match_voice_command_handles_screen_and_mic_variations(
+    phrase: str, expected_intent: VoiceCommandIntent
+) -> None:
+    """Screen reading and mic state phrases should match existing intents."""
+
+    assert match_voice_command(phrase).intent is expected_intent
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "loud",
+        "quiet",
+        "not louder",
+        "not quieter",
+        "not make it louder",
+        "do not make it louder",
+        "not make it quieter",
+        "do not make it quieter",
+        "make it not louder",
+        "turn volume not up",
+        "volume not down",
+        "not too loud",
+        "it is not too quiet",
+        "read this book",
+        "read this message",
+        "read this contact",
+        "turn on the music",
+        "turn off the music",
+        "turn on the light",
+        "turn off the light",
+        "mute music",
+        "unmute music",
+        "play a game",
+        "put on jacket",
+        "put on shoes",
+        "put on headphones",
+        "do not call mom",
+        "don't call mom",
+        "never call dad",
+        "can't call mom",
+        "cannot call mom",
+        "won't call mom",
+        "do n't call mom",
+        "can t call mom",
+        "do nt call mom",
+        "do n t call mom",
+        "don t call mom",
+        "won t call mom",
+        "please don t call mom",
+        "call not mom",
+    ],
+)
+def test_match_voice_command_rejects_nearby_non_commands(phrase: str) -> None:
+    """Short command phrases should not match negations or object-reading requests."""
+
+    assert match_voice_command(phrase).intent is VoiceCommandIntent.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected_intent"),
+    [
+        ("read this please", VoiceCommandIntent.READ_SCREEN),
+        ("play a song please", VoiceCommandIntent.PLAY_MUSIC),
+        ("turn off the mic please", VoiceCommandIntent.MUTE_MIC),
+        ("turn on microphone now", VoiceCommandIntent.UNMUTE_MIC),
+    ],
+)
+def test_match_voice_command_accepts_polite_exact_trigger_suffixes(
+    phrase: str, expected_intent: VoiceCommandIntent
+) -> None:
+    """Exact triggers should allow harmless polite suffixes."""
+
+    assert match_voice_command(phrase).intent is expected_intent
+
+
+@pytest.mark.parametrize("template", VOICE_COMMAND_GRAMMAR)
+def test_voice_command_grammar_examples_match_template_intents(template) -> None:
+    """Each declared example should be executable by the deterministic matcher."""
+
+    for example in template.examples:
+        assert match_voice_command(example).intent is template.intent
+
+
+@pytest.mark.parametrize("template", VOICE_COMMAND_GRAMMAR)
+def test_voice_command_exact_trigger_phrases_are_declared_triggers(template) -> None:
+    """Exact-match trigger declarations should stay tied to real trigger phrases."""
+
+    assert set(template.exact_trigger_phrases) <= set(template.trigger_phrases)
 
 
 def test_match_voice_command_handles_basic_device_actions() -> None:

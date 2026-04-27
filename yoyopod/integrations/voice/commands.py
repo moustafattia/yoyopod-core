@@ -24,6 +24,17 @@ _POLITE_PREFIX_TOKENS = frozenset(
     }
 )
 _SLOT_FILLER_TOKENS = frozenset({"a", "an", "the", "to", "for", "my", "please", "now"})
+_NEGATION_TOKENS = frozenset(
+    {"no", "not", "never", "dont", "don't", "cant", "can't", "cannot", "wont", "won't", "n't"}
+)
+_NEGATION_TOKEN_SEQUENCES = (
+    ("can", "t"),
+    ("do", "nt"),
+    ("do", "n", "t"),
+    ("don", "t"),
+    ("won", "t"),
+)
+_EXACT_TRIGGER_SUFFIX_TOKENS = frozenset({"please", "now"})
 _SCRIPT_COMMAND_ALIASES = {
     "\u0648\u0648\u0644\u06cc\u0648\u0645": "volume",
     "\u0648\u0648\u0644\u064a\u0648\u0645": "volume",
@@ -88,13 +99,27 @@ class VoiceCommandTemplate:
     examples: tuple[str, ...]
     slot_name: str | None = None
     fuzzy_threshold: float = 0.82
+    exact_trigger_phrases: tuple[str, ...] = ()
 
 
 VOICE_COMMAND_GRAMMAR: tuple[VoiceCommandTemplate, ...] = (
     VoiceCommandTemplate(
         intent=VoiceCommandIntent.CALL_CONTACT,
         trigger_phrases=("call", "phone", "ring"),
-        examples=("call mom", "call dad", "please call mama"),
+        examples=(
+            "call mom",
+            "call dad",
+            "please call mama",
+            "call mama",
+            "call my mama",
+            "call mommy",
+            "please call my mom",
+            "ring mama",
+            "phone mom",
+            "call daddy",
+            "call papa",
+            "ring papa",
+        ),
         slot_name="contact_name",
         fuzzy_threshold=0.86,
     ),
@@ -106,8 +131,12 @@ VOICE_COMMAND_GRAMMAR: tuple[VoiceCommandTemplate, ...] = (
             "turn it up",
             "raise volume",
             "increase volume",
+            "louder",
+            "make it louder",
+            "too quiet",
         ),
-        examples=("volume up", "turn it up", "please raise volume"),
+        examples=("volume up", "turn it up", "please raise volume", "louder"),
+        exact_trigger_phrases=("louder",),
         fuzzy_threshold=0.78,
     ),
     VoiceCommandTemplate(
@@ -118,8 +147,12 @@ VOICE_COMMAND_GRAMMAR: tuple[VoiceCommandTemplate, ...] = (
             "turn it down",
             "lower volume",
             "decrease volume",
+            "quieter",
+            "make it quieter",
+            "too loud",
         ),
-        examples=("volume down", "turn it down"),
+        examples=("volume down", "turn it down", "quieter"),
+        exact_trigger_phrases=("quieter",),
         fuzzy_threshold=0.78,
     ),
     VoiceCommandTemplate(
@@ -131,26 +164,87 @@ VOICE_COMMAND_GRAMMAR: tuple[VoiceCommandTemplate, ...] = (
             "start some music",
             "start playing music",
             "shuffle music",
+            "play a song",
+            "play songs",
+            "put on music",
+            "start songs",
+            "play kids music",
         ),
-        examples=("play music", "play some music", "start music"),
+        examples=("play music", "play some music", "start music", "play a song"),
+        exact_trigger_phrases=(
+            "play a song",
+            "play songs",
+            "put on music",
+            "start songs",
+            "play kids music",
+        ),
         fuzzy_threshold=0.78,
     ),
     VoiceCommandTemplate(
         intent=VoiceCommandIntent.READ_SCREEN,
-        trigger_phrases=("read screen", "read the screen", "read this screen"),
-        examples=("read screen", "read the screen"),
+        trigger_phrases=(
+            "read screen",
+            "read the screen",
+            "read this screen",
+            "read this",
+            "what is on the screen",
+            "tell me what is on the screen",
+        ),
+        examples=("read screen", "read the screen", "read this"),
+        exact_trigger_phrases=(
+            "read screen",
+            "read the screen",
+            "read this screen",
+            "read this",
+            "what is on the screen",
+            "tell me what is on the screen",
+        ),
         fuzzy_threshold=0.8,
     ),
     VoiceCommandTemplate(
         intent=VoiceCommandIntent.UNMUTE_MIC,
-        trigger_phrases=("unmute mic", "unmute microphone"),
-        examples=("unmute mic", "unmute microphone"),
+        trigger_phrases=(
+            "unmute mic",
+            "unmute microphone",
+            "unmute the mic",
+            "unmute the microphone",
+            "turn on the mic",
+            "turn on microphone",
+            "turn on the microphone",
+        ),
+        examples=("unmute mic", "unmute microphone", "turn on the mic"),
+        exact_trigger_phrases=(
+            "unmute mic",
+            "unmute microphone",
+            "unmute the mic",
+            "unmute the microphone",
+            "turn on the mic",
+            "turn on microphone",
+            "turn on the microphone",
+        ),
         fuzzy_threshold=0.84,
     ),
     VoiceCommandTemplate(
         intent=VoiceCommandIntent.MUTE_MIC,
-        trigger_phrases=("mute mic", "mute microphone"),
-        examples=("mute mic", "mute microphone"),
+        trigger_phrases=(
+            "mute mic",
+            "mute microphone",
+            "mute the mic",
+            "mute the microphone",
+            "turn off the mic",
+            "turn off microphone",
+            "turn off the microphone",
+        ),
+        examples=("mute mic", "mute microphone", "turn off the mic"),
+        exact_trigger_phrases=(
+            "mute mic",
+            "mute microphone",
+            "mute the mic",
+            "mute the microphone",
+            "turn off the mic",
+            "turn off microphone",
+            "turn off the microphone",
+        ),
         fuzzy_threshold=0.84,
     ),
 )
@@ -160,7 +254,11 @@ def match_voice_command(transcript: str) -> VoiceCommandMatch:
     """Map a transcript to the first supported local voice command."""
 
     normalized_transcript = _expand_script_command_aliases(transcript)
-    tokens = _strip_polite_prefix(_tokenize(normalized_transcript))
+    transcript_tokens = _tokenize(normalized_transcript)
+    if _has_negation(transcript_tokens):
+        return VoiceCommandMatch(VoiceCommandIntent.UNKNOWN, transcript=transcript)
+
+    tokens = _strip_polite_prefix(transcript_tokens)
     if not tokens:
         return VoiceCommandMatch(VoiceCommandIntent.UNKNOWN, transcript=transcript)
 
@@ -210,7 +308,12 @@ def _match_slot_command(tokens: tuple[str, ...], transcript: str) -> VoiceComman
                 )
                 if score < template.fuzzy_threshold:
                     continue
-                slot_tokens = _trim_slot_tokens(tokens[start + len(phrase_tokens) :])
+                if _has_negation_before_window(tokens, start):
+                    continue
+                raw_slot_tokens = tokens[start + len(phrase_tokens) :]
+                if _has_negation(raw_slot_tokens):
+                    continue
+                slot_tokens = _trim_slot_tokens(raw_slot_tokens)
                 if not slot_tokens:
                     continue
                 if score > best_score:
@@ -235,7 +338,15 @@ def _match_fixed_command(tokens: tuple[str, ...], transcript: str) -> VoiceComma
             phrase_tokens = _tokenize(phrase)
             if not phrase_tokens:
                 continue
-            score = _best_window_score(tokens, phrase_tokens)
+            exact_phrase = phrase in template.exact_trigger_phrases
+            if exact_phrase and not _matches_exact_trigger(tokens, phrase_tokens):
+                continue
+            if exact_phrase:
+                score = 1.0
+            else:
+                score, start, end = _best_window_match(tokens, phrase_tokens)
+                if _has_negation_before_window(tokens, start) or _has_negation(tokens[start:end]):
+                    continue
             if score >= template.fuzzy_threshold and score > best_score:
                 best_score = score
                 best_intent = template.intent
@@ -244,21 +355,59 @@ def _match_fixed_command(tokens: tuple[str, ...], transcript: str) -> VoiceComma
     return VoiceCommandMatch(best_intent, transcript=transcript)
 
 
-def _best_window_score(tokens: tuple[str, ...], phrase_tokens: tuple[str, ...]) -> float:
-    """Return the best score between one transcript and one grammar phrase."""
+def _best_window_match(
+    tokens: tuple[str, ...], phrase_tokens: tuple[str, ...]
+) -> tuple[float, int, int]:
+    """Return the best score and window span for one transcript and phrase."""
 
     best_score = 0.0
+    best_start = 0
+    best_end = 0
     if len(tokens) <= len(phrase_tokens) + 2:
         window_sizes = range(max(1, len(phrase_tokens) - 1), len(tokens) + 1)
     else:
         window_sizes = range(max(1, len(phrase_tokens) - 1), len(phrase_tokens) + 3)
     for window_size in window_sizes:
         for start in range(len(tokens) - window_size + 1):
+            end = start + window_size
             window = tokens[start : start + window_size]
             score = 1.0 if window == phrase_tokens else _phrase_similarity(window, phrase_tokens)
             if score > best_score:
                 best_score = score
-    return best_score
+                best_start = start
+                best_end = end
+    return best_score, best_start, best_end
+
+
+def _has_negation_before_window(tokens: tuple[str, ...], start: int) -> bool:
+    """Return True when a command window is preceded by negation."""
+
+    return _has_negation(tokens[:start])
+
+
+def _has_negation(tokens: tuple[str, ...]) -> bool:
+    """Return True when any token is a negation token."""
+
+    if any(token in _NEGATION_TOKENS for token in tokens):
+        return True
+    return any(_contains_token_sequence(tokens, sequence) for sequence in _NEGATION_TOKEN_SEQUENCES)
+
+
+def _contains_token_sequence(tokens: tuple[str, ...], sequence: tuple[str, ...]) -> bool:
+    """Return True when tokens contain a contiguous token sequence."""
+
+    if len(tokens) < len(sequence):
+        return False
+    return any(tokens[index : index + len(sequence)] == sequence for index in range(len(tokens)))
+
+
+def _matches_exact_trigger(tokens: tuple[str, ...], phrase_tokens: tuple[str, ...]) -> bool:
+    """Return True when tokens match an exact trigger plus harmless polite suffixes."""
+
+    end = len(tokens)
+    while end > 0 and tokens[end - 1] in _EXACT_TRIGGER_SUFFIX_TOKENS:
+        end -= 1
+    return tokens[:end] == phrase_tokens
 
 
 def _phrase_similarity(candidate_tokens: tuple[str, ...], phrase_tokens: tuple[str, ...]) -> float:
