@@ -9,6 +9,7 @@ and reading the events it writes onto a real ``multiprocessing.Pipe``.
 from __future__ import annotations
 
 import multiprocessing
+import threading
 import time
 from multiprocessing.connection import Connection
 from typing import Any
@@ -226,6 +227,100 @@ def test_unregister_stops_backend_and_iterate_thread(
     adapter.handle_command(Unregister())
     assert _wait_for(lambda: not mock_backend.running)
     assert adapter._wait_for_iterate_thread_to_exit(timeout=1.0)
+
+
+def test_unregister_clears_current_call_id(
+    adapter: SidecarBackendAdapter,
+    parent_conn: Connection,
+    mock_backend: MockVoIPBackend,
+) -> None:
+    """After Unregister, a follow-up Dial must not return ``call_in_progress``.
+
+    Codex review on #389 (P1): the iterate loop is stopped before
+    backend.stop(), so any terminal call-state event the backend would emit
+    on teardown is not guaranteed to flow through. _handle_unregister must
+    therefore reset the tracked call id explicitly.
+    """
+
+    adapter.handle_command(Configure(config=_config_dict()))
+    adapter.handle_command(Register(cmd_id=1))
+    _drain(parent_conn)
+    mock_backend.emit(IncomingCallDetected(caller_address="sip:bob@example.com"))
+    events = _drain(parent_conn)
+    assert any(isinstance(event, IncomingCall) for event in events)
+    assert adapter._current_call_id is not None
+
+    adapter.handle_command(Unregister())
+    assert _wait_for(lambda: not mock_backend.running)
+    assert adapter._current_call_id is None
+
+    # A follow-up re-register + dial must succeed instead of being blocked by
+    # the stale call id from the previous registration.
+    mock_backend.start_result = True  # default already, but make it explicit
+    adapter.handle_command(Configure(config=_config_dict()))
+    adapter.handle_command(Register(cmd_id=2))
+    _drain(parent_conn)
+    adapter.handle_command(Dial(uri="sip:carol@example.com", cmd_id=3))
+    events = _drain(parent_conn)
+    errors = [event for event in events if isinstance(event, Error)]
+    assert not any(
+        error.code == "call_in_progress" for error in errors
+    ), f"call_in_progress leaked across unregister: {errors!r}"
+
+
+def test_stop_iterate_thread_retains_handle_on_join_timeout() -> None:
+    """A stuck iterate thread must not be silently forgotten.
+
+    Codex review on #389 (P1): if ``_stop_iterate_thread`` cleared
+    ``_iterate_thread = None`` even when ``join`` timed out, a follow-up
+    ``Register`` would happily spawn a second iterate thread alongside the
+    still-running one. Both would race ``backend.iterate()``. This test
+    drives the stuck case directly and asserts the handle is retained, so
+    ``_start_iterate_thread`` short-circuits on ``is_alive()``.
+    """
+
+    parent, child = multiprocessing.Pipe(duplex=True)
+    try:
+        adapter = SidecarBackendAdapter(
+            conn=child,
+            backend_factory=lambda _config: MockVoIPBackend(),
+        )
+        # Plant a synthetic stuck thread directly into the adapter so the
+        # test does not rely on a misbehaving backend.
+        release = threading.Event()
+        stuck_thread = threading.Thread(
+            target=lambda: release.wait(timeout=10.0),
+            daemon=True,
+            name="voip-sidecar-iterate-test-stub",
+        )
+        stuck_thread.start()
+        adapter._iterate_thread = stuck_thread
+
+        # Tighten the join timeout so the test runs quickly.
+        adapter._ITERATE_JOIN_TIMEOUT_SECONDS = 0.05  # type: ignore[misc]
+
+        adapter._stop_iterate_thread()
+
+        # Handle must still reference the alive thread.
+        assert adapter._iterate_thread is stuck_thread
+        assert adapter._iterate_thread.is_alive()
+
+        # And the start path must refuse to spawn a parallel iterate thread
+        # while the old one is still alive.
+        adapter._start_iterate_thread()
+        assert adapter._iterate_thread is stuck_thread
+
+        release.set()
+        stuck_thread.join(timeout=1.0)
+    finally:
+        try:
+            parent.close()
+        except OSError:
+            pass
+        try:
+            child.close()
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------

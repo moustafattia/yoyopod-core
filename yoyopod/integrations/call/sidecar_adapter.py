@@ -248,6 +248,12 @@ class SidecarBackendAdapter:
                     cmd_id=command.cmd_id,
                 )
             )
+        # Stopping the iterate loop happens before backend.stop(), so any
+        # terminal call-state event the backend would have emitted on
+        # teardown is no longer guaranteed to flow through. Reset the
+        # tracked call id explicitly so a follow-up Configure/Register/Dial
+        # cycle is not stuck on a stale ``call_in_progress``.
+        self._reset_call_state()
 
     def _handle_dial(self, command: Dial) -> None:
         backend = self._require_backend(command.cmd_id)
@@ -449,7 +455,17 @@ class SidecarBackendAdapter:
         self._iterate_stop.set()
         thread.join(timeout=self._ITERATE_JOIN_TIMEOUT_SECONDS)
         if thread.is_alive():
-            logger.warning("Sidecar adapter: iterate thread did not exit within join timeout")
+            # Keep the handle so we never let a fresh start spawn a second
+            # iterate thread alongside the one that is still alive: two
+            # threads racing ``backend.iterate()`` would corrupt liblinphone
+            # state and double up on event emission. ``_start_iterate_thread``
+            # checks ``is_alive()`` and returns without spawning if the old
+            # thread is still here.
+            logger.warning(
+                "Sidecar adapter: iterate thread did not exit within join timeout; "
+                "retaining handle so a restart cannot race a second iterate thread"
+            )
+            return
         self._iterate_thread = None
 
     def _run_iterate_loop(self) -> None:
