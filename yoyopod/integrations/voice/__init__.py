@@ -35,6 +35,12 @@ if TYPE_CHECKING:
         VoiceCommandTemplate,
         match_voice_command,
     )
+    from yoyopod.integrations.voice.dictionary import (
+        SAFE_VOICE_ROUTE_ACTIONS,
+        VoiceCommandAction,
+        VoiceCommandDictionary,
+        load_voice_command_dictionary,
+    )
     from yoyopod.integrations.voice.executor import VoiceCommandExecutor
     from yoyopod.integrations.voice.manager import VoiceManager, VoiceService
     from yoyopod.integrations.voice.models import (
@@ -57,6 +63,10 @@ _PUBLIC_EXPORTS = {
         "yoyopod.integrations.voice.ask_conversation",
         "AskConversationState",
     ),
+    "SAFE_VOICE_ROUTE_ACTIONS": (
+        "yoyopod.integrations.voice.dictionary",
+        "SAFE_VOICE_ROUTE_ACTIONS",
+    ),
     "VOICE_COMMAND_GRAMMAR": ("yoyopod.integrations.voice.commands", "VOICE_COMMAND_GRAMMAR"),
     "VoiceCaptureRequest": ("yoyopod.integrations.voice.models", "VoiceCaptureRequest"),
     "VoiceCaptureResult": ("yoyopod.integrations.voice.models", "VoiceCaptureResult"),
@@ -72,6 +82,11 @@ _PUBLIC_EXPORTS = {
     "VoiceCommandMatch": ("yoyopod.integrations.voice.commands", "VoiceCommandMatch"),
     "VoiceCommandOutcome": ("yoyopod.integrations.voice.settings", "VoiceCommandOutcome"),
     "VoiceCommandTemplate": ("yoyopod.integrations.voice.commands", "VoiceCommandTemplate"),
+    "VoiceCommandAction": ("yoyopod.integrations.voice.dictionary", "VoiceCommandAction"),
+    "VoiceCommandDictionary": (
+        "yoyopod.integrations.voice.dictionary",
+        "VoiceCommandDictionary",
+    ),
     "VoiceCommandExecutor": ("yoyopod.integrations.voice.executor", "VoiceCommandExecutor"),
     "VoiceManager": ("yoyopod.integrations.voice.manager", "VoiceManager"),
     "VoiceRuntimeCoordinator": ("yoyopod.integrations.voice.runtime", "VoiceRuntimeCoordinator"),
@@ -112,6 +127,10 @@ _PUBLIC_EXPORTS = {
         "yoyopod.integrations.voice.worker_contract",
         "build_transcribe_payload",
     ),
+    "load_voice_command_dictionary": (
+        "yoyopod.integrations.voice.dictionary",
+        "load_voice_command_dictionary",
+    ),
     "match_voice_command": ("yoyopod.integrations.voice.commands", "match_voice_command"),
     "normalize_voice_activation": (
         "yoyopod.integrations.voice.activation",
@@ -142,12 +161,15 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "AskConversationState",
+    "SAFE_VOICE_ROUTE_ACTIONS",
     "VOICE_COMMAND_GRAMMAR",
     "VoiceActivationNormalizer",
     "VoiceActivationResult",
     "VoiceCaptureRequest",
     "VoiceCaptureResult",
     "VoiceCommandIntent",
+    "VoiceCommandAction",
+    "VoiceCommandDictionary",
     "VoiceCommandMatch",
     "VoiceCommandOutcome",
     "VoiceCommandTemplate",
@@ -170,6 +192,7 @@ __all__ = [
     "build_ask_payload",
     "build_speak_payload",
     "build_transcribe_payload",
+    "load_voice_command_dictionary",
     "match_voice_command",
     "normalize_voice_activation",
     "parse_ask_result",

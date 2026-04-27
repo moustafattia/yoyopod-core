@@ -250,9 +250,14 @@ VOICE_COMMAND_GRAMMAR: tuple[VoiceCommandTemplate, ...] = (
 )
 
 
-def match_voice_command(transcript: str) -> VoiceCommandMatch:
+def match_voice_command(
+    transcript: str,
+    *,
+    grammar: tuple[VoiceCommandTemplate, ...] | None = None,
+) -> VoiceCommandMatch:
     """Map a transcript to the first supported local voice command."""
 
+    effective_grammar = VOICE_COMMAND_GRAMMAR if grammar is None else grammar
     normalized_transcript = _expand_script_command_aliases(transcript)
     transcript_tokens = _tokenize(normalized_transcript)
     if _has_negation(transcript_tokens):
@@ -262,11 +267,11 @@ def match_voice_command(transcript: str) -> VoiceCommandMatch:
     if not tokens:
         return VoiceCommandMatch(VoiceCommandIntent.UNKNOWN, transcript=transcript)
 
-    slot_match = _match_slot_command(tokens, transcript)
+    slot_match = _match_slot_command(tokens, transcript, grammar=effective_grammar)
     if slot_match is not None:
         return slot_match
 
-    fixed_match = _match_fixed_command(tokens, transcript)
+    fixed_match = _match_fixed_command(tokens, transcript, grammar=effective_grammar)
     if fixed_match is not None:
         return fixed_match
 
@@ -288,12 +293,17 @@ def _expand_script_command_aliases(transcript: str) -> str:
     return _SCRIPT_COMMAND_TOKEN_RE.sub(replace_token, normalized)
 
 
-def _match_slot_command(tokens: tuple[str, ...], transcript: str) -> VoiceCommandMatch | None:
+def _match_slot_command(
+    tokens: tuple[str, ...],
+    transcript: str,
+    *,
+    grammar: tuple[VoiceCommandTemplate, ...],
+) -> VoiceCommandMatch | None:
     """Return the best slot-bearing command match for the given tokens."""
 
     best_score = 0.0
     best_match: VoiceCommandMatch | None = None
-    for template in VOICE_COMMAND_GRAMMAR:
+    for template in grammar:
         if template.slot_name is None:
             continue
         for phrase in template.trigger_phrases:
@@ -326,12 +336,17 @@ def _match_slot_command(tokens: tuple[str, ...], transcript: str) -> VoiceComman
     return best_match
 
 
-def _match_fixed_command(tokens: tuple[str, ...], transcript: str) -> VoiceCommandMatch | None:
+def _match_fixed_command(
+    tokens: tuple[str, ...],
+    transcript: str,
+    *,
+    grammar: tuple[VoiceCommandTemplate, ...],
+) -> VoiceCommandMatch | None:
     """Return the best fixed-phrase command match for the given tokens."""
 
     best_score = 0.0
     best_intent: VoiceCommandIntent | None = None
-    for template in VOICE_COMMAND_GRAMMAR:
+    for template in grammar:
         if template.slot_name is not None:
             continue
         for phrase in template.trigger_phrases:

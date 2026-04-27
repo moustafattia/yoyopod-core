@@ -294,6 +294,26 @@ def test_match_voice_command_accepts_fuzzy_basic_phrases() -> None:
     assert match_voice_command("play some music").intent is VoiceCommandIntent.PLAY_MUSIC
 
 
+def test_match_voice_command_accepts_injected_grammar() -> None:
+    """Callers should be able to match against dictionary-derived grammar."""
+
+    from yoyopod.integrations.voice.commands import VoiceCommandTemplate
+
+    grammar = (
+        VoiceCommandTemplate(
+            intent=VoiceCommandIntent.VOLUME_UP,
+            trigger_phrases=("boost sound",),
+            examples=("boost sound",),
+            fuzzy_threshold=0.9,
+        ),
+    )
+
+    assert (
+        match_voice_command("boost sound", grammar=grammar).intent is VoiceCommandIntent.VOLUME_UP
+    )
+    assert match_voice_command("volume up", grammar=grammar).intent is VoiceCommandIntent.UNKNOWN
+
+
 def test_voice_service_uses_injected_backends() -> None:
     """The service should delegate STT/TTS work to the configured backends."""
 
