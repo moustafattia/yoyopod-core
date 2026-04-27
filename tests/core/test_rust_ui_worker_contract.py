@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+
+def test_rust_ui_worker_mock_contract() -> None:
+    if shutil.which("cargo") is None:
+        pytest.skip("cargo toolchain not available")
+
+    worker_dir = Path("workers/ui/rust")
+    command = {
+        "schema_version": 1,
+        "kind": "command",
+        "type": "ui.show_test_scene",
+        "request_id": "frame-contract",
+        "timestamp_ms": 1,
+        "deadline_ms": 1000,
+        "payload": {"counter": 1},
+    }
+    shutdown = {
+        "schema_version": 1,
+        "kind": "command",
+        "type": "ui.shutdown",
+        "request_id": "shutdown",
+        "timestamp_ms": 2,
+        "deadline_ms": 1000,
+        "payload": {},
+    }
+
+    result = subprocess.run(
+        ["cargo", "run", "--quiet", "--", "--hardware", "mock"],
+        input=json.dumps(command) + "\n" + json.dumps(shutdown) + "\n",
+        cwd=worker_dir,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    envelopes = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert envelopes[0]["type"] == "ui.ready"
