@@ -74,6 +74,12 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod build simulation` | Build the LVGL native shim required by ``python yoyopod.py --simulate``. |
 | `yoyopod build voice-worker` | Build the Go cloud voice worker for the current platform. |
 
+## `yoyopod voice`
+
+| Command | What it does |
+|---|---|
+| `yoyopod voice trace last` | Show the most recent local voice trace entries. |
+
 ## `yoyopod release`
 
 | Command | What it does |
