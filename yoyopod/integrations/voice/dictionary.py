@@ -56,6 +56,19 @@ class VoiceCommandDictionary:
         )
         return self.grammar + action_templates
 
+    def match_action(self, transcript: str) -> VoiceCommandAction | None:
+        """Return an exact safe route action match for one normalized transcript."""
+
+        normalized_transcript = _normalize_action_text(transcript)
+        if not normalized_transcript:
+            return None
+        for action in self.actions.values():
+            if any(
+                _normalize_action_text(alias) == normalized_transcript for alias in action.aliases
+            ):
+                return action
+        return None
+
 
 def load_voice_command_dictionary(path: str | Path | None) -> VoiceCommandDictionary:
     """Load a mutable command dictionary, falling back to built-ins on invalid input."""
@@ -178,6 +191,10 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
 
 def _dedupe(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
+
+
+def _normalize_action_text(value: str) -> str:
+    return " ".join(value.strip().lower().split())
 
 
 __all__ = [

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Callable
 
 from loguru import logger
 
-from yoyopod.integrations.voice import VoiceCommandIntent, match_voice_command
+from yoyopod.integrations.voice import VoiceCommandIntent, VoiceCommandMatch, match_voice_command
 
 from yoyopod.integrations.voice.settings import VoiceCommandOutcome
 
@@ -21,9 +21,7 @@ if TYPE_CHECKING:
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
 _CALL_HINT_TOKENS = frozenset({"call", "dial", "phone", "ring"})
-_CONFIRM_YES_TOKENS = frozenset(
-    {"yes", "yeah", "yep", "yup", "sure", "ok", "okay"}
-)
+_CONFIRM_YES_TOKENS = frozenset({"yes", "yeah", "yep", "yup", "sure", "ok", "okay"})
 _CONFIRM_NO_TOKENS = frozenset(
     {"no", "nope", "nah", "cancel", "stop", "dont", "don't", "not", "never"}
 )
@@ -72,7 +70,12 @@ class VoiceCommandExecutor:
         self._screen_summary_provider = screen_summary_provider or self._default_screen_summary
         self._pending_call_confirmation: _PendingCallConfirmation | None = None
 
-    def execute(self, transcript: str) -> VoiceCommandOutcome:
+    def execute(
+        self,
+        transcript: str,
+        *,
+        command: VoiceCommandMatch | None = None,
+    ) -> VoiceCommandOutcome:
         """Parse and execute one local deterministic voice command."""
 
         normalized = transcript.strip()
@@ -88,7 +91,8 @@ class VoiceCommandExecutor:
         if pending_outcome is not None:
             return pending_outcome
 
-        command = match_voice_command(normalized)
+        if command is None:
+            command = match_voice_command(normalized)
         if not command.is_command:
             inferred_call = self._infer_call_confirmation(normalized)
             if inferred_call is not None:
@@ -268,10 +272,7 @@ class VoiceCommandExecutor:
             cls._normalize_label(contact.name),
             cls._normalize_label(contact.display_name),
             cls._normalize_label(getattr(contact, "notes", "")),
-            *{
-                cls._normalize_label(alias)
-                for alias in getattr(contact, "aliases", [])
-            },
+            *{cls._normalize_label(alias) for alias in getattr(contact, "aliases", [])},
         }
         labels.discard("")
 

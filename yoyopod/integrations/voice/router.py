@@ -14,6 +14,7 @@ class VoiceRouteKind(StrEnum):
     """Possible post-transcription voice routing decisions."""
 
     COMMAND = "command"
+    ACTION = "action"
     ASK_FALLBACK = "ask_fallback"
     LOCAL_HELP = "local_help"
 
@@ -27,6 +28,7 @@ class VoiceRouteDecision:
     normalized_text: str
     stripped_prefix: str
     command: VoiceCommandMatch | None = None
+    route_name: str | None = None
     confidence: float = 0.0
     reason: str = ""
 
@@ -62,6 +64,17 @@ class VoiceRouter:
                 command=command,
                 confidence=1.0,
                 reason="command_match",
+            )
+        action = self._dictionary.match_action(activation.normalized_text)
+        if action is not None:
+            return VoiceRouteDecision(
+                kind=VoiceRouteKind.ACTION,
+                original_text=transcript,
+                normalized_text=activation.normalized_text,
+                stripped_prefix=activation.stripped_prefix,
+                route_name=action.route,
+                confidence=1.0,
+                reason="action_match",
             )
         if self._ask_fallback_enabled and activation.normalized_text:
             return VoiceRouteDecision(

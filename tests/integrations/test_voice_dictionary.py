@@ -107,6 +107,30 @@ def test_dictionary_rejects_unsafe_actions(tmp_path: Path) -> None:
     assert "open_talk" in SAFE_VOICE_ROUTE_ACTIONS
 
 
+def test_dictionary_matches_safe_action_alias_exactly(tmp_path: Path) -> None:
+    commands_file = tmp_path / "commands.yaml"
+    commands_file.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "actions": {
+                    "open_talk": {
+                        "aliases": ["Open Talk"],
+                        "route": "open_talk",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    dictionary = load_voice_command_dictionary(commands_file)
+
+    assert dictionary.match_action("  open   talk  ") == dictionary.actions["open_talk"]
+    assert dictionary.match_action("open talk now") is None
+
+
 def test_dictionary_rejects_negative_fuzzy_threshold(tmp_path: Path) -> None:
     commands_file = tmp_path / "commands.yaml"
     commands_file.write_text(

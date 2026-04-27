@@ -32,6 +32,7 @@ from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettin
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
+    from yoyopod.integrations.voice.commands import VoiceCommandMatch
 
 
 _ASK_OFFLINE_BODY = "I cannot reach Ask right now. I can still help with music, calls, and volume."
@@ -166,18 +167,6 @@ class VoiceRuntimeCoordinator:
             self._apply_outcome(readiness_error)
             return
 
-        ask_client = self._ask_client
-        if ask_client is None:
-            self._apply_outcome(
-                VoiceCommandOutcome(
-                    "Ask Offline",
-                    _ASK_OFFLINE_BODY,
-                    should_speak=False,
-                    auto_return=False,
-                )
-            )
-            return
-
         self._ask_conversation.max_turns = max(1, settings.cloud_worker_ask_max_history_turns)
         self._ask_conversation.max_text_chars = max(
             1,
@@ -196,12 +185,12 @@ class VoiceRuntimeCoordinator:
         if async_capture:
             threading.Thread(
                 target=self._run_ask_cycle,
-                args=(voice_service, ask_client, settings, generation, cancel_event),
+                args=(voice_service, self._ask_client, settings, generation, cancel_event),
                 daemon=True,
                 name="VoiceRuntimeAsk",
             ).start()
             return
-        self._run_ask_cycle(voice_service, ask_client, settings, generation, cancel_event)
+        self._run_ask_cycle(voice_service, self._ask_client, settings, generation, cancel_event)
 
     def begin_listening(self, *, async_capture: bool) -> None:
         """Start one record-transcribe-command cycle."""
@@ -308,8 +297,16 @@ class VoiceRuntimeCoordinator:
         self._apply_outcome(outcome)
         return outcome
 
-    def _execute_command_transcript(self, transcript: str) -> VoiceCommandOutcome:
-        outcome = self._command_executor.execute(transcript)
+    def _execute_command_transcript(
+        self,
+        transcript: str,
+        *,
+        command: "VoiceCommandMatch | None" = None,
+    ) -> VoiceCommandOutcome:
+        if command is None:
+            outcome = self._command_executor.execute(transcript)
+        else:
+            outcome = self._command_executor.execute(transcript, command=command)
         logger.info(
             "Voice command outcome headline={} should_speak={} route={} auto_return={} transcript={}",
             outcome.headline,
@@ -447,15 +444,6 @@ class VoiceRuntimeCoordinator:
         voice_service: VoiceManager,
         settings: VoiceSettings,
     ) -> VoiceCommandOutcome | None:
-        context_ai_disabled = (
-            self._context is not None and not self._context.voice.ai_requests_enabled
-        )
-        if context_ai_disabled or not settings.ai_requests_enabled:
-            return VoiceCommandOutcome(
-                "Ask Off",
-                "Turn Ask on in Setup first.",
-                should_speak=False,
-            )
         if self._context is not None and self._context.voice.mic_muted:
             return VoiceCommandOutcome(
                 "Mic Muted",
@@ -467,13 +455,6 @@ class VoiceRuntimeCoordinator:
             self._context.update_voice_backend_status(
                 stt_available=voice_service.capture_available() and voice_service.stt_available(),
                 tts_available=voice_service.tts_available(),
-            )
-        if self._ask_client is None or not self._ask_client.is_available:
-            return VoiceCommandOutcome(
-                "Ask Offline",
-                _ASK_OFFLINE_BODY,
-                should_speak=False,
-                auto_return=False,
             )
         if not voice_service.capture_available():
             return VoiceCommandOutcome(
@@ -594,7 +575,7 @@ class VoiceRuntimeCoordinator:
     def _run_ask_cycle(
         self,
         voice_service: VoiceManager,
-        ask_client: _AskClient,
+        ask_client: _AskClient | None,
         settings: VoiceSettings,
         generation: int,
         cancel_event: threading.Event,
@@ -661,7 +642,22 @@ class VoiceRuntimeCoordinator:
         decision = router.route(question)
         if decision.kind is VoiceRouteKind.COMMAND and decision.command is not None:
             self._dispatch_ask_outcome(
-                self._execute_command_transcript(decision.normalized_text),
+                self._execute_command_transcript(
+                    decision.normalized_text,
+                    command=decision.command,
+                ),
+                generation,
+            )
+            return
+        if decision.kind is VoiceRouteKind.ACTION and decision.route_name:
+            self._dispatch_ask_outcome(
+                VoiceCommandOutcome(
+                    "Command",
+                    "",
+                    should_speak=False,
+                    route_name=decision.route_name,
+                    auto_return=False,
+                ),
                 generation,
             )
             return
@@ -686,8 +682,14 @@ class VoiceRuntimeCoordinator:
         self._dispatch_ask_thinking(generation)
         if cancel_event.is_set() or generation != self._state.generation:
             return
+        unavailable_outcome = self._ask_unavailable_outcome(settings, ask_client)
+        if unavailable_outcome is not None:
+            self._dispatch_ask_outcome(unavailable_outcome, generation)
+            return
         history = self._ask_conversation.history_for_worker()
         try:
+            if ask_client is None:
+                raise RuntimeError("Ask client unavailable")
             result = ask_client.ask(
                 question=question,
                 history=history,
@@ -722,6 +724,29 @@ class VoiceRuntimeCoordinator:
             generation,
             on_apply=lambda: self._ask_conversation.append(question, result.answer),
         )
+
+    def _ask_unavailable_outcome(
+        self,
+        settings: VoiceSettings,
+        ask_client: _AskClient | None,
+    ) -> VoiceCommandOutcome | None:
+        context_ai_disabled = (
+            self._context is not None and not self._context.voice.ai_requests_enabled
+        )
+        if context_ai_disabled or not settings.ai_requests_enabled:
+            return VoiceCommandOutcome(
+                "Ask Off",
+                "Turn Ask on in Setup first.",
+                should_speak=False,
+            )
+        if ask_client is None or not ask_client.is_available:
+            return VoiceCommandOutcome(
+                "Ask Offline",
+                _ASK_OFFLINE_BODY,
+                should_speak=False,
+                auto_return=False,
+            )
+        return None
 
     def _run_ptt_listening_cycle(
         self,
