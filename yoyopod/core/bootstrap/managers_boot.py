@@ -12,15 +12,25 @@ if TYPE_CHECKING:
 def _voip_sidecar_enabled() -> bool:
     """Return whether the VoIP sidecar process should back the manager.
 
-    Off by default; opt in via the ``YOYOPOD_VOIP_SIDECAR`` env var. Phase
-    2B.3 ships the sidecar path as opt-in so production keeps using the
-    in-process :class:`LiblinphoneBackend` until the call surface has been
-    smoke-tested on the Pi. Phase 2B.4 will extend the sidecar protocol to
-    cover messaging / voice notes; Phase 2B.5 will flip the default.
+    Phase 2B.5: sidecar is now the production default. Set
+    ``YOYOPOD_VOIP_SIDECAR=0`` (or ``false``/``no``/``off``) to opt out
+    and fall back to the in-process :class:`LiblinphoneBackend`. Any
+    other value (including unset) keeps the sidecar path active.
+
+    The opt-out exists for two reasons:
+
+    1. **Hardware regression escape hatch.** If a Pi-specific issue
+       surfaces post-rollout, operators can flip a single env var in
+       ``yoyopod-prod.service`` and restart instead of waiting for a
+       revert PR.
+    2. **Local dev shortcut.** In-process is easier to attach a
+       debugger to and skips the spawn/forkserver cost.
     """
 
     raw = os.environ.get("YOYOPOD_VOIP_SIDECAR", "").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return True
 
 
 def _rust_voip_host_enabled() -> bool:
@@ -83,10 +93,6 @@ class ManagersBoot:
             voip_config = self.voip_config_cls.from_config_manager(config_manager)
             sidecar_backed_backend = None
             background_iterate_enabled = True
-            if _voip_sidecar_enabled() and _rust_voip_host_enabled():
-                raise RuntimeError(
-                    "YOYOPOD_VOIP_SIDECAR and YOYOPOD_RUST_VOIP_HOST cannot both be enabled"
-                )
             if _rust_voip_host_enabled():
                 self.logger.info(
                     "    YOYOPOD_RUST_VOIP_HOST=1 - using Rust VoIP Host backend"
@@ -101,7 +107,7 @@ class ManagersBoot:
                 # The Rust host drives liblinphone iterate inside the worker.
                 background_iterate_enabled = False
             elif _voip_sidecar_enabled():
-                self.logger.info("    YOYOPOD_VOIP_SIDECAR=1 — using sidecar-backed VoIP backend")
+                self.logger.info("    using sidecar-backed VoIP backend (default)")
                 from yoyopod.backends.voip.supervisor_backed import (
                     SupervisorBackedBackend,
                 )
@@ -111,6 +117,10 @@ class ManagersBoot:
                 # background-iterate worker would do nothing useful here and
                 # would just add noise to the loop instrumentation.
                 background_iterate_enabled = False
+            else:
+                self.logger.info(
+                    "    YOYOPOD_VOIP_SIDECAR opt-out detected — using in-process LiblinphoneBackend"
+                )
             self.app.voip_manager = self.voip_manager_cls(
                 voip_config,
                 people_directory=self.app.people_directory,

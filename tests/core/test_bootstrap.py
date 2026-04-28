@@ -1099,10 +1099,10 @@ def test_setup_music_callbacks_schedule_playback_handlers_on_main_thread() -> No
     assert music_backend.warm_start_calls == 1
 
 
-def test_voip_rust_host_env_helpers_and_sidecar_conflict(
+def test_voip_rust_host_env_helpers_and_sidecar_flag_visibility(
     monkeypatch,
 ) -> None:
-    """Rust host and the legacy Python sidecar flags should be visible and exclusive."""
+    """Rust host and Python sidecar flags should be visible to boot composition."""
 
     from yoyopod.core.bootstrap.managers_boot import (
         _rust_voip_host_enabled,
@@ -1413,3 +1413,37 @@ def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -
     assert app.network_manager.started is False
     assert app.network_manager.started_in_background is True
     assert sync_calls == ["synced"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B.5: VoIP sidecar default-on
+# ---------------------------------------------------------------------------
+
+
+def test_voip_sidecar_enabled_by_default(monkeypatch) -> None:
+    """Sidecar is the production default; missing env var enables it."""
+
+    from yoyopod.core.bootstrap.managers_boot import _voip_sidecar_enabled
+
+    monkeypatch.delenv("YOYOPOD_VOIP_SIDECAR", raising=False)
+    assert _voip_sidecar_enabled() is True
+
+
+def test_voip_sidecar_opt_out_via_env_var(monkeypatch) -> None:
+    """Operators can fall back to the in-process backend with an opt-out env var."""
+
+    from yoyopod.core.bootstrap.managers_boot import _voip_sidecar_enabled
+
+    for value in ("0", "false", "no", "off", "FALSE", "Off"):
+        monkeypatch.setenv("YOYOPOD_VOIP_SIDECAR", value)
+        assert _voip_sidecar_enabled() is False, f"value {value!r} should opt out"
+
+
+def test_voip_sidecar_remains_enabled_for_other_values(monkeypatch) -> None:
+    """Anything other than the explicit opt-out keeps the sidecar default."""
+
+    from yoyopod.core.bootstrap.managers_boot import _voip_sidecar_enabled
+
+    for value in ("1", "true", "yes", "on", "", "  ", "anything-else"):
+        monkeypatch.setenv("YOYOPOD_VOIP_SIDECAR", value)
+        assert _voip_sidecar_enabled() is True, f"value {value!r} should keep sidecar on"

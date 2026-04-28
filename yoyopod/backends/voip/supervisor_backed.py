@@ -1,8 +1,10 @@
 """VoIPBackend implementation that delegates to a sidecar process.
 
-Production wires this backend up when ``YOYOPOD_VOIP_SIDECAR=1`` is set.
-The :class:`SidecarSupervisor` owns the sidecar process; this backend
-adapts the synchronous :class:`yoyopod.backends.voip.protocol.VoIPBackend`
+Phase 2B.5 made this the production default. Set
+``YOYOPOD_VOIP_SIDECAR=0`` (or ``false``/``no``/``off``) to opt out and
+fall back to the in-process :class:`LiblinphoneBackend`. The
+:class:`SidecarSupervisor` owns the sidecar process; this backend adapts
+the synchronous :class:`yoyopod.backends.voip.protocol.VoIPBackend`
 surface that :class:`VoIPManager` already consumes onto the asynchronous
 command/event protocol the sidecar speaks.
 
