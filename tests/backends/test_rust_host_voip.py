@@ -138,9 +138,7 @@ def test_worker_events_translate_to_voip_events() -> None:
     backend.handle_worker_message(
         _event("voip.call_state_changed", {"call_id": "call-1", "state": "streams_running"})
     )
-    backend.handle_worker_message(
-        _event("voip.backend_stopped", {"reason": "iterate failed"})
-    )
+    backend.handle_worker_message(_event("voip.backend_stopped", {"reason": "iterate failed"}))
     backend.handle_worker_message(_event("voip.backend_stopped", {"reason": "wrong"}, domain="ui"))
 
     assert isinstance(received[0], RegistrationStateChanged)
@@ -175,6 +173,38 @@ def test_worker_startup_error_marks_backend_stopped() -> None:
     assert received[0].reason == "voip.register command_failed: shim missing"
 
 
+def test_worker_call_command_errors_surface_call_error_events() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    received: list[object] = []
+    backend.on_event(received.append)
+    backend.start()
+
+    commands = [
+        lambda: backend.make_call("sip:bob@example.com"),
+        backend.answer_call,
+        backend.reject_call,
+        backend.hangup,
+        backend.mute,
+        backend.unmute,
+    ]
+    for send_command in commands:
+        assert send_command() is True
+        backend.handle_worker_message(
+            _reply(
+                "error",
+                "voip.error",
+                {"code": "command_failed", "message": "shim rejected command"},
+                request_id=supervisor.request_ids[-1],
+            )
+        )
+
+    assert backend.running is True
+    call_errors = [event for event in received if isinstance(event, CallStateChanged)]
+    assert len(call_errors) == len(commands)
+    assert all(event.state == CallState.ERROR for event in call_errors)
+
+
 def test_ready_after_worker_restart_resends_configure_register() -> None:
     supervisor = _FakeSupervisor()
     backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
@@ -202,7 +232,9 @@ def test_ready_after_worker_restart_resends_configure_register() -> None:
 
 
 def test_iterate_is_noop_and_unsupported_messaging_fails() -> None:
-    backend = RustHostBackend(_config(), worker_supervisor=_FakeSupervisor(), worker_path="/bin/voip")
+    backend = RustHostBackend(
+        _config(), worker_supervisor=_FakeSupervisor(), worker_path="/bin/voip"
+    )
 
     assert backend.iterate() == 0
     assert backend.get_iterate_metrics() is None

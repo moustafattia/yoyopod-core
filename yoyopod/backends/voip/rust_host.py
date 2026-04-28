@@ -22,6 +22,17 @@ from yoyopod.integrations.call.models import (
     VoIPEvent,
 )
 
+_STARTUP_COMMANDS = frozenset({"voip.configure", "voip.register"})
+_CALL_CONTROL_COMMANDS = frozenset(
+    {
+        "voip.dial",
+        "voip.answer",
+        "voip.reject",
+        "voip.hangup",
+        "voip.set_mute",
+    }
+)
+
 
 class RustHostBackend:
     """Calls-only VoIPBackend adapter for the Rust VoIP Host."""
@@ -187,9 +198,7 @@ class RustHostBackend:
             )
             return
         if event_type == "voip.incoming_call":
-            self._dispatch(
-                IncomingCallDetected(caller_address=str(payload.get("from_uri", "")))
-            )
+            self._dispatch(IncomingCallDetected(caller_address=str(payload.get("from_uri", ""))))
             return
         if event_type == "voip.call_state_changed":
             self._dispatch(CallStateChanged(state=_call_state(str(payload.get("state", "idle")))))
@@ -278,8 +287,12 @@ class RustHostBackend:
     def _handle_worker_error(self, payload: dict[str, Any], *, request_id: str | None) -> None:
         command = self._pop_pending_command(request_id)
         reason = _worker_error_reason(payload, command=command)
-        if command in {"voip.configure", "voip.register"} or command is None:
+        if command in _STARTUP_COMMANDS or command is None:
             self._mark_stopped(reason)
+            return
+        if command in _CALL_CONTROL_COMMANDS:
+            logger.warning("Rust VoIP Host call command failed: {}", reason)
+            self._dispatch(CallStateChanged(state=CallState.ERROR))
             return
         logger.warning("Rust VoIP Host command failed: {}", reason)
 

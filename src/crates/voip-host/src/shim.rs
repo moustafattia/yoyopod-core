@@ -99,6 +99,22 @@ pub struct ShimBackend {
     next_outgoing_call_id: u64,
 }
 
+struct StartAudioSettings {
+    audio_enabled: c_int,
+    mic_gain: c_int,
+    output_volume: c_int,
+}
+
+impl StartAudioSettings {
+    fn from_config(config: &VoipConfig) -> Self {
+        Self {
+            audio_enabled: 1,
+            mic_gain: config.mic_gain,
+            output_volume: config.output_volume,
+        }
+    }
+}
+
 pub fn resolve_shim_path(explicit_path: Option<&str>) -> Result<PathBuf, ShimError> {
     if let Some(path) = explicit_path.filter(|value| !value.trim().is_empty()) {
         return Ok(PathBuf::from(path));
@@ -177,6 +193,7 @@ impl LiblinphoneShim {
         let capture_dev_id = CString::new(config.capture_dev_id.as_str())?;
         let media_dev_id = CString::new(config.media_dev_id.as_str())?;
         let voice_note_store_dir = CString::new(config.voice_note_store_dir.as_str())?;
+        let audio_settings = StartAudioSettings::from_config(config);
 
         self.check(unsafe {
             (self.start)(
@@ -200,9 +217,9 @@ impl LiblinphoneShim {
                 ringer_dev_id.as_ptr(),
                 capture_dev_id.as_ptr(),
                 media_dev_id.as_ptr(),
-                1,
-                0,
-                config.output_volume,
+                audio_settings.audio_enabled,
+                audio_settings.mic_gain,
+                audio_settings.output_volume,
                 voice_note_store_dir.as_ptr(),
             )
         })
@@ -356,10 +373,28 @@ pub fn c_string<const N: usize>(buffer: &[c_char; N]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn explicit_path_wins() {
         let path = resolve_shim_path(Some("/tmp/libshim.so")).expect("path");
         assert_eq!(path, PathBuf::from("/tmp/libshim.so"));
+    }
+
+    #[test]
+    fn start_audio_settings_forward_configured_gain_and_volume() {
+        let config = VoipConfig::from_payload(&json!({
+            "sip_server": "sip.example.com",
+            "sip_identity": "sip:alice@example.com",
+            "mic_gain": 42,
+            "output_volume": 73
+        }))
+        .expect("config");
+
+        let settings = StartAudioSettings::from_config(&config);
+
+        assert_eq!(settings.audio_enabled, 1);
+        assert_eq!(settings.mic_gain, 42);
+        assert_eq!(settings.output_volume, 73);
     }
 }
