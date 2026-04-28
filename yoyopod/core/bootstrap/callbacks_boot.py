@@ -54,6 +54,15 @@ class CallbacksBoot:
         )
         self.app.voice_note_events.sync_talk_summary_context()
         self.app.voice_note_events.sync_active_voice_note_context()
+
+        backend = getattr(self.app.voip_manager, "backend", None)
+        handle_worker_message = getattr(backend, "handle_worker_message", None)
+        bus = getattr(self.app, "bus", None)
+        if callable(handle_worker_message) and bus is not None:
+            from yoyopod.core.events import WorkerMessageReceivedEvent
+
+            bus.subscribe(WorkerMessageReceivedEvent, handle_worker_message)
+
         self.logger.info("  VoIP callbacks registered")
 
     def setup_music_callbacks(self) -> None:

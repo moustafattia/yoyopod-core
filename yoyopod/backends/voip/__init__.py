@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from yoyopod.backends.voip.liblinphone import LiblinphoneBackend
     from yoyopod.backends.voip.mock_backend import MockVoIPBackend
     from yoyopod.backends.voip.protocol import VoIPBackend, VoIPIterateMetrics
+    from yoyopod.backends.voip.rust_host import RustHostBackend
 
 
 _EXPORTS = {
@@ -27,6 +28,7 @@ _EXPORTS = {
         "LiblinphoneNativeEvent",
     ),
     "MockVoIPBackend": ("yoyopod.backends.voip.mock_backend", "MockVoIPBackend"),
+    "RustHostBackend": ("yoyopod.backends.voip.rust_host", "RustHostBackend"),
     "VoIPBackend": ("yoyopod.backends.voip.protocol", "VoIPBackend"),
     "VoIPIterateMetrics": ("yoyopod.backends.voip.protocol", "VoIPIterateMetrics"),
 }
@@ -50,6 +52,7 @@ __all__ = [
     "LiblinphoneBindingError",
     "LiblinphoneNativeEvent",
     "MockVoIPBackend",
+    "RustHostBackend",
     "VoIPBackend",
     "VoIPIterateMetrics",
 ]

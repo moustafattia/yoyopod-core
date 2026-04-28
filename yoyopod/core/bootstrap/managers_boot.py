@@ -23,6 +23,22 @@ def _voip_sidecar_enabled() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _rust_voip_host_enabled() -> bool:
+    """Return whether the Rust VoIP Host worker should back the manager."""
+
+    raw = os.environ.get("YOYOPOD_RUST_VOIP_HOST", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _rust_voip_host_worker_path() -> str:
+    """Return the Rust VoIP Host worker binary path."""
+
+    return os.environ.get(
+        "YOYOPOD_RUST_VOIP_HOST_WORKER",
+        "src/crates/voip-host/build/yoyopod-voip-host",
+    ).strip()
+
+
 class ManagersBoot:
     """Initialize manager-level runtime integrations."""
 
@@ -67,7 +83,24 @@ class ManagersBoot:
             voip_config = self.voip_config_cls.from_config_manager(config_manager)
             sidecar_backed_backend = None
             background_iterate_enabled = True
-            if _voip_sidecar_enabled():
+            if _voip_sidecar_enabled() and _rust_voip_host_enabled():
+                raise RuntimeError(
+                    "YOYOPOD_VOIP_SIDECAR and YOYOPOD_RUST_VOIP_HOST cannot both be enabled"
+                )
+            if _rust_voip_host_enabled():
+                self.logger.info(
+                    "    YOYOPOD_RUST_VOIP_HOST=1 - using Rust VoIP Host backend"
+                )
+                from yoyopod.backends.voip.rust_host import RustHostBackend
+
+                sidecar_backed_backend = RustHostBackend(
+                    voip_config,
+                    worker_supervisor=self.app.worker_supervisor,
+                    worker_path=_rust_voip_host_worker_path(),
+                )
+                # The Rust host drives liblinphone iterate inside the worker.
+                background_iterate_enabled = False
+            elif _voip_sidecar_enabled():
                 self.logger.info("    YOYOPOD_VOIP_SIDECAR=1 — using sidecar-backed VoIP backend")
                 from yoyopod.backends.voip.supervisor_backed import (
                     SupervisorBackedBackend,

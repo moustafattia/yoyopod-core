@@ -13,7 +13,7 @@ from yoyopod.core.bootstrap import RuntimeBootService
 from yoyopod.core.bootstrap.screens_boot import ScreensBoot
 from yoyopod.core.bootstrap.managers_boot import ManagersBoot
 from yoyopod.core.bus import Bus
-from yoyopod.core.events import WorkerDomainStateChangedEvent
+from yoyopod.core.events import WorkerDomainStateChangedEvent, WorkerMessageReceivedEvent
 from yoyopod.core.scheduler import MainThreadScheduler
 from yoyopod.core.workers import WorkerProcessConfig
 from yoyopod.integrations.voice import VoiceSettings
@@ -1029,6 +1029,37 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     assert synced == {"talk": 1, "active": 1}
 
 
+def test_setup_voip_callbacks_subscribes_worker_message_handler() -> None:
+    """Worker-backed VoIP backends should receive supervised worker messages."""
+
+    voip_manager = _FakeVoipManager()
+    call_runtime = _FakeCallRuntime()
+    subscribed: list[tuple[object, object]] = []
+    handler = lambda *_args: None
+    voip_manager.backend = SimpleNamespace(handle_worker_message=handler)
+    voice_note_events = SimpleNamespace(
+        handle_voice_note_summary_changed=lambda *_args: None,
+        handle_voice_note_activity_changed=lambda *_args: None,
+        handle_voice_note_failure=lambda *_args: None,
+        sync_talk_summary_context=lambda: None,
+        sync_active_voice_note_context=lambda: None,
+    )
+    app = SimpleNamespace(
+        voip_manager=voip_manager,
+        call_runtime=call_runtime,
+        voice_note_events=voice_note_events,
+        context=None,
+        call_history_store=None,
+        bus=SimpleNamespace(
+            subscribe=lambda event_type, callback: subscribed.append((event_type, callback))
+        ),
+    )
+
+    RuntimeBootService(app).setup_voip_callbacks()
+
+    assert (WorkerMessageReceivedEvent, handler) in subscribed
+
+
 def test_setup_music_callbacks_schedule_playback_handlers_on_main_thread() -> None:
     """Music callbacks should schedule playback handlers back onto the main thread."""
 
@@ -1066,6 +1097,137 @@ def test_setup_music_callbacks_schedule_playback_handlers_on_main_thread() -> No
         ("availability", (True, "connected")),
     ]
     assert music_backend.warm_start_calls == 1
+
+
+def test_voip_rust_host_env_helpers_and_sidecar_conflict(
+    monkeypatch,
+) -> None:
+    """Rust host and the legacy Python sidecar flags should be visible and exclusive."""
+
+    from yoyopod.core.bootstrap.managers_boot import (
+        _rust_voip_host_enabled,
+        _rust_voip_host_worker_path,
+        _voip_sidecar_enabled,
+    )
+
+    monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST", "true")
+    monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST_WORKER", "/tmp/yoyopod-voip-host")
+    monkeypatch.setenv("YOYOPOD_VOIP_SIDECAR", "1")
+
+    assert _rust_voip_host_enabled() is True
+    assert _voip_sidecar_enabled() is True
+    assert _rust_voip_host_worker_path() == "/tmp/yoyopod-voip-host"
+
+
+def test_rust_host_backend_receives_worker_supervisor(monkeypatch) -> None:
+    """ManagersBoot should inject WorkerSupervisor into the Rust VoIP Host backend."""
+
+    captured_interval: list[float] = []
+
+    class _FakeVoipConfig:
+        iterate_interval_ms = 20
+        sip_server = "sip.example.com"
+        sip_identity = "sip:alice@example.com"
+
+        @classmethod
+        def from_config_manager(cls, _config_manager):
+            return cls()
+
+    class _FakeVoipManager:
+        def __init__(self, *_args, **kwargs) -> None:
+            self.backend = kwargs.get("backend")
+            self.background_iterate_enabled = kwargs.get("background_iterate_enabled")
+            self.running = False
+            self.registration_state = "none"
+
+        def start(self) -> bool:
+            return False
+
+    class _FakeMusicConfig:
+        music_dir = "data/test_music"
+
+        @classmethod
+        def from_config_manager(cls, _config_manager):
+            return cls()
+
+    class _FakeMusicBackend:
+        def __init__(self, _config) -> None:
+            self.is_connected = False
+
+    class _FakeLocalMusicService:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+    class _FakeOutputVolumeController:
+        def __init__(self, _music_backend) -> None:
+            return None
+
+    class _FakePowerManager:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(enabled=False, poll_interval_seconds=30.0)
+
+        @classmethod
+        def from_config_manager(cls, _config_manager):
+            return cls()
+
+    class _FakeNetworkManager:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(enabled=False)
+
+        @classmethod
+        def from_config_manager(cls, *_args, **_kwargs):
+            return cls()
+
+    class _FakeCloudManager:
+        def __init__(self, *, app, config_manager) -> None:
+            self.app = app
+            self.config_manager = config_manager
+
+        def prepare_boot(self) -> None:
+            return None
+
+    monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST", "1")
+    monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST_WORKER", "/bin/yoyopod-voip-host")
+
+    app = SimpleNamespace(
+        config_manager=_FakeConfigManager(),
+        people_directory=None,
+        worker_supervisor=object(),
+        recent_track_store=None,
+        context=AppContext(),
+        runtime_loop=SimpleNamespace(
+            set_configured_voip_iterate_interval_seconds=captured_interval.append
+        ),
+        scheduler=SimpleNamespace(run_on_main=lambda fn: fn()),
+        output_volume=None,
+        audio_volume_controller=None,
+        simulate=False,
+        network_events=SimpleNamespace(sync_network_context_from_manager=lambda: None),
+    )
+    service = ManagersBoot(
+        app,
+        logger=SimpleNamespace(
+            info=lambda *_args, **_kwargs: None,
+            warning=lambda *_args, **_kwargs: None,
+            error=lambda *_args, **_kwargs: None,
+            exception=lambda *_args, **_kwargs: None,
+        ),
+        voip_config_cls=_FakeVoipConfig,
+        voip_manager_cls=_FakeVoipManager,
+        music_config_cls=_FakeMusicConfig,
+        mpv_backend_cls=_FakeMusicBackend,
+        local_music_service_cls=_FakeLocalMusicService,
+        output_volume_controller_cls=_FakeOutputVolumeController,
+        power_manager_cls=_FakePowerManager,
+        network_manager_cls=_FakeNetworkManager,
+        cloud_manager_cls=_FakeCloudManager,
+    )
+
+    assert service.init_managers() is True
+    assert app.voip_manager.backend.worker_supervisor is app.worker_supervisor
+    assert app.voip_manager.backend.worker_path == "/bin/yoyopod-voip-host"
+    assert app.voip_manager.background_iterate_enabled is False
+    assert captured_interval == [0.02]
 
 
 def test_setup_event_subscriptions_keeps_legacy_runtime_helper_flow() -> None:
