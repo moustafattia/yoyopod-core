@@ -35,7 +35,7 @@ fn main() -> Result<()> {
 
     write_envelope(&WorkerEnvelope::event(
         "voip.ready",
-        json!({"capabilities":["calls"]}),
+        json!({"capabilities":["calls", "text_messages"]}),
     ))?;
 
     let (stdin_tx, stdin_rx) = mpsc::channel();
@@ -218,6 +218,31 @@ fn handle_command(
                 json!({"muted": muted}),
             ))?;
         }
+        "voip.send_text_message" => {
+            let uri = envelope.payload["uri"].as_str().unwrap_or("").trim();
+            let text = envelope.payload["text"].as_str().unwrap_or("");
+            let client_id = envelope.payload["client_id"].as_str().unwrap_or("").trim();
+            if uri.is_empty() || text.is_empty() || client_id.is_empty() {
+                write_envelope(&WorkerEnvelope::error(
+                    "voip.error",
+                    envelope.request_id,
+                    "invalid_command",
+                    "voip.send_text_message requires uri, text, and client_id",
+                ))?;
+            } else {
+                let backend_ref = backend
+                    .as_mut()
+                    .ok_or_else(|| anyhow!("voip host is not registered"))?;
+                let message_id = host
+                    .send_text_message(backend_ref, uri, text, client_id)
+                    .map_err(|error| anyhow!(error))?;
+                write_envelope(&WorkerEnvelope::result(
+                    "voip.send_text_message",
+                    envelope.request_id,
+                    json!({"message_id": message_id}),
+                ))?;
+            }
+        }
         "voip.shutdown" | "worker.stop" => {
             if let Some(mut backend_ref) = backend.take() {
                 host.unregister(&mut backend_ref);
@@ -284,6 +309,54 @@ fn backend_event_envelope(event: host::BackendEvent) -> WorkerEnvelope {
         host::BackendEvent::BackendStopped { reason } => {
             WorkerEnvelope::event("voip.backend_stopped", json!({"reason": reason}))
         }
+        host::BackendEvent::MessageReceived { message } => WorkerEnvelope::event(
+            "voip.message_received",
+            json!({
+                "message_id": message.message_id,
+                "peer_sip_address": message.peer_sip_address,
+                "sender_sip_address": message.sender_sip_address,
+                "recipient_sip_address": message.recipient_sip_address,
+                "kind": message.kind,
+                "direction": message.direction,
+                "delivery_state": message.delivery_state,
+                "text": message.text,
+                "local_file_path": message.local_file_path,
+                "mime_type": message.mime_type,
+                "duration_ms": message.duration_ms,
+                "unread": message.unread,
+                "display_name": "",
+            }),
+        ),
+        host::BackendEvent::MessageDeliveryChanged {
+            message_id,
+            delivery_state,
+            local_file_path,
+            error,
+        } => WorkerEnvelope::event(
+            "voip.message_delivery_changed",
+            json!({
+                "message_id": message_id,
+                "delivery_state": delivery_state,
+                "local_file_path": local_file_path,
+                "error": error,
+            }),
+        ),
+        host::BackendEvent::MessageDownloadCompleted {
+            message_id,
+            local_file_path,
+            mime_type,
+        } => WorkerEnvelope::event(
+            "voip.message_download_completed",
+            json!({
+                "message_id": message_id,
+                "local_file_path": local_file_path,
+                "mime_type": mime_type,
+            }),
+        ),
+        host::BackendEvent::MessageFailed { message_id, reason } => WorkerEnvelope::event(
+            "voip.message_failed",
+            json!({"message_id": message_id, "reason": reason}),
+        ),
     }
 }
 
@@ -309,6 +382,31 @@ mod tests {
         assert_eq!(envelope.message_type, "voip.incoming_call");
         assert_eq!(envelope.payload["call_id"], "call-1");
         assert_eq!(envelope.payload["from_uri"], "sip:bob@example.com");
+    }
+
+    #[test]
+    fn message_events_map_to_worker_envelopes() {
+        let envelope = backend_event_envelope(host::BackendEvent::MessageReceived {
+            message: host::MessageRecord {
+                message_id: "msg-1".to_string(),
+                peer_sip_address: "sip:bob@example.com".to_string(),
+                sender_sip_address: "sip:bob@example.com".to_string(),
+                recipient_sip_address: "sip:alice@example.com".to_string(),
+                kind: "text".to_string(),
+                direction: "incoming".to_string(),
+                delivery_state: "delivered".to_string(),
+                text: "hello".to_string(),
+                local_file_path: "".to_string(),
+                mime_type: "".to_string(),
+                duration_ms: 0,
+                unread: true,
+            },
+        });
+
+        assert_eq!(envelope.message_type, "voip.message_received");
+        assert_eq!(envelope.payload["message_id"], "msg-1");
+        assert_eq!(envelope.payload["kind"], "text");
+        assert_eq!(envelope.payload["text"], "hello");
     }
 
     #[test]

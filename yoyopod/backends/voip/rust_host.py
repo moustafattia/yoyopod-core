@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
@@ -17,10 +18,18 @@ from yoyopod.integrations.call.models import (
     CallState,
     CallStateChanged,
     IncomingCallDetected,
+    MessageDeliveryChanged,
+    MessageDeliveryState,
+    MessageDirection,
+    MessageDownloadCompleted,
+    MessageFailed,
+    MessageKind,
+    MessageReceived,
     RegistrationState,
     RegistrationStateChanged,
     VoIPConfig,
     VoIPEvent,
+    VoIPMessageRecord,
 )
 
 _STARTUP_COMMANDS = frozenset({"voip.configure", "voip.register"})
@@ -33,11 +42,12 @@ _CALL_CONTROL_COMMANDS = frozenset(
         "voip.set_mute",
     }
 )
+_TEXT_MESSAGE_COMMANDS = frozenset({"voip.send_text_message"})
 _INTENTIONAL_STOP_REASONS = frozenset({"stop", "stop_all"})
 
 
 class RustHostBackend:
-    """Calls-only VoIPBackend adapter for the Rust VoIP Host."""
+    """VoIPBackend adapter backed by the Rust VoIP Host worker."""
 
     def __init__(
         self,
@@ -59,7 +69,9 @@ class RustHostBackend:
         self.event_callbacks: list[Callable[[VoIPEvent], None]] = []
         self._registered_with_supervisor = False
         self._request_counter = 0
+        self._message_counter = 0
         self._pending_commands: dict[str, str] = {}
+        self._pending_message_ids: dict[str, str] = {}
         self._startup_commands_sent = False
         self._ready_seen = False
         self._reconfigure_on_ready = False
@@ -120,6 +132,7 @@ class RustHostBackend:
                     stop(self.domain, grace_seconds=1.0)
         finally:
             self._pending_commands.clear()
+            self._pending_message_ids.clear()
             self._startup_commands_sent = False
             self._ready_seen = False
             self._reconfigure_on_ready = False
@@ -151,9 +164,15 @@ class RustHostBackend:
         return self._send("voip.set_mute", {"muted": False})
 
     def send_text_message(self, sip_address: str, text: str) -> str | None:
-        del sip_address, text
-        logger.warning("Rust VoIP Host does not support text messages in calls-only mode")
-        return None
+        message_id = self._next_message_id()
+        request_id = self._send_with_request_id(
+            "voip.send_text_message",
+            {"uri": sip_address, "text": text, "client_id": message_id},
+        )
+        if request_id is None:
+            return None
+        self._pending_message_ids[request_id] = message_id
+        return message_id
 
     def start_voice_note_recording(self, file_path: str) -> bool:
         del file_path
@@ -186,6 +205,7 @@ class RustHostBackend:
         request_id = getattr(event, "request_id", None)
         kind = getattr(event, "kind", "event")
         if kind == "result":
+            self._pending_message_ids.pop(request_id, None)
             self._pop_pending_command(request_id)
             return
         if kind == "error":
@@ -211,6 +231,45 @@ class RustHostBackend:
             return
         if event_type == "voip.backend_stopped":
             self._mark_stopped(str(payload.get("reason", "")) or "backend_stopped")
+            return
+        if event_type == "voip.message_received":
+            message = _message_record(payload)
+            if message is not None:
+                self._dispatch(MessageReceived(message=message))
+            return
+        if event_type == "voip.message_delivery_changed":
+            delivery_state = _message_delivery_state(str(payload.get("delivery_state", "")))
+            if delivery_state is None:
+                logger.warning(
+                    "Rust VoIP Host emitted unknown message delivery state {!r}",
+                    payload.get("delivery_state", ""),
+                )
+                return
+            self._dispatch(
+                MessageDeliveryChanged(
+                    message_id=str(payload.get("message_id", "")),
+                    delivery_state=delivery_state,
+                    local_file_path=str(payload.get("local_file_path", "")),
+                    error=str(payload.get("error", "")),
+                )
+            )
+            return
+        if event_type == "voip.message_download_completed":
+            self._dispatch(
+                MessageDownloadCompleted(
+                    message_id=str(payload.get("message_id", "")),
+                    local_file_path=str(payload.get("local_file_path", "")),
+                    mime_type=str(payload.get("mime_type", "")),
+                )
+            )
+            return
+        if event_type == "voip.message_failed":
+            self._dispatch(
+                MessageFailed(
+                    message_id=str(payload.get("message_id", "")),
+                    reason=str(payload.get("reason", "")),
+                )
+            )
 
     def handle_worker_state_change(self, event: Any) -> None:
         if getattr(event, "domain", self.domain) != self.domain:
@@ -231,9 +290,12 @@ class RustHostBackend:
             self._mark_stopped(reason)
 
     def _send(self, message_type: str, payload: dict[str, Any]) -> bool:
+        return self._send_with_request_id(message_type, payload) is not None
+
+    def _send_with_request_id(self, message_type: str, payload: dict[str, Any]) -> str | None:
         send_command = getattr(self.worker_supervisor, "send_command", None)
         if not callable(send_command):
-            return False
+            return None
         request_id = self._next_request_id(message_type)
         try:
             sent = bool(
@@ -246,10 +308,11 @@ class RustHostBackend:
             )
         except Exception as exc:
             logger.error("Rust VoIP Host command {} failed: {}", message_type, exc)
-            return False
+            return None
         if sent:
             self._pending_commands[request_id] = message_type
-        return sent
+            return request_id
+        return None
 
     def _dispatch(self, event: VoIPEvent) -> None:
         for callback in list(self.event_callbacks):
@@ -297,12 +360,19 @@ class RustHostBackend:
     def _handle_worker_error(self, payload: dict[str, Any], *, request_id: str | None) -> None:
         command = self._pop_pending_command(request_id)
         reason = _worker_error_reason(payload, command=command)
+        message_id = self._pending_message_ids.pop(request_id, "") if request_id else ""
         if command in _STARTUP_COMMANDS or command is None:
             self._stop_after_startup_command_failure(reason)
             return
         if command in _CALL_CONTROL_COMMANDS:
             logger.warning("Rust VoIP Host call command failed: {}", reason)
             self._dispatch(CallStateChanged(state=CallState.ERROR))
+            return
+        if command in _TEXT_MESSAGE_COMMANDS:
+            if message_id:
+                self._dispatch(MessageFailed(message_id=message_id, reason=reason))
+            else:
+                logger.warning("Rust VoIP Host text message command failed: {}", reason)
             return
         logger.warning("Rust VoIP Host command failed: {}", reason)
 
@@ -327,6 +397,7 @@ class RustHostBackend:
             finally:
                 self._stopping = was_stopping
         self._pending_commands.clear()
+        self._pending_message_ids.clear()
         self._startup_commands_sent = False
         self._ready_seen = False
         self._reconfigure_on_ready = False
@@ -348,6 +419,10 @@ class RustHostBackend:
         command_name = message_type.replace(".", "_")
         return f"{self.domain}-{command_name}-{self._request_counter}"
 
+    def _next_message_id(self) -> str:
+        self._message_counter += 1
+        return f"rust-msg-{self._message_counter}"
+
     def _pop_pending_command(self, request_id: str | None) -> str | None:
         if request_id is None:
             return None
@@ -366,6 +441,86 @@ def _call_state(value: str) -> CallState:
         return CallState(value)
     except ValueError:
         return CallState.IDLE
+
+
+def _message_record(payload: dict[str, Any]) -> VoIPMessageRecord | None:
+    kind = _message_kind(str(payload.get("kind", "")))
+    direction = _message_direction(str(payload.get("direction", "")))
+    delivery_state = _message_delivery_state(str(payload.get("delivery_state", "")))
+    if kind is None or direction is None or delivery_state is None:
+        logger.warning(
+            "Rust VoIP Host emitted message with unknown enum values: "
+            "kind={!r} direction={!r} delivery_state={!r}",
+            payload.get("kind", ""),
+            payload.get("direction", ""),
+            payload.get("delivery_state", ""),
+        )
+        return None
+
+    timestamp = _iso_timestamp(payload.get("created_at"))
+    updated_at = (
+        _iso_timestamp(payload.get("updated_at")) if payload.get("updated_at") else timestamp
+    )
+    return VoIPMessageRecord(
+        id=str(payload.get("message_id", "")),
+        peer_sip_address=str(payload.get("peer_sip_address", "")),
+        sender_sip_address=str(payload.get("sender_sip_address", "")),
+        recipient_sip_address=str(payload.get("recipient_sip_address", "")),
+        kind=kind,
+        direction=direction,
+        delivery_state=delivery_state,
+        created_at=timestamp,
+        updated_at=updated_at,
+        text=str(payload.get("text", "")),
+        local_file_path=str(payload.get("local_file_path", "")),
+        mime_type=str(payload.get("mime_type", "")),
+        duration_ms=_duration_ms(payload.get("duration_ms")),
+        unread=_bool_payload(payload.get("unread", False)),
+        display_name=str(payload.get("display_name", "")),
+    )
+
+
+def _message_kind(value: str) -> MessageKind | None:
+    try:
+        return MessageKind(value)
+    except ValueError:
+        return None
+
+
+def _message_direction(value: str) -> MessageDirection | None:
+    try:
+        return MessageDirection(value)
+    except ValueError:
+        return None
+
+
+def _message_delivery_state(value: str) -> MessageDeliveryState | None:
+    try:
+        return MessageDeliveryState(value)
+    except ValueError:
+        return None
+
+
+def _iso_timestamp(value: Any) -> str:
+    timestamp = str(value or "").strip()
+    if timestamp:
+        return timestamp
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _duration_ms(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _bool_payload(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def _worker_error_reason(payload: dict[str, Any], *, command: str | None) -> str:

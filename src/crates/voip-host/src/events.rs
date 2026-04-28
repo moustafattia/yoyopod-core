@@ -27,6 +27,27 @@ pub enum CallState {
     End,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageKind {
+    Text,
+    VoiceNote,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageDirection {
+    Incoming,
+    Outgoing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageDeliveryState {
+    Queued,
+    Sending,
+    Sent,
+    Delivered,
+    Failed,
+}
+
 impl RegistrationState {
     pub fn from_native(value: i32) -> Self {
         match value {
@@ -93,6 +114,63 @@ impl CallState {
     }
 }
 
+impl MessageKind {
+    pub fn from_native(value: i32) -> Self {
+        if value == 2 {
+            Self::VoiceNote
+        } else {
+            Self::Text
+        }
+    }
+
+    pub fn as_protocol(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::VoiceNote => "voice_note",
+        }
+    }
+}
+
+impl MessageDirection {
+    pub fn from_native(value: i32) -> Self {
+        if value == 2 {
+            Self::Outgoing
+        } else {
+            Self::Incoming
+        }
+    }
+
+    pub fn as_protocol(self) -> &'static str {
+        match self {
+            Self::Incoming => "incoming",
+            Self::Outgoing => "outgoing",
+        }
+    }
+}
+
+impl MessageDeliveryState {
+    pub fn from_native(value: i32) -> Self {
+        match value {
+            1 => Self::Queued,
+            2 => Self::Sending,
+            3 => Self::Sent,
+            4 => Self::Delivered,
+            5 => Self::Failed,
+            _ => Self::Failed,
+        }
+    }
+
+    pub fn as_protocol(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Sending => "sending",
+            Self::Sent => "sent",
+            Self::Delivered => "delivered",
+            Self::Failed => "failed",
+        }
+    }
+}
+
 pub fn registration_payload(state: RegistrationState, reason: &str) -> Value {
     json!({"state": state.as_protocol(), "reason": reason})
 }
@@ -127,6 +205,23 @@ mod tests {
         assert!(CallState::Error.is_terminal());
         assert!(CallState::End.is_terminal());
         assert!(!CallState::Connected.is_terminal());
+    }
+
+    #[test]
+    fn maps_native_message_values_to_python_values() {
+        assert_eq!(MessageKind::from_native(1).as_protocol(), "text");
+        assert_eq!(MessageKind::from_native(2).as_protocol(), "voice_note");
+        assert_eq!(MessageDirection::from_native(1).as_protocol(), "incoming");
+        assert_eq!(MessageDirection::from_native(2).as_protocol(), "outgoing");
+        assert_eq!(MessageDeliveryState::from_native(1).as_protocol(), "queued");
+        assert_eq!(
+            MessageDeliveryState::from_native(4).as_protocol(),
+            "delivered"
+        );
+        assert_eq!(
+            MessageDeliveryState::from_native(99).as_protocol(),
+            "failed"
+        );
     }
 
     #[test]

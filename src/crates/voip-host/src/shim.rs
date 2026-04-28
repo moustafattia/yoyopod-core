@@ -1,5 +1,5 @@
 use crate::config::VoipConfig;
-use crate::host::{BackendEvent, CallBackend};
+use crate::host::{BackendEvent, CallBackend, MessageRecord};
 use libloading::Library;
 use std::env;
 use std::ffi::{CStr, CString};
@@ -76,6 +76,8 @@ type StartFn = unsafe extern "C" fn(
 type SimpleCallFn = unsafe extern "C" fn() -> c_int;
 type MakeCallFn = unsafe extern "C" fn(*const c_char) -> c_int;
 type SetMutedFn = unsafe extern "C" fn(i32) -> c_int;
+type SendTextMessageFn =
+    unsafe extern "C" fn(*const c_char, *const c_char, *mut c_char, u32) -> c_int;
 type LastErrorFn = unsafe extern "C" fn() -> *const c_char;
 
 pub struct LiblinphoneShim {
@@ -91,6 +93,7 @@ pub struct LiblinphoneShim {
     reject_call: SimpleCallFn,
     hangup: SimpleCallFn,
     set_muted: SetMutedFn,
+    send_text_message: SendTextMessageFn,
     last_error: LastErrorFn,
 }
 
@@ -167,6 +170,9 @@ impl LiblinphoneShim {
             reject_call: unsafe { symbol(&library, b"yoyopod_liblinphone_reject_call\0") }?,
             hangup: unsafe { symbol(&library, b"yoyopod_liblinphone_hangup\0") }?,
             set_muted: unsafe { symbol(&library, b"yoyopod_liblinphone_set_muted\0") }?,
+            send_text_message: unsafe {
+                symbol(&library, b"yoyopod_liblinphone_send_text_message\0")
+            }?,
             last_error: unsafe { symbol(&library, b"yoyopod_liblinphone_last_error\0") }?,
             _library: library,
         })
@@ -258,6 +264,21 @@ impl LiblinphoneShim {
         self.check(unsafe { (self.set_muted)(if muted { 1 } else { 0 }) })
     }
 
+    pub fn send_text_message(&self, sip_address: &str, text: &str) -> Result<String, ShimError> {
+        let sip_address = CString::new(sip_address)?;
+        let text = CString::new(text)?;
+        let mut message_id = [0 as c_char; 128];
+        self.check(unsafe {
+            (self.send_text_message)(
+                sip_address.as_ptr(),
+                text.as_ptr(),
+                message_id.as_mut_ptr(),
+                message_id.len() as u32,
+            )
+        })?;
+        Ok(c_string(&message_id))
+    }
+
     fn last_error(&self) -> String {
         unsafe {
             let raw = (self.last_error)();
@@ -284,27 +305,8 @@ impl LiblinphoneShim {
             if has_event == 0 {
                 break;
             }
-            match event.event_type {
-                1 => events.push(BackendEvent::RegistrationChanged {
-                    state: crate::events::RegistrationState::from_native(event.registration_state)
-                        .as_protocol()
-                        .to_string(),
-                    reason: c_string(&event.reason),
-                }),
-                2 => events.push(BackendEvent::CallStateChanged {
-                    call_id: c_string(&event.peer_sip_address),
-                    state: crate::events::CallState::from_native(event.call_state)
-                        .as_protocol()
-                        .to_string(),
-                }),
-                3 => events.push(BackendEvent::IncomingCall {
-                    call_id: c_string(&event.peer_sip_address),
-                    from_uri: c_string(&event.peer_sip_address),
-                }),
-                4 => events.push(BackendEvent::BackendStopped {
-                    reason: c_string(&event.reason),
-                }),
-                _ => {}
+            if let Some(backend_event) = native_event_to_backend_event(&event) {
+                events.push(backend_event);
             }
         }
         Ok(events)
@@ -362,6 +364,80 @@ impl CallBackend for ShimBackend {
             .set_muted(muted)
             .map_err(|error| error.to_string())
     }
+
+    fn send_text_message(&mut self, sip_address: &str, text: &str) -> Result<String, String> {
+        self.shim
+            .send_text_message(sip_address, text)
+            .map_err(|error| error.to_string())
+    }
+}
+
+fn native_event_to_backend_event(event: &NativeEvent) -> Option<BackendEvent> {
+    match event.event_type {
+        1 => Some(BackendEvent::RegistrationChanged {
+            state: crate::events::RegistrationState::from_native(event.registration_state)
+                .as_protocol()
+                .to_string(),
+            reason: c_string(&event.reason),
+        }),
+        2 => Some(BackendEvent::CallStateChanged {
+            call_id: c_string(&event.peer_sip_address),
+            state: crate::events::CallState::from_native(event.call_state)
+                .as_protocol()
+                .to_string(),
+        }),
+        3 => Some(BackendEvent::IncomingCall {
+            call_id: c_string(&event.peer_sip_address),
+            from_uri: c_string(&event.peer_sip_address),
+        }),
+        4 => Some(BackendEvent::BackendStopped {
+            reason: c_string(&event.reason),
+        }),
+        5 => Some(BackendEvent::MessageReceived {
+            message: MessageRecord {
+                message_id: c_string(&event.message_id),
+                peer_sip_address: c_string(&event.peer_sip_address),
+                sender_sip_address: c_string(&event.sender_sip_address),
+                recipient_sip_address: c_string(&event.recipient_sip_address),
+                kind: crate::events::MessageKind::from_native(event.message_kind)
+                    .as_protocol()
+                    .to_string(),
+                direction: crate::events::MessageDirection::from_native(event.message_direction)
+                    .as_protocol()
+                    .to_string(),
+                delivery_state: crate::events::MessageDeliveryState::from_native(
+                    event.message_delivery_state,
+                )
+                .as_protocol()
+                .to_string(),
+                text: c_string(&event.text),
+                local_file_path: c_string(&event.local_file_path),
+                mime_type: c_string(&event.mime_type),
+                duration_ms: event.duration_ms,
+                unread: event.unread != 0,
+            },
+        }),
+        6 => Some(BackendEvent::MessageDeliveryChanged {
+            message_id: c_string(&event.message_id),
+            delivery_state: crate::events::MessageDeliveryState::from_native(
+                event.message_delivery_state,
+            )
+            .as_protocol()
+            .to_string(),
+            local_file_path: c_string(&event.local_file_path),
+            error: c_string(&event.reason),
+        }),
+        7 => Some(BackendEvent::MessageDownloadCompleted {
+            message_id: c_string(&event.message_id),
+            local_file_path: c_string(&event.local_file_path),
+            mime_type: c_string(&event.mime_type),
+        }),
+        8 => Some(BackendEvent::MessageFailed {
+            message_id: c_string(&event.message_id),
+            reason: c_string(&event.reason),
+        }),
+        _ => None,
+    }
 }
 
 pub fn c_string<const N: usize>(buffer: &[c_char; N]) -> String {
@@ -396,5 +472,89 @@ mod tests {
         assert_eq!(settings.audio_enabled, 1);
         assert_eq!(settings.mic_gain, 42);
         assert_eq!(settings.output_volume, 73);
+    }
+
+    #[test]
+    fn native_message_event_maps_to_backend_message_record() {
+        let mut event = NativeEvent {
+            event_type: 5,
+            message_kind: 1,
+            message_direction: 1,
+            message_delivery_state: 4,
+            duration_ms: 1200,
+            unread: 1,
+            ..Default::default()
+        };
+        write_c_string(&mut event.message_id, "msg-1");
+        write_c_string(&mut event.peer_sip_address, "sip:bob@example.com");
+        write_c_string(&mut event.sender_sip_address, "sip:bob@example.com");
+        write_c_string(&mut event.recipient_sip_address, "sip:alice@example.com");
+        write_c_string(&mut event.text, "hello");
+        write_c_string(&mut event.mime_type, "text/plain");
+
+        let backend_event = native_event_to_backend_event(&event).expect("backend event");
+
+        assert_eq!(
+            backend_event,
+            BackendEvent::MessageReceived {
+                message: MessageRecord {
+                    message_id: "msg-1".to_string(),
+                    peer_sip_address: "sip:bob@example.com".to_string(),
+                    sender_sip_address: "sip:bob@example.com".to_string(),
+                    recipient_sip_address: "sip:alice@example.com".to_string(),
+                    kind: "text".to_string(),
+                    direction: "incoming".to_string(),
+                    delivery_state: "delivered".to_string(),
+                    text: "hello".to_string(),
+                    local_file_path: "".to_string(),
+                    mime_type: "text/plain".to_string(),
+                    duration_ms: 1200,
+                    unread: true,
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn native_message_delivery_events_map_to_backend_events() {
+        let mut delivery = NativeEvent {
+            event_type: 6,
+            message_delivery_state: 5,
+            ..Default::default()
+        };
+        write_c_string(&mut delivery.message_id, "msg-1");
+        write_c_string(&mut delivery.local_file_path, "/tmp/msg.wav");
+        write_c_string(&mut delivery.reason, "peer offline");
+
+        assert_eq!(
+            native_event_to_backend_event(&delivery),
+            Some(BackendEvent::MessageDeliveryChanged {
+                message_id: "msg-1".to_string(),
+                delivery_state: "failed".to_string(),
+                local_file_path: "/tmp/msg.wav".to_string(),
+                error: "peer offline".to_string(),
+            })
+        );
+
+        let mut failed = NativeEvent {
+            event_type: 8,
+            ..Default::default()
+        };
+        write_c_string(&mut failed.message_id, "msg-2");
+        write_c_string(&mut failed.reason, "send failed");
+
+        assert_eq!(
+            native_event_to_backend_event(&failed),
+            Some(BackendEvent::MessageFailed {
+                message_id: "msg-2".to_string(),
+                reason: "send failed".to_string(),
+            })
+        );
+    }
+
+    fn write_c_string<const N: usize>(buffer: &mut [c_char; N], value: &str) {
+        for (slot, byte) in buffer.iter_mut().zip(value.bytes()) {
+            *slot = byte as c_char;
+        }
     }
 }

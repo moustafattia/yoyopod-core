@@ -1,5 +1,6 @@
 use crate::config::VoipConfig;
 use serde_json::json;
+use std::collections::HashMap;
 
 pub trait CallBackend {
     fn start(&mut self, config: &VoipConfig) -> Result<(), String>;
@@ -10,14 +11,60 @@ pub trait CallBackend {
     fn reject_call(&mut self) -> Result<(), String>;
     fn hangup(&mut self) -> Result<(), String>;
     fn set_muted(&mut self, muted: bool) -> Result<(), String>;
+    fn send_text_message(&mut self, sip_address: &str, text: &str) -> Result<String, String>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageRecord {
+    pub message_id: String,
+    pub peer_sip_address: String,
+    pub sender_sip_address: String,
+    pub recipient_sip_address: String,
+    pub kind: String,
+    pub direction: String,
+    pub delivery_state: String,
+    pub text: String,
+    pub local_file_path: String,
+    pub mime_type: String,
+    pub duration_ms: i32,
+    pub unread: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BackendEvent {
-    RegistrationChanged { state: String, reason: String },
-    IncomingCall { call_id: String, from_uri: String },
-    CallStateChanged { call_id: String, state: String },
-    BackendStopped { reason: String },
+    RegistrationChanged {
+        state: String,
+        reason: String,
+    },
+    IncomingCall {
+        call_id: String,
+        from_uri: String,
+    },
+    CallStateChanged {
+        call_id: String,
+        state: String,
+    },
+    BackendStopped {
+        reason: String,
+    },
+    MessageReceived {
+        message: MessageRecord,
+    },
+    MessageDeliveryChanged {
+        message_id: String,
+        delivery_state: String,
+        local_file_path: String,
+        error: String,
+    },
+    MessageDownloadCompleted {
+        message_id: String,
+        local_file_path: String,
+        mime_type: String,
+    },
+    MessageFailed {
+        message_id: String,
+        reason: String,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -25,6 +72,7 @@ pub struct VoipHost {
     config: Option<VoipConfig>,
     registered: bool,
     active_call_id: Option<String>,
+    outbound_message_ids: HashMap<String, String>,
 }
 
 impl VoipHost {
@@ -32,6 +80,7 @@ impl VoipHost {
         self.config = Some(config);
         self.registered = false;
         self.active_call_id = None;
+        self.outbound_message_ids.clear();
     }
 
     pub fn mark_registered(&mut self, registered: bool) {
@@ -71,6 +120,7 @@ impl VoipHost {
         backend.stop();
         self.registered = false;
         self.active_call_id = None;
+        self.outbound_message_ids.clear();
     }
 
     pub fn dial<B: CallBackend>(
@@ -107,11 +157,38 @@ impl VoipHost {
         backend.set_muted(muted)
     }
 
+    pub fn send_text_message<B: CallBackend>(
+        &mut self,
+        backend: &mut B,
+        sip_address: &str,
+        text: &str,
+        client_id: &str,
+    ) -> Result<String, String> {
+        let client_id = client_id.trim();
+        if client_id.is_empty() {
+            return Err("voip text message requires client_id".to_string());
+        }
+        let backend_id = backend.send_text_message(sip_address, text)?;
+        let backend_id = backend_id.trim();
+        if backend_id.is_empty() {
+            return Err("voip text message backend returned empty message id".to_string());
+        }
+        if backend_id != client_id {
+            self.outbound_message_ids
+                .insert(backend_id.to_string(), client_id.to_string());
+        }
+        Ok(client_id.to_string())
+    }
+
     pub fn poll_backend_events<B: CallBackend>(
         &mut self,
         backend: &mut B,
     ) -> Result<Vec<BackendEvent>, String> {
-        let events = backend.iterate()?;
+        let events: Vec<BackendEvent> = backend
+            .iterate()?
+            .into_iter()
+            .map(|event| self.translate_backend_event(event))
+            .collect();
         for event in &events {
             self.apply_backend_event(event);
         }
@@ -144,9 +221,63 @@ impl VoipHost {
             BackendEvent::BackendStopped { .. } => {
                 self.registered = false;
                 self.active_call_id = None;
+                self.outbound_message_ids.clear();
             }
+            BackendEvent::MessageReceived { .. }
+            | BackendEvent::MessageDeliveryChanged { .. }
+            | BackendEvent::MessageDownloadCompleted { .. }
+            | BackendEvent::MessageFailed { .. } => {}
         }
     }
+
+    fn translate_backend_event(&mut self, event: BackendEvent) -> BackendEvent {
+        match event {
+            BackendEvent::MessageReceived { mut message } => {
+                message.message_id = self.translate_message_id(&message.message_id, false);
+                BackendEvent::MessageReceived { message }
+            }
+            BackendEvent::MessageDeliveryChanged {
+                message_id,
+                delivery_state,
+                local_file_path,
+                error,
+            } => {
+                let terminal = is_terminal_delivery_state(&delivery_state);
+                BackendEvent::MessageDeliveryChanged {
+                    message_id: self.translate_message_id(&message_id, terminal),
+                    delivery_state,
+                    local_file_path,
+                    error,
+                }
+            }
+            BackendEvent::MessageDownloadCompleted {
+                message_id,
+                local_file_path,
+                mime_type,
+            } => BackendEvent::MessageDownloadCompleted {
+                message_id: self.translate_message_id(&message_id, false),
+                local_file_path,
+                mime_type,
+            },
+            BackendEvent::MessageFailed { message_id, reason } => BackendEvent::MessageFailed {
+                message_id: self.translate_message_id(&message_id, true),
+                reason,
+            },
+            other => other,
+        }
+    }
+
+    fn translate_message_id(&mut self, backend_id: &str, terminal: bool) -> String {
+        let client_id = self.outbound_message_ids.get(backend_id).cloned();
+        if terminal && client_id.is_some() {
+            self.outbound_message_ids.remove(backend_id);
+        }
+        client_id.unwrap_or_else(|| backend_id.to_string())
+    }
+}
+
+fn is_terminal_delivery_state(value: &str) -> bool {
+    matches!(value, "delivered" | "failed")
 }
 
 #[cfg(test)]
@@ -225,6 +356,11 @@ mod command_tests {
             self.calls.push(format!("mute:{muted}"));
             Ok(())
         }
+
+        fn send_text_message(&mut self, sip_address: &str, text: &str) -> Result<String, String> {
+            self.calls.push(format!("text:{sip_address}:{text}"));
+            Ok("backend-msg-1".to_string())
+        }
     }
 
     fn config() -> VoipConfig {
@@ -289,6 +425,94 @@ mod command_tests {
     }
 
     #[test]
+    fn send_text_message_returns_client_id_and_maps_delivery_back_to_client_id() {
+        struct EventBackend {
+            calls: Vec<String>,
+            events: Vec<BackendEvent>,
+        }
+
+        impl CallBackend for EventBackend {
+            fn start(&mut self, _config: &VoipConfig) -> Result<(), String> {
+                self.calls.push("start".to_string());
+                Ok(())
+            }
+
+            fn stop(&mut self) {
+                self.calls.push("stop".to_string());
+            }
+
+            fn iterate(&mut self) -> Result<Vec<BackendEvent>, String> {
+                Ok(std::mem::take(&mut self.events))
+            }
+
+            fn make_call(&mut self, _sip_address: &str) -> Result<String, String> {
+                Ok("call-outgoing".to_string())
+            }
+
+            fn answer_call(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn reject_call(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn hangup(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn set_muted(&mut self, _muted: bool) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn send_text_message(
+                &mut self,
+                sip_address: &str,
+                text: &str,
+            ) -> Result<String, String> {
+                self.calls.push(format!("text:{sip_address}:{text}"));
+                Ok("backend-msg-1".to_string())
+            }
+        }
+
+        let mut host = VoipHost::default();
+        host.configure(config());
+        let mut backend = EventBackend {
+            calls: Vec::new(),
+            events: Vec::new(),
+        };
+        host.register(&mut backend).unwrap();
+
+        let message_id = host
+            .send_text_message(&mut backend, "sip:bob@example.com", "hello", "client-msg-1")
+            .expect("send text");
+
+        assert_eq!(message_id, "client-msg-1");
+        assert_eq!(
+            backend.calls,
+            vec!["start", "text:sip:bob@example.com:hello"]
+        );
+
+        backend.events = vec![BackendEvent::MessageDeliveryChanged {
+            message_id: "backend-msg-1".to_string(),
+            delivery_state: "delivered".to_string(),
+            local_file_path: "".to_string(),
+            error: "".to_string(),
+        }];
+        let events = host.poll_backend_events(&mut backend).expect("poll");
+
+        assert_eq!(
+            events,
+            vec![BackendEvent::MessageDeliveryChanged {
+                message_id: "client-msg-1".to_string(),
+                delivery_state: "delivered".to_string(),
+                local_file_path: "".to_string(),
+                error: "".to_string(),
+            }]
+        );
+    }
+
+    #[test]
     fn reject_and_unregister_clear_state() {
         let mut host = VoipHost::default();
         let mut backend = FakeBackend::default();
@@ -345,6 +569,14 @@ mod command_tests {
 
             fn set_muted(&mut self, _muted: bool) -> Result<(), String> {
                 Ok(())
+            }
+
+            fn send_text_message(
+                &mut self,
+                _sip_address: &str,
+                _text: &str,
+            ) -> Result<String, String> {
+                Ok("backend-msg-1".to_string())
             }
         }
 

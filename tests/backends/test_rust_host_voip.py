@@ -10,6 +10,12 @@ from yoyopod.integrations.call.models import (
     CallState,
     CallStateChanged,
     IncomingCallDetected,
+    MessageDeliveryChanged,
+    MessageDeliveryState,
+    MessageDownloadCompleted,
+    MessageFailed,
+    MessageKind,
+    MessageReceived,
     RegistrationState,
     RegistrationStateChanged,
     VoIPConfig,
@@ -219,6 +225,52 @@ def test_call_commands_send_worker_commands() -> None:
     assert supervisor.sent[5][2] == {"muted": False}
 
 
+def test_send_text_message_returns_client_id_and_sends_worker_command() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    backend.start()
+    supervisor.sent.clear()
+
+    message_id = backend.send_text_message("sip:bob@example.com", "hi")
+
+    assert message_id is not None
+    assert message_id.startswith("rust-msg-")
+    assert supervisor.sent == [
+        (
+            "voip",
+            "voip.send_text_message",
+            {
+                "uri": "sip:bob@example.com",
+                "text": "hi",
+                "client_id": message_id,
+            },
+        )
+    ]
+
+
+def test_text_message_command_error_emits_message_failed() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    received: list[object] = []
+    backend.on_event(received.append)
+    backend.start()
+
+    message_id = backend.send_text_message("sip:bob@example.com", "hi")
+    backend.handle_worker_message(
+        _reply(
+            "error",
+            "voip.error",
+            {"code": "command_failed", "message": "peer offline"},
+            request_id=supervisor.request_ids[-1],
+        )
+    )
+
+    failures = [event for event in received if isinstance(event, MessageFailed)]
+    assert failures
+    assert failures[-1].message_id == message_id
+    assert failures[-1].reason == "voip.send_text_message command_failed: peer offline"
+
+
 def test_worker_events_translate_to_voip_events() -> None:
     supervisor = _FakeSupervisor()
     backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
@@ -246,6 +298,68 @@ def test_worker_events_translate_to_voip_events() -> None:
     assert isinstance(received[3], BackendStopped)
     assert received[3].reason == "iterate failed"
     assert len(received) == 4
+
+
+def test_worker_message_events_translate_to_voip_events() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    received: list[object] = []
+    backend.on_event(received.append)
+
+    backend.handle_worker_message(
+        _event(
+            "voip.message_received",
+            {
+                "message_id": "msg-1",
+                "peer_sip_address": "sip:bob@example.com",
+                "sender_sip_address": "sip:bob@example.com",
+                "recipient_sip_address": "sip:alice@example.com",
+                "kind": "text",
+                "direction": "incoming",
+                "delivery_state": "delivered",
+                "created_at": "2026-04-29T00:00:00+00:00",
+                "updated_at": "2026-04-29T00:00:00+00:00",
+                "text": "hello",
+                "local_file_path": "",
+                "mime_type": "",
+                "duration_ms": 0,
+                "unread": True,
+            },
+        )
+    )
+    backend.handle_worker_message(
+        _event(
+            "voip.message_delivery_changed",
+            {
+                "message_id": "msg-1",
+                "delivery_state": "delivered",
+                "local_file_path": "",
+                "error": "",
+            },
+        )
+    )
+    backend.handle_worker_message(
+        _event(
+            "voip.message_download_completed",
+            {"message_id": "msg-1", "local_file_path": "/tmp/a.wav", "mime_type": "audio/wav"},
+        )
+    )
+    backend.handle_worker_message(
+        _event("voip.message_failed", {"message_id": "msg-1", "reason": "peer offline"})
+    )
+
+    assert isinstance(received[0], MessageReceived)
+    assert received[0].message.id == "msg-1"
+    assert received[0].message.kind == MessageKind.TEXT
+    assert received[0].message.delivery_state == MessageDeliveryState.DELIVERED
+    assert received[0].message.text == "hello"
+    assert isinstance(received[1], MessageDeliveryChanged)
+    assert received[1].message_id == "msg-1"
+    assert received[1].delivery_state == MessageDeliveryState.DELIVERED
+    assert isinstance(received[2], MessageDownloadCompleted)
+    assert received[2].local_file_path == "/tmp/a.wav"
+    assert isinstance(received[3], MessageFailed)
+    assert received[3].reason == "peer offline"
 
 
 def test_worker_startup_error_stops_worker_and_marks_backend_stopped() -> None:
@@ -344,14 +458,13 @@ def test_ready_after_worker_restart_resends_configure_register() -> None:
     assert received[1].reason == "worker_ready"
 
 
-def test_iterate_is_noop_and_unsupported_messaging_fails() -> None:
+def test_iterate_is_noop_and_unsupported_voice_notes_fail() -> None:
     backend = RustHostBackend(
         _config(), worker_supervisor=_FakeSupervisor(), worker_path="/bin/voip"
     )
 
     assert backend.iterate() == 0
     assert backend.get_iterate_metrics() is None
-    assert backend.send_text_message("sip:bob@example.com", "hi") is None
     assert backend.start_voice_note_recording("/tmp/a.wav") is False
     assert backend.stop_voice_note_recording() is None
     assert backend.cancel_voice_note_recording() is False
