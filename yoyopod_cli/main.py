@@ -70,6 +70,10 @@ from yoyopod_cli import health as _health  # noqa: E402
 
 app.add_typer(_health.app, name="health")
 
+from yoyopod_cli import voice as _voice  # noqa: E402
+
+app.add_typer(_voice.app, name="voice")
+
 from yoyopod_cli import release as _release  # noqa: E402
 
 app.add_typer(_release.app, name="release")

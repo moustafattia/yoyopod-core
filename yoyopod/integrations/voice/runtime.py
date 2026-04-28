@@ -25,10 +25,17 @@ from yoyopod.integrations.voice import (
     VoiceWorkerAskTurn,
 )
 
+from yoyopod.integrations.voice.commands import match_voice_command
 from yoyopod.integrations.voice.dictionary import load_voice_command_dictionary
 from yoyopod.integrations.voice.executor import VoiceCommandExecutor
 from yoyopod.integrations.voice.router import VoiceRouteKind, VoiceRouter
 from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
+from yoyopod.integrations.voice.trace import (
+    VoiceTraceRecorder,
+    VoiceTraceStore,
+    new_turn_id,
+    utc_now_iso,
+)
 
 if TYPE_CHECKING:
     from yoyopod.backends.music import MusicBackend
@@ -83,6 +90,7 @@ class VoiceRuntimeCoordinator:
         ask_client: _AskClient | None = None,
         music_backend: "MusicBackend | None" = None,
         call_music_handoff: Callable[[], bool] | None = None,
+        trace_store_factory: Callable[[VoiceSettings], VoiceTraceStore | None] | None = None,
     ) -> None:
         self._context = context
         self._settings_resolver = settings_resolver
@@ -92,6 +100,7 @@ class VoiceRuntimeCoordinator:
         self._ask_client = ask_client
         self._music_backend = music_backend
         self._call_music_handoff = call_music_handoff
+        self._trace_store_factory = trace_store_factory
         self._ask_conversation = AskConversationState()
         self._cached_voice_service: VoiceManager | None = None
         self._state = VoiceInteractionState(headline="YoYo", body="How can I help?")
@@ -111,6 +120,8 @@ class VoiceRuntimeCoordinator:
         self._music_focus_lock = threading.Lock()
         self._music_paused_for_voice = False
         self._music_paused_generation: int | None = None
+        self._trace_lock = threading.Lock()
+        self._active_traces: dict[int, VoiceTraceRecorder] = {}
 
     @property
     def state(self) -> VoiceInteractionState:
@@ -184,6 +195,7 @@ class VoiceRuntimeCoordinator:
         generation = self._next_generation()
         cancel_event = threading.Event()
         self._active_capture_cancel = cancel_event
+        self._begin_trace(settings, generation=generation, source="ask_screen", mode="ask")
         self._pause_music_for_voice(generation=generation, reason="ask")
         self._set_state(
             "listening",
@@ -217,6 +229,7 @@ class VoiceRuntimeCoordinator:
         generation = self._next_generation()
         cancel_event = threading.Event()
         self._active_capture_cancel = cancel_event
+        self._begin_trace(settings, generation=generation, source="ask_screen", mode="command")
         self._pause_music_for_voice(generation=generation, reason="command")
         self._set_state(
             "listening",
@@ -252,6 +265,7 @@ class VoiceRuntimeCoordinator:
         generation = self._next_generation()
         cancel_event = threading.Event()
         self._active_capture_cancel = cancel_event
+        self._begin_trace(settings, generation=generation, source="hub_hold", mode="ptt")
         self._pause_music_for_voice(generation=generation, reason="ptt")
         self._set_state(
             "listening",
@@ -288,12 +302,18 @@ class VoiceRuntimeCoordinator:
     def cancel(self) -> None:
         """Cancel any in-flight capture without mutating navigation."""
 
+        generation = self._state.generation
+        recorder = self._trace_for_generation(generation)
+        if recorder is not None:
+            recorder.route_kind = "error"
+            recorder.outcome = "cancelled"
         with self._active_capture_cancel_lock:
             self._next_generation()
             if self._active_capture_cancel is not None:
                 self._active_capture_cancel.set()
                 self._active_capture_cancel = None
         self._resume_music_after_voice()
+        self._complete_trace(generation)
         self._set_state(
             self._state.phase,
             self._state.headline,
@@ -317,9 +337,22 @@ class VoiceRuntimeCoordinator:
         command: "VoiceCommandMatch | None" = None,
     ) -> VoiceCommandOutcome:
         if command is None:
-            outcome = self._command_executor.execute(transcript)
-        else:
+            command = match_voice_command(transcript)
+        recorder = self._trace_for_generation()
+        if recorder is not None:
+            recorder.transcript_normalized = transcript.strip()
+            if command.is_command:
+                recorder.route_kind = "command"
+                recorder.command_intent = command.intent.value
+                recorder.command_confidence = 1.0
+            else:
+                recorder.route_kind = "silence"
+        try:
             outcome = self._command_executor.execute(transcript, command=command)
+        except TypeError as exc:
+            if "command" not in str(exc):
+                raise
+            outcome = self._command_executor.execute(transcript)
         logger.info(
             "Voice command outcome headline={} should_speak={} route={} auto_return={} transcript={}",
             outcome.headline,
@@ -352,6 +385,9 @@ class VoiceRuntimeCoordinator:
                 _preview_voice_text(transcript),
             )
             if capture_failed:
+                recorder = self._trace_for_generation(generation)
+                if recorder is not None and recorder.error is None:
+                    recorder.record_error("capture", RuntimeError("voice capture failed"))
                 self._apply_outcome(
                     VoiceCommandOutcome(
                         "Mic Unavailable",
@@ -363,6 +399,10 @@ class VoiceRuntimeCoordinator:
             if transcript:
                 self.handle_transcript(transcript)
                 return
+            recorder = self._trace_for_generation(generation)
+            if recorder is not None:
+                recorder.route_kind = "silence"
+                recorder.transcript_normalized = ""
             self._apply_outcome(
                 VoiceCommandOutcome("No Speech", "I did not catch a command.", should_speak=False)
             )
@@ -525,10 +565,80 @@ class VoiceRuntimeCoordinator:
             auto_return=False,
         )
 
+    def _begin_trace(
+        self,
+        settings: VoiceSettings,
+        *,
+        generation: int,
+        source: str,
+        mode: str,
+    ) -> None:
+        if not settings.voice_trace_enabled or self._trace_store_factory is None:
+            return
+        try:
+            store = self._trace_store_factory(settings)
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logger.debug("Unable to create voice trace store: {}", exc)
+            return
+        if store is None:
+            return
+        recorder = VoiceTraceRecorder(
+            store=store,
+            turn_id=new_turn_id(),
+            started_at=utc_now_iso(),
+            source=source,
+            mode=mode,
+            include_transcripts=settings.voice_trace_include_transcripts,
+            body_preview_chars=settings.voice_trace_body_preview_chars,
+            audio_focus_before=self._audio_focus_snapshot(),
+            music_before=self._music_snapshot(),
+        )
+        with self._trace_lock:
+            self._active_traces[generation] = recorder
+
+    def _trace_for_generation(self, generation: int | None = None) -> VoiceTraceRecorder | None:
+        if generation is None:
+            generation = self._state.generation
+        with self._trace_lock:
+            return self._active_traces.get(generation)
+
+    def _complete_trace(self, generation: int | None = None) -> None:
+        if generation is None:
+            generation = self._state.generation
+        with self._trace_lock:
+            recorder = self._active_traces.pop(generation, None)
+        if recorder is None:
+            return
+        try:
+            recorder.audio_focus_after = self._audio_focus_snapshot()
+            recorder.music_after = self._music_snapshot()
+            recorder.complete()
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logger.debug("Unable to complete voice trace: {}", exc)
+
+    def _audio_focus_snapshot(self) -> dict[str, object]:
+        with self._music_focus_lock:
+            return {
+                "music_paused_for_voice": self._music_paused_for_voice,
+                "music_paused_generation": self._music_paused_generation,
+            }
+
+    def _music_snapshot(self) -> dict[str, object]:
+        music_backend = self._music_backend
+        if music_backend is None or not getattr(music_backend, "is_connected", False):
+            return {"connected": False}
+
+        snapshot: dict[str, object] = {"connected": True}
+        try:
+            snapshot["playback_state"] = music_backend.get_playback_state()
+        except Exception as exc:
+            snapshot["playback_state_error"] = f"{type(exc).__name__}: {exc}"
+        return snapshot
+
     def _next_generation(self) -> int:
         self._cancel_generation_scoped_tts()
         self._state.generation += 1
-        return self._state.generation
+        return int(self._state.generation)
 
     def _cancel_pending_speech_before_capture(self) -> None:
         with self._tts_cancel_lock:
@@ -657,6 +767,9 @@ class VoiceRuntimeCoordinator:
                 capture_result.audio_path.unlink(missing_ok=True)
             return
         if capture_result.audio_path is None:
+            recorder = self._trace_for_generation(generation)
+            if recorder is not None:
+                recorder.record_error("capture", RuntimeError("capture returned no audio"))
             self.dispatch_listen_result("", capture_failed=True, generation=generation)
             return
 
@@ -667,6 +780,9 @@ class VoiceRuntimeCoordinator:
             )
         except Exception as exc:
             logger.warning("Voice command transcription failed: {}", exc)
+            recorder = self._trace_for_generation(generation)
+            if recorder is not None:
+                recorder.record_error("stt", exc)
             self.dispatch_listen_result("", capture_failed=True, generation=generation)
             return
         finally:
@@ -674,6 +790,9 @@ class VoiceRuntimeCoordinator:
 
         if cancel_event.is_set():
             return
+        recorder = self._trace_for_generation(generation)
+        if recorder is not None:
+            recorder.transcript_raw = transcript.text
         self.dispatch_listen_result(
             transcript.text.strip(),
             capture_failed=False,
@@ -700,6 +819,9 @@ class VoiceRuntimeCoordinator:
                 capture_result.audio_path.unlink(missing_ok=True)
             return
         if capture_result.audio_path is None:
+            recorder = self._trace_for_generation(generation)
+            if recorder is not None:
+                recorder.route_kind = "silence"
             self._dispatch_ask_outcome(
                 VoiceCommandOutcome(
                     "No Speech",
@@ -718,6 +840,9 @@ class VoiceRuntimeCoordinator:
             )
         except Exception as exc:
             logger.warning("Ask transcription failed: {}", exc)
+            recorder = self._trace_for_generation(generation)
+            if recorder is not None:
+                recorder.record_error("stt", exc)
             self._dispatch_ask_outcome(
                 VoiceCommandOutcome(
                     "Mic Unavailable",
@@ -734,7 +859,13 @@ class VoiceRuntimeCoordinator:
         if cancel_event.is_set() or generation != self._state.generation:
             return
         question = transcript.text.strip()
+        recorder = self._trace_for_generation(generation)
+        if recorder is not None:
+            recorder.transcript_raw = transcript.text
         if not question:
+            if recorder is not None:
+                recorder.route_kind = "silence"
+                recorder.transcript_normalized = ""
             self._dispatch_ask_outcome(
                 VoiceCommandOutcome(
                     "No Speech",
@@ -748,6 +879,23 @@ class VoiceRuntimeCoordinator:
 
         router = self._voice_router(settings)
         decision = router.route(question)
+        recorder = self._trace_for_generation(generation)
+        if recorder is not None:
+            recorder.transcript_normalized = decision.normalized_text
+            recorder.activation_prefix = decision.stripped_prefix or None
+            recorder.command_confidence = decision.confidence or None
+            recorder.route_name = decision.route_name
+            recorder.ask_fallback = decision.kind is VoiceRouteKind.ASK_FALLBACK
+            if decision.kind is VoiceRouteKind.COMMAND:
+                recorder.route_kind = "command"
+                if decision.command is not None:
+                    recorder.command_intent = decision.command.intent.value
+            elif decision.kind is VoiceRouteKind.ACTION:
+                recorder.route_kind = "command"
+            elif decision.kind is VoiceRouteKind.ASK_FALLBACK:
+                recorder.route_kind = "ask"
+            else:
+                recorder.route_kind = "silence"
         if decision.kind is VoiceRouteKind.COMMAND and decision.command is not None:
             self._dispatch_ask_outcome(
                 self._execute_command_transcript(
@@ -809,6 +957,9 @@ class VoiceRuntimeCoordinator:
             )
         except Exception as exc:
             logger.warning("Ask worker request failed: {}", exc)
+            recorder = self._trace_for_generation(generation)
+            if recorder is not None:
+                recorder.record_error("ask", exc)
             self._dispatch_ask_outcome(
                 VoiceCommandOutcome(
                     "Ask Offline",
@@ -881,11 +1032,16 @@ class VoiceRuntimeCoordinator:
             return
 
         if capture_result.audio_path is None:
+            recorder = self._trace_for_generation(generation)
             if not self._state.ptt_active:
                 logger.info("PTT capture ended without audio; treating the release as no speech")
+                if recorder is not None:
+                    recorder.route_kind = "silence"
                 self.dispatch_listen_result("", capture_failed=False, generation=generation)
             else:
                 logger.warning("PTT capture ended without audio while hold was still active")
+                if recorder is not None:
+                    recorder.record_error("capture", RuntimeError("ptt capture returned no audio"))
                 self.dispatch_listen_result("", capture_failed=True, generation=generation)
             return
 
@@ -916,6 +1072,9 @@ class VoiceRuntimeCoordinator:
                     )
                     return
                 logger.warning("PTT transcription failed: {}", exc)
+                recorder = self._trace_for_generation(generation)
+                if recorder is not None:
+                    recorder.record_error("stt", exc)
                 self.dispatch_listen_result("", capture_failed=True, generation=generation)
                 return
             finally:
@@ -923,6 +1082,9 @@ class VoiceRuntimeCoordinator:
 
             if transcription_cancel_event.is_set() or generation != self._state.generation:
                 return
+            recorder = self._trace_for_generation(generation)
+            if recorder is not None:
+                recorder.transcript_raw = transcript.text
             self.dispatch_listen_result(
                 transcript.text.strip(),
                 capture_failed=False,
@@ -938,6 +1100,31 @@ class VoiceRuntimeCoordinator:
 
         capture_result.audio_path.unlink(missing_ok=True)
 
+    def _record_outcome_trace(
+        self,
+        outcome: VoiceCommandOutcome,
+        *,
+        generation: int | None = None,
+        ask_outcome: bool = False,
+    ) -> None:
+        recorder = self._trace_for_generation(generation)
+        if recorder is None:
+            return
+        if recorder.error is None:
+            if ask_outcome and outcome.headline == "Answer":
+                recorder.route_kind = "ask"
+            elif outcome.headline == "No Speech" and recorder.route_kind == "unknown":
+                recorder.route_kind = "silence"
+            elif recorder.route_kind == "unknown" and outcome.route_name:
+                recorder.route_kind = "command"
+        recorder.outcome = outcome.headline
+        recorder.assistant_status = outcome.headline
+        recorder.assistant_title = outcome.headline
+        recorder.assistant_body_preview = outcome.body
+        recorder.should_speak = outcome.should_speak
+        recorder.auto_return = outcome.auto_return
+        recorder.route_name = outcome.route_name
+
     def _apply_outcome(self, outcome: VoiceCommandOutcome) -> None:
         logger.info(
             "Voice outcome applied headline={} should_speak={} route={} auto_return={} body_chars={}",
@@ -947,6 +1134,8 @@ class VoiceRuntimeCoordinator:
             outcome.auto_return,
             len(outcome.body),
         )
+        generation = self._state.generation
+        self._record_outcome_trace(outcome, generation=generation)
         self._set_state(
             "reply",
             outcome.headline,
@@ -957,11 +1146,17 @@ class VoiceRuntimeCoordinator:
         if self._context is not None and outcome.should_speak:
             self._context.record_voice_response(outcome.body)
         if outcome.should_speak:
-            self._speak_outcome_async(outcome.body, release_music_after=outcome)
+            self._speak_outcome_async(
+                outcome.body,
+                generation=generation,
+                release_music_after=outcome,
+            )
         else:
             self._resume_music_after_voice(outcome)
+            self._complete_trace(generation)
         if self._outcome_listener is not None:
-            self._dispatch(lambda: self._outcome_listener(outcome))
+            outcome_listener = self._outcome_listener
+            self._dispatch(lambda: outcome_listener(outcome))
 
     def _apply_ask_outcome(self, outcome: VoiceCommandOutcome, *, generation: int) -> None:
         logger.info(
@@ -972,6 +1167,7 @@ class VoiceRuntimeCoordinator:
             outcome.auto_return,
             len(outcome.body),
         )
+        self._record_outcome_trace(outcome, generation=generation, ask_outcome=True)
         self._set_state(
             "reply",
             outcome.headline,
@@ -988,8 +1184,10 @@ class VoiceRuntimeCoordinator:
             )
         else:
             self._resume_music_after_voice(outcome)
+            self._complete_trace(generation)
         if self._outcome_listener is not None:
-            self._dispatch(lambda: self._outcome_listener(outcome))
+            outcome_listener = self._outcome_listener
+            self._dispatch(lambda: outcome_listener(outcome))
 
     def _speak_outcome_async(
         self,
@@ -1082,6 +1280,13 @@ class VoiceRuntimeCoordinator:
                     and not (item.cancel_event is not None and item.cancel_event.is_set())
                 ):
                     self._resume_music_after_voice(item.release_music_after)
+                    self._complete_trace(item.generation)
+                elif item.release_music_after is not None and item.generation is not None:
+                    recorder = self._trace_for_generation(item.generation)
+                    if recorder is not None:
+                        recorder.route_kind = "error"
+                        recorder.outcome = "cancelled"
+                    self._complete_trace(item.generation)
                 if item.cancel_event is not None:
                     with self._tts_cancel_lock:
                         self._tts_cancel_events.discard(item.cancel_event)
@@ -1124,7 +1329,8 @@ class VoiceRuntimeCoordinator:
             )
         if self._state_listener is not None:
             snapshot = replace(self._state)
-            self._dispatch(lambda: self._state_listener(snapshot))
+            state_listener = self._state_listener
+            self._dispatch(lambda: state_listener(snapshot))
 
     def _dispatch(self, callback: Callable[[], None]) -> None:
         if self._dispatcher is not None:
@@ -1145,13 +1351,12 @@ class VoiceRuntimeCoordinator:
                 beep_path = Path(handle.name)
             self._write_beep_wav(beep_path)
             device_id = self._context.voice.speaker_device_id if self._context is not None else None
-            play_kwargs: dict[str, object] = {
-                "timeout_seconds": 2.0,
-                "block_if_busy": False,
-            }
-            if device_id:
-                play_kwargs["device_id"] = device_id
-            self._output_player.play_wav(beep_path, **play_kwargs)
+            self._output_player.play_wav(
+                beep_path,
+                device_id=device_id,
+                timeout_seconds=2.0,
+                block_if_busy=False,
+            )
         except Exception:
             logger.debug("Voice attention tone unavailable")
         finally:

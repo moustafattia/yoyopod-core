@@ -210,6 +210,14 @@ class _FakeVoiceService:
         self.release_calls += 1
 
 
+class _MemoryTraceStore:
+    def __init__(self) -> None:
+        self.entries = []
+
+    def append(self, entry) -> None:
+        self.entries.append(entry)
+
+
 class _SequenceVoiceService(_FakeVoiceService):
     def __init__(self, transcripts: list[str]) -> None:
         super().__init__("")
@@ -755,6 +763,208 @@ def test_begin_ask_falls_back_to_ask_for_non_command() -> None:
         "Because sunlight scatters in the air.",
         auto_return=False,
     )
+
+
+def test_begin_ask_traces_command_turn() -> None:
+    context = AppContext()
+    service = _FakeVoiceService("hey yoyo play music")
+    trace_store = _MemoryTraceStore()
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(
+                mode="cloud",
+                activation_prefixes=("hey yoyo", "yoyo"),
+                ask_fallback_enabled=True,
+                voice_trace_enabled=True,
+                voice_trace_include_transcripts=True,
+            ),
+        ),
+        command_executor=_build_executor(context=context, play_music_action=lambda: True),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=_FakeAskClient(["unused"]),
+        trace_store_factory=lambda settings: trace_store,
+    )
+
+    coordinator.begin_ask(async_capture=False)
+
+    assert len(trace_store.entries) == 1
+    payload = trace_store.entries[0].to_json_dict()
+    assert payload["source"] == "ask_screen"
+    assert payload["mode"] == "ask"
+    assert payload["route_kind"] == "command"
+    assert payload["transcript_normalized"] == "play music"
+    assert payload["command_intent"] == "play_music"
+    assert payload["outcome"] == "Playing"
+
+
+def test_begin_ask_traces_ask_fallback_with_capped_body_preview() -> None:
+    context = AppContext()
+    service = _FakeVoiceService("hey yoyo why is the sky blue")
+    trace_store = _MemoryTraceStore()
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(
+                mode="cloud",
+                activation_prefixes=("hey yoyo", "yoyo"),
+                ask_fallback_enabled=True,
+                voice_trace_enabled=True,
+                voice_trace_include_transcripts=True,
+                voice_trace_body_preview_chars=12,
+            ),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=_FakeAskClient(["Because sunlight scatters in the air."]),
+        trace_store_factory=lambda settings: trace_store,
+    )
+
+    coordinator.begin_ask(async_capture=False)
+    coordinator._tts_queue.join()
+
+    assert len(trace_store.entries) == 1
+    payload = trace_store.entries[0].to_json_dict()
+    assert payload["route_kind"] == "ask"
+    assert payload["transcript_normalized"] == "why is the sky blue"
+    assert payload["assistant_body_preview"] == "Because s..."
+
+
+def test_begin_ask_trace_completes_when_answer_speech_is_cancelled_by_new_capture() -> None:
+    context = AppContext()
+    speak_started = threading.Event()
+    service = _SequenceVoiceService(
+        [
+            "hey yoyo why is the sky blue",
+            "play music",
+        ]
+    )
+    trace_store = _MemoryTraceStore()
+
+    def speak(
+        text: str,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> bool:
+        service.speak_calls.append(text)
+        speak_started.set()
+        assert cancel_event is not None
+        cancel_event.wait(timeout=1.0)
+        return False
+
+    service.speak = speak
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(
+                mode="cloud",
+                activation_prefixes=("hey yoyo", "yoyo"),
+                ask_fallback_enabled=True,
+                voice_trace_enabled=True,
+                voice_trace_include_transcripts=True,
+            ),
+        ),
+        command_executor=_build_executor(context=context, play_music_action=lambda: True),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=_FakeAskClient(["Because sunlight scatters in the air."]),
+        trace_store_factory=lambda settings: trace_store,
+    )
+
+    coordinator.begin_ask(async_capture=False)
+    assert speak_started.wait(timeout=1.0)
+
+    coordinator.begin_listening(async_capture=False)
+    coordinator._tts_queue.join()
+
+    payloads = [entry.to_json_dict() for entry in trace_store.entries]
+    assert [payload["mode"] for payload in payloads] == ["ask", "command"]
+    assert payloads[0]["route_kind"] == "error"
+    assert payloads[0]["outcome"] == "cancelled"
+    assert payloads[0]["assistant_body_preview"] == "Because sunlight scatters in the air."
+    assert payloads[1]["route_kind"] == "command"
+    assert payloads[1]["outcome"] == "Playing"
+    assert coordinator._active_traces == {}
+
+
+def test_begin_listening_traces_stt_failure() -> None:
+    context = AppContext()
+    trace_store = _MemoryTraceStore()
+
+    class _SttFailureVoiceService(_FakeVoiceService):
+        def transcribe(
+            self,
+            audio_path: Path,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> VoiceTranscript:
+            raise RuntimeError("stt boom")
+
+    service = _SttFailureVoiceService("unused")
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(
+                mode="cloud",
+                voice_trace_enabled=True,
+                voice_trace_include_transcripts=True,
+            ),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        trace_store_factory=lambda settings: trace_store,
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert len(trace_store.entries) == 1
+    payload = trace_store.entries[0].to_json_dict()
+    assert payload["route_kind"] == "error"
+    assert payload["outcome"] == "Mic Unavailable"
+    assert payload["error"]["stage"] == "stt"
+    assert payload["error"]["type"] == "RuntimeError"
+
+
+def test_begin_ask_trace_records_music_focus_after_resume() -> None:
+    context = AppContext()
+    service = _FakeVoiceService("hey yoyo play music")
+    music_backend = _FakeMusicBackend("playing")
+    trace_store = _MemoryTraceStore()
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(
+                mode="cloud",
+                activation_prefixes=("hey yoyo", "yoyo"),
+                ask_fallback_enabled=True,
+                voice_trace_enabled=True,
+                voice_trace_include_transcripts=True,
+            ),
+        ),
+        command_executor=_build_executor(context=context, play_music_action=lambda: True),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=_FakeAskClient(["unused"]),
+        music_backend=music_backend,
+        trace_store_factory=lambda settings: trace_store,
+    )
+
+    coordinator.begin_ask(async_capture=False)
+
+    assert len(trace_store.entries) == 1
+    payload = trace_store.entries[0].to_json_dict()
+    assert payload["music_before"]["playback_state"] == "playing"
+    assert payload["audio_focus_before"]["music_paused_for_voice"] is False
+    assert payload["music_after"]["playback_state"] == "playing"
+    assert payload["audio_focus_after"]["music_paused_for_voice"] is False
 
 
 def test_begin_ask_pauses_music_and_resumes_after_answer_speech() -> None:
@@ -2061,6 +2271,29 @@ def test_voice_settings_resolver_includes_command_routing_config() -> None:
     assert settings.command_routing_mode == "command_first"
     assert settings.ask_fallback_enabled is False
     assert settings.fallback_min_command_confidence == 0.91
+
+
+def test_voice_settings_resolver_includes_trace_config() -> None:
+    config_manager = _FakeConfigManager([])
+    voice_cfg = config_manager.get_voice_settings()
+    voice_cfg.trace = SimpleNamespace(
+        enabled=False,
+        path="logs/voice/test-turns.jsonl",
+        max_turns=123,
+        include_transcripts=False,
+        body_preview_chars=44,
+    )
+
+    settings = VoiceSettingsResolver(
+        context=None,
+        config_manager=config_manager,
+    ).defaults()
+
+    assert settings.voice_trace_enabled is False
+    assert settings.voice_trace_path == "logs/voice/test-turns.jsonl"
+    assert settings.voice_trace_max_turns == 123
+    assert settings.voice_trace_include_transcripts is False
+    assert settings.voice_trace_body_preview_chars == 44
 
 
 def test_voice_settings_resolver_falls_back_for_empty_routing_config() -> None:

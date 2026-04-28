@@ -148,6 +148,7 @@ class RuntimeBootService:
         if not started:
             logger.error("Failed to start Rust UI Host")
             return False
+        facade.send_backlight(brightness=self.app._active_brightness)
         facade.send_snapshot()
         return True
 

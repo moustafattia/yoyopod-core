@@ -47,6 +47,18 @@ class ScreenPowerService:
         brightness = max(0, min(100, int(self.app.app_settings.display.brightness)))
         return brightness / 100.0
 
+    def _set_backlight(self, brightness: float) -> None:
+        normalized = max(0.0, min(1.0, float(brightness)))
+        display = getattr(self.app, "display", None)
+        if display is not None:
+            display.set_backlight(normalized)
+            return
+
+        rust_ui_host = getattr(self.app, "rust_ui_host", None)
+        send_backlight = getattr(rust_ui_host, "send_backlight", None)
+        if callable(send_backlight):
+            send_backlight(brightness=normalized)
+
     def configure_screen_power(self, initial_now: float | None = None) -> None:
         """Initialize screen timeout and usage tracking state."""
         now = time.monotonic() if initial_now is None else initial_now
@@ -56,8 +68,7 @@ class ScreenPowerService:
         self.app._screen_on_accumulated_seconds = 0.0
         self.app._screen_awake = True
 
-        if self.app.display is not None:
-            self.app.display.set_backlight(self.app._active_brightness)
+        self._set_backlight(self.app._active_brightness)
 
         self.update_screen_runtime_metrics(now)
 
@@ -121,8 +132,7 @@ class ScreenPowerService:
 
         self.app._screen_awake = True
         self.app._screen_on_started_at = now
-        if self.app.display is not None:
-            self.app.display.set_backlight(self.app._active_brightness)
+        self._set_backlight(self.app._active_brightness)
 
         if render_current and self.app.screen_manager is not None:
             self.app.screen_manager.refresh_current_screen()
@@ -152,8 +162,7 @@ class ScreenPowerService:
             )
         self.app._screen_on_started_at = None
         self.app._screen_awake = False
-        if self.app.display is not None:
-            self.app.display.set_backlight(0.0)
+        self._set_backlight(0.0)
         self.update_screen_runtime_metrics(now)
         logger.info("Screen slept after inactivity timeout")
 

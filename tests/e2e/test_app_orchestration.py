@@ -126,6 +126,17 @@ class FakeDisplay:
         self.set_backlight_calls.append(brightness)
 
 
+class FakeRustUiHost:
+    """Minimal Rust UI host double for screen-power ownership tests."""
+
+    def __init__(self) -> None:
+        self.backlight_calls: list[float] = []
+
+    def send_backlight(self, *, brightness: float) -> bool:
+        self.backlight_calls.append(brightness)
+        return True
+
+
 class FakeLvglBackend:
     """Minimal LVGL backend double for wake-path tests."""
 
@@ -1915,6 +1926,28 @@ def test_screen_power_service_turns_backlight_off_after_inactivity() -> None:
     assert app.context.screen.awake is False
     assert app.context.screen.on_seconds == 31
     assert app.context.screen.idle_seconds == 31
+
+
+def test_screen_power_service_forwards_backlight_to_rust_ui_host() -> None:
+    """Rust-host mode should preserve physical backlight sleep/wake commands."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+    rust_ui_host = FakeRustUiHost()
+    app.display = None
+    app.rust_ui_host = rust_ui_host
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=80, backlight_timeout_seconds=30),
+    )
+
+    app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
+    app._active_brightness = app.screen_power_service.resolve_active_brightness()
+    app.screen_power_service.configure_screen_power(initial_now=0.0)
+    app.screen_power_service.update_screen_power(31.0)
+    app.screen_power_service.wake_screen(40.0, render_current=False)
+
+    assert rust_ui_host.backlight_calls == [0.8, 0.0, 0.8]
+    assert app.context.screen.awake is True
 
 
 def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None:

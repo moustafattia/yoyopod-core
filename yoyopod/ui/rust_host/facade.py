@@ -69,6 +69,19 @@ class RustUiFacade:
             )
         )
 
+    def send_backlight(self, *, brightness: float) -> bool:
+        supervisor = getattr(self.app, "worker_supervisor", None)
+        send_command = getattr(supervisor, "send_command", None)
+        if not callable(send_command):
+            return False
+        return bool(
+            send_command(
+                self.worker_domain,
+                type="ui.set_backlight",
+                payload={"brightness": _clamp_normalized(brightness)},
+            )
+        )
+
     def handle_worker_message(self, event: WorkerMessageReceivedEvent) -> None:
         if event.domain != self.worker_domain:
             return
@@ -109,11 +122,7 @@ class RustUiFacade:
         if domain == "voice" and action == "capture_stop":
             return "call", "stop_voice_note_recording"
         if domain == "voice" and action == "capture_toggle":
-            context = getattr(self.app, "context", None)
-            interaction = getattr(getattr(context, "voice", None), "interaction", None)
-            if bool(getattr(interaction, "capture_in_flight", False)) or bool(
-                getattr(interaction, "ptt_active", False)
-            ):
+            if self._active_voice_note_recording():
                 return "call", "stop_voice_note_recording"
             return "call", "start_voice_note_recording"
         return domain, action
@@ -224,6 +233,12 @@ class RustUiFacade:
             str(getattr(active_note, "recipient_name", "") or "").strip(),
         )
 
+    def _active_voice_note_recording(self) -> bool:
+        context = getattr(self.app, "context", None)
+        active_note = getattr(getattr(context, "talk", None), "active_voice_note", None)
+        send_state = str(getattr(active_note, "send_state", "") or "").strip().lower()
+        return send_state == "recording"
+
 
 def _payload_value(data: dict[str, Any], *keys: str) -> str:
     for key in keys:
@@ -233,3 +248,7 @@ def _payload_value(data: dict[str, Any], *keys: str) -> str:
             if text:
                 return text
     return ""
+
+
+def _clamp_normalized(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))

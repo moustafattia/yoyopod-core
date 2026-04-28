@@ -81,6 +81,16 @@ def test_facade_sends_snapshot_and_tick_without_request_tracking() -> None:
     assert supervisor.sent[1] == ("ui", "ui.tick", {"renderer": "lvgl"}, None)
 
 
+def test_facade_sends_backlight_commands_to_ui_worker() -> None:
+    supervisor = _Supervisor()
+    app = SimpleNamespace(worker_supervisor=supervisor)
+    facade = RustUiFacade(app, worker_domain="ui")
+
+    assert facade.send_backlight(brightness=1.25)
+
+    assert supervisor.sent == [("ui", "ui.set_backlight", {"brightness": 1.0}, None)]
+
+
 def test_facade_dispatches_intents_to_python_services() -> None:
     services = _Services()
     app = SimpleNamespace(services=services)
@@ -147,6 +157,7 @@ def test_facade_maps_voice_capture_toggle_to_current_runtime_state() -> None:
     active_voice_note = SimpleNamespace(
         recipient_address="sip:mama@example.com",
         recipient_name="Mama",
+        send_state="idle",
     )
     app = SimpleNamespace(
         services=services,
@@ -166,7 +177,7 @@ def test_facade_maps_voice_capture_toggle_to_current_runtime_state() -> None:
             payload={"domain": "voice", "action": "capture_toggle", "payload": {}},
         )
     )
-    interaction.capture_in_flight = True
+    active_voice_note.send_state = "recording"
     facade.handle_worker_message(
         WorkerMessageReceivedEvent(
             domain="ui",

@@ -8,7 +8,6 @@ from types import ModuleType, SimpleNamespace
 import yoyopod.core.bootstrap as boot_module
 from yoyopod.core.bootstrap import components_boot as components_boot_module
 from yoyopod.core import AppContext
-from yoyopod.core.audio_volume import OutputVolumeController
 from yoyopod.core.bootstrap.components_boot import ComponentsBoot
 from yoyopod.core.bootstrap import RuntimeBootService
 from yoyopod.core.bootstrap.screens_boot import ScreensBoot
@@ -680,6 +679,76 @@ def test_cloud_voice_settings_provider_includes_worker_ask_settings(monkeypatch)
     assert settings.cloud_worker_ask_instructions == ASK_INSTRUCTIONS
 
 
+def test_cloud_voice_settings_provider_includes_trace_settings(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    _install_dummy_screen_modules(monkeypatch)
+
+    class _CapturingVoiceRuntime:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.screens_boot.VoiceRuntimeCoordinator",
+        _CapturingVoiceRuntime,
+    )
+    app = _build_cloud_screen_app(stt_backend="cloud-worker", tts_backend="cloud-worker")
+    voice_cfg = _cloud_voice_config(stt_backend="cloud-worker", tts_backend="cloud-worker")
+    voice_cfg.trace = SimpleNamespace(
+        enabled=False,
+        path="logs/voice/custom-turns.jsonl",
+        max_turns=12,
+        include_transcripts=False,
+        body_preview_chars=24,
+    )
+    app.config_manager = SimpleNamespace(get_voice_settings=lambda: voice_cfg)
+
+    assert ScreensBoot(app, logger=_quiet_logger()).setup_screens() is True
+
+    resolver = captured["settings_resolver"]
+    settings = resolver.current()
+
+    assert settings.voice_trace_enabled is False
+    assert settings.voice_trace_path == "logs/voice/custom-turns.jsonl"
+    assert settings.voice_trace_max_turns == 12
+    assert settings.voice_trace_include_transcripts is False
+    assert settings.voice_trace_body_preview_chars == 24
+
+
+def test_cloud_voice_settings_provider_includes_command_routing_settings(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    _install_dummy_screen_modules(monkeypatch)
+
+    class _CapturingVoiceRuntime:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.screens_boot.VoiceRuntimeCoordinator",
+        _CapturingVoiceRuntime,
+    )
+    app = _build_cloud_screen_app(stt_backend="cloud-worker", tts_backend="cloud-worker")
+    voice_cfg = _cloud_voice_config(stt_backend="cloud-worker", tts_backend="cloud-worker")
+    voice_cfg.assistant.activation_prefixes = ["yo pod", " hey pod "]
+    voice_cfg.assistant.command_dictionary_path = "config/voice/custom-commands.yaml"
+    voice_cfg.assistant.command_routing = SimpleNamespace(
+        mode="command_only",
+        ask_fallback_enabled=False,
+        fallback_min_command_confidence=0.91,
+    )
+    app.config_manager = SimpleNamespace(get_voice_settings=lambda: voice_cfg)
+
+    assert ScreensBoot(app, logger=_quiet_logger()).setup_screens() is True
+
+    resolver = captured["settings_resolver"]
+    settings = resolver.current()
+
+    assert settings.activation_prefixes == ("yo pod", "hey pod")
+    assert settings.command_dictionary_path == "config/voice/custom-commands.yaml"
+    assert settings.command_routing_mode == "command_only"
+    assert settings.ask_fallback_enabled is False
+    assert settings.fallback_min_command_confidence == 0.91
+
+
 def test_boot_voice_runtime_uses_ask_screen_summary_provider(monkeypatch) -> None:
     captured: dict[str, object] = {}
     _install_dummy_screen_modules(monkeypatch)
@@ -1009,6 +1078,51 @@ def test_setup_event_subscriptions_keeps_legacy_runtime_helper_flow() -> None:
     service.setup_event_subscriptions()
 
     assert calls == ["ensure"]
+
+
+def test_setup_rust_ui_host_sends_initial_backlight(monkeypatch) -> None:
+    """Rust UI host boot should apply configured brightness after the worker starts."""
+
+    calls: list[tuple[str, object]] = []
+
+    class _FakeRustUiFacade:
+        def __init__(self, app, *, worker_domain: str) -> None:
+            self.app = app
+            self.worker_domain = worker_domain
+
+        def start_worker(self, worker_path: str, *, hardware: str) -> bool:
+            calls.append(("start", (worker_path, hardware)))
+            return True
+
+        def send_snapshot(self) -> bool:
+            calls.append(("snapshot", None))
+            return True
+
+        def send_backlight(self, *, brightness: float) -> bool:
+            calls.append(("backlight", brightness))
+            return True
+
+        def handle_worker_message(self, _event) -> None:
+            return None
+
+    monkeypatch.setattr("yoyopod.ui.rust_host.RustUiFacade", _FakeRustUiFacade)
+    app = SimpleNamespace(
+        app_settings=SimpleNamespace(
+            display=SimpleNamespace(
+                rust_ui_worker_path="src/crates/ui-host/build/yoyopod-ui-host"
+            )
+        ),
+        bus=SimpleNamespace(subscribe=lambda *_args: None),
+        _active_brightness=0.8,
+    )
+
+    assert RuntimeBootService(app).setup_rust_ui_host()
+
+    assert calls == [
+        ("start", ("src/crates/ui-host/build/yoyopod-ui-host", "whisplay")),
+        ("backlight", 0.8),
+        ("snapshot", None),
+    ]
 
 
 def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -> None:

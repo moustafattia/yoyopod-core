@@ -48,6 +48,7 @@ from yoyopod.integrations.call.models import (
 from yoyopod.integrations.call.sidecar_protocol import (
     Accept,
     CallStateChanged,
+    CancelVoiceNoteRecording,
     Configure,
     Dial,
     Error,
@@ -65,8 +66,11 @@ from yoyopod.integrations.call.sidecar_protocol import (
     RegistrationStateChanged,
     Reject,
     SendTextMessage,
+    SendVoiceNote,
     SetMute,
     SetVolume,
+    StartVoiceNoteRecording,
+    StopVoiceNoteRecording,
     Unregister,
     send_message,
 )
@@ -157,6 +161,22 @@ class SidecarBackendAdapter:
 
         if isinstance(command, SendTextMessage):
             self._handle_send_text_message(command)
+            return
+
+        if isinstance(command, StartVoiceNoteRecording):
+            self._handle_start_voice_note_recording(command)
+            return
+
+        if isinstance(command, StopVoiceNoteRecording):
+            self._handle_stop_voice_note_recording(command)
+            return
+
+        if isinstance(command, CancelVoiceNoteRecording):
+            self._handle_cancel_voice_note_recording(command)
+            return
+
+        if isinstance(command, SendVoiceNote):
+            self._handle_send_voice_note(command)
             return
 
         self._safe_send(
@@ -462,6 +482,114 @@ class SidecarBackendAdapter:
         with self._message_id_lock:
             self._outbound_message_id_map[backend_id] = command.client_id
 
+    def _handle_start_voice_note_recording(self, command: StartVoiceNoteRecording) -> None:
+        backend = self._require_backend(command.cmd_id)
+        if backend is None:
+            return
+        try:
+            success = backend.start_voice_note_recording(command.file_path)
+        except Exception as exc:
+            self._safe_send(
+                Error(
+                    code="start_voice_note_failed",
+                    message=f"backend.start_voice_note_recording raised: {exc}",
+                    cmd_id=command.cmd_id,
+                )
+            )
+            return
+        if not success:
+            self._safe_send(
+                Error(
+                    code="start_voice_note_failed",
+                    message="backend.start_voice_note_recording returned False",
+                    cmd_id=command.cmd_id,
+                )
+            )
+
+    def _handle_stop_voice_note_recording(self, command: StopVoiceNoteRecording) -> None:
+        backend = self._require_backend(command.cmd_id)
+        if backend is None:
+            return
+        try:
+            # Main computes an optimistic monotonic-elapsed duration on its
+            # side; a real backend duration is not forwarded here. ``None`` is
+            # still a stop failure because it means the sidecar could not
+            # finalize a recording that main is about to show for review.
+            duration_ms = backend.stop_voice_note_recording()
+        except Exception as exc:
+            self._safe_send(
+                Error(
+                    code="stop_voice_note_failed",
+                    message=f"backend.stop_voice_note_recording raised: {exc}",
+                    cmd_id=command.cmd_id,
+                )
+            )
+            return
+        if duration_ms is None:
+            self._safe_send(
+                Error(
+                    code="stop_voice_note_failed",
+                    message="backend.stop_voice_note_recording returned no duration",
+                    cmd_id=command.cmd_id,
+                )
+            )
+
+    def _handle_cancel_voice_note_recording(self, command: CancelVoiceNoteRecording) -> None:
+        backend = self._require_backend(command.cmd_id)
+        if backend is None:
+            return
+        try:
+            success = backend.cancel_voice_note_recording()
+        except Exception as exc:
+            self._safe_send(
+                Error(
+                    code="cancel_voice_note_failed",
+                    message=f"backend.cancel_voice_note_recording raised: {exc}",
+                    cmd_id=command.cmd_id,
+                )
+            )
+            return
+        if not success:
+            self._safe_send(
+                Error(
+                    code="cancel_voice_note_failed",
+                    message="backend.cancel_voice_note_recording returned False",
+                    cmd_id=command.cmd_id,
+                )
+            )
+
+    def _handle_send_voice_note(self, command: SendVoiceNote) -> None:
+        backend = self._require_backend(command.cmd_id)
+        if backend is None:
+            return
+        try:
+            backend_id = backend.send_voice_note(
+                command.uri,
+                file_path=command.file_path,
+                duration_ms=command.duration_ms,
+                mime_type=command.mime_type,
+            )
+        except Exception as exc:
+            self._safe_send(
+                Error(
+                    code="send_voice_note_failed",
+                    message=f"backend.send_voice_note raised: {exc}",
+                    cmd_id=command.cmd_id,
+                )
+            )
+            return
+        if not backend_id:
+            self._safe_send(
+                Error(
+                    code="send_voice_note_failed",
+                    message="backend.send_voice_note returned no id",
+                    cmd_id=command.cmd_id,
+                )
+            )
+            return
+        with self._message_id_lock:
+            self._outbound_message_id_map[backend_id] = command.client_id
+
     # ------------------------------------------------------------------
     # Backend event translation
     # ------------------------------------------------------------------
@@ -734,9 +862,7 @@ class SidecarBackendAdapter:
             )
         )
 
-    def _forward_message_delivery_changed(
-        self, event: BackendMessageDeliveryChanged
-    ) -> None:
+    def _forward_message_delivery_changed(self, event: BackendMessageDeliveryChanged) -> None:
         terminal = event.delivery_state.value in {"delivered", "failed"}
         message_id = self._translate_message_id(event.message_id, terminal=terminal)
         self._safe_send(
@@ -748,9 +874,7 @@ class SidecarBackendAdapter:
             )
         )
 
-    def _forward_message_download_completed(
-        self, event: BackendMessageDownloadCompleted
-    ) -> None:
+    def _forward_message_download_completed(self, event: BackendMessageDownloadCompleted) -> None:
         message_id = self._translate_message_id(event.message_id)
         self._safe_send(
             MessageDownloadCompleted(
@@ -762,9 +886,7 @@ class SidecarBackendAdapter:
 
     def _forward_message_failed(self, event: BackendMessageFailed) -> None:
         message_id = self._translate_message_id(event.message_id, terminal=True)
-        self._safe_send(
-            MessageFailed(message_id=message_id, reason=event.reason)
-        )
+        self._safe_send(MessageFailed(message_id=message_id, reason=event.reason))
 
     # ------------------------------------------------------------------
     # Test seams
