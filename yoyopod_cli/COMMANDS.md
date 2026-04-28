@@ -52,7 +52,8 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod pi power rtc status` | Show current RTC and alarm state. |
 | `yoyopod pi power rtc sync-from` | Sync PiSugar RTC time to the Raspberry Pi system clock. |
 | `yoyopod pi power rtc sync-to` | Sync Raspberry Pi system time to the PiSugar RTC. |
-| `yoyopod pi rust-ui-poc` | Run the Rust UI PoC against Whisplay hardware. |
+| `yoyopod pi rust-ui-host` | Run the Rust UI host against Whisplay hardware. |
+| `yoyopod pi rust-ui-poc` | Run the Rust UI host against Whisplay hardware. |
 | `yoyopod pi validate cloud-voice` | Validate cloud STT/TTS and local voice command routing on the target. |
 | `yoyopod pi validate deploy` | Validate deploy-readiness for the current target checkout without launching the app. |
 | `yoyopod pi validate lvgl` | Run a deterministic LVGL navigation and idle soak pass against YoYoPod. |
@@ -72,7 +73,8 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod build ensure-native` | Build missing or stale native shims required by the app. |
 | `yoyopod build liblinphone` | Build the native Liblinphone shim for the current platform. |
 | `yoyopod build lvgl` | Build the pinned LVGL shim for the current platform. |
-| `yoyopod build rust-ui-poc` | Build the Rust UI PoC worker. |
+| `yoyopod build rust-ui-host` | Build the Rust UI host binary. |
+| `yoyopod build rust-ui-poc` | Compatibility alias for `yoyopod build rust-ui-host`. |
 | `yoyopod build simulation` | Build the LVGL native shim required by ``python yoyopod.py --simulate``. |
 | `yoyopod build voice-worker` | Build the Go cloud voice worker for the current platform. |
 

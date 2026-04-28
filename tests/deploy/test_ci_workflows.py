@@ -27,11 +27,15 @@ def test_rust_ui_ci_builds_arm64_binary_artifact() -> None:
     workflow = CI_YML.read_text(encoding="utf-8")
 
     assert "runs-on: ubuntu-24.04-arm" in workflow
-    assert "cargo test --locked --features whisplay-hardware" in workflow
-    assert "cargo build --release --features whisplay-hardware --locked" in workflow
+    assert "working-directory: src" in workflow
+    assert "cargo test --workspace --locked --features whisplay-hardware" in workflow
+    assert (
+        "cargo build --release -p yoyopod-ui-host --features whisplay-hardware --locked"
+        in workflow
+    )
     assert "uses: actions/upload-artifact@v4" in workflow
-    assert "name: yoyopod-rust-ui-poc-${{ github.sha }}" in workflow
-    assert "workers/ui/rust/build/yoyopod-rust-ui-poc" in workflow
+    assert "name: yoyopod-ui-host-${{ github.sha }}" in workflow
+    assert "src/crates/ui-host/build/yoyopod-ui-host" in workflow
 
 
 def test_rust_ui_worker_lockfile_is_committable_for_locked_ci_builds() -> None:

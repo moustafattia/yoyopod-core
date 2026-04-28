@@ -47,7 +47,7 @@ jobs:
           git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}" > changed-files.txt
           cat changed-files.txt
 
-          if grep -Eq '^(\.github/workflows/(ci|release)\.yml|\.python-version|pyproject\.toml|yoyopod\.py|config/|deploy/docker/slot-builder\.Dockerfile|deploy/scripts/(install_release|launch)\.sh|scripts/(build_release\.py|build_slot_artifact_ci\.sh)|workers/voice/go/|workers/ui/rust/|yoyopod/|yoyopod_cli/)' changed-files.txt; then
+          if grep -Eq '^(\.github/workflows/(ci|release)\.yml|\.python-version|pyproject\.toml|yoyopod\.py|config/|deploy/docker/slot-builder\.Dockerfile|deploy/scripts/(install_release|launch)\.sh|scripts/(build_release\.py|build_slot_artifact_ci\.sh)|workers/voice/go/|src/|yoyopod/|yoyopod_cli/)' changed-files.txt; then
             echo "slot_arm64=true" >> "${GITHUB_OUTPUT}"
           else
             echo "slot_arm64=false" >> "${GITHUB_OUTPUT}"
@@ -126,23 +126,23 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run Rust UI worker tests
-        working-directory: workers/ui/rust
-        run: cargo test --locked --features whisplay-hardware
+      - name: Run Rust UI host tests
+        working-directory: src
+        run: cargo test --workspace --locked --features whisplay-hardware
 
-      - name: Build Rust UI Whisplay worker
-        working-directory: workers/ui/rust
+      - name: Build Rust UI Whisplay host
+        working-directory: src
         run: |
           set -euo pipefail
-          cargo build --release --features whisplay-hardware --locked
-          mkdir -p build
-          cp target/release/yoyopod-rust-ui-poc build/yoyopod-rust-ui-poc
+          cargo build --release -p yoyopod-ui-host --features whisplay-hardware --locked
+          mkdir -p crates/ui-host/build
+          cp target/release/yoyopod-ui-host crates/ui-host/build/yoyopod-ui-host
 
-      - name: Upload Rust UI ARM64 worker
+      - name: Upload Rust UI ARM64 host
         uses: actions/upload-artifact@v4
         with:
-          name: yoyopod-rust-ui-poc-${{ github.sha }}
-          path: workers/ui/rust/build/yoyopod-rust-ui-poc
+          name: yoyopod-ui-host-${{ github.sha }}
+          path: src/crates/ui-host/build/yoyopod-ui-host
           if-no-files-found: error
 
   slot-arm64:

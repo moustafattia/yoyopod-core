@@ -1,108 +1,16 @@
-# Rust UI PoC
+# Rust UI PoC Compatibility
 
-The Rust UI PoC is the Whisplay-only hardware I/O and sidecar UI port path.
-Python still owns the app/runtime services for now; Rust owns the sidecar UI
-state machine, screen focus, one-button transitions, and Whisplay rendering when
-the sidecar is enabled or launched directly.
+The former Rust UI PoC is now the Rust UI Host. The old `rust-ui-poc` commands
+remain as compatibility aliases, but new production source, CI artifacts, and
+hardware validation should use the host names.
 
-## Build
+Current contract:
 
-```bash
-yoyopod build rust-ui-poc
-```
+- Docs: `docs/RUST_UI_HOST.md`
+- CI artifact: `yoyopod-ui-host-<sha>`
+- Pi checkout binary: `src/crates/ui-host/build/yoyopod-ui-host`
+- Build command: `yoyopod build rust-ui-host`
+- Pi smoke command: `yoyopod pi rust-ui-host`
 
-For host-only protocol tests:
-
-```bash
-yoyopod build rust-ui-poc --no-hardware-feature
-```
-
-CI builds the Whisplay worker on a native Linux ARM64 runner and uploads it as
-the `yoyopod-rust-ui-poc-${{ github.sha }}` artifact.
-
-For Raspberry Pi Zero 2W hardware validation, the deploy path is always:
-
-1. Commit and push the branch.
-2. Wait for the GitHub Actions `ui-rust` job to pass for the exact commit.
-3. Download the matching `yoyopod-rust-ui-poc-<sha>` artifact.
-4. Copy it to `workers/ui/rust/build/yoyopod-rust-ui-poc` on the Pi checkout.
-
-Do not run `cargo build` or `yoyopod build rust-ui-poc` on the Pi Zero 2W unless
-the user explicitly overrides this rule. Local builds are for developer
-workstations or faster ARM64 boards only.
-
-## Required Whisplay Environment
-
-The first hardware backend reads explicit GPIO/SPI settings:
-
-- `YOYOPOD_WHISPLAY_SPI_BUS`
-- `YOYOPOD_WHISPLAY_SPI_CS`
-- `YOYOPOD_WHISPLAY_SPI_HZ`
-- `YOYOPOD_WHISPLAY_DC_GPIO`
-- `YOYOPOD_WHISPLAY_RESET_GPIO`
-- `YOYOPOD_WHISPLAY_BACKLIGHT_GPIO`
-- `YOYOPOD_WHISPLAY_BACKLIGHT_ACTIVE_LOW`
-- `YOYOPOD_WHISPLAY_BUTTON_GPIO`
-- `YOYOPOD_WHISPLAY_BUTTON_ACTIVE_LOW`
-
-The Whisplay defaults match the vendor board mapping:
-
-- SPI bus `0`, chip select `0`, speed `100000000`
-- DC GPIO `27`
-- reset GPIO `4`
-- backlight GPIO `22`, active low
-- button GPIO `17`, active high
-
-## Run On Pi
-
-First copy the CI artifact into the dev checkout and make it executable:
-
-```bash
-mkdir -p workers/ui/rust/build
-chmod +x workers/ui/rust/build/yoyopod-rust-ui-poc
-```
-
-```bash
-yoyopod pi rust-ui-poc --worker workers/ui/rust/build/yoyopod-rust-ui-poc --frames 10
-```
-
-Expected result:
-
-- the Whisplay display shows changing test frames
-- the command prints a `ui.ready` payload
-- the command prints a `ui.health` payload
-
-For one-button validation, run both checks:
-
-- no-touch `ui.tick` loop: should produce `button_events=0`
-- physical button click while ticking: should emit `ui.input` and move focus
-
-## Runtime Sidecar Protocol
-
-The Rust worker accepts these UI-owner commands over the same line-delimited
-JSON envelope used by the PoC:
-
-- `ui.runtime_snapshot` -- Python sends the latest app/runtime snapshot. Rust
-  applies call/loading/error preemption, owns the active screen, renders the
-  screen, and emits `ui.screen_changed` when the Rust route changes.
-- `ui.input_action` -- Python or tests inject one semantic action
-  (`advance`, `select`, `back`, `ptt_press`, `ptt_release`). Rust applies it to
-  the active screen and emits `ui.intent` when Python runtime work is needed.
-- `ui.tick` -- Rust polls the Whisplay button, runs the one-button gesture
-  machine, applies generated actions, emits intents, and renders dirty screens.
-
-Rust-owned screens in this slice are Hub, Listen, Playlists, Now Playing, Ask,
-Talk/Calls, Incoming Call, Outgoing Call, In Call, Power/Status, Loading, and
-Error. Runtime intents are narrow domain requests such as `music.shuffle_all`,
-`music.load_playlist`, `music.play_pause`, `call.answer`, `call.reject`,
-`call.hangup`, and `voice.capture_start`.
-
-The Python bridge lives in `yoyopod/ui/rust_sidecar/`. It serializes
-`RustUiRuntimeSnapshot` from the current app context and dispatches `ui.intent`
-events back into registered Python services. Snapshot and tick sends use the
-untracked worker command path so UI updates do not create request timeout state.
-
-Config fields are available but opt-in:
-
-- `display.rust_ui_sidecar_enabled` / `YOYOPOD_RUST_UI_SIDECAR_ENABLED`
-- `display.rust_ui_worker` / `YOYOPOD_RUST_UI_WORKER`
+Do not build Rust on the Pi Zero 2W. Commit and push first, wait for the CI
+`ui-rust` artifact for the exact commit, then copy that artifact to the target.

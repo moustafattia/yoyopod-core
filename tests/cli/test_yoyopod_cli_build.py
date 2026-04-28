@@ -59,7 +59,15 @@ def test_rust_ui_poc_build_help() -> None:
     result = runner.invoke(app, ["rust-ui-poc", "--help"])
 
     assert result.exit_code == 0
-    assert "rust ui poc" in result.output.lower()
+    assert "rust-ui-host" in result.output.lower()
+
+
+def test_rust_ui_host_build_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["rust-ui-host", "--help"])
+
+    assert result.exit_code == 0
+    assert "rust ui host" in result.output.lower()
 
 
 def test_voice_worker_build_command_invokes_builder(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -215,11 +223,12 @@ def test_build_rust_ui_poc_invokes_cargo(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    worker_dir = tmp_path / "workers" / "ui" / "rust"
-    worker_dir.mkdir(parents=True)
+    workspace_dir = tmp_path / "src"
+    crate_dir = workspace_dir / "crates" / "ui-host"
+    crate_dir.mkdir(parents=True)
     calls: list[tuple[list[str], Path | None, dict[str, str] | None]] = []
     copies: list[tuple[Path, Path]] = []
-    monkeypatch.setattr(build_cli, "_rust_ui_poc_dir", lambda: worker_dir)
+    monkeypatch.setattr(build_cli, "_rust_ui_host_workspace_dir", lambda: workspace_dir)
     monkeypatch.setattr(
         build_cli,
         "_run",
@@ -233,10 +242,67 @@ def test_build_rust_ui_poc_invokes_cargo(
 
     output = build_cli.build_rust_ui_poc()
 
-    assert output.name.startswith("yoyopod-rust-ui-poc")
-    assert calls[0][0][:4] == ["cargo", "build", "--release", "--features"]
-    assert calls[0][1] == worker_dir
-    assert copies == [(worker_dir / "target" / "release" / output.name, output)]
+    assert output.name.startswith("yoyopod-ui-host")
+    assert calls[0][0] == [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "yoyopod-ui-host",
+        "--locked",
+        "--features",
+        "whisplay-hardware",
+    ]
+    assert calls[0][1] == workspace_dir
+    assert copies == [(workspace_dir / "target" / "release" / output.name, output)]
+
+
+def test_build_rust_ui_host_invokes_cargo_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    workspace_dir = tmp_path / "src"
+    crate_dir = workspace_dir / "crates" / "ui-host"
+    crate_dir.mkdir(parents=True)
+    calls: list[tuple[list[str], Path | None, dict[str, str] | None]] = []
+    copies: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(build_cli, "_rust_ui_host_workspace_dir", lambda: workspace_dir)
+    monkeypatch.setattr(
+        build_cli,
+        "_run",
+        lambda command, cwd=None, env=None: calls.append((command, cwd, env)),
+    )
+    monkeypatch.setattr(
+        build_cli.shutil,
+        "copy2",
+        lambda source, target: copies.append((Path(source), Path(target))),
+    )
+
+    output = build_cli.build_rust_ui_host()
+
+    assert output.name.startswith("yoyopod-ui-host")
+    assert calls == [
+        (
+            [
+                "cargo",
+                "build",
+                "--release",
+                "-p",
+                "yoyopod-ui-host",
+                "--locked",
+                "--features",
+                "whisplay-hardware",
+            ],
+            workspace_dir,
+            None,
+        )
+    ]
+    assert copies == [
+        (
+            workspace_dir / "target" / "release" / output.name,
+            crate_dir / "build" / output.name,
+        )
+    ]
 
 
 def test_voice_worker_build_env_preserves_explicit_go_parallelism(

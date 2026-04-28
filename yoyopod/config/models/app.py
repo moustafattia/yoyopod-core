@@ -68,7 +68,7 @@ class AppDisplayConfig:
         env="YOYOPOD_RUST_UI_SIDECAR_ENABLED",
     )
     rust_ui_worker: str = config_value(
-        default="workers/ui/rust/build/yoyopod-rust-ui-poc",
+        default="src/crates/ui-host/build/yoyopod-ui-host",
         env="YOYOPOD_RUST_UI_WORKER",
     )
     brightness: int = 80

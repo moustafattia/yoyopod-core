@@ -201,13 +201,25 @@ def _voice_worker_binary_path() -> Path:
     return _voice_worker_dir() / "build" / f"yoyopod-voice-worker{suffix}"
 
 
+def _rust_ui_host_workspace_dir() -> Path:
+    return _REPO_ROOT / "src"
+
+
+def _rust_ui_host_crate_dir() -> Path:
+    return _rust_ui_host_workspace_dir() / "crates" / "ui-host"
+
+
+def _rust_ui_host_binary_path() -> Path:
+    suffix = ".exe" if os.name == "nt" else ""
+    return _rust_ui_host_crate_dir() / "build" / f"yoyopod-ui-host{suffix}"
+
+
 def _rust_ui_poc_dir() -> Path:
-    return _REPO_ROOT / "workers" / "ui" / "rust"
+    return _rust_ui_host_crate_dir()
 
 
 def _rust_ui_poc_binary_path() -> Path:
-    suffix = ".exe" if os.name == "nt" else ""
-    return _rust_ui_poc_dir() / "build" / f"yoyopod-rust-ui-poc{suffix}"
+    return _rust_ui_host_binary_path()
 
 
 def _voice_worker_sources() -> tuple[Path, ...]:
@@ -233,22 +245,35 @@ def build_voice_worker() -> Path:
     return output
 
 
-def build_rust_ui_poc(*, hardware_feature: bool = True) -> Path:
-    """Build the Rust Whisplay UI PoC sidecar and return the copied binary path."""
+def build_rust_ui_host(*, hardware_feature: bool = True) -> Path:
+    """Build the Rust Whisplay UI host and return the copied binary path."""
 
-    worker_dir = _rust_ui_poc_dir()
-    output = _rust_ui_poc_binary_path()
+    workspace_dir = _rust_ui_host_workspace_dir()
+    output = _rust_ui_host_binary_path()
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    command = ["cargo", "build", "--release"]
+    command = [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "yoyopod-ui-host",
+        "--locked",
+    ]
     if hardware_feature:
         command.extend(["--features", "whisplay-hardware"])
-    _run(command, cwd=worker_dir)
+    _run(command, cwd=workspace_dir)
 
     suffix = ".exe" if os.name == "nt" else ""
-    built_binary = worker_dir / "target" / "release" / f"yoyopod-rust-ui-poc{suffix}"
+    built_binary = workspace_dir / "target" / "release" / f"yoyopod-ui-host{suffix}"
     shutil.copy2(built_binary, output)
     return output
+
+
+def build_rust_ui_poc(*, hardware_feature: bool = True) -> Path:
+    """Compatibility wrapper for the renamed Rust UI host build."""
+
+    return build_rust_ui_host(hardware_feature=hardware_feature)
 
 
 def _default_lvgl_source_dir() -> Path:
@@ -379,14 +404,30 @@ def build_rust_ui_poc_command(
         bool,
         typer.Option(
             "--no-hardware-feature",
-            help="Build without the Linux Whisplay hardware feature for host-only protocol tests.",
+            help="Build without the whisplay-hardware Cargo feature.",
         ),
     ] = False,
 ) -> None:
-    """Build the Rust UI PoC worker."""
+    """Compatibility alias for `yoyopod build rust-ui-host`."""
 
-    output = build_rust_ui_poc(hardware_feature=not no_hardware_feature)
-    typer.echo(f"Built Rust UI PoC worker: {output}")
+    output = build_rust_ui_host(hardware_feature=not no_hardware_feature)
+    typer.echo(f"Built Rust UI host: {output}")
+
+
+@app.command("rust-ui-host")
+def build_rust_ui_host_command(
+    no_hardware_feature: Annotated[
+        bool,
+        typer.Option(
+            "--no-hardware-feature",
+            help="Build without the whisplay-hardware Cargo feature.",
+        ),
+    ] = False,
+) -> None:
+    """Build the Rust UI host binary."""
+
+    output = build_rust_ui_host(hardware_feature=not no_hardware_feature)
+    typer.echo(f"Built Rust UI host: {output}")
 
 
 @app.command("lvgl")

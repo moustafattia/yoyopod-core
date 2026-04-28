@@ -21,7 +21,8 @@ from yoyopod_cli.remote_transport import (
 
 app = build_remote_app("validate_app", "Validate commit + health on the Pi.")
 
-_RUST_UI_POC_WORKER = "workers/ui/rust/build/yoyopod-rust-ui-poc"
+_RUST_UI_HOST_WORKER = "src/crates/ui-host/build/yoyopod-ui-host"
+_RUST_UI_POC_WORKER = _RUST_UI_HOST_WORKER
 
 
 def _build_preflight_steps() -> list[tuple[str, list[str]]]:
@@ -117,6 +118,7 @@ def _build_validate(
     with_cloud_voice: bool = False,
     with_lvgl_soak: bool,
     with_navigation: bool,
+    with_rust_ui_host: bool = False,
     with_rust_ui_poc: bool = False,
 ) -> str:
     """Shell that fast-forwards the branch on the Pi, then runs staged validation.
@@ -158,21 +160,21 @@ def _build_validate(
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "lvgl"))
     if with_navigation:
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "navigation"))
-    if with_rust_ui_poc:
-        worker = shell_quote(_RUST_UI_POC_WORKER)
+    if with_rust_ui_host or with_rust_ui_poc:
+        worker = shell_quote(_RUST_UI_HOST_WORKER)
         message = shell_quote(
             "Missing executable CI-built Rust UI artifact at "
-            f"{_RUST_UI_POC_WORKER}. Download the GitHub Actions artifact "
-            "for this exact commit before --with-rust-ui-poc; do not build Rust on the Pi."
+            f"{_RUST_UI_HOST_WORKER}. Download the GitHub Actions artifact "
+            "for this exact commit before Rust UI host validation; do not build Rust on the Pi."
         )
         steps.append(f"test -x {worker} || (echo {message} >&2 && exit 1)")
         steps.append(
             checkout_module_command(
                 venv_relpath,
                 "pi",
-                "rust-ui-poc",
+                "rust-ui-host",
                 "--worker",
-                _RUST_UI_POC_WORKER,
+                _RUST_UI_HOST_WORKER,
             )
         )
     return " && ".join(steps)
@@ -207,10 +209,15 @@ def validate(
     ),
     with_lvgl_soak: bool = typer.Option(False, "--with-lvgl-soak"),
     with_navigation: bool = typer.Option(False, "--with-navigation"),
+    with_rust_ui_host: bool = typer.Option(
+        False,
+        "--with-rust-ui-host",
+        help="Run the Rust UI host using a preinstalled CI artifact.",
+    ),
     with_rust_ui_poc: bool = typer.Option(
         False,
         "--with-rust-ui-poc",
-        help="Run the Whisplay-only Rust UI hardware I/O PoC using a preinstalled CI artifact.",
+        help="Compatibility alias for --with-rust-ui-host.",
     ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
@@ -231,6 +238,7 @@ def validate(
         with_cloud_voice=with_cloud_voice,
         with_lvgl_soak=with_lvgl_soak,
         with_navigation=with_navigation,
+        with_rust_ui_host=with_rust_ui_host,
         with_rust_ui_poc=with_rust_ui_poc,
     )
     raise typer.Exit(run_remote(conn, cmd, tty=True))
