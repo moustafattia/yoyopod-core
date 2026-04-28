@@ -3,6 +3,9 @@ use clap::Parser;
 use serde_json::json;
 use std::io::{self, BufRead, Write};
 
+mod config;
+mod events;
+mod host;
 mod protocol;
 
 use protocol::WorkerEnvelope;
