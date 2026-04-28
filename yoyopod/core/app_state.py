@@ -205,6 +205,8 @@ class AppStateRuntime:
         resolved_state = AppRuntimeState.ui_state_for_screen_name(screen_name)
         if resolved_state is None:
             return None
+        if resolved_state not in _UI_STATES:
+            return None
 
         return self.set_ui_state(resolved_state, trigger=f"screen:{screen_name}")
 

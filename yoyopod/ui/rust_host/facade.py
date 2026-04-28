@@ -7,7 +7,7 @@ from typing import Any
 
 from loguru import logger
 
-from yoyopod.core.events import WorkerMessageReceivedEvent
+from yoyopod.core.events import ScreenChangedEvent, WorkerMessageReceivedEvent
 from yoyopod.core.workers import WorkerProcessConfig
 from yoyopod.ui.input.hal import InputAction
 from yoyopod.ui.rust_host.snapshot import RustUiRuntimeSnapshot
@@ -92,7 +92,26 @@ class RustUiFacade:
         elif event.type == "ui.input":
             self._handle_input_event(event.payload)
         elif event.type == "ui.screen_changed":
-            logger.debug("Rust UI screen changed: {}", event.payload.get("screen"))
+            self._handle_screen_changed_event(event.payload)
+
+    def _handle_screen_changed_event(self, payload: dict[str, Any]) -> None:
+        data = payload if isinstance(payload, dict) else {}
+        screen_name = str(data.get("screen", "") or "").strip() or None
+        logger.debug("Rust UI screen changed: {}", screen_name)
+
+        bus = getattr(self.app, "bus", None)
+        publish = getattr(bus, "publish", None)
+        if not callable(publish):
+            return
+
+        event = ScreenChangedEvent(screen_name=screen_name)
+        scheduler = getattr(self.app, "scheduler", None)
+        run_on_main = getattr(scheduler, "run_on_main", None)
+        if callable(run_on_main):
+            run_on_main(lambda: publish(event))
+            return
+
+        publish(event)
 
     def _handle_input_event(self, payload: dict[str, Any]) -> None:
         data = payload if isinstance(payload, dict) else {}
