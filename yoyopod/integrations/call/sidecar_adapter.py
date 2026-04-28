@@ -511,17 +511,25 @@ class SidecarBackendAdapter:
         if backend is None:
             return
         try:
-            # Return value (duration) is intentionally discarded — main computes
-            # an optimistic monotonic-elapsed duration on its side and the
-            # corrected value travels back via the eventual MessageReceived
-            # event for the voice-note kind. Discarding here keeps the
-            # protocol command/event symmetric with the rest of the surface.
-            backend.stop_voice_note_recording()
+            # Main computes an optimistic monotonic-elapsed duration on its
+            # side; a real backend duration is not forwarded here. ``None`` is
+            # still a stop failure because it means the sidecar could not
+            # finalize a recording that main is about to show for review.
+            duration_ms = backend.stop_voice_note_recording()
         except Exception as exc:
             self._safe_send(
                 Error(
                     code="stop_voice_note_failed",
                     message=f"backend.stop_voice_note_recording raised: {exc}",
+                    cmd_id=command.cmd_id,
+                )
+            )
+            return
+        if duration_ms is None:
+            self._safe_send(
+                Error(
+                    code="stop_voice_note_failed",
+                    message="backend.stop_voice_note_recording returned no duration",
                     cmd_id=command.cmd_id,
                 )
             )
@@ -854,9 +862,7 @@ class SidecarBackendAdapter:
             )
         )
 
-    def _forward_message_delivery_changed(
-        self, event: BackendMessageDeliveryChanged
-    ) -> None:
+    def _forward_message_delivery_changed(self, event: BackendMessageDeliveryChanged) -> None:
         terminal = event.delivery_state.value in {"delivered", "failed"}
         message_id = self._translate_message_id(event.message_id, terminal=terminal)
         self._safe_send(
@@ -868,9 +874,7 @@ class SidecarBackendAdapter:
             )
         )
 
-    def _forward_message_download_completed(
-        self, event: BackendMessageDownloadCompleted
-    ) -> None:
+    def _forward_message_download_completed(self, event: BackendMessageDownloadCompleted) -> None:
         message_id = self._translate_message_id(event.message_id)
         self._safe_send(
             MessageDownloadCompleted(
@@ -882,9 +886,7 @@ class SidecarBackendAdapter:
 
     def _forward_message_failed(self, event: BackendMessageFailed) -> None:
         message_id = self._translate_message_id(event.message_id, terminal=True)
-        self._safe_send(
-            MessageFailed(message_id=message_id, reason=event.reason)
-        )
+        self._safe_send(MessageFailed(message_id=message_id, reason=event.reason))
 
     # ------------------------------------------------------------------
     # Test seams

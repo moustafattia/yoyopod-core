@@ -88,7 +88,6 @@ from yoyopod.integrations.call.sidecar_protocol import (
 )
 from yoyopod.integrations.call.sidecar_supervisor import SidecarSupervisor
 
-
 # States that mean the call has fully ended and the tracked id should be cleared.
 _TERMINAL_CALL_STATES = frozenset(
     {
@@ -132,6 +131,15 @@ _CALL_FATAL_ERROR_CODES = frozenset(
 # to ``BackendRegistrationStateChanged(FAILED)`` so the manager can
 # surface a "registration failed" status to the UI.
 _REGISTRATION_FATAL_ERROR_CODES = frozenset({"register_failed"})
+
+
+_VOICE_NOTE_RECORDING_ERROR_CODES = frozenset(
+    {
+        "start_voice_note_failed",
+        "stop_voice_note_failed",
+        "cancel_voice_note_failed",
+    }
+)
 
 
 class SupervisorBackedBackend:
@@ -329,9 +337,7 @@ class SupervisorBackedBackend:
 
         client_id = f"client-msg-{uuid.uuid4()}"
         try:
-            self._supervisor.send(
-                SendTextMessage(uri=sip_address, text=text, client_id=client_id)
-            )
+            self._supervisor.send(SendTextMessage(uri=sip_address, text=text, client_id=client_id))
         except Exception as exc:
             logger.error("VoIP sidecar refused SendTextMessage: {}", exc)
             return None
@@ -506,6 +512,12 @@ class SupervisorBackedBackend:
             if event.code in _REGISTRATION_FATAL_ERROR_CODES:
                 self._dispatch(BackendRegistrationStateChanged(state=RegistrationState.FAILED))
                 return
+            if event.code in _VOICE_NOTE_RECORDING_ERROR_CODES:
+                self._reset_recording_state()
+                self._dispatch(
+                    BackendMessageFailed(message_id="", reason=event.message or event.code)
+                )
+                return
             return
 
         if isinstance(event, ProtocolRegistrationStateChanged):
@@ -574,11 +586,7 @@ class SupervisorBackedBackend:
             return
 
         if isinstance(event, ProtocolMessageFailed):
-            self._dispatch(
-                BackendMessageFailed(
-                    message_id=event.message_id, reason=event.reason
-                )
-            )
+            self._dispatch(BackendMessageFailed(message_id=event.message_id, reason=event.reason))
             return
 
         # Anything else (DTMFReceived, etc.) — log and drop. Future events get

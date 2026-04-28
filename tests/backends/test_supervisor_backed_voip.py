@@ -16,7 +16,6 @@ Two layers of coverage:
 from __future__ import annotations
 
 import dataclasses
-import threading
 import time
 from collections.abc import Callable
 from multiprocessing.connection import Connection
@@ -31,6 +30,7 @@ from yoyopod.integrations.call.models import (
     CallState,
     CallStateChanged as BackendCallStateChanged,
     IncomingCallDetected,
+    MessageFailed as BackendMessageFailed,
     RegistrationState,
     RegistrationStateChanged as BackendRegistrationStateChanged,
     VoIPConfig,
@@ -50,7 +50,6 @@ from yoyopod.integrations.call.sidecar_protocol import (
     MediaStateChanged,
     Pong,
     Ready,
-    Register,
     RegistrationStateChanged as ProtocolRegistrationStateChanged,
     SendVoiceNote,
     SetMute,
@@ -586,9 +585,7 @@ def test_protocol_message_delivery_changed_translates() -> None:
             error="",
         )
     )
-    matches = [
-        event for event in received if isinstance(event, BackendMessageDeliveryChanged)
-    ]
+    matches = [event for event in received if isinstance(event, BackendMessageDeliveryChanged)]
     assert matches and matches[-1].message_id == "client-msg-x"
     assert matches[-1].delivery_state == MessageDeliveryState.DELIVERED
 
@@ -818,6 +815,32 @@ def test_backend_stopped_error_clears_recording_state() -> None:
         ProtocolError(code="backend_stopped", message="iterate failed", cmd_id=None)
     )
     assert backend._recording_start_monotonic is None
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "start_voice_note_failed",
+        "stop_voice_note_failed",
+        "cancel_voice_note_failed",
+    ],
+)
+def test_voice_note_command_errors_clear_recording_state_and_dispatch_failure(
+    code: str,
+) -> None:
+    fake = _FakeSupervisor()
+    backend = SupervisorBackedBackend(_config(), supervisor=fake)
+    backend._recording_start_monotonic = time.monotonic()
+    received: list[VoIPEvent] = []
+    backend.on_event(received.append)
+
+    backend._on_protocol_event(ProtocolError(code=code, message="recorder failed", cmd_id=None))
+
+    assert backend._recording_start_monotonic is None
+    matches = [event for event in received if isinstance(event, BackendMessageFailed)]
+    assert matches
+    assert matches[-1].message_id == ""
+    assert matches[-1].reason == "recorder failed"
 
 
 # ---------------------------------------------------------------------------
