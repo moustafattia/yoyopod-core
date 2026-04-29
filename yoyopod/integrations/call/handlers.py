@@ -84,6 +84,7 @@ def seed_call_state(app: Any, integration: Any, *, available: bool) -> None:
 def handle_incoming_call_event(app: Any, integration: Any, event: IncomingCallEvent) -> None:
     """Mirror incoming-call metadata into the state store and focus/ringer helpers."""
 
+    _clear_finalized_rust_call_sessions(integration)
     if not _manager_owns_runtime_snapshot(integration.manager):
         integration.session_tracker.begin_incoming_call(event.caller_address, event.caller_name)
     _request_focus(app)
@@ -111,6 +112,8 @@ def handle_call_state_changed_event(
     state = event.state
 
     if _manager_owns_runtime_snapshot(manager):
+        if state not in _TERMINAL_STATES:
+            _clear_finalized_rust_call_sessions(integration)
         _apply_call_state(app, manager, state)
         app.states.set("call.muted", bool(getattr(manager, "is_muted", False)), {})
         return
@@ -240,6 +243,12 @@ def _prune_finalized_rust_call_sessions(
         finalized_sessions.clear()
 
 
+def _clear_finalized_rust_call_sessions(integration: Any) -> None:
+    finalized_sessions = getattr(integration, "finalized_rust_call_sessions", None)
+    if isinstance(finalized_sessions, set):
+        finalized_sessions.clear()
+
+
 def _persist_rust_call_session_history(
     app: Any,
     integration: Any,
@@ -320,6 +329,7 @@ def dial(app: Any, integration: Any, command: DialCommand) -> bool:
     if not success:
         return False
     if _manager_owns_runtime_snapshot(integration.manager):
+        _clear_finalized_rust_call_sessions(integration)
         return True
     _request_focus(app)
     integration.session_tracker.ensure_outgoing_call(
