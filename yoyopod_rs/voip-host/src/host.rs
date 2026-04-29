@@ -115,7 +115,6 @@ impl VoipHost {
         self.lifecycle.clear_recovery_pending();
         self.lifecycle.record("configured", "configured", false);
         self.call.clear();
-        self.call_history = CallHistoryStore::default();
         self.voice_note_playback.stop();
         self.voice_note.reset();
         self.last_message = None;

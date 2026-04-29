@@ -606,7 +606,10 @@ def _sync_runtime_call_history_store(integration: Any) -> None:
     replace_entries = getattr(history_store, "replace_entries", None)
     if not callable(replace_entries):
         return
-    replace_entries(_runtime_call_history_entries(integration.manager, snapshot))
+    entries = _runtime_call_history_entries(integration.manager, snapshot)
+    if not entries and history_store.list_recent(1):
+        return
+    replace_entries(entries)
 
 
 def _runtime_call_history_entries(

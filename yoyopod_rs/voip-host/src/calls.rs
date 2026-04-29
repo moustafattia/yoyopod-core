@@ -197,13 +197,14 @@ impl CallSession {
             return None;
         }
         session.history_recorded = true;
+        let outcome = session.history_outcome();
         Some(CallHistoryEntry {
             session_id: session.session_id.clone(),
             peer_sip_address: session.peer_sip_address.clone(),
             direction: session.direction.clone(),
-            outcome: session.history_outcome(),
+            seen: outcome != "missed",
+            outcome,
             duration_seconds: session.duration_seconds(),
-            seen: false,
         })
     }
 

@@ -524,6 +524,22 @@ def test_rust_owned_call_history_syncs_snapshot_to_python_store(
     assert manager.mark_history_calls == [""]
     assert history_store.list_recent(1)[0].seen is True
 
+    manager.emit_runtime_snapshot(
+        VoIPRuntimeSnapshot(
+            configured=True,
+            registered=True,
+            registration_state=RegistrationState.OK,
+            call_state=CallState.IDLE,
+            lifecycle=VoIPLifecycleSnapshot(
+                state="registered",
+                reason="registered",
+                backend_available=True,
+            ),
+        )
+    )
+    drain_all(app)
+    assert history_store.list_recent(1)[0].sip_address == "sip:bob@example.com"
+
 
 def test_rust_owned_terminal_session_snapshot_does_not_write_python_history(
     tmp_path: Path,
