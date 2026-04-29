@@ -1,11 +1,40 @@
-load("//:defs.bzl", "yoyopod_rust_host_binary", "yoyopod_rust_host_test")
+load(
+    "//:defs.bzl",
+    "yoyopod_rust_host_binary",
+    "yoyopod_rust_host_integration_tests",
+    "yoyopod_rust_host_library",
+)
+
+yoyopod_rust_host_library(
+    name = "voip_host_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "yoyopod_voip_host",
+)
 
 yoyopod_rust_host_binary(
     name = "yoyopod-voip-host",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = ["src/main.rs"],
+    deps = [":voip_host_lib"],
 )
 
-yoyopod_rust_host_test(
+VOIP_HOST_TESTS = [
+    "config",
+    "events",
+    "host",
+    "protocol",
+    "shim",
+    "worker",
+]
+
+yoyopod_rust_host_integration_tests(
     name = "tests",
-    crate = ":yoyopod-voip-host",
+    tests = VOIP_HOST_TESTS,
+    deps = [":voip_host_lib"],
+    extra_srcs_by_test = {
+        "host": ["tests/support/mod.rs"],
+        "worker": ["tests/support/mod.rs"],
+    },
 )

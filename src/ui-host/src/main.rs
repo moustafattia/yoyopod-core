@@ -1,17 +1,6 @@
-mod framebuffer;
-mod hardware;
-mod hub;
-mod input;
-mod lvgl_bridge;
-mod protocol;
-mod render;
-mod runtime;
-mod screens;
-mod whisplay_panel;
-mod worker;
-
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
+use yoyopod_ui_host::{hardware, worker};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum HardwareMode {

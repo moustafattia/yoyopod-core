@@ -219,24 +219,6 @@ fn spi_cs_from_u8(value: u8) -> Result<SlaveSelect> {
     }
 }
 
-fn spi_chunks(data: &[u8]) -> impl Iterator<Item = &[u8]> {
+pub fn spi_chunks(data: &[u8]) -> impl Iterator<Item = &[u8]> {
     data.chunks(SPI_CHUNK_BYTES)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn chunks_full_frame_under_linux_spi_message_limit() {
-        let payload = vec![0u8; WIDTH * HEIGHT * 2];
-        let chunk_lengths: Vec<usize> = spi_chunks(&payload).map(|chunk| chunk.len()).collect();
-
-        assert!(chunk_lengths
-            .iter()
-            .all(|length| *length <= SPI_CHUNK_BYTES));
-        assert_eq!(chunk_lengths.iter().sum::<usize>(), payload.len());
-        assert_eq!(chunk_lengths[0], SPI_CHUNK_BYTES);
-        assert_eq!(*chunk_lengths.last().unwrap(), 3328);
-    }
 }
