@@ -78,6 +78,14 @@ pub enum BackendEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LifecycleEvent {
+    pub state: String,
+    pub previous_state: String,
+    pub reason: String,
+    pub recovered: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct VoiceNoteSessionState {
     state: String,
     file_path: String,
@@ -113,6 +121,10 @@ pub struct VoipHost {
     config: Option<VoipConfig>,
     registered: bool,
     registration_state: String,
+    lifecycle_state: String,
+    lifecycle_reason: String,
+    recovery_pending: bool,
+    lifecycle_events: Vec<LifecycleEvent>,
     call_state: String,
     active_call_id: Option<String>,
     active_call_peer: String,
@@ -127,6 +139,10 @@ impl Default for VoipHost {
             config: None,
             registered: false,
             registration_state: "none".to_string(),
+            lifecycle_state: "unconfigured".to_string(),
+            lifecycle_reason: String::new(),
+            recovery_pending: false,
+            lifecycle_events: Vec::new(),
             call_state: "idle".to_string(),
             active_call_id: None,
             active_call_peer: String::new(),
@@ -142,6 +158,8 @@ impl VoipHost {
         self.config = Some(config);
         self.registered = false;
         self.registration_state = "none".to_string();
+        self.recovery_pending = false;
+        self.record_lifecycle("configured", "configured", false);
         self.call_state = "idle".to_string();
         self.active_call_id = None;
         self.active_call_peer.clear();
@@ -153,6 +171,9 @@ impl VoipHost {
     pub fn mark_registered(&mut self, registered: bool) {
         self.registered = registered;
         self.registration_state = if registered { "ok" } else { "none" }.to_string();
+        if registered {
+            self.record_lifecycle("registered", "registered", false);
+        }
     }
 
     pub fn set_active_call_id(&mut self, call_id: Option<String>) {
@@ -164,6 +185,17 @@ impl VoipHost {
             "configured": self.config.is_some(),
             "registered": self.registered,
             "active_call_id": self.active_call_id,
+            "lifecycle_state": self.lifecycle_state,
+            "lifecycle_reason": self.lifecycle_reason,
+            "backend_available": self.registered && self.lifecycle_state == "registered",
+        })
+    }
+
+    pub fn lifecycle_payload(&self) -> serde_json::Value {
+        json!({
+            "state": self.lifecycle_state,
+            "reason": self.lifecycle_reason,
+            "backend_available": self.registered && self.lifecycle_state == "registered",
         })
     }
 
@@ -186,6 +218,7 @@ impl VoipHost {
             "configured": self.config.is_some(),
             "registered": self.registered,
             "registration_state": self.registration_state,
+            "lifecycle": self.lifecycle_payload(),
             "call_state": self.call_state,
             "active_call_id": self.active_call_id,
             "active_call_peer": self.active_call_peer,
@@ -212,9 +245,21 @@ impl VoipHost {
         let config = self
             .config
             .as_ref()
-            .ok_or_else(|| "voip host is not configured".to_string())?;
-        backend.start(config)?;
+            .ok_or_else(|| "voip host is not configured".to_string())?
+            .clone();
+        self.record_lifecycle("registering", "registering", false);
+        if let Err(error) = backend.start(&config) {
+            self.registered = false;
+            self.registration_state = "failed".to_string();
+            self.recovery_pending = true;
+            self.record_lifecycle("failed", &error, false);
+            return Err(error);
+        }
         self.registered = true;
+        self.registration_state = "none".to_string();
+        let recovered = self.recovery_pending;
+        self.recovery_pending = false;
+        self.record_lifecycle("registered", "registered", recovered);
         Ok(())
     }
 
@@ -222,6 +267,8 @@ impl VoipHost {
         backend.stop();
         self.registered = false;
         self.registration_state = "none".to_string();
+        self.recovery_pending = false;
+        self.record_lifecycle("stopped", "unregistered", false);
         self.call_state = "idle".to_string();
         self.active_call_id = None;
         self.active_call_peer.clear();
@@ -357,6 +404,10 @@ impl VoipHost {
         Ok(events)
     }
 
+    pub fn take_lifecycle_events(&mut self) -> Vec<LifecycleEvent> {
+        std::mem::take(&mut self.lifecycle_events)
+    }
+
     fn apply_backend_event(&mut self, event: &BackendEvent) {
         match event {
             BackendEvent::RegistrationChanged { state, .. } => {
@@ -385,9 +436,11 @@ impl VoipHost {
                     self.active_call_id = Some(call_id.clone());
                 }
             }
-            BackendEvent::BackendStopped { .. } => {
+            BackendEvent::BackendStopped { reason } => {
                 self.registered = false;
                 self.registration_state = "failed".to_string();
+                self.recovery_pending = true;
+                self.record_lifecycle("failed", reason, false);
                 self.call_state = "idle".to_string();
                 self.active_call_id = None;
                 self.active_call_peer.clear();
@@ -520,6 +573,20 @@ impl VoipHost {
                 .insert(backend_id.to_string(), client_id.to_string());
         }
         Ok(())
+    }
+
+    fn record_lifecycle(&mut self, state: &str, reason: &str, recovered: bool) {
+        let previous_state = self.lifecycle_state.clone();
+        let state = state.to_string();
+        let reason = reason.to_string();
+        self.lifecycle_state = state.clone();
+        self.lifecycle_reason = reason.clone();
+        self.lifecycle_events.push(LifecycleEvent {
+            state,
+            previous_state,
+            reason,
+            recovered,
+        });
     }
 }
 
@@ -821,6 +888,121 @@ mod command_tests {
 
         assert_eq!(backend.calls, vec!["start"]);
         assert_eq!(host.health_payload()["registered"], true);
+    }
+
+    #[test]
+    fn lifecycle_snapshot_tracks_register_failure_recovery_and_stop() {
+        struct LifecycleBackend {
+            start_results: Vec<Result<(), String>>,
+            stop_calls: usize,
+        }
+
+        impl CallBackend for LifecycleBackend {
+            fn start(&mut self, _config: &VoipConfig) -> Result<(), String> {
+                self.start_results.remove(0)
+            }
+
+            fn stop(&mut self) {
+                self.stop_calls += 1;
+            }
+
+            fn iterate(&mut self) -> Result<Vec<BackendEvent>, String> {
+                Ok(vec![])
+            }
+
+            fn make_call(&mut self, _sip_address: &str) -> Result<String, String> {
+                Ok("call-outgoing".to_string())
+            }
+
+            fn answer_call(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn reject_call(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn hangup(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn set_muted(&mut self, _muted: bool) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn send_text_message(
+                &mut self,
+                _sip_address: &str,
+                _text: &str,
+            ) -> Result<String, String> {
+                Ok("backend-msg-1".to_string())
+            }
+
+            fn start_voice_recording(&mut self, _file_path: &str) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn stop_voice_recording(&mut self) -> Result<i32, String> {
+                Ok(1250)
+            }
+
+            fn cancel_voice_recording(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn send_voice_note(
+                &mut self,
+                _sip_address: &str,
+                _file_path: &str,
+                _duration_ms: i32,
+                _mime_type: &str,
+            ) -> Result<String, String> {
+                Ok("backend-vn-1".to_string())
+            }
+        }
+
+        let mut host = VoipHost::default();
+        assert_eq!(
+            host.session_snapshot_payload()["lifecycle"]["state"],
+            "unconfigured"
+        );
+
+        host.configure(config());
+        assert_eq!(
+            host.session_snapshot_payload()["lifecycle"]["state"],
+            "configured"
+        );
+
+        let mut backend = LifecycleBackend {
+            start_results: vec![Err("shim missing".to_string()), Ok(())],
+            stop_calls: 0,
+        };
+        assert_eq!(
+            host.register(&mut backend)
+                .expect_err("register should fail"),
+            "shim missing"
+        );
+        let snapshot = host.session_snapshot_payload();
+        assert_eq!(snapshot["registered"], false);
+        assert_eq!(snapshot["registration_state"], "failed");
+        assert_eq!(snapshot["lifecycle"]["state"], "failed");
+        assert_eq!(snapshot["lifecycle"]["reason"], "shim missing");
+
+        host.register(&mut backend)
+            .expect("register should recover");
+        let lifecycle_events = host.take_lifecycle_events();
+        assert!(lifecycle_events
+            .iter()
+            .any(|event| event.state == "registered" && event.recovered));
+        let snapshot = host.session_snapshot_payload();
+        assert_eq!(snapshot["registered"], true);
+        assert_eq!(snapshot["lifecycle"]["state"], "registered");
+
+        host.unregister(&mut backend);
+        assert_eq!(backend.stop_calls, 1);
+        let snapshot = host.session_snapshot_payload();
+        assert_eq!(snapshot["registered"], false);
+        assert_eq!(snapshot["lifecycle"]["state"], "stopped");
     }
 
     #[test]

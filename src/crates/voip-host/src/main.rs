@@ -127,6 +127,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"configured": true}),
             ))?;
+            write_lifecycle_events(host)?;
             write_session_snapshot(host)?;
         }
         "voip.health" => {
@@ -144,12 +145,17 @@ fn handle_command(
                 *backend = Some(unsafe { shim::ShimBackend::load(&path) }?);
             }
             let backend_ref = backend.as_mut().expect("backend was just created");
-            host.register(backend_ref).map_err(|error| anyhow!(error))?;
+            if let Err(error) = host.register(backend_ref) {
+                write_lifecycle_events(host)?;
+                write_session_snapshot(host)?;
+                return Err(anyhow!(error));
+            }
             write_envelope(&WorkerEnvelope::result(
                 "voip.register",
                 envelope.request_id,
                 json!({"registered": true}),
             ))?;
+            write_lifecycle_events(host)?;
             write_session_snapshot(host)?;
         }
         "voip.unregister" => {
@@ -161,6 +167,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"registered": false}),
             ))?;
+            write_lifecycle_events(host)?;
             write_session_snapshot(host)?;
         }
         "voip.dial" => {
@@ -361,6 +368,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"shutdown": true}),
             ))?;
+            write_lifecycle_events(host)?;
             write_session_snapshot(host)?;
             return Ok(LoopAction::Shutdown);
         }
@@ -387,17 +395,21 @@ fn next_loop_timeout(host: &VoipHost, backend_running: bool) -> Duration {
 
 fn poll_backend(host: &mut VoipHost, backend: &mut Option<shim::ShimBackend>) -> Result<()> {
     if let Some(backend_ref) = backend.as_mut() {
-        emit_backend_events(
-            host.poll_backend_events(backend_ref)
-                .map_err(|error| anyhow!(error))?,
-            host,
-        )?;
+        let events = host
+            .poll_backend_events(backend_ref)
+            .map_err(|error| anyhow!(error))?;
+        let lifecycle_events = host.take_lifecycle_events();
+        emit_backend_events(events, lifecycle_events, host)?;
     }
     Ok(())
 }
 
-fn emit_backend_events(events: Vec<host::BackendEvent>, host: &VoipHost) -> Result<()> {
-    for envelope in backend_event_envelopes(events, host) {
+fn emit_backend_events(
+    events: Vec<host::BackendEvent>,
+    lifecycle_events: Vec<host::LifecycleEvent>,
+    host: &VoipHost,
+) -> Result<()> {
+    for envelope in backend_event_envelopes(events, lifecycle_events, host) {
         write_envelope(&envelope)?;
     }
     Ok(())
@@ -405,15 +417,36 @@ fn emit_backend_events(events: Vec<host::BackendEvent>, host: &VoipHost) -> Resu
 
 fn backend_event_envelopes(
     events: Vec<host::BackendEvent>,
+    lifecycle_events: Vec<host::LifecycleEvent>,
     host: &VoipHost,
 ) -> Vec<WorkerEnvelope> {
-    if events.is_empty() {
+    if events.is_empty() && lifecycle_events.is_empty() {
         return Vec::new();
     }
     let mut envelopes: Vec<WorkerEnvelope> =
         events.into_iter().map(backend_event_envelope).collect();
+    envelopes.extend(lifecycle_events.into_iter().map(lifecycle_event_envelope));
     envelopes.push(session_snapshot_envelope(host));
     envelopes
+}
+
+fn write_lifecycle_events(host: &mut VoipHost) -> Result<()> {
+    for event in host.take_lifecycle_events() {
+        write_envelope(&lifecycle_event_envelope(event))?;
+    }
+    Ok(())
+}
+
+fn lifecycle_event_envelope(event: host::LifecycleEvent) -> WorkerEnvelope {
+    WorkerEnvelope::event(
+        "voip.lifecycle_changed",
+        json!({
+            "state": event.state,
+            "previous_state": event.previous_state,
+            "reason": event.reason,
+            "recovered": event.recovered,
+        }),
+    )
 }
 
 fn write_session_snapshot(host: &VoipHost) -> Result<()> {
@@ -611,6 +644,7 @@ mod tests {
                 state: "ok".to_string(),
                 reason: "".to_string(),
             }],
+            vec![],
             &host,
         );
 
@@ -619,6 +653,104 @@ mod tests {
         assert_eq!(envelopes[1].message_type, "voip.snapshot");
         assert_eq!(envelopes[1].payload["registered"], true);
         assert_eq!(envelopes[1].payload["registration_state"], "ok");
+    }
+
+    #[test]
+    fn backend_event_batch_appends_lifecycle_before_snapshot() {
+        struct EventBackend {
+            events: Vec<host::BackendEvent>,
+        }
+
+        impl host::CallBackend for EventBackend {
+            fn start(&mut self, _config: &VoipConfig) -> std::result::Result<(), String> {
+                Ok(())
+            }
+
+            fn stop(&mut self) {}
+
+            fn iterate(&mut self) -> std::result::Result<Vec<host::BackendEvent>, String> {
+                Ok(std::mem::take(&mut self.events))
+            }
+
+            fn make_call(&mut self, _sip_address: &str) -> std::result::Result<String, String> {
+                Ok("call-outgoing".to_string())
+            }
+
+            fn answer_call(&mut self) -> std::result::Result<(), String> {
+                Ok(())
+            }
+
+            fn reject_call(&mut self) -> std::result::Result<(), String> {
+                Ok(())
+            }
+
+            fn hangup(&mut self) -> std::result::Result<(), String> {
+                Ok(())
+            }
+
+            fn set_muted(&mut self, _muted: bool) -> std::result::Result<(), String> {
+                Ok(())
+            }
+
+            fn send_text_message(
+                &mut self,
+                _sip_address: &str,
+                _text: &str,
+            ) -> std::result::Result<String, String> {
+                Ok("backend-msg-1".to_string())
+            }
+
+            fn start_voice_recording(
+                &mut self,
+                _file_path: &str,
+            ) -> std::result::Result<(), String> {
+                Ok(())
+            }
+
+            fn stop_voice_recording(&mut self) -> std::result::Result<i32, String> {
+                Ok(1250)
+            }
+
+            fn cancel_voice_recording(&mut self) -> std::result::Result<(), String> {
+                Ok(())
+            }
+
+            fn send_voice_note(
+                &mut self,
+                _sip_address: &str,
+                _file_path: &str,
+                _duration_ms: i32,
+                _mime_type: &str,
+            ) -> std::result::Result<String, String> {
+                Ok("backend-vn-1".to_string())
+            }
+        }
+
+        let mut host = VoipHost::default();
+        host.configure(
+            VoipConfig::from_payload(&json!({
+                "sip_server": "sip.example.com",
+                "sip_identity": "sip:alice@example.com"
+            }))
+            .expect("config"),
+        );
+        host.take_lifecycle_events();
+        let mut backend = EventBackend {
+            events: vec![host::BackendEvent::BackendStopped {
+                reason: "iterate failed".to_string(),
+            }],
+        };
+        let events = host.poll_backend_events(&mut backend).expect("poll");
+
+        let envelopes = backend_event_envelopes(events, host.take_lifecycle_events(), &host);
+
+        assert_eq!(envelopes.len(), 3);
+        assert_eq!(envelopes[0].message_type, "voip.backend_stopped");
+        assert_eq!(envelopes[1].message_type, "voip.lifecycle_changed");
+        assert_eq!(envelopes[1].payload["state"], "failed");
+        assert_eq!(envelopes[1].payload["reason"], "iterate failed");
+        assert_eq!(envelopes[2].message_type, "voip.snapshot");
+        assert_eq!(envelopes[2].payload["lifecycle"]["state"], "failed");
     }
 
     #[test]

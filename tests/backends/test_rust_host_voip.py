@@ -542,6 +542,40 @@ def test_worker_startup_error_stops_worker_and_marks_backend_stopped() -> None:
     assert supervisor.started == ["voip", "voip"]
 
 
+def test_worker_lifecycle_failure_owns_startup_stopped_event() -> None:
+    supervisor = _SingleRunningSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    received: list[object] = []
+    backend.on_event(received.append)
+    backend.start()
+
+    backend.handle_worker_message(
+        _event(
+            "voip.lifecycle_changed",
+            {
+                "state": "failed",
+                "previous_state": "registering",
+                "reason": "shim missing",
+                "recovered": False,
+            },
+        )
+    )
+    backend.handle_worker_message(
+        _reply(
+            "error",
+            "voip.error",
+            {"code": "command_failed", "message": "shim missing"},
+            request_id=supervisor.request_ids[1],
+        )
+    )
+
+    assert backend.running is False
+    assert supervisor.stopped == [("voip", 1.0)]
+    stopped = [event for event in received if isinstance(event, BackendStopped)]
+    assert len(stopped) == 1
+    assert stopped[0].reason == "shim missing"
+
+
 def test_startup_send_failure_stops_worker_before_returning_false() -> None:
     supervisor = _RejectingStartupSupervisor("voip.register")
     backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
@@ -609,8 +643,22 @@ def test_ready_after_worker_restart_resends_configure_register() -> None:
     assert backend.running is True
     assert isinstance(received[0], BackendStopped)
     assert received[0].reason == "process_exited"
+    assert len(received) == 1
+
+    backend.handle_worker_message(
+        _event(
+            "voip.lifecycle_changed",
+            {
+                "state": "registered",
+                "previous_state": "registering",
+                "reason": "registered",
+                "recovered": True,
+            },
+        )
+    )
+
     assert isinstance(received[1], BackendRecovered)
-    assert received[1].reason == "worker_ready"
+    assert received[1].reason == "registered"
 
 
 def test_iterate_is_noop() -> None:

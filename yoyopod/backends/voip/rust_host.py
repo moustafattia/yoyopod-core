@@ -88,6 +88,7 @@ class RustHostBackend:
         self._recording_start_monotonic: float | None = None
         self._snapshot_registration_state = RegistrationState.NONE
         self._snapshot_call_state = CallState.IDLE
+        self._last_lifecycle_state = "unconfigured"
 
     def on_event(self, callback: Callable[[VoIPEvent], None]) -> None:
         self.event_callbacks.append(callback)
@@ -150,6 +151,7 @@ class RustHostBackend:
             self._recording_start_monotonic = None
             self._snapshot_registration_state = RegistrationState.NONE
             self._snapshot_call_state = CallState.IDLE
+            self._last_lifecycle_state = "stopped"
             self.running = False
             self._stopping = False
 
@@ -256,6 +258,9 @@ class RustHostBackend:
             return
         if event_type == "voip.snapshot":
             self._handle_session_snapshot(payload)
+            return
+        if event_type == "voip.lifecycle_changed":
+            self._handle_lifecycle_changed(payload)
             return
         if event_type == "voip.registration_changed":
             self._dispatch_registration_state(
@@ -385,14 +390,10 @@ class RustHostBackend:
     def _handle_worker_ready(self) -> None:
         if self._reconfigure_on_ready or not self._startup_commands_sent:
             logger.info("Rust VoIP Host ready; sending configure/register")
-            was_stopped = self._last_stop_reason is not None
             if not self._send_startup_commands():
                 self._stop_after_startup_command_failure("worker_ready_reconfigure_failed")
                 return
             self.running = True
-            self._last_stop_reason = None
-            if was_stopped:
-                self._dispatch(BackendRecovered(reason="worker_ready"))
         self._ready_seen = True
         self._reconfigure_on_ready = False
 
@@ -401,7 +402,10 @@ class RustHostBackend:
         reason = _worker_error_reason(payload, command=command)
         message_id = self._pending_message_ids.pop(request_id, "") if request_id else ""
         if command in _STARTUP_COMMANDS or command is None:
-            self._stop_after_startup_command_failure(reason)
+            self._stop_after_startup_command_failure(
+                reason,
+                notify_backend_stopped=self._last_lifecycle_state not in {"failed", "stopped"},
+            )
             return
         if command in _CALL_CONTROL_COMMANDS:
             logger.warning("Rust VoIP Host call command failed: {}", reason)
@@ -447,11 +451,29 @@ class RustHostBackend:
         self._recording_start_monotonic = None
         self._snapshot_registration_state = RegistrationState.NONE
         self._snapshot_call_state = CallState.IDLE
+        self._last_lifecycle_state = "failed"
         self.running = False
         if notify_backend_stopped:
             self._mark_stopped(reason)
         else:
             self._last_stop_reason = reason
+
+    def _handle_lifecycle_changed(self, payload: dict[str, Any]) -> None:
+        state = str(payload.get("state", "") or "").strip()
+        if not state:
+            return
+        reason = str(payload.get("reason", "") or "").strip() or state
+        recovered = _bool_payload(payload.get("recovered", False))
+        self._last_lifecycle_state = state
+        if state in {"failed", "stopped"}:
+            self._mark_stopped(reason)
+            return
+        if state == "registered":
+            was_stopped = self._last_stop_reason is not None
+            self.running = True
+            if recovered or was_stopped:
+                self._dispatch(BackendRecovered(reason=reason))
+            self._last_stop_reason = None
 
     def _handle_session_snapshot(self, payload: dict[str, Any]) -> None:
         registration_state = str(payload.get("registration_state", "") or "").strip()
@@ -479,6 +501,8 @@ class RustHostBackend:
             return
         self.running = False
         self._last_stop_reason = reason
+        if self._last_lifecycle_state != "stopped":
+            self._last_lifecycle_state = "failed"
         self._dispatch(BackendStopped(reason=reason))
 
     def _next_request_id(self, message_type: str) -> str:
