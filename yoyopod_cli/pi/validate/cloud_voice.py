@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 import os
 import queue
-import shlex
 import shutil
 import subprocess
 import threading
@@ -35,36 +34,13 @@ from yoyopod.integrations.voice.worker_contract import (
 )
 from yoyopod_cli.common import REPO_ROOT, configure_logging, resolve_config_dir
 from yoyopod_cli.pi.validate._common import _CheckResult, _print_summary
+from yoyopod_cli.pi.validate.service_env import load_service_env_file, resolve_service_env_file
 
 
 def _load_cloud_voice_env_file(env_file: Path) -> list[str]:
     """Load service-style KEY=VALUE assignments into this validation process."""
 
-    if not env_file.exists():
-        return []
-
-    loaded: list[str] = []
-    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        try:
-            parts = shlex.split(line, comments=True, posix=True)
-        except ValueError:
-            continue
-        if not parts:
-            continue
-        if parts[0] == "export":
-            parts = parts[1:]
-        if not parts or "=" not in parts[0]:
-            continue
-        key, value = parts[0].split("=", 1)
-        key = key.strip()
-        if not key:
-            continue
-        os.environ[key] = value
-        loaded.append(key)
-    return loaded
+    return load_service_env_file(env_file)
 
 
 def _cloud_voice_env_file_check(env_file: Path, loaded_keys: list[str]) -> _CheckResult:
@@ -854,9 +830,7 @@ def cloud_voice(
 
     configure_logging(verbose)
     config_path = resolve_config_dir(config_dir)
-    env_path = Path(env_file)
-    if not env_path.is_absolute():
-        env_path = REPO_ROOT / env_path
+    env_path = resolve_service_env_file(env_file)
 
     logger.info("Running target cloud voice validation")
 

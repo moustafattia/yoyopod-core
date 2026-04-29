@@ -12,8 +12,9 @@ from typing import Annotated, Any, Callable, Protocol, cast
 
 import typer
 
-from yoyopod_cli.pi.validate._common import _CheckResult, _print_summary
 from yoyopod_cli.common import REPO_ROOT, configure_logging, resolve_config_dir
+from yoyopod_cli.pi.validate._common import _CheckResult, _print_summary
+from yoyopod_cli.pi.validate.service_env import load_service_env_file, resolve_service_env_file
 
 # ---------------------------------------------------------------------------
 # VoIP check helper
@@ -975,6 +976,13 @@ def voip(
     config_dir: Annotated[
         str, typer.Option("--config-dir", help="Configuration directory to use.")
     ] = "config",
+    env_file: Annotated[
+        str,
+        typer.Option(
+            "--env-file",
+            help="Service EnvironmentFile to load before resolving VoIP settings.",
+        ),
+    ] = "/etc/default/yoyopod-dev",
     registration_timeout: Annotated[
         float, typer.Option("--registration-timeout", help="Registration timeout in seconds.")
     ] = 90.0,
@@ -1080,6 +1088,8 @@ def voip(
 ) -> None:
     """VoIP validation: quick check (default) or soak drill (--soak registration|reconnect|call)."""
     configure_logging(verbose)
+    if env_file.strip():
+        load_service_env_file(resolve_service_env_file(env_file))
     if not soak:
         return _run_quick_voip_check(config_dir, registration_timeout)
     if soak == "registration":
