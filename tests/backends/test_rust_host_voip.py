@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+from loguru import logger
+
 from yoyopod.backends.voip import rust_host
 from yoyopod.backends.voip.rust_host import RustHostBackend
 from yoyopod.integrations.call.models import (
@@ -126,6 +128,26 @@ class _StrictSupervisor(_FakeSupervisor):
             timestamp_ms=timestamp_ms,
             deadline_ms=deadline_ms,
         )
+
+
+class _UnregisteredSupervisor(_FakeSupervisor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.send_attempts = 0
+
+    def send_command(
+        self,
+        domain: str,
+        *,
+        type: str,
+        payload: dict[str, Any] | None = None,
+        request_id: str | None = None,
+        timestamp_ms: int = 0,
+        deadline_ms: int = 0,
+    ) -> bool:
+        del domain, type, payload, request_id, timestamp_ms, deadline_ms
+        self.send_attempts += 1
+        raise KeyError("voip")
 
 
 def _config() -> VoIPConfig:
@@ -293,6 +315,32 @@ def test_history_and_playback_commands_send_worker_commands() -> None:
         ("voip", "voip.play_voice_note", {"file_path": "/tmp/note.wav"}),
         ("voip", "voip.stop_voice_note_playback", {}),
     ]
+
+
+def test_stop_voice_note_playback_is_noop_before_worker_registration() -> None:
+    supervisor = _UnregisteredSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+
+    assert backend.stop_voice_note_playback() is False
+    assert supervisor.send_attempts == 0
+
+
+def test_rust_host_backend_logs_worker_lifecycle_boundaries() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    messages: list[str] = []
+    sink_id = logger.add(lambda message: messages.append(str(message)), format="{message}")
+
+    try:
+        assert backend.start() is True
+        backend.stop()
+    finally:
+        logger.remove(sink_id)
+
+    assert any("Rust VoIP Host worker starting" in message for message in messages)
+    assert any("Rust VoIP Host worker started" in message for message in messages)
+    assert any("Rust VoIP Host worker stopping" in message for message in messages)
+    assert any("Rust VoIP Host worker stopped" in message for message in messages)
 
 
 def test_text_message_ids_do_not_repeat_across_backend_instances() -> None:

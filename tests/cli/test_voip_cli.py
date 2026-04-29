@@ -587,6 +587,37 @@ def test_hold_call_connected_returns_machine_friendly_failure_keys(
     assert reason == expected_reason
 
 
+def test_hold_call_connected_accepts_remote_update_as_active_call(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A remote call parameter update should not abort an otherwise active call soak."""
+
+    clock = FakeClock()
+    manager = FakeVoIPManager(clock)
+    manager._set_registration(RegistrationState.OK)
+    manager._set_call_state(CallState.CONNECTED)
+    manager.schedule_call_state(0.2, CallState.UPDATED_BY_REMOTE)
+    _patch_clock(monkeypatch, clock)
+
+    recorder = voip_cli._VoIPDrillRecorder(
+        drill="call-soak",
+        config=manager.config,
+        artifacts_dir=str(tmp_path),
+    )
+    recorder.attach(manager)
+
+    soaked, reason = voip_cli._hold_call_connected(
+        manager,
+        recorder,
+        soak_seconds=0.5,
+    )
+
+    assert soaked is True
+    assert reason == ""
+    assert manager.call_state == CallState.UPDATED_BY_REMOTE
+
+
 def test_call_soak_writes_pass_summary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -672,6 +703,53 @@ def test_call_soak_fails_when_call_never_reaches_connected_media(
     assert summary["status"] == "fail"
     assert summary["reason"] == "Call never reached a connected state (last_state=end)"
     assert summary["extras"]["last_call_state"] == "end"
+
+
+def test_call_soak_waits_through_initial_idle_after_dial_ack(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The connect wait should allow Rust snapshots to lag just after dial is accepted."""
+
+    clock = FakeClock()
+    manager = FakeVoIPManager(clock)
+    manager.schedule_registration(0.1, RegistrationState.OK)
+    _patch_clock(monkeypatch, clock)
+    monkeypatch.setattr(voip_cli, "_build_voip_manager_for_drill", lambda _config_dir: manager)
+
+    def fake_make_call(sip_address: str, contact_name: str | None = None) -> bool:
+        manager.schedule_call_state(0.2, CallState.OUTGOING_RINGING)
+        manager.schedule_call_state(0.4, CallState.CONNECTED)
+        return True
+
+    monkeypatch.setattr(manager, "make_call", fake_make_call)
+
+    result = runner.invoke(
+        pi_validate_app,
+        [
+            "voip",
+            "--soak", "call",
+            "--soak-target",
+            "sip:echo@example.com",
+            "--registration-timeout",
+            "1",
+            "--connect-timeout",
+            "1",
+            "--soak-seconds",
+            "1",
+            "--hangup-timeout",
+            "0.5",
+            "--sample-interval",
+            "0.5",
+            "--artifacts-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    summary = _load_summary(tmp_path)
+    assert summary["status"] == "pass"
+    assert summary["extras"]["connect_wait_seconds"] > 0
 
 
 def test_call_soak_fails_fast_when_call_returns_to_idle(

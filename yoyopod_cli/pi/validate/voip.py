@@ -91,6 +91,7 @@ def _voip_check(config_dir: Path, registration_timeout: float) -> _CheckResult:
 # ---------------------------------------------------------------------------
 
 _CONNECTED_CALL_STATES: set[str] = set()  # populated lazily below
+_ACTIVE_CALL_STATES: set[str] = set()  # populated lazily below
 
 
 def _lazy_connected_call_states() -> set[str]:
@@ -100,6 +101,21 @@ def _lazy_connected_call_states() -> set[str]:
 
         _CONNECTED_CALL_STATES = {CallState.CONNECTED.value, CallState.STREAMS_RUNNING.value}
     return _CONNECTED_CALL_STATES
+
+
+def _lazy_active_call_states() -> set[str]:
+    global _ACTIVE_CALL_STATES
+    if not _ACTIVE_CALL_STATES:
+        from yoyopod.integrations.call import CallState
+
+        _ACTIVE_CALL_STATES = {
+            CallState.CONNECTED.value,
+            CallState.STREAMS_RUNNING.value,
+            CallState.PAUSED.value,
+            CallState.PAUSED_BY_REMOTE.value,
+            CallState.UPDATED_BY_REMOTE.value,
+        }
+    return _ACTIVE_CALL_STATES
 
 
 class _VoIPManagerLike(Protocol):
@@ -439,12 +455,12 @@ def _wait_for_call_connection(
     deadline = started_at + timeout
     interval = _iterate_interval_seconds(manager)
     terminal_states = {
-        CallState.IDLE.value,
         CallState.RELEASED.value,
         CallState.END.value,
         CallState.ERROR.value,
     }
     connected_states = _lazy_connected_call_states()
+    observed_started_call = False
     while time.monotonic() <= deadline:
         manager.iterate()
         recorder.sample(manager)
@@ -452,6 +468,10 @@ def _wait_for_call_connection(
         call_state = str(status.get("call_state", ""))
         if call_state in connected_states:
             return True, call_state, max(0.0, time.monotonic() - started_at)
+        if call_state != CallState.IDLE.value:
+            observed_started_call = True
+        if call_state == CallState.IDLE.value and observed_started_call:
+            return False, call_state, max(0.0, time.monotonic() - started_at)
         if call_state in terminal_states:
             return False, call_state, max(0.0, time.monotonic() - started_at)
         time.sleep(interval)
@@ -471,7 +491,7 @@ def _hold_call_connected(
 ) -> tuple[bool, str]:
     deadline = time.monotonic() + soak_seconds
     interval = _iterate_interval_seconds(manager)
-    connected_states = _lazy_connected_call_states()
+    active_states = _lazy_active_call_states()
     while time.monotonic() <= deadline:
         manager.iterate()
         recorder.sample(manager)
@@ -479,7 +499,7 @@ def _hold_call_connected(
         if not _status_is_registered(status):
             return False, f"registration_state={status.get('registration_state', '')}"
         call_state = str(status.get("call_state", ""))
-        if call_state not in connected_states:
+        if call_state not in active_states:
             return False, f"call_state={call_state}"
         time.sleep(interval)
     recorder.sample(manager, force=True)

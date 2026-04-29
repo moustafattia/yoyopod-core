@@ -120,6 +120,9 @@ def _build_validate(
     with_cloud_voice: bool = False,
     with_lvgl_soak: bool,
     with_navigation: bool,
+    with_voip_call_soak: bool = False,
+    voip_soak_target: str = "",
+    voip_soak_seconds: float = 300.0,
     with_rust_ui_host: bool = False,
     with_rust_ui_poc: bool = False,
 ) -> str:
@@ -155,7 +158,7 @@ def _build_validate(
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "cloud-voice"))
     if with_music:
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "music"))
-    if with_voip:
+    if with_voip or with_voip_call_soak:
         voip_worker = shell_quote(_RUST_VOIP_HOST_WORKER)
         voip_shim = shell_quote(_RUST_LIBLINPHONE_SHIM)
         voip_message = shell_quote(
@@ -167,7 +170,23 @@ def _build_validate(
             f"(test -x {voip_worker} && test -f {voip_shim}) || "
             f"(echo {voip_message} >&2 && exit 1)"
         )
+    if with_voip:
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "voip"))
+    if with_voip_call_soak:
+        steps.append(
+            checkout_module_command(
+                venv_relpath,
+                "pi",
+                "validate",
+                "voip",
+                "--soak",
+                "call",
+                "--soak-target",
+                voip_soak_target,
+                "--soak-seconds",
+                str(voip_soak_seconds),
+            )
+        )
     steps.append(checkout_module_command(venv_relpath, "pi", "validate", "stability"))
     if with_lvgl_soak:
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "lvgl"))
@@ -222,6 +241,21 @@ def validate(
     ),
     with_lvgl_soak: bool = typer.Option(False, "--with-lvgl-soak"),
     with_navigation: bool = typer.Option(False, "--with-navigation"),
+    with_voip_call_soak: bool = typer.Option(
+        False,
+        "--with-voip-call-soak",
+        help="Run a real outbound VoIP call soak on the target after quick validation stages.",
+    ),
+    voip_soak_target: str = typer.Option(
+        "",
+        "--voip-soak-target",
+        help="SIP URI to call when --with-voip-call-soak is enabled.",
+    ),
+    voip_soak_seconds: float = typer.Option(
+        300.0,
+        "--voip-soak-seconds",
+        help="Seconds to hold the call connected during --with-voip-call-soak.",
+    ),
     with_rust_ui_host: bool = typer.Option(
         False,
         "--with-rust-ui-host",
@@ -238,6 +272,9 @@ def validate(
     configure_logging(verbose)
     conn = pi_conn(ctx)
     validate_config(conn)
+    if with_voip_call_soak and not voip_soak_target.strip():
+        typer.echo("--voip-soak-target is required with --with-voip-call-soak", err=True)
+        raise typer.Exit(1)
     _require_local_revision_ready(conn.branch, sha)
     pi = load_pi_paths()
     cmd = _build_validate(
@@ -251,6 +288,9 @@ def validate(
         with_cloud_voice=with_cloud_voice,
         with_lvgl_soak=with_lvgl_soak,
         with_navigation=with_navigation,
+        with_voip_call_soak=with_voip_call_soak,
+        voip_soak_target=voip_soak_target,
+        voip_soak_seconds=voip_soak_seconds,
         with_rust_ui_host=with_rust_ui_host,
         with_rust_ui_poc=with_rust_ui_poc,
     )

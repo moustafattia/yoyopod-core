@@ -120,6 +120,11 @@ class RustHostBackend:
             logger.error("Rust VoIP Host supervisor is unavailable")
             return False
 
+        logger.info(
+            "Rust VoIP Host worker starting: domain={} path={}",
+            self.domain,
+            self.worker_path,
+        )
         try:
             if not self._registered_with_supervisor:
                 register(
@@ -146,9 +151,13 @@ class RustHostBackend:
 
         self.running = True
         self._last_stop_reason = None
+        logger.info("Rust VoIP Host worker started: domain={}", self.domain)
         return True
 
     def stop(self) -> None:
+        should_log = self.running or self._registered_with_supervisor
+        if should_log:
+            logger.info("Rust VoIP Host worker stopping: domain={}", self.domain)
         self._stopping = True
         try:
             if self._registered_with_supervisor:
@@ -169,6 +178,8 @@ class RustHostBackend:
             self._last_lifecycle_state = "stopped"
             self.running = False
             self._stopping = False
+            if should_log:
+                logger.info("Rust VoIP Host worker stopped: domain={}", self.domain)
 
     def iterate(self) -> int:
         return 0
@@ -266,6 +277,8 @@ class RustHostBackend:
         return self._send("voip.play_voice_note", {"file_path": file_path})
 
     def stop_voice_note_playback(self) -> bool:
+        if not self.running or not self._registered_with_supervisor:
+            return False
         return self._send("voip.stop_voice_note_playback", {})
 
     def handle_worker_message(self, event: Any) -> None:
