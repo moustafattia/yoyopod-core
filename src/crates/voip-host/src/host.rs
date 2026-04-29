@@ -128,6 +128,7 @@ pub struct VoipHost {
     call_state: String,
     active_call_id: Option<String>,
     active_call_peer: String,
+    muted: bool,
     voice_note: VoiceNoteSessionState,
     last_message: Option<MessageSessionState>,
     outbound_message_ids: HashMap<String, String>,
@@ -146,6 +147,7 @@ impl Default for VoipHost {
             call_state: "idle".to_string(),
             active_call_id: None,
             active_call_peer: String::new(),
+            muted: false,
             voice_note: VoiceNoteSessionState::default(),
             last_message: None,
             outbound_message_ids: HashMap::new(),
@@ -163,6 +165,7 @@ impl VoipHost {
         self.call_state = "idle".to_string();
         self.active_call_id = None;
         self.active_call_peer.clear();
+        self.muted = false;
         self.voice_note = VoiceNoteSessionState::default();
         self.last_message = None;
         self.outbound_message_ids.clear();
@@ -222,6 +225,7 @@ impl VoipHost {
             "call_state": self.call_state,
             "active_call_id": self.active_call_id,
             "active_call_peer": self.active_call_peer,
+            "muted": self.muted,
             "pending_outbound_messages": self.outbound_message_ids.len(),
             "voice_note": {
                 "state": self.voice_note.state,
@@ -272,6 +276,7 @@ impl VoipHost {
         self.call_state = "idle".to_string();
         self.active_call_id = None;
         self.active_call_peer.clear();
+        self.muted = false;
         self.voice_note = VoiceNoteSessionState::default();
         self.outbound_message_ids.clear();
     }
@@ -313,7 +318,9 @@ impl VoipHost {
         backend: &mut B,
         muted: bool,
     ) -> Result<(), String> {
-        backend.set_muted(muted)
+        backend.set_muted(muted)?;
+        self.muted = muted;
+        Ok(())
     }
 
     pub fn send_text_message<B: CallBackend>(
@@ -431,6 +438,7 @@ impl VoipHost {
                     {
                         self.active_call_id = None;
                         self.active_call_peer.clear();
+                        self.muted = false;
                     }
                 } else {
                     self.active_call_id = Some(call_id.clone());
@@ -444,6 +452,7 @@ impl VoipHost {
                 self.call_state = "idle".to_string();
                 self.active_call_id = None;
                 self.active_call_peer.clear();
+                self.muted = false;
                 self.outbound_message_ids.clear();
             }
             BackendEvent::MessageReceived { message } => {
@@ -1044,6 +1053,27 @@ mod command_tests {
             host.health_payload()["active_call_id"],
             serde_json::Value::Null
         );
+    }
+
+    #[test]
+    fn mute_state_is_owned_by_host_snapshots_and_resets_on_stop() {
+        let mut host = VoipHost::default();
+        let mut backend = FakeBackend::default();
+        host.configure(config());
+        host.register(&mut backend).unwrap();
+
+        assert_eq!(host.session_snapshot_payload()["muted"], false);
+
+        host.set_muted(&mut backend, true).expect("mute");
+        assert_eq!(host.session_snapshot_payload()["muted"], true);
+
+        host.set_muted(&mut backend, false).expect("unmute");
+        assert_eq!(host.session_snapshot_payload()["muted"], false);
+
+        host.set_muted(&mut backend, true)
+            .expect("mute before stop");
+        host.unregister(&mut backend);
+        assert_eq!(host.session_snapshot_payload()["muted"], false);
     }
 
     #[test]
