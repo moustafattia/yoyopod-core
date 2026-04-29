@@ -242,6 +242,21 @@ def _validate_shortcut(
     ),
     with_lvgl_soak: bool = typer.Option(False, "--with-lvgl-soak"),
     with_navigation: bool = typer.Option(False, "--with-navigation"),
+    with_voip_call_soak: bool = typer.Option(
+        False,
+        "--with-voip-call-soak",
+        help="Run a real outbound VoIP call soak on the target.",
+    ),
+    voip_soak_target: str = typer.Option(
+        "",
+        "--voip-soak-target",
+        help="SIP URI to call when --with-voip-call-soak is enabled.",
+    ),
+    voip_soak_seconds: float = typer.Option(
+        300.0,
+        "--voip-soak-seconds",
+        help="Seconds to hold the call connected during --with-voip-call-soak.",
+    ),
     with_rust_ui_host: bool = typer.Option(
         False,
         "--with-rust-ui-host",
@@ -265,6 +280,9 @@ def _validate_shortcut(
         with_cloud_voice=with_cloud_voice,
         with_lvgl_soak=with_lvgl_soak,
         with_navigation=with_navigation,
+        with_voip_call_soak=with_voip_call_soak,
+        voip_soak_target=voip_soak_target,
+        voip_soak_seconds=voip_soak_seconds,
         with_rust_ui_host=with_rust_ui_host,
         with_rust_ui_poc=with_rust_ui_poc,
         verbose=verbose,

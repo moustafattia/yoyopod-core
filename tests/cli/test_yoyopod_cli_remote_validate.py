@@ -72,6 +72,30 @@ def test_build_validate_all_flags() -> None:
     assert ".venv/bin/python -m yoyopod_cli.main pi validate navigation" in shell
 
 
+def test_build_validate_with_voip_call_soak() -> None:
+    shell = _build_validate(
+        branch="main",
+        venv_relpath=".venv",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_cloud_voice=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
+        with_voip_call_soak=True,
+        voip_soak_target="sip:hagarmo@sip.linphone.org",
+        voip_soak_seconds=30.0,
+    )
+
+    assert "CI-built Rust VoIP artifacts" in shell
+    assert (
+        ".venv/bin/python -m yoyopod_cli.main pi validate voip --soak call "
+        "--soak-target sip:hagarmo@sip.linphone.org --soak-seconds 30.0"
+    ) in shell
+
+
 def test_build_validate_with_rust_ui_poc() -> None:
     shell = _build_validate(
         branch="feature",
@@ -228,10 +252,30 @@ def test_validate_has_all_with_flags() -> None:
         "--with-cloud-voice",
         "--with-lvgl-soak",
         "--with-navigation",
+        "--with-voip-call-soak",
+        "--voip-soak-target",
+        "--voip-soak-seconds",
         "--with-rust-ui-host",
         "--with-rust-ui-poc",
     ):
         assert flag in names
+
+
+def test_validate_cli_requires_target_for_voip_call_soak(monkeypatch) -> None:
+    remote_calls: list[str] = []
+
+    monkeypatch.setattr(
+        "yoyopod_cli.remote_validate.run_remote",
+        lambda conn, cmd, tty=False: (remote_calls.append(cmd), 0)[1],
+    )
+    monkeypatch.setenv("YOYOPOD_PI_HOST", "rpi-zero")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["validate", "--with-voip-call-soak"])
+
+    assert result.exit_code == 1
+    assert "--voip-soak-target is required" in result.output
+    assert remote_calls == []
 
 
 # --- Fix 2: checkout-local module invocation ---
