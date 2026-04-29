@@ -224,7 +224,7 @@ def test_build_rust_ui_poc_invokes_cargo(
     tmp_path: Path,
 ) -> None:
     workspace_dir = tmp_path / "src"
-    crate_dir = workspace_dir / "crates" / "ui-host"
+    crate_dir = workspace_dir / "ui-host"
     crate_dir.mkdir(parents=True)
     calls: list[tuple[list[str], Path | None, dict[str, str] | None]] = []
     copies: list[tuple[Path, Path]] = []
@@ -262,7 +262,7 @@ def test_build_rust_ui_host_invokes_cargo_workspace(
     tmp_path: Path,
 ) -> None:
     workspace_dir = tmp_path / "src"
-    crate_dir = workspace_dir / "crates" / "ui-host"
+    crate_dir = workspace_dir / "ui-host"
     crate_dir.mkdir(parents=True)
     calls: list[tuple[list[str], Path | None, dict[str, str] | None]] = []
     copies: list[tuple[Path, Path]] = []

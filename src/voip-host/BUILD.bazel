@@ -1,0 +1,11 @@
+load("//:defs.bzl", "yoyopod_rust_host_binary", "yoyopod_rust_host_test")
+
+yoyopod_rust_host_binary(
+    name = "yoyopod-voip-host",
+    srcs = glob(["src/**/*.rs"]),
+)
+
+yoyopod_rust_host_test(
+    name = "tests",
+    crate = ":yoyopod-voip-host",
+)

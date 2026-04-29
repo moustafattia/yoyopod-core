@@ -37,6 +37,9 @@ target/
 Cargo.lock
 !workers/ui/rust/Cargo.lock
 
+# Bazel
+bazel-*/
+
 # IDEs
 .vscode/
 .idea/

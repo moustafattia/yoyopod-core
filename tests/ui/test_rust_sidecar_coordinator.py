@@ -79,14 +79,14 @@ def test_coordinator_registers_and_starts_worker() -> None:
     app = SimpleNamespace(worker_supervisor=supervisor)
     coordinator = RustUiSidecarCoordinator(app, worker_domain="ui")
 
-    assert coordinator.start_worker("src/crates/ui-host/build/yoyopod-ui-host")
+    assert coordinator.start_worker("src/ui-host/build/yoyopod-ui-host")
 
     assert supervisor.started == ["ui"]
     domain, config = supervisor.registered[0]
     assert domain == "ui"
     assert getattr(config, "name") == "ui"
     assert getattr(config, "argv") == [
-        "src/crates/ui-host/build/yoyopod-ui-host",
+        "src/ui-host/build/yoyopod-ui-host",
         "--hardware",
         "mock",
     ]
