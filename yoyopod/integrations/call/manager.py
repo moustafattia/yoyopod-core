@@ -1,4 +1,4 @@
-"""App-facing VoIP facade built on top of Liblinphone backend events."""
+"""App-facing VoIP facade backed by the Rust VoIP runtime worker."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Callable, cast
 from loguru import logger
 
 from yoyopod.backends.voip.protocol import VoIPBackend
-from yoyopod.backends.voip import LiblinphoneBackend
 from yoyopod.integrations.call.messaging import MessagingService
 from yoyopod.integrations.call.message_store import VoIPMessageStore
 from yoyopod.integrations.call.models import (
@@ -59,7 +58,7 @@ class VoIPIterateSnapshot:
 
 
 class VoIPManager:
-    """Application-facing VoIP facade over Liblinphone calls and messages."""
+    """Application-facing VoIP facade over the Rust-owned VoIP runtime."""
 
     def __init__(
         self,
@@ -72,7 +71,9 @@ class VoIPManager:
     ) -> None:
         self.config = config
         self.people_directory = people_directory
-        self.backend = backend or LiblinphoneBackend(config)
+        if backend is None:
+            raise ValueError("VoIPManager requires an explicit VoIP backend")
+        self.backend = backend
         self.running = False
         self.registered = False
         self.registration_state = RegistrationState.NONE
@@ -372,15 +373,45 @@ class VoIPManager:
             return
         self._voice_note_service.mark_voice_notes_seen(sip_address)
 
+    def call_history_unread_count(self) -> int:
+        if self._backend_owns_runtime_snapshot() and self._runtime_snapshot is not None:
+            return max(0, int(self._runtime_snapshot.unseen_call_history))
+        return 0
+
+    def call_history_recent_preview(self) -> tuple[str, ...]:
+        if not self._backend_owns_runtime_snapshot() or self._runtime_snapshot is None:
+            return ()
+        preview: list[str] = []
+        for raw_entry in self._runtime_snapshot.recent_call_history:
+            if not isinstance(raw_entry, dict):
+                continue
+            peer_sip_address = str(raw_entry.get("peer_sip_address", "") or "").strip()
+            if peer_sip_address:
+                preview.append(self._extract_username(peer_sip_address))
+        return tuple(preview)
+
+    def mark_call_history_seen(self, sip_address: str = "") -> bool:
+        if not self._backend_owns_runtime_snapshot():
+            return False
+        mark_seen = getattr(self.backend, "mark_call_history_seen", None)
+        if not callable(mark_seen):
+            return False
+        return bool(mark_seen(sip_address))
+
     def play_latest_voice_note(self, sip_address: str) -> bool:
         if self._backend_owns_runtime_snapshot():
             record = self._runtime_voice_note_record_for_contact(sip_address)
             if record is None or not record.local_file_path:
                 return False
-            return self._voice_note_service.play_voice_note(record.local_file_path)
+            return self.play_voice_note(record.local_file_path)
         return self._voice_note_service.play_latest_voice_note(sip_address)
 
     def play_voice_note(self, file_path: str) -> bool:
+        if self._backend_owns_runtime_snapshot():
+            play = getattr(self.backend, "play_voice_note", None)
+            if callable(play):
+                return bool(play(file_path))
+            return False
         return self._voice_note_service.play_voice_note(file_path)
 
     def on_registration_change(self, callback: Callable[[RegistrationState], None]) -> None:
@@ -845,6 +876,11 @@ class VoIPManager:
                 logger.error("Error in runtime snapshot callback: {}", exc)
 
     def _stop_voice_note_playback(self) -> None:
+        if self._backend_owns_runtime_snapshot():
+            stop = getattr(self.backend, "stop_voice_note_playback", None)
+            if callable(stop):
+                stop()
+            return
         self._voice_note_service.stop_voice_note_playback()
 
     @staticmethod

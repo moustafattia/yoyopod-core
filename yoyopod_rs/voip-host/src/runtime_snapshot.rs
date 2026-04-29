@@ -1,7 +1,9 @@
 use crate::calls::CallSession;
+use crate::history::CallHistoryStore;
 use crate::lifecycle::LifecycleState;
 use crate::message_store::MessageStore;
 use crate::messages::MessageSessionState;
+use crate::playback::VoiceNotePlayback;
 use crate::voice_notes::VoiceNoteSession;
 use serde_json::json;
 
@@ -11,6 +13,8 @@ pub struct RuntimeSnapshot<'a> {
     pub registration_state: &'a str,
     pub lifecycle: &'a LifecycleState,
     pub call: &'a CallSession,
+    pub call_history: &'a CallHistoryStore,
+    pub voice_note_playback: &'a VoiceNotePlayback,
     pub voice_note: &'a VoiceNoteSession,
     pub last_message: Option<&'a MessageSessionState>,
     pub pending_outbound_messages: usize,
@@ -24,6 +28,7 @@ impl RuntimeSnapshot<'_> {
             .map(MessageSessionState::payload)
             .unwrap_or(serde_json::Value::Null);
         let message_summary = self.message_store.summary_payload();
+        let call_history = self.call_history.summary_payload();
 
         json!({
             "configured": self.configured,
@@ -35,8 +40,11 @@ impl RuntimeSnapshot<'_> {
             "active_call_peer": self.call.active_peer(),
             "muted": self.call.muted(),
             "call_session": self.call.session_payload(),
+            "unseen_call_history": call_history["unseen_call_history"].clone(),
+            "recent_call_history": call_history["recent_call_history"].clone(),
             "pending_outbound_messages": self.pending_outbound_messages,
             "voice_note": self.voice_note.payload(),
+            "voice_note_playback": self.voice_note_playback.payload(),
             "last_message": last_message,
             "unread_voice_notes": message_summary["unread_voice_notes"].clone(),
             "unread_voice_notes_by_contact": message_summary["unread_voice_notes_by_contact"].clone(),

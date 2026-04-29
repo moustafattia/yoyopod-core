@@ -164,3 +164,47 @@ fn mark_voice_notes_seen_command_updates_snapshot_summary() {
     ));
     assert_eq!(host.session_snapshot_payload()["unread_voice_notes"], 0);
 }
+
+#[test]
+fn mark_call_history_seen_command_updates_snapshot_summary() {
+    let mut host = VoipHost::default();
+    host.configure(config());
+    let mut backend = FakeBackend {
+        events: vec![
+            BackendEvent::IncomingCall {
+                call_id: "sip:mom@example.com".to_string(),
+                from_uri: "sip:mom@example.com".to_string(),
+            },
+            BackendEvent::CallStateChanged {
+                call_id: "sip:mom@example.com".to_string(),
+                state: "end".to_string(),
+            },
+        ],
+        ..FakeBackend::default()
+    };
+    host.poll_backend_events(&mut backend)
+        .expect("incoming call");
+    let mut backend = None;
+
+    let action = handle_command(
+        WorkerEnvelope {
+            schema_version: SUPPORTED_SCHEMA_VERSION,
+            kind: EnvelopeKind::Command,
+            message_type: "voip.mark_call_history_seen".to_string(),
+            request_id: Some("mark-history-1".to_string()),
+            timestamp_ms: 0,
+            deadline_ms: 0,
+            payload: json!({"uri": ""}),
+        },
+        &mut host,
+        &mut backend,
+        None,
+    )
+    .expect("mark history seen should be handled");
+
+    assert!(matches!(
+        action,
+        yoyopod_voip_host::worker::LoopAction::Continue
+    ));
+    assert_eq!(host.session_snapshot_payload()["unseen_call_history"], 0);
+}

@@ -3,4 +3,5 @@ resolver = "2"
 members = [
     "ui-host",
     "voip-host",
+    "liblinphone-shim",
 ]

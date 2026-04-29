@@ -43,6 +43,6 @@ def test_build_pi_setup_commands_bootstraps_checkout_venv_without_uv() -> None:
     assert "python3 -m venv .venv" in argv_strings
     assert ".venv/bin/python -m pip install --upgrade pip setuptools wheel" in argv_strings
     assert ".venv/bin/python -m pip install -e .[dev]" in argv_strings
-    assert ".venv/bin/python -m yoyopod_cli.main build liblinphone" in argv_strings
+    assert ".venv/bin/python -m yoyopod_cli.main build liblinphone" not in argv_strings
     assert ".venv/bin/python -m yoyopod_cli.main build lvgl" in argv_strings
     assert not any("uv " in argv for argv in argv_strings)

@@ -8,8 +8,8 @@
 YoYoPod currently reaches ALSA and device selection through multiple partially overlapping paths:
 
 - music playback uses `media_audio.alsa_device` plus `OutputVolumeController`
-- Liblinphone receives its own playback, ringer, capture, and media device IDs
-- `LiblinphoneBackend` also applies capture-side `amixer` commands directly
+- the Rust VoIP host forwards playback, ringer, capture, and media device IDs to Liblinphone
+- capture-side mixer tuning is still VoIP-specific and must move behind the shared facade
 - voice-command capture resolves `arecord` devices independently
 - spoken prompts use `AlsaOutputPlayer`, which resolves `aplay` devices independently
 
@@ -40,7 +40,7 @@ That means the app does not yet have one global audio hardware contract. Device 
 ### Calls
 
 - `config/device/hardware.yaml` carries shared communication audio device IDs
-- `yoyopod/backends/voip/liblinphone.py` directly issues startup `amixer` capture-tuning commands
+- `yoyopod_rs/voip-host` owns the Liblinphone call runtime; capture tuning still needs to be centralized behind this facade
 
 ### Voice Commands
 
@@ -144,7 +144,7 @@ These should be typed models, not loose dicts.
   - receives resolved playback device
 - `OutputVolumeController`
   - becomes an implementation detail under the facade or is owned by it
-- `LiblinphoneBackend`
+- Rust VoIP host / Rust liblinphone shim
   - receives resolved playback, ringer, capture, and media IDs
   - no longer owns startup `amixer` policy
 - `SubprocessAudioCaptureBackend`

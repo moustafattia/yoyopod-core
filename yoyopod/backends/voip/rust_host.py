@@ -58,6 +58,12 @@ _VOICE_NOTE_RECORDING_COMMANDS = frozenset(
         "voip.cancel_voice_note_recording",
     }
 )
+_VOICE_NOTE_PLAYBACK_COMMANDS = frozenset(
+    {
+        "voip.play_voice_note",
+        "voip.stop_voice_note_playback",
+    }
+)
 _INTENTIONAL_STOP_REASONS = frozenset({"stop", "stop_all"})
 _INTENTIONAL_LIFECYCLE_STOP_REASONS = frozenset({"unregistered", "shutdown"})
 
@@ -253,6 +259,15 @@ class RustHostBackend:
     def mark_voice_notes_seen(self, sip_address: str) -> bool:
         return self._send("voip.mark_voice_notes_seen", {"uri": sip_address})
 
+    def mark_call_history_seen(self, sip_address: str) -> bool:
+        return self._send("voip.mark_call_history_seen", {"uri": sip_address})
+
+    def play_voice_note(self, file_path: str) -> bool:
+        return self._send("voip.play_voice_note", {"file_path": file_path})
+
+    def stop_voice_note_playback(self) -> bool:
+        return self._send("voip.stop_voice_note_playback", {})
+
     def handle_worker_message(self, event: Any) -> None:
         if getattr(event, "domain", self.domain) != self.domain:
             return
@@ -433,6 +448,9 @@ class RustHostBackend:
             self._recording_start_monotonic = None
             self._dispatch(MessageFailed(message_id="", reason=reason))
             return
+        if command in _VOICE_NOTE_PLAYBACK_COMMANDS:
+            logger.warning("Rust VoIP Host voice-note playback command failed: {}", reason)
+            return
         if command in _MESSAGE_SEND_COMMANDS:
             if message_id:
                 self._dispatch(MessageFailed(message_id=message_id, reason=reason))
@@ -602,6 +620,8 @@ def _runtime_snapshot(payload: dict[str, Any]) -> VoIPRuntimeSnapshot:
         active_call_id=str(payload.get("active_call_id", "") or ""),
         active_call_peer=str(payload.get("active_call_peer", "") or ""),
         muted=_bool_payload(payload.get("muted", False)),
+        unseen_call_history=_duration_ms(payload.get("unseen_call_history")),
+        recent_call_history=_call_history_payload(payload.get("recent_call_history")),
         pending_outbound_messages=_duration_ms(payload.get("pending_outbound_messages")),
         unread_voice_notes=_duration_ms(payload.get("unread_voice_notes")),
         unread_voice_notes_by_contact=_int_map_payload(
@@ -694,6 +714,28 @@ def _summary_map_payload(value: object) -> dict[str, dict[str, object]]:
             "display_name": str(summary.get("display_name", "") or ""),
         }
     return result
+
+
+def _call_history_payload(value: object) -> tuple[dict[str, object], ...]:
+    if not isinstance(value, list):
+        return ()
+    entries: list[dict[str, object]] = []
+    for raw_entry in value:
+        entry = _dict_payload(raw_entry)
+        peer_sip_address = str(entry.get("peer_sip_address", "") or "").strip()
+        if not peer_sip_address:
+            continue
+        entries.append(
+            {
+                "session_id": str(entry.get("session_id", "") or ""),
+                "peer_sip_address": peer_sip_address,
+                "direction": str(entry.get("direction", "") or ""),
+                "outcome": str(entry.get("outcome", "") or ""),
+                "duration_seconds": _duration_ms(entry.get("duration_seconds")),
+                "seen": _bool_payload(entry.get("seen", False)),
+            }
+        )
+    return tuple(entries)
 
 
 def _message_kind(value: str) -> MessageKind | None:

@@ -130,7 +130,7 @@ jobs:
         uses: bazelbuild/setup-bazelisk@v3
 
       - name: Run Bazel Rust host tests
-        run: bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/voip-host/...
+        run: bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/voip-host/... //yoyopod_rs/liblinphone-shim/...
 
       - name: Run Rust UI host tests
         working-directory: yoyopod_rs
@@ -164,6 +164,21 @@ jobs:
         with:
           name: yoyopod-voip-host-${{ github.sha }}
           path: yoyopod_rs/voip-host/build/yoyopod-voip-host
+          if-no-files-found: error
+
+      - name: Build Rust Liblinphone shim
+        working-directory: yoyopod_rs
+        run: |
+          set -euo pipefail
+          cargo build --release -p yoyopod-liblinphone-shim --locked
+          mkdir -p liblinphone-shim/build
+          cp target/release/libyoyopod_liblinphone_shim.so liblinphone-shim/build/libyoyopod_liblinphone_shim.so
+
+      - name: Upload Rust Liblinphone shim ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoyopod-liblinphone-shim-${{ github.sha }}
+          path: yoyopod_rs/liblinphone-shim/build/libyoyopod_liblinphone_shim.so
           if-no-files-found: error
 
   slot-arm64:

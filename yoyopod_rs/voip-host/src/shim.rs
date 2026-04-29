@@ -141,16 +141,20 @@ pub fn resolve_shim_path(explicit_path: Option<&str>) -> Result<PathBuf, ShimErr
             return Ok(PathBuf::from(path));
         }
     }
-    let repo_candidate = Path::new("yoyopod")
-        .join("backends")
-        .join("voip")
-        .join("shim_native")
-        .join("build")
-        .join(shim_file_name());
-    if repo_candidate.exists() {
-        return Ok(repo_candidate);
+    for candidate in default_shim_candidates(Path::new(".")) {
+        if candidate.exists() {
+            return Ok(candidate);
+        }
     }
     Err(ShimError::NotFound)
+}
+
+pub fn default_shim_candidates(repo_root: &Path) -> Vec<PathBuf> {
+    vec![repo_root
+        .join("yoyopod_rs")
+        .join("liblinphone-shim")
+        .join("build")
+        .join(shim_file_name())]
 }
 
 fn shim_file_name() -> &'static str {

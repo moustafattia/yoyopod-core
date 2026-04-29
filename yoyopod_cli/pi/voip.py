@@ -7,7 +7,7 @@ from typing import Any, Callable, Protocol, cast
 
 import typer
 
-from yoyopod_cli.common import configure_logging, resolve_config_dir
+from yoyopod_cli.common import configure_logging
 
 app = typer.Typer(
     name="voip",
@@ -57,20 +57,13 @@ class _VoIPManagerLike(Protocol):
 def _build_voip_manager(config_dir: str) -> _VoIPManagerLike:
     from loguru import logger
 
-    from yoyopod.backends.voip import LiblinphoneBinding
-    from yoyopod.config import ConfigManager
-    from yoyopod.integrations.call import VoIPConfig, VoIPManager
+    from yoyopod_cli.pi.rust_voip_runtime import build_rust_voip_manager
 
-    if LiblinphoneBinding.try_load() is None:
-        logger.error(
-            "Liblinphone shim is unavailable. Build it first with yoyopod build liblinphone."
-        )
+    try:
+        return cast(_VoIPManagerLike, build_rust_voip_manager(config_dir))
+    except RuntimeError as exc:
+        logger.error(str(exc))
         raise typer.Exit(code=1)
-
-    config_path = resolve_config_dir(config_dir)
-    config_manager = ConfigManager(config_dir=str(config_path))
-    voip_config = VoIPConfig.from_config_manager(config_manager)
-    return cast(_VoIPManagerLike, VoIPManager(voip_config))
 
 
 @app.command()
@@ -81,13 +74,13 @@ def check(
         help="Configuration directory to use.",
     ),
 ) -> None:
-    """Run a verbose SIP registration check against the Liblinphone backend."""
+    """Run a verbose SIP registration check against the Rust VoIP runtime."""
     from loguru import logger
 
     configure_logging(verbose=True)
 
     logger.info("=" * 60)
-    logger.info("Liblinphone Registration Test")
+    logger.info("Rust VoIP Registration Test")
     logger.info("=" * 60)
 
     voip_manager = _build_voip_manager(config_dir)

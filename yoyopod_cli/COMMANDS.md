@@ -62,7 +62,7 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod pi validate smoke` | Validate core target hardware paths: environment, display, input, and optional PiSugar state. |
 | `yoyopod pi validate stability` | Run a repeated navigation and idle stability pass on the target checkout. |
 | `yoyopod pi validate voip` | VoIP validation: quick check (default) or soak drill (--soak registration|reconnect|call). |
-| `yoyopod pi voip check` | Run a verbose SIP registration check against the Liblinphone backend. |
+| `yoyopod pi voip check` | Run a verbose SIP registration check against the Rust VoIP runtime. |
 | `yoyopod pi voip debug` | Monitor for incoming SIP calls with verbose logging. |
 
 ## `yoyopod build`
@@ -71,7 +71,7 @@ For live help, use `yoyopod <cmd> --help`.
 |---|---|
 | `yoyopod build clean-native` | Remove mutable native CMake build dirs before a clean rebuild. |
 | `yoyopod build ensure-native` | Build missing or stale native shims required by the app. |
-| `yoyopod build liblinphone` | Build the native Liblinphone shim for the current platform. |
+| `yoyopod build liblinphone` | Build the Rust Liblinphone shim for the current platform. |
 | `yoyopod build lvgl` | Build the pinned LVGL shim for the current platform. |
 | `yoyopod build rust-ui-host` | Build the Rust UI host binary. |
 | `yoyopod build rust-ui-poc` | Compatibility alias for `yoyopod build rust-ui-host`. |

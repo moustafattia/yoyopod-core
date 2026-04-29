@@ -44,13 +44,8 @@ HOST_REMOTE_TOOLS: tuple[str, ...] = ("ssh", "rsync")
 HOST_DEV_MODULES: tuple[str, ...] = ("pytest", "black", "ruff", "mypy", "typer")
 NATIVE_ARTIFACTS: tuple[Path, ...] = (
     REPO_ROOT / "yoyopod" / "ui" / "lvgl_binding" / "native" / "build" / "libyoyopod_lvgl_shim.so",
-    REPO_ROOT
-    / "yoyopod"
-    / "backends"
-    / "voip"
-    / "shim_native"
-    / "build"
-    / "libyoyopod_liblinphone_shim.so",
+    REPO_ROOT / "yoyopod_rs" / "voip-host" / "build" / "yoyopod-voip-host",
+    REPO_ROOT / "yoyopod_rs" / "liblinphone-shim" / "build" / "libyoyopod_liblinphone_shim.so",
 )
 PI_VENV_DIR = ".venv"
 
@@ -249,10 +244,6 @@ def build_pi_setup_commands(
     if not skip_builds:
         commands.extend(
             (
-                SetupCommand(
-                    "build-liblinphone",
-                    (venv_python, "-m", "yoyopod_cli.main", "build", "liblinphone"),
-                ),
                 SetupCommand(
                     "build-lvgl",
                     (venv_python, "-m", "yoyopod_cli.main", "build", "lvgl"),

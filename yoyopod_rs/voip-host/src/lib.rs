@@ -1,10 +1,12 @@
 pub mod calls;
 pub mod config;
 pub mod events;
+pub mod history;
 pub mod host;
 pub mod lifecycle;
 pub mod message_store;
 pub mod messages;
+pub mod playback;
 pub mod protocol;
 pub mod runtime_snapshot;
 pub mod shim;

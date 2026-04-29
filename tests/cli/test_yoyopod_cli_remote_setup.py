@@ -18,7 +18,7 @@ def test_build_setup_calls_pi_setup() -> None:
     assert "sudo apt update" in shell
     assert "python3 -m venv .venv" in shell
     assert ".venv/bin/python -m pip install -e '.[dev]'" in shell
-    assert ".venv/bin/python -m yoyopod_cli.main build liblinphone" in shell
+    assert ".venv/bin/python -m yoyopod_cli.main build liblinphone" not in shell
     assert ".venv/bin/python -m yoyopod_cli.main build lvgl" in shell
 
 

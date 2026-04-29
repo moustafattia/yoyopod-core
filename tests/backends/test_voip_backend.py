@@ -1,9 +1,8 @@
-"""Unit tests for the Liblinphone backend abstraction and manager facade."""
+"""Unit tests for the Rust VoIP backend adapter and manager facade."""
 
 from __future__ import annotations
 
 import queue
-import subprocess
 import tempfile
 import threading
 import time
@@ -12,9 +11,8 @@ from types import SimpleNamespace
 from typing import Callable
 
 import pytest
-from cffi import FFI
 
-from yoyopod.backends.voip import LiblinphoneBackend, LiblinphoneBinding, MockVoIPBackend
+from yoyopod.backends.voip import MockVoIPBackend
 from yoyopod.backends.voip.rust_host import _runtime_snapshot
 from yoyopod.integrations.call.models import (
     BackendRecovered,
@@ -40,75 +38,6 @@ from yoyopod.integrations.call.models import (
     VoIPVoiceNoteSnapshot,
 )
 from yoyopod.integrations.call import VoIPManager
-
-
-class FakeBinding:
-    """Minimal binding double for LiblinphoneBackend tests."""
-
-    def __init__(self) -> None:
-        self.started = False
-        self.initialized = False
-        self.stopped = False
-        self.shutdown_called = False
-        self.events: list[SimpleNamespace] = []
-        self.calls: list[str] = []
-        self.start_kwargs: dict[str, object] = {}
-
-    def init(self) -> None:
-        self.initialized = True
-
-    def shutdown(self) -> None:
-        self.shutdown_called = True
-
-    def start(self, **kwargs) -> None:
-        self.start_kwargs = kwargs
-        self.started = True
-
-    def stop(self) -> None:
-        self.stopped = True
-
-    def iterate(self) -> None:
-        return
-
-    def poll_event(self):
-        if not self.events:
-            return None
-        return self.events.pop(0)
-
-    def make_call(self, sip_address: str) -> None:
-        self.calls.append(f"call {sip_address}")
-
-    def answer_call(self) -> None:
-        self.calls.append("answer")
-
-    def reject_call(self) -> None:
-        self.calls.append("reject")
-
-    def hangup(self) -> None:
-        self.calls.append("hangup")
-
-    def set_muted(self, muted: bool) -> None:
-        self.calls.append(f"mute {muted}")
-
-    def send_text_message(self, sip_address: str, text: str) -> str:
-        self.calls.append(f"text {sip_address} {text}")
-        return "text-1"
-
-    def start_voice_recording(self, file_path: str) -> None:
-        self.calls.append(f"record {file_path}")
-
-    def stop_voice_recording(self) -> int:
-        self.calls.append("stop-record")
-        return 1800
-
-    def cancel_voice_recording(self) -> None:
-        self.calls.append("cancel-record")
-
-    def send_voice_note(
-        self, sip_address: str, *, file_path: str, duration_ms: int, mime_type: str
-    ) -> str:
-        self.calls.append(f"voice {sip_address} {file_path} {duration_ms} {mime_type}")
-        return "voice-1"
 
 
 class FakePeopleDirectory:
@@ -163,12 +92,27 @@ class SnapshotOwnedMockVoIPBackend(MockVoIPBackend):
         super().__init__()
         self.runtime_snapshot: VoIPRuntimeSnapshot | None = None
         self.mark_seen_addresses: list[str] = []
+        self.marked_call_history_addresses: list[str] = []
+        self.played_voice_notes: list[str] = []
+        self.stopped_playback = 0
 
     def get_runtime_snapshot(self) -> VoIPRuntimeSnapshot | None:
         return self.runtime_snapshot
 
     def mark_voice_notes_seen(self, sip_address: str) -> bool:
         self.mark_seen_addresses.append(sip_address)
+        return True
+
+    def mark_call_history_seen(self, sip_address: str) -> bool:
+        self.marked_call_history_addresses.append(sip_address)
+        return True
+
+    def play_voice_note(self, file_path: str) -> bool:
+        self.played_voice_notes.append(file_path)
+        return True
+
+    def stop_voice_note_playback(self) -> bool:
+        self.stopped_playback += 1
         return True
 
 
@@ -188,29 +132,11 @@ def build_config(storage_root: Path | None = None) -> VoIPConfig:
     )
 
 
-def native_event(**overrides) -> SimpleNamespace:
-    """Create one fake native shim event."""
+def test_voip_manager_requires_explicit_backend_in_rust_only_runtime() -> None:
+    """The Python facade must not construct a legacy liblinphone backend itself."""
 
-    base = {
-        "type": 1,
-        "registration_state": 0,
-        "call_state": 0,
-        "message_kind": 1,
-        "message_direction": 1,
-        "message_delivery_state": 1,
-        "duration_ms": 0,
-        "unread": 0,
-        "message_id": "",
-        "peer_sip_address": "",
-        "sender_sip_address": "",
-        "recipient_sip_address": "",
-        "local_file_path": "",
-        "mime_type": "",
-        "text": "",
-        "reason": "",
-    }
-    base.update(overrides)
-    return SimpleNamespace(**base)
+    with pytest.raises(ValueError, match="requires an explicit VoIP backend"):
+        VoIPManager(build_config())
 
 
 def wait_for_condition(predicate: Callable[[], bool], *, timeout_seconds: float = 1.0) -> bool:
@@ -224,194 +150,17 @@ def wait_for_condition(predicate: Callable[[], bool], *, timeout_seconds: float 
     return predicate()
 
 
-def test_liblinphone_backend_starts_and_drains_native_events() -> None:
-    """LiblinphoneBackend should translate native shim events into typed events."""
-
-    binding = FakeBinding()
-    backend = LiblinphoneBackend(build_config(), binding=binding)
-    events: list[object] = []
-    backend.on_event(events.append)
-
-    assert backend.start()
-
-    binding.events = [
-        native_event(type=1, registration_state=2),
-        native_event(type=3, peer_sip_address="sip:parent@example.com"),
-        native_event(type=2, call_state=6),
-        native_event(
-            type=5,
-            message_id="msg-1",
-            peer_sip_address="sip:parent@example.com",
-            sender_sip_address="sip:parent@example.com",
-            recipient_sip_address="sip:alice@example.com",
-            message_kind=2,
-            message_direction=1,
-            message_delivery_state=4,
-            local_file_path="data/voice.wav",
-            duration_ms=2100,
-            unread=1,
-        ),
-    ]
-    drained_events = backend.iterate()
-
-    assert isinstance(events[0], RegistrationStateChanged)
-    assert events[0].state == RegistrationState.OK
-    assert isinstance(events[1], IncomingCallDetected)
-    assert isinstance(events[2], CallStateChanged)
-    assert events[2].state == CallState.CONNECTED
-    assert isinstance(events[3], MessageReceived)
-    assert events[3].message.kind == MessageKind.VOICE_NOTE
-    assert events[3].message.unread is True
-    assert drained_events == 4
-    assert binding.start_kwargs["conference_factory_uri"] == ""
-    assert binding.start_kwargs["file_transfer_server_url"] == "https://transfer.example.com"
-    assert binding.start_kwargs["lime_server_url"] == ""
-    assert binding.start_kwargs["mic_gain"] == 0
-    assert binding.start_kwargs["output_volume"] == 100
-    assert (
-        binding.start_kwargs["factory_config_path"]
-        .replace("\\", "/")
-        .endswith("config/communication/integrations/liblinphone_factory.conf")
-    )
-
-
 def test_voip_manager_skips_backend_start_when_identity_missing() -> None:
     """VoIPManager should fail fast before touching the backend when SIP identity is absent."""
 
-    binding = FakeBinding()
+    backend = MockVoIPBackend()
     config = build_config()
     config.sip_identity = ""
-    manager = VoIPManager(config, backend=LiblinphoneBackend(config, binding=binding))
+    manager = VoIPManager(config, backend=backend)
 
     assert manager.start() is False
-    assert binding.initialized is False
-    assert binding.started is False
+    assert backend.running is False
     assert manager.registration_state == RegistrationState.FAILED
-
-
-def test_liblinphone_backend_infers_linphone_hosted_servers() -> None:
-    """Hosted Linphone accounts should inherit the same messaging defaults as the official client."""
-
-    binding = FakeBinding()
-    config = build_config()
-    config.sip_server = "sip.linphone.org"
-    config.file_transfer_server_url = ""
-    config.lime_server_url = ""
-    backend = LiblinphoneBackend(config, binding=binding)
-
-    assert backend.start()
-    assert (
-        binding.start_kwargs["conference_factory_uri"] == "sip:conference-factory@sip.linphone.org"
-    )
-    assert binding.start_kwargs["file_transfer_server_url"] == "https://files.linphone.org/lft.php"
-    assert (
-        binding.start_kwargs["lime_server_url"]
-        == "https://lime.linphone.org/lime-server/lime-server.php"
-    )
-
-
-def test_liblinphone_backend_records_native_iterate_timings(monkeypatch) -> None:
-    """Keep-alive diagnostics should separate native iterate time from event-drain time."""
-
-    binding = FakeBinding()
-    binding.events = [native_event(type=1, registration_state=2)]
-    backend = LiblinphoneBackend(build_config(), binding=binding)
-    warnings: list[tuple[object, ...]] = []
-    monotonic_values = iter([10.0, 10.0, 10.18, 10.18, 10.29, 10.31])
-
-    monkeypatch.setattr(
-        "yoyopod.backends.voip.liblinphone.time.monotonic",
-        lambda: next(monotonic_values),
-    )
-    monkeypatch.setattr(
-        "yoyopod.backends.voip.liblinphone.logger.warning",
-        lambda *args: warnings.append(args),
-    )
-
-    assert backend.start()
-
-    drained_events = backend.iterate()
-    metrics = backend.get_iterate_metrics()
-
-    assert drained_events == 1
-    assert metrics is not None
-    assert metrics.native_duration_seconds == pytest.approx(0.18)
-    assert metrics.event_drain_duration_seconds == pytest.approx(0.11)
-    assert metrics.total_duration_seconds == pytest.approx(0.31)
-    assert metrics.drained_events == 1
-    assert warnings[0][0].startswith("VoIP keep-alive native iterate slow:")
-    assert warnings[1][0].startswith("VoIP keep-alive event drain slow:")
-
-
-def test_liblinphone_backend_uses_shared_output_volume_and_capture_only_alsa(monkeypatch) -> None:
-    """VoIP startup should inherit app output volume but only touch capture-path mixers."""
-
-    commands: list[str] = []
-
-    def fake_run(command, **kwargs) -> subprocess.CompletedProcess[str]:
-        if command == ["arecord", "-l"]:
-            stdout = (
-                "**** List of CAPTURE Hardware Devices ****\n"
-                "card 0: wm8960soundcard [wm8960-soundcard], device 0: foo [bar]\n"
-            )
-            return subprocess.CompletedProcess(command, 0, stdout, "")
-        commands.append(command)
-        return subprocess.CompletedProcess(command, 0, "", "")
-
-    monkeypatch.setattr("yoyopod.backends.voip.liblinphone.subprocess.run", fake_run)
-
-    binding = FakeBinding()
-    config = build_config()
-    config.output_volume = 73
-    backend = LiblinphoneBackend(config, binding=binding)
-
-    assert backend.start()
-    assert binding.start_kwargs["output_volume"] == 73
-    assert all("Speaker" not in command for command in commands)
-    assert all("Headphone" not in command for command in commands)
-    assert all("Playback" not in command for command in commands)
-    assert any("Capture" in command for command in commands)
-    assert any("ADC PCM" in command for command in commands)
-    assert any("sset 'Capture' 26" in command for command in commands)
-    assert all("-c 0" in command for command in commands)
-
-
-def test_liblinphone_backend_matches_wm8960_card_from_capture_device(monkeypatch) -> None:
-    """The ALSA capture mixer should target the card matching the configured device name."""
-
-    commands: list[str] = []
-
-    def fake_run(command, **kwargs) -> subprocess.CompletedProcess[str]:
-        if command == ["arecord", "-l"]:
-            stdout = (
-                "**** List of CAPTURE Hardware Devices ****\n"
-                "card 2: other [Other Card], device 0: foo [bar]\n"
-                "card 0: wm8960soundcard [wm8960-soundcard], device 0: foo [bar]\n"
-            )
-            return subprocess.CompletedProcess(command, 0, stdout, "")
-        commands.append(command)
-        return subprocess.CompletedProcess(command, 0, "", "")
-
-    monkeypatch.setattr("yoyopod.backends.voip.liblinphone.subprocess.run", fake_run)
-
-    backend = LiblinphoneBackend(build_config(), binding=FakeBinding())
-
-    backend._configure_alsa_capture_path()
-
-    assert commands
-    assert all("-c 0" in command for command in commands)
-
-
-def test_liblinphone_binding_decodes_c_string_arrays() -> None:
-    """Fixed-size C char arrays should decode through ffi.string on all platforms."""
-
-    ffi = FFI()
-    binding = object.__new__(LiblinphoneBinding)
-    binding.ffi = ffi
-
-    buffer = ffi.new("char[]", b"sip:parent@example.com")
-
-    assert binding._decode_c_string(buffer) == "sip:parent@example.com"
 
 
 def test_voip_manager_applies_backend_events_and_resolves_contact_names() -> None:
@@ -656,6 +405,41 @@ def test_rust_runtime_snapshot_parses_message_summary_fields() -> None:
     }
 
 
+def test_rust_runtime_snapshot_parses_call_history_fields() -> None:
+    """Rust call-history summaries should survive Python parsing without Python storage."""
+
+    snapshot = _runtime_snapshot(
+        {
+            "configured": True,
+            "registered": True,
+            "registration_state": "ok",
+            "unseen_call_history": 1,
+            "recent_call_history": [
+                {
+                    "session_id": "call-1",
+                    "peer_sip_address": "sip:mom@example.com",
+                    "direction": "incoming",
+                    "outcome": "missed",
+                    "duration_seconds": 0,
+                    "seen": False,
+                }
+            ],
+        }
+    )
+
+    assert snapshot.unseen_call_history == 1
+    assert snapshot.recent_call_history == (
+        {
+            "session_id": "call-1",
+            "peer_sip_address": "sip:mom@example.com",
+            "direction": "incoming",
+            "outcome": "missed",
+            "duration_seconds": 0,
+            "seen": False,
+        },
+    )
+
+
 def test_voip_manager_uses_rust_owned_voice_note_summary_snapshot() -> None:
     """Rust-host mode should expose voice-note summaries from snapshots, not Python storage."""
 
@@ -700,6 +484,52 @@ def test_voip_manager_uses_rust_owned_voice_note_summary_snapshot() -> None:
     assert manager.latest_voice_note_summary()["sip:mom@example.com"]["message_id"] == "note-1"
     assert summary_events == [(1, snapshot.latest_voice_note_by_contact)]
     assert backend.mark_seen_addresses == ["sip:mom@example.com"]
+
+
+def test_voip_manager_routes_rust_owned_playback_to_backend() -> None:
+    """Voice-note playback is a Rust runtime command, not a Python subprocess."""
+
+    backend = SnapshotOwnedMockVoIPBackend()
+    manager = VoIPManager(build_config(), backend=backend)
+    snapshot = VoIPRuntimeSnapshot(
+        configured=True,
+        registered=True,
+        registration_state=RegistrationState.OK,
+        lifecycle=VoIPLifecycleSnapshot(
+            state="registered",
+            reason="registered",
+            backend_available=True,
+        ),
+        latest_voice_note_by_contact={
+            "sip:mom@example.com": {
+                "message_id": "note-1",
+                "direction": "incoming",
+                "delivery_state": "delivered",
+                "local_file_path": "/tmp/note-1.wav",
+                "duration_ms": 1800,
+                "unread": True,
+                "display_name": "Mom",
+            }
+        },
+    )
+
+    assert manager.start()
+    backend.runtime_snapshot = snapshot
+    backend.emit(VoIPRuntimeSnapshotChanged(snapshot=snapshot))
+
+    assert manager.play_latest_voice_note("sip:mom@example.com") is True
+    assert backend.played_voice_notes == ["/tmp/note-1.wav"]
+
+
+def test_voip_manager_stops_rust_owned_playback_through_backend() -> None:
+    """Call activity should ask Rust to stop playback when Rust owns the runtime."""
+
+    backend = SnapshotOwnedMockVoIPBackend()
+    manager = VoIPManager(build_config(), backend=backend)
+
+    manager._update_call_state(CallState.INCOMING)
+
+    assert backend.stopped_playback == 1
 
 
 def test_voip_manager_does_not_persist_rust_owned_message_events_to_python_store(
@@ -1225,68 +1055,6 @@ def test_voip_manager_builds_message_store_under_directory(tmp_path: Path) -> No
 
     assert manager._message_store.store_dir == tmp_path / "messages"
     assert manager._message_store.index_file == tmp_path / "messages" / "messages.json"
-
-
-def test_liblinphone_shim_records_voice_notes_as_wav() -> None:
-    """The native recorder shim should explicitly match the .wav files used by the app."""
-
-    shim_source = Path("yoyopod/backends/voip/shim_native/liblinphone_shim.c").read_text(
-        encoding="utf-8"
-    )
-
-    assert (
-        "linphone_recorder_params_set_file_format(params, LinphoneRecorderFileFormatWav);"
-        in shim_source
-    )
-
-
-def test_liblinphone_shim_wires_incoming_message_debug_paths() -> None:
-    """The native shim should cover aggregated and undecryptable incoming message paths."""
-
-    shim_source = Path("yoyopod/backends/voip/shim_native/liblinphone_shim.c").read_text(
-        encoding="utf-8"
-    )
-
-    assert (
-        "linphone_core_cbs_set_messages_received(g_state.core_cbs, yoyopod_on_messages_received);"
-        in shim_source
-    )
-    assert (
-        "linphone_core_set_chat_messages_aggregation_enabled(g_state.core, FALSE);" in shim_source
-    )
-    assert "linphone_core_cbs_set_message_received_unable_decrypt(" in shim_source
-    assert "linphone_account_params_enable_cpim_in_basic_chat_room(params, TRUE);" in shim_source
-    assert (
-        "linphone_account_params_set_conference_factory_address(params, conference_factory_address);"
-        in shim_source
-    )
-    assert "linphone_account_params_set_lime_server_url(params, lime_server_url);" in shim_source
-    assert "linphone_factory_create_chat_room_cbs(g_state.factory);" in shim_source
-    assert "linphone_chat_room_add_callbacks(chat_room, g_state.chat_room_cbs);" in shim_source
-    assert (
-        "linphone_chat_room_cbs_set_message_received(g_state.chat_room_cbs, yoyopod_on_chat_room_message_received);"
-        in shim_source
-    )
-    assert "linphone_logging_service_set_log_level_mask(" in shim_source
-    assert 'yoyopod_log_account_diagnostics("registration_ok");' in shim_source
-    assert "linphone_core_search_chat_room(" in shim_source
-    assert "linphone_core_create_chat_room_6(" in shim_source
-    assert (
-        "linphone_chat_room_params_set_backend(params, LinphoneChatRoomBackendFlexisipChat);"
-        in shim_source
-    )
-    assert (
-        "linphone_chat_room_params_set_backend(params, LinphoneChatRoomBackendBasic);"
-        in shim_source
-    )
-    assert "linphone_chat_room_params_enable_encryption(params, FALSE);" in shim_source
-    assert "voice-recording=yes" in shim_source
-    assert (
-        "linphone_core_enable_auto_download_voice_recordings(g_state.core, FALSE);" in shim_source
-    )
-    assert 'linphone_chat_room_params_set_subject(params, "YoYoPod");' in shim_source
-    assert "linphone_core_delete_chat_room(g_state.core, chat_room);" in shim_source
-    assert shim_source.count("chat_room = yoyopod_get_direct_chat_room(sip_address);") >= 2
 
 
 def test_voip_manager_handles_backend_stop_event() -> None:

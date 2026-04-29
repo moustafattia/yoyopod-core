@@ -105,7 +105,7 @@ This is the startup sequence that exists on `main` today.
 8. `app.run()` delegates to `RuntimeLoopService.run()`, which is the steady-state main-thread loop.
    - It logs a startup status snapshot.
    - It starts the watchdog cadence.
-   - Each loop iteration drains queued scheduler tasks first, then typed bus events, pumps LVGL timers and queued input, iterates the Liblinphone backend on the main thread, polls recovery and power services, and refreshes active screens on the configured cadence.
+   - Each loop iteration drains queued scheduler tasks first, then typed bus events, pumps LVGL timers and queued input, polls Rust worker events, polls recovery and power services, and refreshes active screens on the configured cadence.
    - The outer loop adapts its next wake based on runtime state: call / recent-input paths stay fast, awake idle relaxes, and screen-off idle can relax further while still honoring the next VoIP, watchdog, power-poll, shutdown, or screen-refresh deadline.
 9. Shutdown runs through `app.stop()` and `yoyopod.core.shutdown.ShutdownLifecycleService.stop()`.
    - network, VoIP, music, and input managers are stopped
@@ -155,8 +155,10 @@ yoyopod.py / yoyopod.main
         -> MpvIpcClient
            -> mpv JSON IPC over Unix socket / named pipe
       -> VoIPManager
-         -> LiblinphoneBackend
-            -> native Liblinphone shim
+         -> RustHostBackend
+            -> yoyopod_rs/voip-host worker
+               -> Rust liblinphone shim
+                  -> Liblinphone
       -> PowerManager
          -> PiSugarBackend
          -> PiSugarWatchdog
@@ -207,7 +209,7 @@ yoyopod.py / yoyopod.main
 - `yoyopod/backends/music/`: concrete mpv adapters
 - `yoyopod/integrations/call/`: canonical public call manager, session FSM/policy, lifecycle tracker, messaging service, models, message store, history, and voice-note seam
 - `yoyopod/integrations/call/events.py`: call-domain typed events
-- `yoyopod/backends/voip/`: canonical Liblinphone adapter, protocol types, mock backend, and native shim binding
+- `yoyopod/backends/voip/`: Rust VoIP host supervisor adapter, protocol types, and mock backend
 - `yoyopod/integrations/contacts/`: mutable contacts/address-book domain
 - `config/communication/integrations/liblinphone_factory.conf`: repo-managed Liblinphone factory config for media, codec, and network defaults
 

@@ -360,6 +360,51 @@ pub fn handle_command(
                 write_session_snapshot(host)?;
             }
         }
+        "voip.mark_call_history_seen" => {
+            let uri = envelope
+                .payload
+                .get("uri")
+                .or_else(|| envelope.payload.get("sip_address"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim();
+            host.mark_call_history_seen(uri);
+            write_envelope(&WorkerEnvelope::result(
+                "voip.mark_call_history_seen",
+                envelope.request_id,
+                json!({"marked_seen": true}),
+            ))?;
+            write_session_snapshot(host)?;
+        }
+        "voip.play_voice_note" => {
+            let file_path = envelope.payload["file_path"].as_str().unwrap_or("").trim();
+            if file_path.is_empty() {
+                write_envelope(&WorkerEnvelope::error(
+                    "voip.error",
+                    envelope.request_id,
+                    "invalid_command",
+                    "voip.play_voice_note requires file_path",
+                ))?;
+            } else {
+                host.play_voice_note(file_path)
+                    .map_err(|error| anyhow!(error))?;
+                write_envelope(&WorkerEnvelope::result(
+                    "voip.play_voice_note",
+                    envelope.request_id,
+                    json!({"playing": true}),
+                ))?;
+                write_session_snapshot(host)?;
+            }
+        }
+        "voip.stop_voice_note_playback" => {
+            host.stop_voice_note_playback();
+            write_envelope(&WorkerEnvelope::result(
+                "voip.stop_voice_note_playback",
+                envelope.request_id,
+                json!({"stopped": true}),
+            ))?;
+            write_session_snapshot(host)?;
+        }
         "voip.shutdown" | "worker.stop" => {
             if let Some(mut backend_ref) = backend.take() {
                 host.unregister(&mut backend_ref);

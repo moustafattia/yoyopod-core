@@ -274,6 +274,27 @@ def test_send_text_message_returns_client_id_and_sends_worker_command() -> None:
     ]
 
 
+def test_history_and_playback_commands_send_worker_commands() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    backend.start()
+    supervisor.sent.clear()
+
+    assert backend.mark_call_history_seen("sip:mom@example.com") is True
+    assert backend.play_voice_note("/tmp/note.wav") is True
+    assert backend.stop_voice_note_playback() is True
+
+    assert supervisor.sent == [
+        (
+            "voip",
+            "voip.mark_call_history_seen",
+            {"uri": "sip:mom@example.com"},
+        ),
+        ("voip", "voip.play_voice_note", {"file_path": "/tmp/note.wav"}),
+        ("voip", "voip.stop_voice_note_playback", {}),
+    ]
+
+
 def test_text_message_ids_do_not_repeat_across_backend_instances() -> None:
     first = RustHostBackend(_config(), worker_supervisor=_FakeSupervisor(), worker_path="/bin/voip")
     second = RustHostBackend(

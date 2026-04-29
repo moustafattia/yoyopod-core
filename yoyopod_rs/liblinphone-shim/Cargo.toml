@@ -1,0 +1,12 @@
+[package]
+name = "yoyopod-liblinphone-shim"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "yoyopod_liblinphone_shim"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+libloading = "0.8"
+once_cell = "1"

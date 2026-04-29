@@ -22,20 +22,13 @@ from yoyopod_cli.pi.validate.service_env import load_service_env_file, resolve_s
 
 
 def _voip_check(config_dir: Path, registration_timeout: float) -> _CheckResult:
-    """Validate Liblinphone startup and SIP registration."""
-    from yoyopod.backends.voip import LiblinphoneBinding
+    """Validate Rust VoIP startup and SIP registration."""
     from yoyopod.config import ConfigManager
-    from yoyopod.integrations.call import VoIPConfig, VoIPManager
+    from yoyopod.integrations.call import VoIPConfig
+    from yoyopod_cli.pi.rust_voip_runtime import build_rust_voip_manager
 
     config_manager = ConfigManager(config_dir=str(config_dir))
     voip_config = VoIPConfig.from_config_manager(config_manager)
-    binding = LiblinphoneBinding.try_load()
-    if binding is None:
-        return _CheckResult(
-            name="voip",
-            status="fail",
-            details="Liblinphone shim is unavailable; run yoyopod build liblinphone on the Pi",
-        )
 
     if not voip_config.sip_identity:
         return _CheckResult(
@@ -44,10 +37,10 @@ def _voip_check(config_dir: Path, registration_timeout: float) -> _CheckResult:
             details="sip_identity is empty in config/communication/calling.yaml",
         )
 
-    manager = VoIPManager(
-        voip_config,
-        people_directory=None,
-    )
+    try:
+        manager = build_rust_voip_manager(str(config_dir))
+    except RuntimeError as exc:
+        return _CheckResult(name="voip", status="fail", details=str(exc))
     try:
         if not manager.start():
             return _CheckResult(
@@ -345,20 +338,13 @@ class _VoIPDrillRecorder:
 def _build_voip_manager_for_drill(config_dir: str) -> _VoIPManagerLike:
     from loguru import logger
 
-    from yoyopod.backends.voip import LiblinphoneBinding
-    from yoyopod.config import ConfigManager
-    from yoyopod.integrations.call import VoIPConfig, VoIPManager
+    from yoyopod_cli.pi.rust_voip_runtime import build_rust_voip_manager
 
-    if LiblinphoneBinding.try_load() is None:
-        logger.error(
-            "Liblinphone shim is unavailable. Build it first with yoyopod build liblinphone."
-        )
+    try:
+        return cast(_VoIPManagerLike, build_rust_voip_manager(config_dir))
+    except RuntimeError as exc:
+        logger.error(str(exc))
         raise typer.Exit(code=1)
-
-    config_path = resolve_config_dir(config_dir)
-    config_manager = ConfigManager(config_dir=str(config_path))
-    voip_config = VoIPConfig.from_config_manager(config_manager)
-    return cast(_VoIPManagerLike, VoIPManager(voip_config))
 
 
 def _iterate_interval_seconds(manager: _VoIPManagerLike) -> float:

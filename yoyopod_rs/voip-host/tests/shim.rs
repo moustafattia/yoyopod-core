@@ -5,13 +5,32 @@ use serde_json::json;
 use yoyopod_voip_host::config::VoipConfig;
 use yoyopod_voip_host::host::{BackendEvent, MessageRecord};
 use yoyopod_voip_host::shim::{
-    native_event_to_backend_event, resolve_shim_path, NativeEvent, StartAudioSettings,
+    default_shim_candidates, native_event_to_backend_event, resolve_shim_path, NativeEvent,
+    StartAudioSettings,
 };
 
 #[test]
 fn explicit_path_wins() {
     let path = resolve_shim_path(Some("/tmp/libshim.so")).expect("path");
     assert_eq!(path, PathBuf::from("/tmp/libshim.so"));
+}
+
+#[test]
+fn default_shim_candidates_prefer_rust_liblinphone_shim_artifact() {
+    let candidates = default_shim_candidates(std::path::Path::new("/repo"));
+
+    assert_eq!(
+        candidates[0],
+        std::path::Path::new("/repo")
+            .join("yoyopod_rs")
+            .join("liblinphone-shim")
+            .join("build")
+            .join(platform_shim_file_name())
+    );
+    assert_eq!(candidates.len(), 1);
+    assert!(!candidates.iter().any(|candidate| candidate
+        .components()
+        .any(|component| component.as_os_str() == "shim_native")));
 }
 
 #[test]
@@ -112,5 +131,15 @@ fn native_message_delivery_events_map_to_backend_events() {
 fn write_c_string<const N: usize>(buffer: &mut [c_char; N], value: &str) {
     for (slot, byte) in buffer.iter_mut().zip(value.bytes()) {
         *slot = byte as c_char;
+    }
+}
+
+fn platform_shim_file_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "yoyopod_liblinphone_shim.dll"
+    } else if cfg!(target_os = "macos") {
+        "libyoyopod_liblinphone_shim.dylib"
+    } else {
+        "libyoyopod_liblinphone_shim.so"
     }
 }

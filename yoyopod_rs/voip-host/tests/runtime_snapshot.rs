@@ -1,7 +1,9 @@
 use yoyopod_voip_host::calls::CallSession;
+use yoyopod_voip_host::history::CallHistoryStore;
 use yoyopod_voip_host::lifecycle::LifecycleState;
 use yoyopod_voip_host::message_store::MessageStore;
 use yoyopod_voip_host::messages::MessageSessionState;
+use yoyopod_voip_host::playback::VoiceNotePlayback;
 use yoyopod_voip_host::runtime_snapshot::RuntimeSnapshot;
 use yoyopod_voip_host::voice_notes::VoiceNoteSession;
 
@@ -19,7 +21,9 @@ fn runtime_snapshot_composes_canonical_voip_payload() {
 
     let last_message =
         MessageSessionState::delivery_changed("client-vn-1", "delivered", "/tmp/note.wav", "");
+    let call_history = CallHistoryStore::memory(20);
     let message_store = MessageStore::memory(200);
+    let voice_note_playback = VoiceNotePlayback::default();
 
     let payload = RuntimeSnapshot {
         configured: true,
@@ -27,6 +31,8 @@ fn runtime_snapshot_composes_canonical_voip_payload() {
         registration_state: "ok",
         lifecycle: &lifecycle,
         call: &call,
+        call_history: &call_history,
+        voice_note_playback: &voice_note_playback,
         voice_note: &voice_note,
         last_message: Some(&last_message),
         pending_outbound_messages: 1,

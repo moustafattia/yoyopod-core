@@ -42,7 +42,7 @@ class CallState(Enum):
 
 
 class MessageKind(Enum):
-    """Kinds of VoIP messages handled by the Liblinphone backend."""
+    """Kinds of VoIP messages handled by the Rust VoIP runtime."""
 
     TEXT = "text"
     VOICE_NOTE = "voice_note"
@@ -67,7 +67,7 @@ class MessageDeliveryState(Enum):
 
 @dataclass(slots=True)
 class VoIPConfig:
-    """Runtime communication config passed into the Liblinphone-backed service."""
+    """Runtime communication config passed into the Rust VoIP worker."""
 
     sip_server: str = "sip.linphone.org"
     sip_username: str = ""
@@ -253,6 +253,8 @@ class VoIPRuntimeSnapshot:
     active_call_id: str = ""
     active_call_peer: str = ""
     muted: bool = False
+    unseen_call_history: int = 0
+    recent_call_history: tuple[dict[str, object], ...] = field(default_factory=tuple)
     pending_outbound_messages: int = 0
     unread_voice_notes: int = 0
     unread_voice_notes_by_contact: dict[str, int] = field(default_factory=dict)

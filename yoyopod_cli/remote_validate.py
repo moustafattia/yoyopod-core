@@ -23,6 +23,8 @@ app = build_remote_app("validate_app", "Validate commit + health on the Pi.")
 
 _RUST_UI_HOST_WORKER = "yoyopod_rs/ui-host/build/yoyopod-ui-host"
 _RUST_UI_POC_WORKER = _RUST_UI_HOST_WORKER
+_RUST_VOIP_HOST_WORKER = "yoyopod_rs/voip-host/build/yoyopod-voip-host"
+_RUST_LIBLINPHONE_SHIM = "yoyopod_rs/liblinphone-shim/build/libyoyopod_liblinphone_shim.so"
 
 
 def _build_preflight_steps() -> list[tuple[str, list[str]]]:
@@ -154,6 +156,17 @@ def _build_validate(
     if with_music:
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "music"))
     if with_voip:
+        voip_worker = shell_quote(_RUST_VOIP_HOST_WORKER)
+        voip_shim = shell_quote(_RUST_LIBLINPHONE_SHIM)
+        voip_message = shell_quote(
+            "Missing CI-built Rust VoIP artifacts. Download the GitHub Actions "
+            "artifacts for this exact commit before VoIP validation; do not build "
+            "Rust binaries on the Pi."
+        )
+        steps.append(
+            f"(test -x {voip_worker} && test -f {voip_shim}) || "
+            f"(echo {voip_message} >&2 && exit 1)"
+        )
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "voip"))
     steps.append(checkout_module_command(venv_relpath, "pi", "validate", "stability"))
     if with_lvgl_soak:

@@ -1,10 +1,12 @@
 use crate::calls::CallSession;
 use crate::config::VoipConfig;
+use crate::history::CallHistoryStore;
 use crate::lifecycle::LifecycleState;
 use crate::message_store::MessageStore;
 use crate::messages::{
     is_terminal_delivery_state, normalize_message_record, MessageSessionState, OutboundMessageIds,
 };
+use crate::playback::VoiceNotePlayback;
 use crate::runtime_snapshot::RuntimeSnapshot;
 use crate::voice_notes::VoiceNoteSession;
 use serde_json::json;
@@ -78,6 +80,8 @@ pub struct VoipHost {
     registration_state: String,
     lifecycle: LifecycleState,
     call: CallSession,
+    call_history: CallHistoryStore,
+    voice_note_playback: VoiceNotePlayback,
     voice_note: VoiceNoteSession,
     message_store: MessageStore,
     last_message: Option<MessageSessionState>,
@@ -92,6 +96,8 @@ impl Default for VoipHost {
             registration_state: "none".to_string(),
             lifecycle: LifecycleState::default(),
             call: CallSession::default(),
+            call_history: CallHistoryStore::default(),
+            voice_note_playback: VoiceNotePlayback::default(),
             voice_note: VoiceNoteSession::default(),
             message_store: MessageStore::default(),
             last_message: None,
@@ -109,6 +115,7 @@ impl VoipHost {
         self.lifecycle.clear_recovery_pending();
         self.lifecycle.record("configured", "configured", false);
         self.call.clear();
+        self.voice_note_playback.stop();
         self.voice_note.reset();
         self.last_message = None;
         self.outbound_message_ids.clear();
@@ -148,6 +155,8 @@ impl VoipHost {
             registration_state: &self.registration_state,
             lifecycle: &self.lifecycle,
             call: &self.call,
+            call_history: &self.call_history,
+            voice_note_playback: &self.voice_note_playback,
             voice_note: &self.voice_note,
             last_message: self.last_message.as_ref(),
             pending_outbound_messages: self.outbound_message_ids.len(),
@@ -333,6 +342,18 @@ impl VoipHost {
         self.message_store.mark_contact_seen(sip_address)
     }
 
+    pub fn mark_call_history_seen(&mut self, sip_address: &str) {
+        self.call_history.mark_seen(sip_address);
+    }
+
+    pub fn play_voice_note(&mut self, file_path: &str) -> Result<(), String> {
+        self.voice_note_playback.play(file_path)
+    }
+
+    pub fn stop_voice_note_playback(&mut self) {
+        self.voice_note_playback.stop();
+    }
+
     pub fn poll_backend_events<B: CallBackend>(
         &mut self,
         backend: &mut B,
@@ -366,7 +387,20 @@ impl VoipHost {
                 self.call.incoming(call_id, from_uri);
             }
             BackendEvent::CallStateChanged { call_id, state } => {
+                if matches!(
+                    state.as_str(),
+                    "incoming"
+                        | "outgoing_init"
+                        | "outgoing_progress"
+                        | "outgoing_ringing"
+                        | "outgoing_early_media"
+                        | "connected"
+                        | "streams_running"
+                ) {
+                    self.voice_note_playback.stop();
+                }
                 self.call.apply_call_state(call_id, state);
+                self.record_finished_call_history();
             }
             BackendEvent::BackendStopped { reason } => {
                 self.registered = false;
@@ -428,6 +462,12 @@ impl VoipHost {
                 }
                 self.voice_note.fail(message_id);
             }
+        }
+    }
+
+    fn record_finished_call_history(&mut self) {
+        if let Some(entry) = self.call.take_unrecorded_history_entry() {
+            self.call_history.record(entry);
         }
     }
 

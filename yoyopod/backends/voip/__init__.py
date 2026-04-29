@@ -5,28 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from yoyopod.backends.voip.binding import (
-        LiblinphoneBinding,
-        LiblinphoneBindingError,
-        LiblinphoneNativeEvent,
-    )
-    from yoyopod.backends.voip.liblinphone import LiblinphoneBackend
     from yoyopod.backends.voip.mock_backend import MockVoIPBackend
     from yoyopod.backends.voip.protocol import VoIPBackend, VoIPIterateMetrics
     from yoyopod.backends.voip.rust_host import RustHostBackend
 
 
 _EXPORTS = {
-    "LiblinphoneBackend": ("yoyopod.backends.voip.liblinphone", "LiblinphoneBackend"),
-    "LiblinphoneBinding": ("yoyopod.backends.voip.binding", "LiblinphoneBinding"),
-    "LiblinphoneBindingError": (
-        "yoyopod.backends.voip.binding",
-        "LiblinphoneBindingError",
-    ),
-    "LiblinphoneNativeEvent": (
-        "yoyopod.backends.voip.binding",
-        "LiblinphoneNativeEvent",
-    ),
     "MockVoIPBackend": ("yoyopod.backends.voip.mock_backend", "MockVoIPBackend"),
     "RustHostBackend": ("yoyopod.backends.voip.rust_host", "RustHostBackend"),
     "VoIPBackend": ("yoyopod.backends.voip.protocol", "VoIPBackend"),
@@ -47,10 +31,6 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "LiblinphoneBackend",
-    "LiblinphoneBinding",
-    "LiblinphoneBindingError",
-    "LiblinphoneNativeEvent",
     "MockVoIPBackend",
     "RustHostBackend",
     "VoIPBackend",

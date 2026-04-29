@@ -1104,28 +1104,18 @@ def test_setup_music_callbacks_schedule_playback_handlers_on_main_thread() -> No
     assert music_backend.warm_start_calls == 1
 
 
-def test_voip_rust_host_env_helpers_and_sidecar_flag_visibility(
-    monkeypatch,
-) -> None:
-    """Rust host and Python sidecar flags should be visible to boot composition."""
+def test_voip_rust_host_worker_path_env_override(monkeypatch) -> None:
+    """Only the Rust worker path remains configurable at boot composition."""
 
-    from yoyopod.core.bootstrap.managers_boot import (
-        _rust_voip_host_enabled,
-        _rust_voip_host_worker_path,
-        _voip_sidecar_enabled,
-    )
+    from yoyopod.core.bootstrap.managers_boot import _rust_voip_host_worker_path
 
-    monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST", "true")
     monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST_WORKER", "/tmp/yoyopod-voip-host")
-    monkeypatch.setenv("YOYOPOD_VOIP_SIDECAR", "1")
 
-    assert _rust_voip_host_enabled() is True
-    assert _voip_sidecar_enabled() is True
     assert _rust_voip_host_worker_path() == "/tmp/yoyopod-voip-host"
 
 
-def test_rust_host_backend_receives_worker_supervisor(monkeypatch) -> None:
-    """ManagersBoot should inject WorkerSupervisor into the Rust VoIP Host backend."""
+def test_rust_host_backend_is_default_and_receives_worker_supervisor(monkeypatch) -> None:
+    """ManagersBoot should always inject WorkerSupervisor into the Rust VoIP Host backend."""
 
     captured_interval: list[float] = []
 
@@ -1191,7 +1181,8 @@ def test_rust_host_backend_receives_worker_supervisor(monkeypatch) -> None:
         def prepare_boot(self) -> None:
             return None
 
-    monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST", "1")
+    monkeypatch.delenv("YOYOPOD_RUST_VOIP_HOST", raising=False)
+    monkeypatch.delenv("YOYOPOD_VOIP_SIDECAR", raising=False)
     monkeypatch.setenv("YOYOPOD_RUST_VOIP_HOST_WORKER", "/bin/yoyopod-voip-host")
 
     app = SimpleNamespace(
@@ -1382,6 +1373,7 @@ def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -
         display=display,
         config_manager=_FakeConfigManager(),
         people_directory=None,
+        worker_supervisor=SimpleNamespace(),
         recent_track_store=None,
         context=AppContext(),
         runtime_loop=SimpleNamespace(queue_main_thread_callback=lambda *_args, **_kwargs: None),
@@ -1420,35 +1412,3 @@ def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -
     assert sync_calls == ["synced"]
 
 
-# ---------------------------------------------------------------------------
-# Phase 2B.5: VoIP sidecar default-on
-# ---------------------------------------------------------------------------
-
-
-def test_voip_sidecar_enabled_by_default(monkeypatch) -> None:
-    """Sidecar is the production default; missing env var enables it."""
-
-    from yoyopod.core.bootstrap.managers_boot import _voip_sidecar_enabled
-
-    monkeypatch.delenv("YOYOPOD_VOIP_SIDECAR", raising=False)
-    assert _voip_sidecar_enabled() is True
-
-
-def test_voip_sidecar_opt_out_via_env_var(monkeypatch) -> None:
-    """Operators can fall back to the in-process backend with an opt-out env var."""
-
-    from yoyopod.core.bootstrap.managers_boot import _voip_sidecar_enabled
-
-    for value in ("0", "false", "no", "off", "FALSE", "Off"):
-        monkeypatch.setenv("YOYOPOD_VOIP_SIDECAR", value)
-        assert _voip_sidecar_enabled() is False, f"value {value!r} should opt out"
-
-
-def test_voip_sidecar_remains_enabled_for_other_values(monkeypatch) -> None:
-    """Anything other than the explicit opt-out keeps the sidecar default."""
-
-    from yoyopod.core.bootstrap.managers_boot import _voip_sidecar_enabled
-
-    for value in ("1", "true", "yes", "on", "", "  ", "anything-else"):
-        monkeypatch.setenv("YOYOPOD_VOIP_SIDECAR", value)
-        assert _voip_sidecar_enabled() is True, f"value {value!r} should keep sidecar on"

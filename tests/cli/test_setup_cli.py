@@ -98,13 +98,6 @@ def test_build_pi_setup_commands_include_install_sync_and_builds() -> None:
         "-m",
         "yoyopod_cli.main",
         "build",
-        "liblinphone",
-    )
-    assert commands[6].command == (
-        ".venv/bin/python",
-        "-m",
-        "yoyopod_cli.main",
-        "build",
         "lvgl",
     )
 

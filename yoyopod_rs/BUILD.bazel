@@ -9,3 +9,8 @@ alias(
     name = "voip-host",
     actual = "//yoyopod_rs/voip-host:yoyopod-voip-host",
 )
+
+alias(
+    name = "liblinphone-shim",
+    actual = "//yoyopod_rs/liblinphone-shim:liblinphone_shim_lib",
+)

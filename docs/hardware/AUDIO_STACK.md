@@ -25,14 +25,17 @@ yoyopod.py
         -> speaker / headphone output
 ```
 
-For calls and voice notes, the audio runtime is separate:
+For calls and voice notes, the audio runtime is separate and Rust-owned:
 
 ```text
 YoyoPodApp
   -> VoIPManager
-     -> LiblinphoneBackend
-        -> ALSA: wm8960-soundcard
-        -> same WM8960 codec / physical output path
+     -> RustHostBackend
+        -> yoyopod_rs/voip-host
+           -> yoyopod_rs/liblinphone-shim
+              -> Liblinphone
+              -> ALSA: wm8960-soundcard
+              -> same WM8960 codec / physical output path
 ```
 
 So music and VoIP use different software stacks, but they converge on the same Raspberry Pi audio hardware.

@@ -25,8 +25,10 @@ for the exact commit being tested. Do not run `cargo build`,
 compile on the Raspberry Pi Zero 2W unless the user explicitly overrides this
 rule.
 
-Native C shim work is different: `yoyopod remote sync --clean-native` may still
-rebuild the LVGL/Liblinphone C shims on the Pi when native/CMake inputs change.
+Native C shim work is different only for LVGL:
+`yoyopod remote sync --clean-native` may still rebuild the LVGL C shim on the
+Pi when native/CMake inputs change. The VoIP host and Rust liblinphone shim must
+come from CI artifacts.
 
 ## Rust UI Host Artifact
 
@@ -59,6 +61,22 @@ Install it at:
 ```
 
 Do not build `yoyopod-voip-host` on the Raspberry Pi Zero 2W.
+
+## Rust Liblinphone Shim Artifact
+
+The Rust Liblinphone shim artifact is:
+
+```bash
+yoyopod-liblinphone-shim-<sha>
+```
+
+Install it at:
+
+```bash
+/opt/yoyopod-dev/checkout/yoyopod_rs/liblinphone-shim/build/libyoyopod_liblinphone_shim.so
+```
+
+Do not build `yoyopod-liblinphone-shim` on the Raspberry Pi Zero 2W.
 
 ## Steps
 
