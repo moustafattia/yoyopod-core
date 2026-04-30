@@ -68,6 +68,26 @@ fn pid_and_log_helpers_write_expected_runtime_files() {
     assert!(!pid_file.exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn pid_file_helper_replaces_unwritable_stale_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = temp_dir("stale-pid");
+    let pid_file = dir.join("runtime.pid");
+    fs::create_dir_all(&dir).expect("stale pid dir");
+    fs::write(&pid_file, "stale\n").expect("seed stale pid");
+    let mut permissions = fs::metadata(&pid_file)
+        .expect("stale pid metadata")
+        .permissions();
+    permissions.set_mode(0o444);
+    fs::set_permissions(&pid_file, permissions).expect("make stale pid unwritable");
+
+    write_pid_file(&pid_file, 5150).expect("replace stale pid");
+
+    assert_eq!(fs::read_to_string(&pid_file).expect("read pid"), "5150\n");
+}
+
 #[test]
 fn startup_log_failure_removes_pid_file() {
     let dir = temp_dir("startup-log-failure");

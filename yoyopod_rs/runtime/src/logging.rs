@@ -50,7 +50,15 @@ pub fn write_pid_file(pid_file: impl AsRef<Path>, pid: u32) -> std::io::Result<(
             fs::create_dir_all(parent)?;
         }
     }
-    fs::write(pid_file, format!("{pid}\n"))
+    let contents = format!("{pid}\n");
+    match fs::write(pid_file, &contents) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+            fs::remove_file(pid_file)?;
+            fs::write(pid_file, contents)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 pub fn remove_pid_file(pid_file: impl AsRef<Path>) -> std::io::Result<()> {
