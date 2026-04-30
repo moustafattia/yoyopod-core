@@ -17,6 +17,30 @@ fn default_snapshot_starts_on_hub() {
 }
 
 #[test]
+fn runtime_snapshot_app_state_selects_current_route_when_not_preempted() {
+    let mut runtime = UiRuntime::default();
+    let mut snapshot = RuntimeSnapshot::default();
+    snapshot.app_state = "playlists".to_string();
+
+    runtime.apply_snapshot(snapshot);
+
+    assert_eq!(runtime.active_screen(), UiScreen::Playlists);
+    assert!(runtime.stack().is_empty());
+}
+
+#[test]
+fn runtime_snapshot_preemption_overrides_app_state_route() {
+    let mut runtime = UiRuntime::default();
+    let mut snapshot = RuntimeSnapshot::default();
+    snapshot.app_state = "playlists".to_string();
+    snapshot.call.state = "incoming".to_string();
+
+    runtime.apply_snapshot(snapshot);
+
+    assert_eq!(runtime.active_screen(), UiScreen::IncomingCall);
+}
+
+#[test]
 fn hub_advance_cycles_focus_through_cards() {
     let mut runtime = UiRuntime::default();
     runtime.apply_snapshot(RuntimeSnapshot::default());

@@ -177,6 +177,7 @@ pub struct CallRuntimeState {
     pub peer_address: String,
     pub duration_text: String,
     pub muted: bool,
+    pub contacts: Vec<ListItem>,
     pub history: Vec<ListItem>,
 }
 
@@ -190,6 +191,7 @@ impl Default for CallRuntimeState {
             peer_address: String::new(),
             duration_text: String::new(),
             muted: false,
+            contacts: Vec::new(),
             history: Vec::new(),
         }
     }
@@ -320,6 +322,12 @@ impl RuntimeState {
         if let Some(muted) = snapshot.get("muted").and_then(Value::as_bool) {
             self.call.muted = muted;
         }
+        if let Some(contacts) = snapshot.get("contacts").and_then(Value::as_array) {
+            self.call.contacts = contacts
+                .iter()
+                .filter_map(|item| ListItem::from_snapshot(item, "person"))
+                .collect();
+        }
         if let Some(history) = snapshot
             .get("recent_call_history")
             .and_then(Value::as_array)
@@ -335,7 +343,7 @@ impl RuntimeState {
         json!({
             "app_state": self.current_screen,
             "hub": {
-                "cards": default_hub_cards(),
+                "cards": self.default_hub_cards(),
             },
             "music": {
                 "playing": self.media.playback_state == "playing",
@@ -352,7 +360,7 @@ impl RuntimeState {
                 "peer_address": self.call.peer_address,
                 "duration_text": self.call.duration_text,
                 "muted": self.call.muted,
-                "contacts": [],
+                "contacts": list_payload(&self.call.contacts),
                 "history": list_payload(&self.call.history),
             },
             "voice": {
@@ -366,7 +374,7 @@ impl RuntimeState {
                 "battery_percent": 100,
                 "charging": false,
                 "power_available": true,
-                "rows": [],
+                "rows": self.power_rows(),
             },
             "network": {
                 "enabled": false,
@@ -388,6 +396,66 @@ impl RuntimeState {
                 WorkerDomain::Voice.as_str(): worker_payload(&self.voice_worker),
             },
         })
+    }
+
+    fn default_hub_cards(&self) -> Vec<Value> {
+        vec![
+            json!({
+                "key": "listen",
+                "title": "Listen",
+                "subtitle": self.listen_subtitle(),
+                "accent": 0x00FF88,
+            }),
+            json!({
+                "key": "talk",
+                "title": "Talk",
+                "subtitle": self.talk_subtitle(),
+                "accent": 0x00D4FF,
+            }),
+            json!({
+                "key": "ask",
+                "title": "Ask",
+                "subtitle": "Idle",
+                "accent": 0x9F7AEA,
+            }),
+            json!({
+                "key": "setup",
+                "title": "Setup",
+                "subtitle": "100%",
+                "accent": 0xF6AD55,
+            }),
+        ]
+    }
+
+    fn listen_subtitle(&self) -> String {
+        if self.media.playback_state == "playing" {
+            format!("Playing {}", self.media.title)
+        } else {
+            "Music".to_string()
+        }
+    }
+
+    fn talk_subtitle(&self) -> String {
+        if self.call.state != CallState::Idle {
+            title_case_state(self.call.state.as_str())
+        } else if self.call.contacts.is_empty() {
+            "No contacts".to_string()
+        } else {
+            "Ready".to_string()
+        }
+    }
+
+    fn power_rows(&self) -> Vec<String> {
+        vec![
+            "Battery 100%".to_string(),
+            "On battery".to_string(),
+            "Network offline".to_string(),
+            if self.call.registered {
+                "VoIP ready".to_string()
+            } else {
+                "VoIP offline".to_string()
+            },
+        ]
     }
 
     pub fn status_payload(&self) -> Value {
@@ -535,31 +603,21 @@ fn worker_payload(worker: &WorkerHealth) -> Value {
     })
 }
 
-fn default_hub_cards() -> Vec<Value> {
-    vec![
-        json!({
-            "key": "listen",
-            "title": "Listen",
-            "subtitle": "",
-            "accent": 0x00FF88,
-        }),
-        json!({
-            "key": "talk",
-            "title": "Talk",
-            "subtitle": "Ready",
-            "accent": 0x00D4FF,
-        }),
-        json!({
-            "key": "ask",
-            "title": "Ask",
-            "subtitle": "Voice",
-            "accent": 0x9F7AEA,
-        }),
-        json!({
-            "key": "setup",
-            "title": "Setup",
-            "subtitle": "Status",
-            "accent": 0xF6AD55,
-        }),
-    ]
+fn title_case_state(state: &str) -> String {
+    state
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => {
+                    let mut result = first.to_uppercase().collect::<String>();
+                    result.push_str(chars.as_str());
+                    result
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }

@@ -57,7 +57,8 @@ fn worker_renders_runtime_snapshot_and_reports_active_screen_from_screen_model()
 
 #[test]
 fn worker_applies_semantic_input_inside_rust_state_machine() {
-    let input = br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"renderer":"framebuffer"}}
+    let input =
+        br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"renderer":"framebuffer"}}
 {"kind":"command","type":"ui.input_action","payload":{"renderer":"framebuffer","action":"select"}}
 {"kind":"command","type":"ui.health","payload":{}}
 {"kind":"command","type":"ui.shutdown","payload":{}}

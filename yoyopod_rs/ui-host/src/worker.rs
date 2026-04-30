@@ -337,11 +337,7 @@ where
                 }
             }
             let Some(renderer) = lvgl_renderer.as_mut() else {
-                emit_explicit_lvgl_unavailable(
-                    output,
-                    errors,
-                    &"renderer failed to initialize",
-                )?;
+                emit_explicit_lvgl_unavailable(output, errors, &"renderer failed to initialize")?;
                 return render_runtime_with_framebuffer(
                     output,
                     display,

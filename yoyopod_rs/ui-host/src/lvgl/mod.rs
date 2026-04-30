@@ -3,6 +3,7 @@ pub mod controllers;
 #[cfg(feature = "native-lvgl")]
 mod native_backend;
 pub mod primitives;
+pub mod scene_backend;
 #[cfg(feature = "native-lvgl")]
 pub mod sys;
 pub mod theme;
@@ -23,6 +24,9 @@ pub use controllers::{
 #[cfg(feature = "native-lvgl")]
 pub use native_backend::NativeLvglFacade;
 pub use primitives::WidgetId;
+#[cfg(feature = "native-lvgl")]
+pub use scene_backend::ShimSceneBridge;
+pub use scene_backend::{NativeSceneRenderer, SceneBridge};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SceneKey {
@@ -60,6 +64,61 @@ impl SceneKey {
             Self::NowPlaying => "now_playing",
             Self::Ask => "ask",
             Self::Call => "call",
+            Self::Power => "power",
+            Self::Overlay => "overlay",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeSceneKey {
+    Hub,
+    Listen,
+    Playlist,
+    NowPlaying,
+    Talk,
+    TalkActions,
+    IncomingCall,
+    OutgoingCall,
+    InCall,
+    Ask,
+    Power,
+    Overlay,
+}
+
+impl NativeSceneKey {
+    pub const fn for_screen(screen: UiScreen) -> Self {
+        match screen {
+            UiScreen::Hub => Self::Hub,
+            UiScreen::Listen => Self::Listen,
+            UiScreen::Playlists
+            | UiScreen::RecentTracks
+            | UiScreen::Contacts
+            | UiScreen::CallHistory => Self::Playlist,
+            UiScreen::NowPlaying => Self::NowPlaying,
+            UiScreen::Talk => Self::Talk,
+            UiScreen::VoiceNote => Self::TalkActions,
+            UiScreen::IncomingCall => Self::IncomingCall,
+            UiScreen::OutgoingCall => Self::OutgoingCall,
+            UiScreen::InCall => Self::InCall,
+            UiScreen::Ask => Self::Ask,
+            UiScreen::Power => Self::Power,
+            UiScreen::Loading | UiScreen::Error => Self::Overlay,
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hub => "hub",
+            Self::Listen => "listen",
+            Self::Playlist => "playlist",
+            Self::NowPlaying => "now_playing",
+            Self::Talk => "talk",
+            Self::TalkActions => "talk_actions",
+            Self::IncomingCall => "incoming_call",
+            Self::OutgoingCall => "outgoing_call",
+            Self::InCall => "in_call",
+            Self::Ask => "ask",
             Self::Power => "power",
             Self::Overlay => "overlay",
         }

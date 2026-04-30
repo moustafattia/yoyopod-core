@@ -1,7 +1,7 @@
 use anyhow::Result;
 use yoyopod_ui_host::lvgl::{
-    theme, CallController, LvglFacade, LvglRenderer, OverlayController, PowerController, SceneKey,
-    ScreenController, WidgetId,
+    theme, CallController, LvglFacade, LvglRenderer, NativeSceneKey, OverlayController,
+    PowerController, SceneKey, ScreenController, WidgetId,
 };
 use yoyopod_ui_host::runtime::UiScreen;
 use yoyopod_ui_host::screens::{
@@ -552,6 +552,74 @@ fn scene_key_groups_raw_screens_into_future_shared_controller_families() {
     assert_eq!(SceneKey::for_screen(UiScreen::Power), SceneKey::Power);
     assert_eq!(SceneKey::for_screen(UiScreen::Loading), SceneKey::Overlay);
     assert_eq!(SceneKey::for_screen(UiScreen::Error), SceneKey::Overlay);
+}
+
+#[test]
+fn native_scene_key_matches_python_c_lvgl_retained_scene_contract() {
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Hub),
+        NativeSceneKey::Hub
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Listen),
+        NativeSceneKey::Listen
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Playlists),
+        NativeSceneKey::Playlist
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::RecentTracks),
+        NativeSceneKey::Playlist
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::NowPlaying),
+        NativeSceneKey::NowPlaying
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Talk),
+        NativeSceneKey::Talk
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Contacts),
+        NativeSceneKey::Playlist
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::CallHistory),
+        NativeSceneKey::Playlist
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::VoiceNote),
+        NativeSceneKey::TalkActions
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::IncomingCall),
+        NativeSceneKey::IncomingCall
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::OutgoingCall),
+        NativeSceneKey::OutgoingCall
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::InCall),
+        NativeSceneKey::InCall
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Ask),
+        NativeSceneKey::Ask
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Power),
+        NativeSceneKey::Power
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Loading),
+        NativeSceneKey::Overlay
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::Error),
+        NativeSceneKey::Overlay
+    );
 }
 
 #[test]

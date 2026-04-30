@@ -69,6 +69,7 @@ pub struct UiRuntime {
     focus_index: usize,
     intents: Vec<UiIntent>,
     dirty: bool,
+    last_app_state: String,
 }
 
 impl Default for UiRuntime {
@@ -80,13 +81,17 @@ impl Default for UiRuntime {
             focus_index: 0,
             intents: Vec::new(),
             dirty: true,
+            last_app_state: "hub".to_string(),
         }
     }
 }
 
 impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
+        let app_state = snapshot.app_state.clone();
         self.snapshot = snapshot;
+        self.apply_app_state_route(&app_state);
+        self.last_app_state = app_state;
         self.apply_runtime_preemption();
         self.clamp_focus();
         self.dirty = true;
@@ -231,6 +236,42 @@ impl UiRuntime {
 
         if self.is_call_screen() && self.snapshot.call.state == "idle" {
             self.pop_until_not_call();
+        }
+    }
+
+    fn apply_app_state_route(&mut self, app_state: &str) {
+        if app_state == self.last_app_state {
+            return;
+        }
+        let Some(screen) = Self::screen_for_app_state(app_state) else {
+            return;
+        };
+        if self.active_screen != screen {
+            self.screen_stack.clear();
+            self.active_screen = screen;
+            self.focus_index = 0;
+        }
+    }
+
+    fn screen_for_app_state(app_state: &str) -> Option<UiScreen> {
+        match app_state.trim() {
+            "hub" | "home" | "menu" => Some(UiScreen::Hub),
+            "listen" => Some(UiScreen::Listen),
+            "playlists" => Some(UiScreen::Playlists),
+            "recent_tracks" => Some(UiScreen::RecentTracks),
+            "now_playing" => Some(UiScreen::NowPlaying),
+            "ask" => Some(UiScreen::Ask),
+            "call" | "talk" => Some(UiScreen::Talk),
+            "contacts" => Some(UiScreen::Contacts),
+            "call_history" => Some(UiScreen::CallHistory),
+            "voice_note" => Some(UiScreen::VoiceNote),
+            "incoming_call" => Some(UiScreen::IncomingCall),
+            "outgoing_call" => Some(UiScreen::OutgoingCall),
+            "in_call" => Some(UiScreen::InCall),
+            "power" | "setup" => Some(UiScreen::Power),
+            "loading" => Some(UiScreen::Loading),
+            "error" => Some(UiScreen::Error),
+            _ => None,
         }
     }
 

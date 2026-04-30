@@ -171,6 +171,74 @@ fn voip_snapshot_preserves_current_host_ui_details() {
 }
 
 #[test]
+fn voip_snapshot_projects_contacts_into_ui_payload() {
+    let mut state = RuntimeState::default();
+
+    state.apply_voip_snapshot(&json!({
+        "contacts": [{
+            "id": "sip:mama@example.test",
+            "title": "Mama",
+            "subtitle": "sip:mama@example.test",
+            "icon_key": "person"
+        }]
+    }));
+
+    let ui = state.ui_snapshot_payload();
+    assert_eq!(ui["call"]["contacts"][0]["id"], "sip:mama@example.test");
+    assert_eq!(ui["call"]["contacts"][0]["title"], "Mama");
+    assert_eq!(
+        ui["call"]["contacts"][0]["subtitle"],
+        "sip:mama@example.test"
+    );
+    assert_eq!(ui["call"]["contacts"][0]["icon_key"], "person");
+}
+
+#[test]
+fn ui_snapshot_uses_available_state_for_power_rows() {
+    let mut state = RuntimeState::default();
+
+    state.apply_voip_snapshot(&json!({
+        "registered": true,
+        "registration_state": "ok"
+    }));
+
+    let payload = state.ui_snapshot_payload();
+    let rows = payload["power"]["rows"].as_array().expect("power rows");
+
+    assert_eq!(rows[0], "Battery 100%");
+    assert_eq!(rows[1], "On battery");
+    assert_eq!(rows[2], "Network offline");
+    assert_eq!(rows[3], "VoIP ready");
+}
+
+#[test]
+fn ui_snapshot_hub_card_subtitles_reflect_runtime_state() {
+    let mut state = RuntimeState::default();
+
+    state.apply_media_snapshot(&json!({
+        "playback_state": "playing",
+        "current_track": {"name": "Little Song"}
+    }));
+    state.apply_voip_snapshot(&json!({
+        "call_state": "incoming",
+        "contacts": [{
+            "id": "sip:mama@example.test",
+            "title": "Mama",
+            "subtitle": "sip:mama@example.test",
+            "icon_key": "person"
+        }]
+    }));
+
+    let payload = state.ui_snapshot_payload();
+    let cards = payload["hub"]["cards"].as_array().expect("hub cards");
+
+    assert_eq!(cards[0]["subtitle"], "Playing Little Song");
+    assert_eq!(cards[1]["subtitle"], "Incoming");
+    assert_eq!(cards[2]["subtitle"], "Idle");
+    assert_eq!(cards[3]["subtitle"], "100%");
+}
+
+#[test]
 fn voip_snapshot_normalizes_current_worker_call_states() {
     let mut state = RuntimeState::default();
 

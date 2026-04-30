@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use anyhow::Result;
 #[cfg(not(feature = "native-lvgl"))]
 use anyhow::bail;
+use anyhow::Result;
 
 use crate::framebuffer::Framebuffer;
-#[cfg(feature = "native-lvgl")]
-use crate::lvgl::NativeLvglFacade;
 use crate::lvgl::{LvglFacade, LvglRenderer as SemanticLvglRenderer};
+#[cfg(feature = "native-lvgl")]
+use crate::lvgl::{NativeLvglFacade, NativeSceneRenderer, ShimSceneBridge};
 use crate::screens::ScreenModel;
 
 #[allow(dead_code)]
@@ -80,17 +80,15 @@ pub struct LvglRenderer;
 
 #[cfg(feature = "native-lvgl")]
 pub struct LvglRenderer {
-    renderer: RuntimeLvglRenderer<NativeLvglFacade>,
+    renderer: RuntimeSceneLvglRenderer,
 }
 
 #[cfg(feature = "native-lvgl")]
 impl LvglRenderer {
     pub fn open(explicit_source: Option<&Path>) -> Result<Self> {
-        let facade = NativeLvglFacade::open(explicit_source)?;
+        let bridge = ShimSceneBridge::open(explicit_source)?;
         Ok(Self {
-            renderer: RuntimeLvglRenderer {
-                renderer: SemanticLvglRenderer::new(facade),
-            },
+            renderer: RuntimeSceneLvglRenderer::new(bridge),
         })
     }
 
@@ -100,6 +98,35 @@ impl LvglRenderer {
         model: &ScreenModel,
     ) -> Result<()> {
         self.renderer.render_screen_model(framebuffer, model)
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+struct RuntimeSceneLvglRenderer {
+    renderer: NativeSceneRenderer<ShimSceneBridge>,
+}
+
+#[cfg(feature = "native-lvgl")]
+impl RuntimeSceneLvglRenderer {
+    fn new(bridge: ShimSceneBridge) -> Self {
+        Self {
+            renderer: NativeSceneRenderer::new(bridge),
+        }
+    }
+
+    fn render_screen_model(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        model: &ScreenModel,
+    ) -> Result<()> {
+        if self.renderer.bridge().display_needs_reset(framebuffer) {
+            self.renderer.clear()?;
+        }
+        self.renderer
+            .bridge_mut()
+            .ensure_display_registered(framebuffer)?;
+        self.renderer.render(model)?;
+        self.renderer.bridge_mut().render_frame(framebuffer)
     }
 }
 
