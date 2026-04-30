@@ -68,7 +68,7 @@ class RuntimeBootService:
             voip_config_cls=VoIPConfig,
             voip_manager_cls=VoIPManager,
             music_config_cls=MusicConfig,
-            mpv_backend_cls=RustHostBackend,
+            music_backend_cls=RustHostBackend,
             local_music_service_cls=LocalMusicService,
             output_volume_controller_cls=OutputVolumeController,
             power_manager_cls=PowerManager,

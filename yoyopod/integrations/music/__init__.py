@@ -103,10 +103,16 @@ def setup(
 ) -> MusicIntegration:
     """Register the scaffold music services and state mirroring."""
 
-    from yoyopod.backends.music import MpvBackend, MusicConfig
+    from yoyopod.backends.music import MusicConfig
+    from yoyopod.backends.music.rust_host import RustHostBackend, default_worker_path
 
     actual_config = _resolve_music_config(app, explicit=config)
-    actual_backend = backend or MpvBackend(actual_config)
+    actual_backend = backend or RustHostBackend(
+        actual_config,
+        worker_supervisor=app.worker_supervisor,
+        worker_path=default_worker_path(),
+        scheduler=app.scheduler,
+    )
     actual_recent_store = recent_store or _build_recent_store(app)
     actual_library = library or LocalMusicService(
         actual_backend,
@@ -120,6 +126,8 @@ def setup(
         recent_store=actual_recent_store,
     )
     app.integrations["music"] = integration
+    app.music_backend = actual_backend
+    app.local_music_service = actual_library
 
     backend_started = bool(actual_backend.start())
     effective_volume = (
@@ -204,6 +212,10 @@ def teardown(app: Any) -> None:
     stop = getattr(integration.backend, "stop", None)
     if callable(stop):
         stop()
+    if getattr(app, "music_backend", None) is integration.backend:
+        app.music_backend = None
+    if getattr(app, "local_music_service", None) is integration.library:
+        app.local_music_service = None
     if hasattr(app, "get_music_position"):
         delattr(app, "get_music_position")
     if hasattr(app, "get_music_library"):

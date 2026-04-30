@@ -1175,7 +1175,17 @@ def test_rust_host_backend_is_default_and_receives_worker_supervisor(monkeypatch
             return cls()
 
     class _FakeMusicBackend:
-        def __init__(self, _config) -> None:
+        def __init__(
+            self,
+            _config,
+            *,
+            worker_supervisor,
+            worker_path,
+            scheduler,
+        ) -> None:
+            assert worker_supervisor is not None
+            assert worker_path
+            assert scheduler is not None
             self.is_connected = False
 
     class _FakeLocalMusicService:
@@ -1240,7 +1250,7 @@ def test_rust_host_backend_is_default_and_receives_worker_supervisor(monkeypatch
         voip_config_cls=_FakeVoipConfig,
         voip_manager_cls=_FakeVoipManager,
         music_config_cls=_FakeMusicConfig,
-        mpv_backend_cls=_FakeMusicBackend,
+        music_backend_cls=_FakeMusicBackend,
         local_music_service_cls=_FakeLocalMusicService,
         output_volume_controller_cls=_FakeOutputVolumeController,
         power_manager_cls=_FakePowerManager,
@@ -1370,7 +1380,7 @@ def test_rust_media_host_backend_is_default_and_receives_worker_supervisor(
         voip_config_cls=_FakeVoipConfig,
         voip_manager_cls=_FakeVoipManager,
         music_config_cls=_FakeMusicConfig,
-        mpv_backend_cls=_FakeRustMediaBackend,
+        music_backend_cls=_FakeRustMediaBackend,
         local_music_service_cls=_FakeLocalMusicService,
         output_volume_controller_cls=_FakeOutputVolumeController,
         power_manager_cls=_FakePowerManager,
@@ -1471,7 +1481,17 @@ def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -
             return cls()
 
     class _FakeMusicBackend:
-        def __init__(self, _config) -> None:
+        def __init__(
+            self,
+            _config,
+            *,
+            worker_supervisor,
+            worker_path,
+            scheduler,
+        ) -> None:
+            assert worker_supervisor is not None
+            assert worker_path
+            assert scheduler is not None
             self.is_connected = False
             self.start_calls = 0
 
@@ -1557,7 +1577,7 @@ def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -
         voip_config_cls=_FakeVoipConfig,
         voip_manager_cls=_FakeVoipManager,
         music_config_cls=_FakeMusicConfig,
-        mpv_backend_cls=_FakeMusicBackend,
+        music_backend_cls=_FakeMusicBackend,
         local_music_service_cls=_FakeLocalMusicService,
         output_volume_controller_cls=_FakeOutputVolumeController,
         power_manager_cls=_FakePowerManager,

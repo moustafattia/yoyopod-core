@@ -722,4 +722,13 @@ def _worker_error_reason(payload: dict[str, Any], *, command: str | None) -> str
     return prefix
 
 
-__all__ = ["PreparedRemoteAsset", "RustHostBackend"]
+def default_worker_path() -> str:
+    """Return the default Rust media host worker binary path."""
+
+    return os.environ.get(
+        "YOYOPOD_RUST_MEDIA_HOST_WORKER",
+        "yoyopod_rs/media-host/build/yoyopod-media-host",
+    ).strip()
+
+
+__all__ = ["PreparedRemoteAsset", "RustHostBackend", "default_worker_path"]
