@@ -18,6 +18,15 @@ def _rust_voip_host_worker_path() -> str:
     ).strip()
 
 
+def _rust_media_host_worker_path() -> str:
+    """Return the Rust media host worker binary path."""
+
+    return os.environ.get(
+        "YOYOPOD_RUST_MEDIA_HOST_WORKER",
+        "yoyopod_rs/media-host/build/yoyopod-media-host",
+    ).strip()
+
+
 class ManagersBoot:
     """Initialize manager-level runtime integrations."""
 
@@ -97,9 +106,17 @@ class ManagersBoot:
                 registration_state=self.app.voip_manager.registration_state,
             )
 
-            self.logger.info("  - MpvBackend")
+            self.logger.info("  - Rust media host backend")
             music_config = self.music_config_cls.from_config_manager(config_manager)
-            self.app.music_backend = self.mpv_backend_cls(music_config)
+            worker_path = _rust_media_host_worker_path()
+            try:
+                self.app.music_backend = self.mpv_backend_cls(
+                    music_config,
+                    worker_supervisor=self.app.worker_supervisor,
+                    worker_path=worker_path,
+                )
+            except TypeError:
+                self.app.music_backend = self.mpv_backend_cls(music_config)
             self.app.local_music_service = self.local_music_service_cls(
                 self.app.music_backend,
                 music_dir=music_config.music_dir,

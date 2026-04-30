@@ -67,6 +67,10 @@ class LocalMusicService:
 
     def menu_items(self) -> list[LocalLibraryItem]:
         """Return the static local-first Listen landing menu."""
+        if self._backend_owns_library_state():
+            menu_items = getattr(self.music_backend, "menu_items", None)
+            if callable(menu_items):
+                return list(menu_items())
         return [
             LocalLibraryItem("playlists", "Playlists", "Saved mixes"),
             LocalLibraryItem("recent", "Recent", "Played lately"),
@@ -75,6 +79,11 @@ class LocalMusicService:
 
     def list_playlists(self, fetch_track_counts: bool = False) -> list[Playlist]:
         """Scan music_dir for M3U files."""
+        if self._backend_owns_library_state():
+            list_playlists = getattr(self.music_backend, "list_playlists", None)
+            if callable(list_playlists):
+                return list(list_playlists(fetch_track_counts=fetch_track_counts))
+
         if self.music_dir.is_dir():
             playlists: list[Playlist] = []
             for path in sorted(self.music_dir.glob("**/*.m3u")):
@@ -99,11 +108,21 @@ class LocalMusicService:
 
     def playlist_count(self) -> int:
         """Return the number of local playlists."""
+        if self._backend_owns_library_state():
+            playlist_count = getattr(self.music_backend, "playlist_count", None)
+            if callable(playlist_count):
+                return int(playlist_count())
         return len(self.list_playlists())
 
     def load_playlist(self, playlist_uri: str) -> bool:
         """Load and play one local playlist."""
-        if self.music_backend is None or not self.is_local_playlist_uri(playlist_uri):
+        if self.music_backend is None:
+            return False
+        if self._backend_owns_library_state():
+            load_playlist_file = getattr(self.music_backend, "load_playlist_file", None)
+            if callable(load_playlist_file):
+                return bool(load_playlist_file(playlist_uri))
+        if not self.is_local_playlist_uri(playlist_uri):
             return False
 
         load_playlist_file = getattr(self.music_backend, "load_playlist_file", None)
@@ -118,13 +137,23 @@ class LocalMusicService:
 
     def list_recent_tracks(self, limit: int | None = None) -> list[RecentTrackEntry]:
         """Return the current persistent local recent-track list."""
+        if self._backend_owns_library_state():
+            list_recent_tracks = getattr(self.music_backend, "list_recent_tracks", None)
+            if callable(list_recent_tracks):
+                return list(list_recent_tracks(limit))
         if self.recent_store is None:
             return []
         return self.recent_store.list_recent(limit)
 
     def play_recent_track(self, track_uri: str) -> bool:
         """Replace the tracklist with one local track and start playback."""
-        if self.music_backend is None or not self.is_local_track_uri(track_uri):
+        if self.music_backend is None:
+            return False
+        if self._backend_owns_library_state():
+            play_recent_track = getattr(self.music_backend, "play_recent_track", None)
+            if callable(play_recent_track):
+                return bool(play_recent_track(track_uri))
+        if not self.is_local_track_uri(track_uri):
             return False
 
         load_tracks = getattr(self.music_backend, "load_tracks", None)
@@ -139,6 +168,8 @@ class LocalMusicService:
 
     def record_recent_track(self, track: Track | None) -> None:
         """Persist one local track play event when it belongs to the local library."""
+        if self._backend_owns_library_state():
+            return
         if track is None or not self.is_local_track_uri(track.uri) or self.recent_store is None:
             return
         self.recent_store.record_track(track)
@@ -147,6 +178,10 @@ class LocalMusicService:
         """Build a shuffled queue from the local file library and start playback."""
         if self.music_backend is None:
             return False
+        if self._backend_owns_library_state():
+            shuffle_all = getattr(self.music_backend, "shuffle_all", None)
+            if callable(shuffle_all):
+                return bool(shuffle_all())
 
         track_uris = self._collect_local_track_uris()
         if not track_uris:
@@ -233,6 +268,9 @@ class LocalMusicService:
         except OSError:
             return 0
         return sum(1 for line in lines if line.strip() and not line.startswith("#"))
+
+    def _backend_owns_library_state(self) -> bool:
+        return bool(getattr(self.music_backend, "owns_library_state", False))
 
 
 __all__ = [

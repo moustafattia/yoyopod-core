@@ -19,6 +19,8 @@ _STARTUP_COMMANDS = frozenset({"media.configure", "media.start"})
 class RustHostBackend:
     """Music backend facade backed by the Rust media host worker."""
 
+    owns_library_state = True
+
     def __init__(
         self,
         config: MusicConfig,

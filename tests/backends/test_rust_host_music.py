@@ -57,6 +57,10 @@ def _config() -> MusicConfig:
         mpv_socket="/tmp/yoyopod-mpv.sock",
         mpv_binary="mpv",
         alsa_device="default",
+        default_volume=72,
+        recent_tracks_file="data/media/recent_tracks.json",
+        remote_cache_dir="data/media/remote_cache",
+        remote_cache_max_bytes=64 * 1024 * 1024,
     )
 
 
@@ -79,6 +83,10 @@ def test_start_registers_worker_and_sends_configure_start() -> None:
     assert supervisor.started == ["media"]
     assert [item[1] for item in supervisor.sent] == ["media.configure", "media.start"]
     assert supervisor.sent[0][2]["music_dir"] == str(_config().music_dir)
+    assert supervisor.sent[0][2]["default_volume"] == 72
+    assert supervisor.sent[0][2]["recent_tracks_file"] == "data/media/recent_tracks.json"
+    assert supervisor.sent[0][2]["remote_cache_dir"] == "data/media/remote_cache"
+    assert supervisor.sent[0][2]["remote_cache_max_bytes"] == 64 * 1024 * 1024
     assert supervisor.request_ids == ["media-media_configure-1", "media-media_start-2"]
     assert backend.running is True
     assert backend.startup_in_progress is False

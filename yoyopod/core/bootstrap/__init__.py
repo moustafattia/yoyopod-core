@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from yoyopod.backends.music import MpvBackend, MusicConfig
+from yoyopod.backends.music import MusicConfig
+from yoyopod.backends.music.rust_host import RustHostBackend
 from yoyopod.config import ConfigManager
 from yoyopod.core.audio_volume import OutputVolumeController
 from yoyopod.core.events import WorkerMessageReceivedEvent
@@ -67,7 +68,7 @@ class RuntimeBootService:
             voip_config_cls=VoIPConfig,
             voip_manager_cls=VoIPManager,
             music_config_cls=MusicConfig,
-            mpv_backend_cls=MpvBackend,
+            mpv_backend_cls=RustHostBackend,
             local_music_service_cls=LocalMusicService,
             output_volume_controller_cls=OutputVolumeController,
             power_manager_cls=PowerManager,
