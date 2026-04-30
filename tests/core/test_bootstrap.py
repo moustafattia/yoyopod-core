@@ -185,6 +185,7 @@ class _FakeVoipManager:
         self.call_state_callback = None
         self.registration_callback = None
         self.availability_callback = None
+        self.runtime_snapshot_callback = None
         self.message_summary_callback = None
         self.message_received_callback = None
         self.message_delivery_callback = None
@@ -201,6 +202,9 @@ class _FakeVoipManager:
 
     def on_availability_change(self, callback) -> None:
         self.availability_callback = callback
+
+    def on_runtime_snapshot_change(self, callback) -> None:
+        self.runtime_snapshot_callback = callback
 
     def on_message_summary_change(self, callback) -> None:
         self.message_summary_callback = callback
@@ -236,16 +240,13 @@ class _FakeMusicBackend:
 
 
 class _FakeCallRuntime:
-    def handle_incoming_call(self, *_args) -> None:
-        return None
-
-    def handle_call_state_change(self, *_args) -> None:
-        return None
-
     def handle_registration_change(self, *_args) -> None:
         return None
 
     def handle_availability_change(self, *_args) -> None:
+        return None
+
+    def handle_runtime_snapshot_change(self, *_args) -> None:
         return None
 
 
@@ -988,8 +989,8 @@ def test_init_core_components_refuses_simulation_when_lvgl_backend_does_not_star
     assert fake_input_manager.started is False
 
 
-def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
-    """VoIP callbacks should wire straight to the call runtime handlers."""
+def test_setup_voip_callbacks_bind_snapshot_only_call_runtime() -> None:
+    """VoIP callbacks should leave call state ownership with Rust snapshots."""
 
     voip_manager = _FakeVoipManager()
     call_runtime = _FakeCallRuntime()
@@ -1010,10 +1011,11 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     )
     RuntimeBootService(app).setup_voip_callbacks()
 
-    assert voip_manager.incoming_call_callback.__name__ == "handle_incoming_call"
-    assert voip_manager.call_state_callback.__name__ == "handle_call_state_change"
+    assert voip_manager.incoming_call_callback is None
+    assert voip_manager.call_state_callback is None
     assert voip_manager.registration_callback.__name__ == "handle_registration_change"
     assert voip_manager.availability_callback.__name__ == "handle_availability_change"
+    assert voip_manager.runtime_snapshot_callback.__name__ == "handle_runtime_snapshot_change"
     assert (
         voip_manager.message_summary_callback is voice_note_events.handle_voice_note_summary_changed
     )

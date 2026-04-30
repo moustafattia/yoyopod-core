@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import threading
 import time
-from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, cast
@@ -37,22 +35,6 @@ if TYPE_CHECKING:
     from yoyopod.integrations.contacts.directory import PeopleManager
 
 VOICE_NOTE_CONTAINER_GAIN_DB = 12.0
-
-
-@dataclass(frozen=True, slots=True)
-class VoIPIterateSnapshot:
-    """Latest iterate timing sample reported by one backend execution lane."""
-
-    sample_id: int = 0
-    last_started_at: float = 0.0
-    last_completed_at: float = 0.0
-    schedule_delay_seconds: float = 0.0
-    total_duration_seconds: float = 0.0
-    native_duration_seconds: float = 0.0
-    event_drain_duration_seconds: float = 0.0
-    drained_events: int = 0
-    interval_seconds: float = 0.0
-    in_flight: bool = False
 
 
 class VoIPManager:
@@ -107,20 +89,8 @@ class VoIPManager:
         ] = []
         self._last_lifecycle_availability: tuple[bool, str, RegistrationState] | None = None
         self._event_scheduler = event_scheduler
-        self._background_iterate_enabled = bool(background_iterate_enabled and event_scheduler)
-        if background_iterate_enabled and event_scheduler is None:
-            logger.warning(
-                "VoIP background iterate requested without a main-thread scheduler; "
-                "falling back to coordinator-thread iterate"
-            )
-        self._iterate_interval_seconds = max(0.01, float(config.iterate_interval_ms) / 1000.0)
-        self._iterate_snapshot = VoIPIterateSnapshot(
-            interval_seconds=self._iterate_interval_seconds
-        )
-        self._iterate_state_lock = threading.Lock()
-        self._iterate_thread: threading.Thread | None = None
-        self._iterate_stop_event = threading.Event()
-        self._iterate_wakeup_event = threading.Event()
+        if background_iterate_enabled:
+            logger.info("Ignoring Python VoIP iterate request; Rust worker owns VoIP runtime")
 
         self._stopping = False
 
@@ -150,7 +120,6 @@ class VoIPManager:
         logger.info("Stopping VoIP manager...")
         self._stopping = True
         try:
-            self._stop_background_iterate_loop()
             self._stop_call_timer()
             self._stop_voice_note_playback()
             self.backend.stop()
@@ -162,55 +131,28 @@ class VoIPManager:
         logger.info("VoIP manager stopped")
 
     def iterate(self) -> int:
-        drained_events = 0
-        if self.running:
-            drained_events = self.backend.iterate()
-        return drained_events
+        return 0
 
     @property
     def background_iterate_enabled(self) -> bool:
-        """Return whether this manager owns a dedicated iterate worker."""
+        """Return False because Rust owns VoIP runtime iteration."""
 
-        return self._background_iterate_enabled
+        return False
 
     def ensure_background_iterate_running(self) -> None:
-        """Start the dedicated iterate worker when app-mode background cadence is enabled."""
+        """Do nothing; Rust owns VoIP runtime iteration."""
 
-        if not self._background_iterate_enabled or not self.running:
-            return
-        if self._iterate_thread is not None and self._iterate_thread.is_alive():
-            return
-
-        self._iterate_stop_event.clear()
-        self._iterate_wakeup_event.clear()
-        self._iterate_thread = threading.Thread(
-            target=self._run_background_iterate_loop,
-            daemon=True,
-            name="voip-iterate",
-        )
-        self._iterate_thread.start()
+        return
 
     def set_iterate_interval_seconds(self, interval_seconds: float) -> None:
-        """Update the active background iterate cadence."""
+        """Ignore Python iterate cadence updates; Rust owns VoIP timing."""
 
-        clamped_interval_seconds = max(0.01, float(interval_seconds))
-        with self._iterate_state_lock:
-            if abs(self._iterate_interval_seconds - clamped_interval_seconds) <= 1e-9:
-                return
-            self._iterate_interval_seconds = clamped_interval_seconds
-            self._iterate_snapshot = replace(
-                self._iterate_snapshot,
-                interval_seconds=clamped_interval_seconds,
-            )
-        self._iterate_wakeup_event.set()
+        return
 
-    def get_iterate_timing_snapshot(self) -> VoIPIterateSnapshot | None:
-        """Return the latest iterate timing sample when a worker owns the backend cadence."""
+    def get_iterate_timing_snapshot(self) -> object | None:
+        """Return no Python iterate timing because Rust owns VoIP timing."""
 
-        if not self._background_iterate_enabled:
-            return None
-        with self._iterate_state_lock:
-            return self._iterate_snapshot
+        return None
 
     def get_runtime_snapshot(self) -> VoIPRuntimeSnapshot | None:
         """Return the latest Rust-owned VoIP runtime snapshot when available."""
@@ -223,7 +165,7 @@ class VoIPManager:
         return True
 
     def poll_housekeeping(self) -> None:
-        """Run lightweight coordinator-thread-only maintenance alongside background iterate."""
+        """Run lightweight coordinator-thread-only maintenance."""
 
         return
 
@@ -483,95 +425,19 @@ class VoIPManager:
 
         self._event_scheduler(_handle_scheduled_event)
 
-    def _stop_background_iterate_loop(self) -> None:
-        """Stop the dedicated iterate worker if one is active."""
-
-        self._iterate_stop_event.set()
-        self._iterate_wakeup_event.set()
-        if self._iterate_thread is not None:
-            self._iterate_thread.join(timeout=1.0)
-            self._iterate_thread = None
-        with self._iterate_state_lock:
-            self._iterate_snapshot = replace(self._iterate_snapshot, in_flight=False)
-
-    def _run_background_iterate_loop(self) -> None:
-        """Advance the backend on a dedicated worker instead of the coordinator thread."""
-
-        try:
-            next_due_at = time.monotonic()
-            while not self._iterate_stop_event.is_set():
-                wait_seconds = max(0.0, next_due_at - time.monotonic())
-                woke_early = self._iterate_wakeup_event.wait(wait_seconds)
-                if self._iterate_stop_event.is_set():
-                    break
-                if woke_early:
-                    self._iterate_wakeup_event.clear()
-                    next_due_at = time.monotonic() + self._current_iterate_interval_seconds()
-                    continue
-
-                started_at = time.monotonic()
-                schedule_delay_seconds = max(0.0, started_at - next_due_at)
-                with self._iterate_state_lock:
-                    self._iterate_snapshot = replace(
-                        self._iterate_snapshot,
-                        last_started_at=started_at,
-                        schedule_delay_seconds=schedule_delay_seconds,
-                        in_flight=True,
-                    )
-
-                drained_events = self.backend.iterate() if self.running else 0
-                metrics = self.get_iterate_metrics()
-                completed_at = time.monotonic()
-
-                with self._iterate_state_lock:
-                    self._iterate_snapshot = VoIPIterateSnapshot(
-                        sample_id=self._iterate_snapshot.sample_id + 1,
-                        last_started_at=started_at,
-                        last_completed_at=completed_at,
-                        schedule_delay_seconds=schedule_delay_seconds,
-                        total_duration_seconds=max(0.0, completed_at - started_at),
-                        native_duration_seconds=max(
-                            0.0,
-                            float(getattr(metrics, "native_duration_seconds", 0.0) or 0.0),
-                        ),
-                        event_drain_duration_seconds=max(
-                            0.0,
-                            float(getattr(metrics, "event_drain_duration_seconds", 0.0) or 0.0),
-                        ),
-                        drained_events=max(0, int(drained_events)),
-                        interval_seconds=self._iterate_interval_seconds,
-                        in_flight=False,
-                    )
-
-                next_due_at = started_at + self._current_iterate_interval_seconds()
-        except Exception as exc:
-            if not self._iterate_stop_event.is_set():
-                reason = str(exc).strip() or exc.__class__.__name__
-                logger.exception("VoIP background iterate loop crashed: {}", reason)
-                self._dispatch_backend_event(BackendStopped(reason=reason))
-        finally:
-            with self._iterate_state_lock:
-                self._iterate_snapshot = replace(self._iterate_snapshot, in_flight=False)
-
-    def _current_iterate_interval_seconds(self) -> float:
-        """Return the currently selected iterate interval for the background worker."""
-
-        with self._iterate_state_lock:
-            return self._iterate_interval_seconds
-
     def _handle_backend_event(self, event: VoIPEvent) -> None:
         if self._stopping:
             logger.debug("Ignoring VoIP backend event during shutdown: {!r}", event)
             return
 
-        if isinstance(event, RegistrationStateChanged):
-            self._update_registration_state(event.state)
-            return
-        if isinstance(event, CallStateChanged):
-            self._update_call_state(event.state)
-            return
-        if isinstance(event, IncomingCallDetected):
-            self._handle_incoming_call_event(event.caller_address)
+        if isinstance(
+            event,
+            (RegistrationStateChanged, CallStateChanged, IncomingCallDetected),
+        ):
+            logger.debug(
+                "Ignoring legacy VoIP event in Rust snapshot-owned mode: {!r}",
+                event,
+            )
             return
         if isinstance(event, BackendStopped):
             logger.warning("VoIP backend stopped unexpectedly: {}", event.reason or "unknown")
@@ -1078,4 +944,4 @@ def _bool_from_value(value: object) -> bool:
     return bool(value)
 
 
-__all__ = ["VoIPIterateSnapshot", "VoIPManager"]
+__all__ = ["VoIPManager"]

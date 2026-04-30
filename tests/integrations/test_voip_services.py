@@ -45,10 +45,13 @@ def test_voip_config_requires_server_and_identity_for_backend_start(tmp_path: Pa
         "MessagingService",
         "VoIPMessageStore",
         "VoiceNoteService",
+        "ActiveCallSession",
+        "CallHistoryStore",
+        "CallSessionTracker",
     ],
 )
 def test_legacy_python_voip_services_are_not_public_call_exports(name: str) -> None:
-    """Production callers must not reach Python-owned message or voice-note services."""
+    """Production callers must not reach Python-owned VoIP domain services."""
 
     call_module = importlib.import_module("yoyopod.integrations.call")
 
@@ -63,6 +66,7 @@ def test_legacy_python_voip_services_are_not_public_call_exports(name: str) -> N
         "yoyopod.integrations.call.messaging",
         "yoyopod.integrations.call.message_store",
         "yoyopod.integrations.call.voice_notes",
+        "yoyopod.integrations.call.lifecycle",
     ],
 )
 def test_legacy_python_voip_service_modules_are_quarantined(module_name: str) -> None:

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import queue
 import tempfile
-import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,7 +27,6 @@ from yoyopod.integrations.call.models import (
     RegistrationState,
     RegistrationStateChanged,
     VoIPConfig,
-    VoIPEvent,
     VoIPLifecycleSnapshot,
     VoIPMessageSnapshot,
     VoIPMessageRecord,
@@ -51,42 +48,6 @@ class FakePeopleDirectory:
         if contact_name is None:
             return None
         return SimpleNamespace(display_name=contact_name)
-
-
-class BackgroundIterateMockVoIPBackend(MockVoIPBackend):
-    """Mock backend that cooperates with the manager's real background iterate thread."""
-
-    def __init__(
-        self,
-        *,
-        event_to_emit: VoIPEvent | None = None,
-        metrics_error: Exception | None = None,
-    ) -> None:
-        super().__init__()
-        self.event_to_emit = event_to_emit
-        self.metrics_error = metrics_error
-        self.iterate_calls = 0
-        self.iterate_started = threading.Event()
-        self.runtime_snapshot: VoIPRuntimeSnapshot | None = None
-
-    def get_runtime_snapshot(self) -> VoIPRuntimeSnapshot | None:
-        return self.runtime_snapshot
-
-    def iterate(self) -> int:
-        self.iterate_started.set()
-        self.iterate_calls += 1
-        if self.iterate_calls == 1 and self.event_to_emit is not None:
-            self.emit(self.event_to_emit)
-            return 1
-        return 0
-
-    def get_iterate_metrics(self) -> object | None:
-        if self.metrics_error is not None:
-            raise self.metrics_error
-        return SimpleNamespace(
-            native_duration_seconds=0.0,
-            event_drain_duration_seconds=0.0,
-        )
 
 
 class SnapshotOwnedMockVoIPBackend(MockVoIPBackend):
@@ -120,6 +81,23 @@ class SnapshotOwnedMockVoIPBackend(MockVoIPBackend):
         return True
 
 
+class PythonIterateForbiddenVoIPBackend(SnapshotOwnedMockVoIPBackend):
+    """Backend double that fails the test if the Python facade drives iteration."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.iterate_calls = 0
+        self.metrics_calls = 0
+
+    def iterate(self) -> int:
+        self.iterate_calls += 1
+        raise AssertionError("Python VoIP facade must not iterate the Rust runtime")
+
+    def get_iterate_metrics(self) -> object | None:
+        self.metrics_calls += 1
+        raise AssertionError("Python VoIP facade must not read Rust iterate metrics")
+
+
 def build_config(storage_root: Path | None = None) -> VoIPConfig:
     """Create a small test configuration with isolated on-disk storage."""
 
@@ -133,6 +111,27 @@ def build_config(storage_root: Path | None = None) -> VoIPConfig:
         file_transfer_server_url="https://transfer.example.com",
         message_store_dir=str(root / "messages"),
         voice_note_store_dir=str(root / "voice_notes"),
+    )
+
+
+def _registered_runtime_snapshot(
+    *,
+    call_state: CallState = CallState.IDLE,
+    peer: str = "",
+    call_id: str = "",
+) -> VoIPRuntimeSnapshot:
+    return VoIPRuntimeSnapshot(
+        configured=True,
+        registered=True,
+        registration_state=RegistrationState.OK,
+        call_state=call_state,
+        active_call_id=call_id,
+        active_call_peer=peer,
+        lifecycle=VoIPLifecycleSnapshot(
+            state="registered",
+            reason="registered",
+            backend_available=True,
+        ),
     )
 
 
@@ -161,17 +160,6 @@ def test_voip_manager_does_not_construct_python_runtime_owners() -> None:
     assert not hasattr(manager, "_voice_note_service")
 
 
-def wait_for_condition(predicate: Callable[[], bool], *, timeout_seconds: float = 1.0) -> bool:
-    """Poll a test condition until it becomes true or the timeout expires."""
-
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.01)
-    return predicate()
-
-
 def test_voip_manager_skips_backend_start_when_identity_missing() -> None:
     """VoIPManager should fail fast before touching the backend when SIP identity is absent."""
 
@@ -185,8 +173,8 @@ def test_voip_manager_skips_backend_start_when_identity_missing() -> None:
     assert manager.registration_state == RegistrationState.FAILED
 
 
-def test_voip_manager_applies_backend_events_and_resolves_contact_names() -> None:
-    """VoIPManager should stay app-facing while backend events remain typed and low-level."""
+def test_voip_manager_ignores_legacy_call_events_until_rust_snapshot() -> None:
+    """Raw call events should not own live Python state in Rust-snapshot mode."""
 
     backend = SnapshotOwnedMockVoIPBackend()
     people_directory = FakePeopleDirectory({"sip:parent@example.com": "Parent"})
@@ -206,10 +194,26 @@ def test_voip_manager_applies_backend_events_and_resolves_contact_names() -> Non
     backend.emit(CallStateChanged(state=CallState.INCOMING))
     backend.emit(IncomingCallDetected(caller_address="sip:parent@example.com"))
 
+    assert manager.registered is False
+    assert registration_states == []
+    assert call_states == []
+    assert incoming_calls == []
+    assert manager.get_caller_info()["display_name"] == "Unknown"
+
+    backend.emit(
+        VoIPRuntimeSnapshotChanged(
+            snapshot=_registered_runtime_snapshot(
+                call_state=CallState.INCOMING,
+                peer="sip:parent@example.com",
+                call_id="call-1",
+            )
+        )
+    )
+
     assert manager.registered
     assert registration_states == [RegistrationState.OK]
     assert call_states == [CallState.INCOMING]
-    assert incoming_calls == [("sip:parent@example.com", "Parent")]
+    assert incoming_calls == []
     assert manager.get_caller_info()["display_name"] == "Parent"
 
 
@@ -261,7 +265,7 @@ def test_voip_manager_delegates_outgoing_commands_to_backend() -> None:
     manager = VoIPManager(build_config(), backend=backend)
     call_states: list[CallState] = []
 
-    backend.emit(RegistrationStateChanged(state=RegistrationState.OK))
+    backend.emit(VoIPRuntimeSnapshotChanged(snapshot=_registered_runtime_snapshot()))
     manager.on_call_state_change(call_states.append)
 
     assert manager.make_call("sip:bob@example.com", contact_name="Bob")
@@ -279,7 +283,7 @@ def test_voip_manager_waits_for_rust_snapshot_before_call_identity() -> None:
     manager = VoIPManager(build_config(), people_directory=people_directory, backend=backend)
 
     assert manager.start()
-    backend.emit(RegistrationStateChanged(state=RegistrationState.OK))
+    backend.emit(VoIPRuntimeSnapshotChanged(snapshot=_registered_runtime_snapshot()))
 
     assert manager.make_call("sip:bob@example.com", contact_name="Bob")
     assert backend.commands == ["call sip:bob@example.com"]
@@ -763,7 +767,7 @@ def test_voip_manager_derives_availability_from_rust_lifecycle_snapshots() -> No
 
 
 def test_voip_manager_starts_timer_on_streams_running_without_connected() -> None:
-    """Streams-running callbacks should start live duration tracking on their own."""
+    """Streams-running snapshots should start live duration tracking on their own."""
 
     backend = SnapshotOwnedMockVoIPBackend()
     manager = VoIPManager(build_config(), backend=backend)
@@ -772,7 +776,11 @@ def test_voip_manager_starts_timer_on_streams_running_without_connected() -> Non
 
     assert manager.start()
 
-    backend.emit(CallStateChanged(state=CallState.STREAMS_RUNNING))
+    backend.emit(
+        VoIPRuntimeSnapshotChanged(
+            snapshot=_registered_runtime_snapshot(call_state=CallState.STREAMS_RUNNING)
+        )
+    )
 
     assert started == [True]
 
@@ -970,9 +978,13 @@ def test_voip_manager_queues_backend_events_back_to_main_thread(tmp_path: Path) 
         background_iterate_enabled=True,
     )
 
-    backend.emit(CallStateChanged(state=CallState.CONNECTED))
+    backend.emit(
+        VoIPRuntimeSnapshotChanged(
+            snapshot=_registered_runtime_snapshot(call_state=CallState.CONNECTED)
+        )
+    )
 
-    assert manager.background_iterate_enabled is True
+    assert manager.background_iterate_enabled is False
     assert manager.call_state == CallState.IDLE
     assert len(queued_callbacks) == 1
 
@@ -981,65 +993,48 @@ def test_voip_manager_queues_backend_events_back_to_main_thread(tmp_path: Path) 
     assert manager.call_state == CallState.CONNECTED
 
 
-def test_voip_manager_background_iterate_thread_queues_events_and_stops_cleanly(
+def test_voip_manager_ignores_background_iterate_request(
     tmp_path: Path,
 ) -> None:
-    """The dedicated iterate worker should queue callbacks back to the coordinator thread."""
+    """Python should not start an iterate worker now that Rust owns runtime cadence."""
 
-    backend = BackgroundIterateMockVoIPBackend(
-        event_to_emit=CallStateChanged(state=CallState.CONNECTED)
-    )
+    backend = PythonIterateForbiddenVoIPBackend()
     config = build_config()
     config.message_store_dir = str(tmp_path / "messages")
     config.voice_note_store_dir = str(tmp_path / "voice_notes")
-    scheduled_callbacks: queue.Queue[Callable[[], None]] = queue.Queue()
     manager = VoIPManager(
         config,
         backend=backend,
-        event_scheduler=scheduled_callbacks.put,
+        event_scheduler=lambda callback: callback(),
         background_iterate_enabled=True,
     )
 
     assert manager.start()
-    try:
-        manager.ensure_background_iterate_running()
+    manager.ensure_background_iterate_running()
+    manager.set_iterate_interval_seconds(0.001)
 
-        assert wait_for_condition(backend.iterate_started.is_set)
-        assert manager._iterate_thread is not None
-        worker_thread = manager._iterate_thread
-
-        assert wait_for_condition(lambda: not scheduled_callbacks.empty())
-        assert manager.call_state == CallState.IDLE
-
-        scheduled_callbacks.get_nowait()()
-
-        assert manager.call_state == CallState.CONNECTED
-        assert backend.iterate_calls >= 1
-
-        manager._stop_background_iterate_loop()
-
-        assert manager._iterate_thread is None
-        assert worker_thread is not None
-        assert worker_thread.is_alive() is False
-    finally:
-        manager.stop(notify_events=False)
+    assert manager.background_iterate_enabled is False
+    assert manager.get_iterate_timing_snapshot() is None
+    assert manager.iterate() == 0
+    assert backend.iterate_calls == 0
+    assert backend.metrics_calls == 0
+    assert not hasattr(manager, "_iterate_thread")
 
 
-def test_voip_manager_background_iterate_worker_surfaces_unexpected_failure(
+def test_voip_manager_no_longer_surfaces_python_iterate_worker_failures(
     tmp_path: Path,
 ) -> None:
-    """Unexpected worker-loop failures should be converted into a backend-stopped event."""
+    """Rust lifecycle snapshots, not Python iterate failures, own availability changes."""
 
-    backend = BackgroundIterateMockVoIPBackend(metrics_error=RuntimeError("metrics exploded"))
+    backend = PythonIterateForbiddenVoIPBackend()
     config = build_config()
     config.message_store_dir = str(tmp_path / "messages")
     config.voice_note_store_dir = str(tmp_path / "voice_notes")
-    scheduled_callbacks: queue.Queue[Callable[[], None]] = queue.Queue()
     availability_changes: list[tuple[bool, str, RegistrationState]] = []
     manager = VoIPManager(
         config,
         backend=backend,
-        event_scheduler=scheduled_callbacks.put,
+        event_scheduler=lambda callback: callback(),
         background_iterate_enabled=True,
     )
     manager.on_availability_change(
@@ -1049,32 +1044,15 @@ def test_voip_manager_background_iterate_worker_surfaces_unexpected_failure(
     )
 
     assert manager.start()
-    try:
-        manager.ensure_background_iterate_running()
+    manager.ensure_background_iterate_running()
+    manager.set_iterate_interval_seconds(0.001)
 
-        assert wait_for_condition(backend.iterate_started.is_set)
-        assert wait_for_condition(lambda: not scheduled_callbacks.empty())
-
-        scheduled_callbacks.get_nowait()()
-
-        assert manager.running is False
-        assert manager.registered is False
-        assert manager.registration_state == RegistrationState.FAILED
-        assert availability_changes[-1] == (
-            False,
-            "metrics exploded",
-            RegistrationState.FAILED,
-        )
-
-        worker_thread = manager._iterate_thread
-        assert worker_thread is not None
-        assert wait_for_condition(lambda: worker_thread.is_alive() is False)
-
-        manager._stop_background_iterate_loop()
-
-        assert manager._iterate_thread is None
-    finally:
-        manager.stop(notify_events=False)
+    assert manager.iterate() == 0
+    assert manager.running is True
+    assert manager.registration_state == RegistrationState.NONE
+    assert availability_changes == [(True, "started", RegistrationState.NONE)]
+    assert backend.iterate_calls == 0
+    assert backend.metrics_calls == 0
 
 
 def test_voip_manager_surfaces_voice_note_failure_reason() -> None:
@@ -1220,7 +1198,6 @@ def test_voip_manager_handles_backend_stop_event() -> None:
     manager = VoIPManager(build_config(), backend=backend)
 
     assert manager.start()
-    backend.emit(RegistrationStateChanged(state=RegistrationState.OK))
     backend.emit(BackendStopped(reason="native core stopped"))
 
     assert manager.running is False
@@ -1241,7 +1218,6 @@ def test_voip_manager_marks_available_after_backend_recovery() -> None:
     )
 
     assert manager.start()
-    backend.emit(RegistrationStateChanged(state=RegistrationState.OK))
     backend.emit(BackendStopped(reason="process_exited"))
     backend.emit(BackendRecovered(reason="worker_ready"))
 

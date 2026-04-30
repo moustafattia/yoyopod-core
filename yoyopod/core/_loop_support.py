@@ -282,36 +282,7 @@ def _apply_loop_cadence(
     runtime_loop._current_voip_iterate_interval_seconds = decision.voip_iterate_interval_seconds
     runtime_loop._last_cadence_selected_at = monotonic_now
 
-    if (
-        runtime_loop.app.voip_manager is not None
-        and runtime_loop.app.voip_manager.running
-    ):
-        if runtime_loop._voip_background_iterate_enabled():
-            ensure_running = getattr(
-                runtime_loop.app.voip_manager,
-                "ensure_background_iterate_running",
-                None,
-            )
-            if callable(ensure_running):
-                ensure_running()
-            set_interval = getattr(
-                runtime_loop.app.voip_manager,
-                "set_iterate_interval_seconds",
-                None,
-            )
-            if callable(set_interval):
-                set_interval(decision.voip_iterate_interval_seconds)
-            # The background worker now owns iterate timing, so the coordinator-side
-            # deadline stays cleared even when the cadence decision itself is unchanged.
-            runtime_loop.app._next_voip_iterate_at = 0.0
-        else:
-            # Recompute the coordinator-side deadline on every pass so manual iterate
-            # scheduling stays aligned to the latest cadence and last-start timestamp.
-            runtime_loop.app._next_voip_iterate_at = _next_voip_due_at_for_cadence(
-                runtime_loop=runtime_loop,
-                monotonic_now=monotonic_now,
-                iterate_interval_seconds=decision.voip_iterate_interval_seconds,
-            )
+    runtime_loop.app._next_voip_iterate_at = 0.0
 
     if not changed:
         return

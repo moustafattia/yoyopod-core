@@ -187,12 +187,9 @@ class RuntimeLoopService:
         return _latest_voip_iterate_metrics_impl(self)
 
     def _voip_background_iterate_enabled(self) -> bool:
-        """Return whether the active VoIP manager owns a dedicated iterate worker."""
+        """Return False because Rust owns VoIP runtime iteration internally."""
 
-        return bool(
-            self.app.voip_manager is not None
-            and getattr(self.app.voip_manager, "background_iterate_enabled", False)
-        )
+        return False
 
     @property
     def configured_voip_iterate_interval_seconds(self) -> float:
@@ -480,100 +477,14 @@ class RuntimeLoopService:
         )
 
     def iterate_voip_backend_if_due(self, now: float | None = None) -> None:
-        """Advance or observe VoIP keep-alive work without stalling the coordinator thread."""
+        """Run Python-side VoIP housekeeping without owning liblinphone iteration."""
         if self.app.voip_manager is None or not self.app.voip_manager.running:
             return
 
-        if self._voip_background_iterate_enabled():
-            ensure_running = getattr(
-                self.app.voip_manager, "ensure_background_iterate_running", None
-            )
-            if callable(ensure_running):
-                ensure_running()
-            poll_housekeeping = getattr(self.app.voip_manager, "poll_housekeeping", None)
-            if callable(poll_housekeeping):
-                poll_housekeeping()
-            self._sync_background_voip_timing_sample()
-            return
-
-        monotonic_now = time.monotonic() if now is None else now
-        if self.app._next_voip_iterate_at <= 0.0:
-            self.app._next_voip_iterate_at = monotonic_now
-
-        scheduled_for = self.app._next_voip_iterate_at
-        if monotonic_now < scheduled_for:
-            return
-
-        schedule_delay_seconds = max(0.0, monotonic_now - scheduled_for)
-        since_last_iterate_seconds = (
-            max(0.0, monotonic_now - self._last_voip_iterate_started_at)
-            if self._last_voip_iterate_started_at > 0.0
-            else 0.0
-        )
-        self._last_voip_iterate_started_at = monotonic_now
-        self._last_voip_schedule_delay_seconds = schedule_delay_seconds
-
-        started_at = time.monotonic()
-        native_events = self.app.voip_manager.iterate()
-        iterate_duration_seconds = time.monotonic() - started_at
-        iterate_metrics = self._latest_voip_iterate_metrics()
-        self._last_voip_iterate_duration_seconds = iterate_duration_seconds
-        self._last_voip_native_events = native_events
-        self._last_voip_native_iterate_duration_seconds = (
-            iterate_metrics.native_duration_seconds if iterate_metrics is not None else 0.0
-        )
-        self._last_voip_event_drain_duration_seconds = (
-            iterate_metrics.event_drain_duration_seconds if iterate_metrics is not None else 0.0
-        )
-        self.app._next_voip_iterate_at = self._next_voip_due_at_for_cadence(
-            monotonic_now=monotonic_now,
-            iterate_interval_seconds=self._effective_voip_iterate_interval_seconds(),
-        )
-
-        delayed = schedule_delay_seconds >= self._voip_schedule_delay_warning_seconds()
-        slow = iterate_duration_seconds >= self._voip_iterate_warning_seconds()
-        self._record_voip_timing_sample(
-            monotonic_now=monotonic_now,
-            schedule_delay_seconds=schedule_delay_seconds,
-            iterate_duration_seconds=iterate_duration_seconds,
-            native_iterate_duration_seconds=self._last_voip_native_iterate_duration_seconds,
-            event_drain_duration_seconds=self._last_voip_event_drain_duration_seconds,
-            drained_events=native_events,
-            delayed=delayed,
-            slow=slow,
-        )
-
-        if delayed or slow:
-            voip_logger.warning(
-                "VoIP iterate timing drift: "
-                "schedule_delay_ms={:.1f} iterate_ms={:.1f} since_last_ms={:.1f} "
-                "interval_ms={:.1f} configured_interval_ms={:.1f} "
-                "native_iterate_ms={:.1f} event_drain_ms={:.1f} "
-                "native_events={} cadence_mode={} cadence_reason={} "
-                "pending_scheduler_tasks={} pending_events={} screen={} state={}",
-                schedule_delay_seconds * 1000.0,
-                iterate_duration_seconds * 1000.0,
-                since_last_iterate_seconds * 1000.0,
-                self._effective_voip_iterate_interval_seconds() * 1000.0,
-                self.app._voip_iterate_interval_seconds * 1000.0,
-                self._last_voip_native_iterate_duration_seconds * 1000.0,
-                self._last_voip_event_drain_duration_seconds * 1000.0,
-                native_events,
-                self._current_cadence_mode,
-                self._current_cadence_reason,
-                self.pending_main_thread_callback_count(),
-                self.app.bus.pending_count(),
-                self._current_screen_name(),
-                self._runtime_state_name(),
-            )
-        self._warn_if_slow(
-            "voip iterate",
-            started_at=started_at,
-            threshold_seconds=self._SLOW_VOIP_ITERATE_WARNING_SECONDS,
-            detail_factory=lambda: (
-                f"screen={self._current_screen_name()} " f"state={self._runtime_state_name()}"
-            ),
-        )
+        poll_housekeeping = getattr(self.app.voip_manager, "poll_housekeeping", None)
+        if callable(poll_housekeeping):
+            poll_housekeeping()
+        self.app._next_voip_iterate_at = 0.0
 
     def next_sleep_interval_seconds(
         self,
@@ -590,15 +501,6 @@ class RuntimeLoopService:
 
         sleep_seconds = max(0.0, cadence.loop_sleep_seconds)
         deadlines = [sleep_seconds]
-        if (
-            self.app.voip_manager is not None
-            and self.app.voip_manager.running
-            and not self._voip_background_iterate_enabled()
-        ):
-            if self.app._next_voip_iterate_at <= 0.0:
-                deadlines.append(self._effective_voip_iterate_interval_seconds())
-            else:
-                deadlines.append(max(0.0, self.app._next_voip_iterate_at - monotonic_now))
 
         if self.app._pending_shutdown is not None:
             deadlines.append(max(0.0, self.app._pending_shutdown.execute_at - monotonic_now))

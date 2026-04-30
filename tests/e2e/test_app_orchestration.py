@@ -24,7 +24,14 @@ from yoyopod.integrations.call.events import (
     RegistrationChangedEvent,
     VoIPAvailabilityChangedEvent,
 )
-from yoyopod.integrations.call.models import CallState, RegistrationState, VoIPConfig
+from yoyopod.integrations.call.models import (
+    CallState,
+    RegistrationState,
+    VoIPCallSessionSnapshot,
+    VoIPConfig,
+    VoIPLifecycleSnapshot,
+    VoIPRuntimeSnapshot,
+)
 from yoyopod.integrations.music.events import (
     MusicAvailabilityChangedEvent,
     PlaybackStateChangedEvent,
@@ -619,6 +626,37 @@ class OrchestrationScreens:
         }
 
 
+def _call_runtime_snapshot(
+    state: CallState,
+    *,
+    peer: str = "sip:alice@example.com",
+) -> VoIPRuntimeSnapshot:
+    terminal = state in {CallState.IDLE, CallState.RELEASED, CallState.END, CallState.ERROR}
+    session_active = not terminal
+    session_id = "call-1" if peer else ""
+    return VoIPRuntimeSnapshot(
+        configured=True,
+        registered=True,
+        registration_state=RegistrationState.OK,
+        call_state=state,
+        active_call_id=session_id if session_active else "",
+        active_call_peer=peer if session_active else "",
+        lifecycle=VoIPLifecycleSnapshot(
+            state="registered",
+            reason="registered",
+            backend_available=True,
+        ),
+        call_session=VoIPCallSessionSnapshot(
+            active=session_active,
+            session_id=session_id,
+            direction="incoming",
+            peer_sip_address=peer,
+            terminal_state="" if session_active else state.value,
+            history_outcome="missed" if terminal else "",
+        ),
+    )
+
+
 @dataclass(slots=True)
 class OrchestrationHarness:
     """Small test-only app harness for coordinator-heavy orchestration cases."""
@@ -738,25 +776,14 @@ class OrchestrationHarness:
     def publish(self, event: object) -> None:
         self.pending_semantic_events += 1
         if isinstance(event, IncomingCallEvent):
-            worker = threading.Thread(
-                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                lambda: self.app.call_runtime.handle_incoming_call(
-                        event.caller_address,
-                        event.caller_name,
-                    )
-                )
+            self._queue_call_snapshot(
+                CallState.INCOMING,
+                peer=event.caller_address,
+                display_name=event.caller_name,
             )
-            worker.start()
-            worker.join()
             return
         if isinstance(event, CallStateChangedEvent):
-            worker = threading.Thread(
-                target=lambda: self.app.runtime_loop.queue_main_thread_callback(
-                lambda: self.app.call_runtime.handle_call_state_change(event.state)
-                )
-            )
-            worker.start()
-            worker.join()
+            self._queue_call_snapshot(event.state)
             return
         if isinstance(event, CallEndedEvent):
             worker = threading.Thread(
@@ -822,6 +849,29 @@ class OrchestrationHarness:
             worker.join()
             return
         _publish_from_worker(self.app, event)
+
+    def _queue_call_snapshot(
+        self,
+        state: CallState,
+        *,
+        peer: str = "sip:alice@example.com",
+        display_name: str = "Alice",
+    ) -> None:
+        self.app.voip_manager = SimpleNamespace(
+            get_caller_info=lambda: {
+                "address": peer,
+                "name": display_name,
+                "display_name": display_name,
+            }
+        )
+        snapshot = _call_runtime_snapshot(state, peer=peer)
+        worker = threading.Thread(
+            target=lambda: self.app.runtime_loop.queue_main_thread_callback(
+                lambda: self.app.call_runtime.handle_runtime_snapshot_change(snapshot)
+            )
+        )
+        worker.start()
+        worker.join()
 
     def drain_events(self) -> int:
         self.app.runtime_loop.process_pending_main_thread_actions()
@@ -963,17 +1013,17 @@ def test_incoming_call_does_not_mark_interrupted_when_music_backend_is_unavailab
     assert harness.call_fsm.state == CallSessionState.INCOMING
 
 
-def test_incoming_call_metadata_waits_for_incoming_state_before_mutating_runtime() -> None:
-    """Caller metadata alone should not move the runtime into an active incoming phase."""
+def test_incoming_call_event_is_projected_as_rust_snapshot() -> None:
+    """Legacy incoming-call events in tests should exercise the Rust snapshot path."""
     harness = OrchestrationHarness.build(playback_state="playing")
     harness.sync_runtime(music_state=MusicState.PLAYING, trigger="playback_playing")
 
     harness.publish(IncomingCallEvent(caller_address="sip:alice@example.com", caller_name="Alice"))
 
     assert harness.drain_events() == 1
-    assert harness.music_backend.pause_calls == 0
-    assert harness.call_fsm.state == CallSessionState.IDLE
-    assert harness.screen_manager.current_screen is harness.screens.menu
+    assert harness.music_backend.pause_calls == 1
+    assert harness.call_fsm.state == CallSessionState.INCOMING
+    assert harness.screen_manager.current_screen is harness.screens.incoming_call
 
     harness.publish(CallStateChangedEvent(state=CallState.INCOMING))
 
@@ -1084,7 +1134,9 @@ def test_outgoing_call_does_not_change_idle_or_paused_music(
 
     worker = threading.Thread(
         target=lambda: app.runtime_loop.queue_main_thread_callback(
-        lambda: app.call_runtime.handle_call_state_change(CallState.OUTGOING)
+            lambda: app.call_runtime.handle_runtime_snapshot_change(
+                _call_runtime_snapshot(CallState.OUTGOING)
+            )
         )
     )
     worker.start()
@@ -2621,7 +2673,7 @@ def test_runtime_loop_relaxes_idle_cadence_and_exposes_snapshot() -> None:
 
 
 def test_runtime_loop_uses_slower_screen_off_idle_cadence() -> None:
-    """Screen-off idle should stretch both the loop sleep and the VoIP deadline."""
+    """Screen-off idle should stretch loop sleep without Python VoIP deadlines."""
 
     app, _, _ = _build_app_with_power(
         FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
@@ -2640,7 +2692,7 @@ def test_runtime_loop_uses_slower_screen_off_idle_cadence() -> None:
 
     status = app.get_status()
     assert sleep_seconds == pytest.approx(0.1)
-    assert app._next_voip_iterate_at == pytest.approx(1.1)
+    assert app._next_voip_iterate_at == pytest.approx(0.0)
     assert status["runtime_cadence_mode"] == "idle_sleeping"
     assert status["runtime_cadence_reason"] == "screen_sleeping"
     assert status["runtime_target_sleep_seconds"] == pytest.approx(0.1)
@@ -2676,7 +2728,7 @@ def test_runtime_loop_restores_fast_cadence_for_recent_input() -> None:
 
     status = app.get_status()
     assert fast_sleep_seconds == pytest.approx(0.02)
-    assert app._next_voip_iterate_at == pytest.approx(1.02)
+    assert app._next_voip_iterate_at == pytest.approx(0.0)
     assert status["runtime_cadence_mode"] == "latency_sensitive"
     assert status["runtime_cadence_reason"] == "recent_input"
     assert status["voip_effective_iterate_interval_seconds"] == pytest.approx(0.02)
@@ -2764,7 +2816,7 @@ def test_runtime_loop_pending_work_keeps_minimum_nonzero_backlog_cadence() -> No
 
 
 def test_runtime_loop_budgets_backlog_and_keeps_protected_work_running() -> None:
-    """Queue pressure should defer generic work while still advancing VoIP, LVGL, and watchdog."""
+    """Queue pressure should defer generic work while LVGL/watchdog keep running."""
 
     feed_started = threading.Event()
     feed_release = threading.Event()
@@ -2811,7 +2863,7 @@ def test_runtime_loop_budgets_backlog_and_keeps_protected_work_running() -> None
         assert feed_started.wait(timeout=1.0) is True
 
         status = app.get_status()
-        assert app.voip_manager.iterate_calls == 1
+        assert app.voip_manager.iterate_calls == 0
         assert app._lvgl_backend.pump_calls == [0]
         assert power_manager.feed_watchdog_calls == 1
         assert status["watchdog_feed_in_flight"] is True
@@ -2915,8 +2967,8 @@ def test_runtime_loop_logs_main_thread_drain_budget_hits() -> None:
     assert "events_deferred=2" in log_text
 
 
-def test_runtime_loop_offloads_voip_iterate_to_background_manager() -> None:
-    """App-mode VoIP cadence should no longer call the backend iterate on the coordinator."""
+def test_runtime_loop_leaves_voip_iteration_to_rust_worker() -> None:
+    """The coordinator should not start Python VoIP iterate lanes."""
 
     app, _, _ = _build_app_with_power(
         FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
@@ -2951,21 +3003,21 @@ def test_runtime_loop_offloads_voip_iterate_to_background_manager() -> None:
     assert sleep_seconds == pytest.approx(0.05)
     assert updated_at == 0.0
     assert voip_manager.iterate_calls == 0
-    assert voip_manager.ensure_background_iterate_running_calls >= 1
+    assert voip_manager.ensure_background_iterate_running_calls == 0
     assert voip_manager.housekeeping_calls == 1
-    assert voip_manager.interval_updates[-1] == pytest.approx(0.05)
-    assert status["voip_schedule_delay_seconds"] == pytest.approx(0.004)
-    assert status["voip_iterate_duration_seconds"] == pytest.approx(0.004)
-    assert status["voip_native_iterate_duration_seconds"] == pytest.approx(0.003)
-    assert status["voip_event_drain_duration_seconds"] == pytest.approx(0.001)
-    assert status["voip_iterate_native_events"] == 2
-    assert status["voip_iterate_age_seconds"] is not None
+    assert voip_manager.interval_updates == []
+    assert status["voip_schedule_delay_seconds"] is None
+    assert status["voip_iterate_duration_seconds"] is None
+    assert status["voip_native_iterate_duration_seconds"] is None
+    assert status["voip_event_drain_duration_seconds"] is None
+    assert status["voip_iterate_native_events"] is None
+    assert status["voip_iterate_age_seconds"] is None
 
 
-def test_runtime_loop_logs_voip_timing_drift_and_exposes_snapshot(
+def test_runtime_loop_does_not_log_python_voip_iterate_timing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """VoIP keep-alive timing should surface in logs and freeze snapshots."""
+    """Rust-owned VoIP should not produce Python iterate timing diagnostics."""
 
     app, _, _ = _build_app_with_power(
         FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
@@ -3005,22 +3057,17 @@ def test_runtime_loop_logs_voip_timing_drift_and_exposes_snapshot(
 
     log_text = "\n".join(messages)
     assert "coord|Runtime loop blocked:" in log_text
-    assert "voip|VoIP iterate timing drift:" in log_text
-    assert "voip|VoIP timing window:" in log_text
-    assert "native_iterate_ms=80.0" in log_text
-    assert "event_drain_ms=30.0" in log_text
-    assert "max_native_iterate_ms=80.0" in log_text
-    assert "max_event_drain_ms=30.0" in log_text
-    assert "native_events=3" in log_text
-    assert voip_manager.iterate_calls == 2
+    assert "voip|VoIP iterate timing drift:" not in log_text
+    assert "native_iterate_ms=80.0" not in log_text
+    assert voip_manager.iterate_calls == 0
 
     status = app.get_status()
     assert status["runtime_loop_gap_seconds"] == pytest.approx(0.25)
-    assert status["voip_schedule_delay_seconds"] == pytest.approx(0.23)
-    assert status["voip_iterate_duration_seconds"] is not None
-    assert status["voip_native_iterate_duration_seconds"] == pytest.approx(0.08)
-    assert status["voip_event_drain_duration_seconds"] == pytest.approx(0.03)
-    assert status["voip_iterate_native_events"] == 3
+    assert status["voip_schedule_delay_seconds"] is None
+    assert status["voip_iterate_duration_seconds"] is None
+    assert status["voip_native_iterate_duration_seconds"] is None
+    assert status["voip_event_drain_duration_seconds"] is None
+    assert status["voip_iterate_native_events"] is None
     assert status["voip_iterate_interval_seconds"] == pytest.approx(0.02)
 
 
@@ -3069,8 +3116,6 @@ def test_runtime_loop_logs_named_blocking_spans(
 
     log_text = "\n".join(messages)
     assert "coord|Coordinator blocking span: span=power_poll" in log_text
-    assert "voip|VoIP timing window:" in log_text
-    assert "max_blocking_span=power_poll" in log_text
 
     status = app.get_status()
     assert status["runtime_blocking_span_name"] == "power_poll"

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from tests.fixtures.app import build_test_app, drain_all
-from yoyopod.integrations.call import CallHistoryStore, setup as setup_call
+from yoyopod.integrations.call import setup as setup_call
 from yoyopod.integrations.contacts import (
     LookupByAddressCommand,
     MarkVoiceNotesSeenCommand,
@@ -180,15 +180,12 @@ def test_contacts_voice_note_subscription_refreshes_state_from_background_thread
     }
 
 
-def test_contacts_auto_bridge_call_voice_note_summary_when_call_integration_exists(
-    tmp_path,
-) -> None:
+def test_contacts_auto_bridge_call_voice_note_summary_when_call_integration_exists() -> None:
     app = build_test_app()
-    manager = FakeVoipManager()
+    manager = FakeVoipManager(runtime_snapshot_owned=True)
     setup_call(
         app,
         manager=manager,
-        call_history_store=CallHistoryStore(tmp_path / "call_history.json"),
         ringer=FakeRinger(),
     )
     setup(app, directory=FakeDirectory())

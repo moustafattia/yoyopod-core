@@ -6,8 +6,6 @@ from typing import Any
 
 from yoyopod.core.events import BackendStoppedEvent
 from yoyopod.integrations.call.events import (
-    CallStateChangedEvent,
-    IncomingCallEvent,
     RegistrationChangedEvent,
     VoIPAvailabilityChangedEvent,
     VoIPRuntimeSnapshotChangedEvent,
@@ -58,7 +56,7 @@ _TERMINAL_STATES = {
 
 
 def seed_call_state(app: Any, integration: Any, *, available: bool) -> None:
-    """Seed the scaffold call entities from the manager and history store."""
+    """Seed the scaffold call entities from the Rust snapshot manager."""
 
     manager = integration.manager
     registration_state = _as_registration_state(getattr(manager, "registration_state", None))
@@ -78,76 +76,6 @@ def seed_call_state(app: Any, integration: Any, *, available: bool) -> None:
     _apply_call_state(app, manager, getattr(manager, "call_state", CallState.IDLE))
     app.states.set("call.muted", bool(getattr(manager, "is_muted", False)), {})
     publish_call_history_updated(app, integration)
-
-
-def handle_incoming_call_event(app: Any, integration: Any, event: IncomingCallEvent) -> None:
-    """Mirror incoming-call metadata into the state store and focus/ringer helpers."""
-
-    _clear_finalized_rust_call_sessions(integration)
-    if not _manager_owns_runtime_snapshot(integration.manager):
-        integration.session_tracker.begin_incoming_call(event.caller_address, event.caller_name)
-    _request_focus(app)
-    _start_ringer(app, integration)
-    app.states.set(
-        "call.state",
-        "incoming",
-        {
-            "raw_state": CallState.INCOMING.value,
-            "caller_address": event.caller_address,
-            "caller_name": event.caller_name or event.caller_address,
-        },
-    )
-    app.states.set("call.muted", False, {})
-
-
-def handle_call_state_changed_event(
-    app: Any,
-    integration: Any,
-    event: CallStateChangedEvent,
-) -> None:
-    """Mirror one call-state transition and apply history/focus side effects."""
-
-    manager = integration.manager
-    state = event.state
-
-    if _manager_owns_runtime_snapshot(manager):
-        if state not in _TERMINAL_STATES:
-            _clear_finalized_rust_call_sessions(integration)
-        _apply_call_state(app, manager, state)
-        app.states.set("call.muted", bool(getattr(manager, "is_muted", False)), {})
-        return
-
-    if state in _OUTGOING_STATES:
-        _request_focus(app)
-        integration.session_tracker.ensure_outgoing_call(_caller_info(manager))
-        _stop_ringer(integration)
-    elif state == CallState.INCOMING:
-        _request_focus(app)
-        pending = integration.session_tracker.pending_incoming_call
-        if pending is None:
-            caller = _caller_info(manager)
-            integration.session_tracker.begin_incoming_call(
-                str(caller.get("address") or ""),
-                str(caller.get("display_name") or caller.get("name") or ""),
-            )
-        _start_ringer(app, integration)
-    elif state in _ACTIVE_STATES:
-        _request_focus(app)
-        integration.session_tracker.mark_answered()
-        _stop_ringer(integration)
-    elif state in _TERMINAL_STATES:
-        _stop_ringer(integration)
-        integration.session_tracker.mark_terminal_state(
-            state,
-            local_end_action=_consume_pending_terminal_action(manager),
-        )
-        integration.session_tracker.clear_pending_incoming_call()
-        integration.session_tracker.finalize(call_duration_seconds=_call_duration_seconds(manager))
-        publish_call_history_updated(app, integration)
-        _release_focus_if_owned(app)
-
-    _apply_call_state(app, manager, state)
-    app.states.set("call.muted", bool(getattr(manager, "is_muted", False)), {})
 
 
 def handle_registration_changed_event(
@@ -276,34 +204,15 @@ def handle_voice_note_summary_changed_event(
     }
 
 
-def dial(app: Any, integration: Any, command: DialCommand) -> bool:
-    """Place an outgoing call and mirror state only when Python owns call runtime."""
+def dial(_app: Any, integration: Any, command: DialCommand) -> bool:
+    """Place an outgoing call and wait for Rust snapshots to mirror state."""
 
     if not isinstance(command, DialCommand):
         raise TypeError("call.dial expects DialCommand")
     success = bool(integration.manager.make_call(command.sip_address, command.contact_name))
     if not success:
         return False
-    if _manager_owns_runtime_snapshot(integration.manager):
-        _clear_finalized_rust_call_sessions(integration)
-        return True
-    _request_focus(app)
-    integration.session_tracker.ensure_outgoing_call(
-        {
-            "address": command.sip_address,
-            "display_name": command.contact_name,
-            "name": command.contact_name,
-        }
-    )
-    app.states.set(
-        "call.state",
-        "outgoing",
-        {
-            "raw_state": CallState.OUTGOING.value,
-            "caller_address": command.sip_address,
-            "caller_name": command.contact_name or command.sip_address,
-        },
-    )
+    _clear_finalized_rust_call_sessions(integration)
     return True
 
 
@@ -336,26 +245,20 @@ def reject(integration: Any, command: RejectCommand) -> bool:
     return bool(integration.manager.reject_call())
 
 
-def mute(app: Any, integration: Any, command: MuteCommand) -> bool:
-    """Mute the active call and mirror state only when Python owns call runtime."""
+def mute(_app: Any, integration: Any, command: MuteCommand) -> bool:
+    """Mute the active call and wait for Rust snapshots to mirror state."""
 
     if not isinstance(command, MuteCommand):
         raise TypeError("call.mute expects MuteCommand")
-    success = bool(integration.manager.mute())
-    if success and not _manager_owns_runtime_snapshot(integration.manager):
-        app.states.set("call.muted", True, {})
-    return success
+    return bool(integration.manager.mute())
 
 
-def unmute(app: Any, integration: Any, command: UnmuteCommand) -> bool:
-    """Unmute the active call and mirror state only when Python owns call runtime."""
+def unmute(_app: Any, integration: Any, command: UnmuteCommand) -> bool:
+    """Unmute the active call and wait for Rust snapshots to mirror state."""
 
     if not isinstance(command, UnmuteCommand):
         raise TypeError("call.unmute expects UnmuteCommand")
-    success = bool(integration.manager.unmute())
-    if success and not _manager_owns_runtime_snapshot(integration.manager):
-        app.states.set("call.muted", False, {})
-    return success
+    return bool(integration.manager.unmute())
 
 
 def send_text_message(integration: Any, command: SendTextMessageCommand) -> bool:
@@ -428,39 +331,26 @@ def mark_history_seen(app: Any, integration: Any, command: MarkHistorySeenComman
 
     if not isinstance(command, MarkHistorySeenCommand):
         raise TypeError("call.mark_history_seen expects MarkHistorySeenCommand")
-    if _manager_owns_runtime_snapshot(integration.manager):
-        mark_seen = getattr(integration.manager, "mark_call_history_seen", None)
-        marked = bool(mark_seen("")) if callable(mark_seen) else False
-        _publish_call_history_updated(
-            app,
-            0 if marked else _runtime_call_history_unread_count(integration.manager),
-            _runtime_call_history_preview(integration.manager),
-        )
-        return 0 if marked else _runtime_call_history_unread_count(integration.manager)
-    if integration.history_store is None:
-        publish_call_history_updated(app, integration)
-        return 0
-    integration.history_store.mark_all_seen()
-    publish_call_history_updated(app, integration)
-    return integration.history_store.missed_count()
+    mark_seen = getattr(integration.manager, "mark_call_history_seen", None)
+    marked = bool(mark_seen("")) if callable(mark_seen) else False
+    unread_count = 0 if marked else _runtime_call_history_unread_count(integration.manager)
+    _publish_call_history_updated(
+        app,
+        unread_count,
+        _runtime_call_history_preview(integration.manager),
+    )
+    return unread_count
 
 
 def publish_call_history_updated(app: Any, integration: Any) -> None:
     """Publish one typed history-summary update event."""
 
-    if _manager_owns_runtime_snapshot(integration.manager):
-        unread_count = _runtime_call_history_unread_count(integration.manager)
-        _publish_call_history_updated(
-            app,
-            unread_count,
-            _runtime_call_history_preview(integration.manager),
-        )
-        return
-
-    history_store = integration.history_store
-    unread_count = 0 if history_store is None else history_store.missed_count()
-    recent_preview = () if history_store is None else tuple(history_store.recent_preview())
-    _publish_call_history_updated(app, unread_count, recent_preview)
+    unread_count = _runtime_call_history_unread_count(integration.manager)
+    _publish_call_history_updated(
+        app,
+        unread_count,
+        _runtime_call_history_preview(integration.manager),
+    )
 
 
 def _publish_call_history_updated(
@@ -534,20 +424,6 @@ def _caller_info(manager: Any) -> dict[str, object]:
     return {}
 
 
-def _consume_pending_terminal_action(manager: Any) -> str | None:
-    consume_pending_terminal_action = getattr(manager, "consume_pending_terminal_action", None)
-    if not callable(consume_pending_terminal_action):
-        return None
-    return consume_pending_terminal_action()
-
-
-def _call_duration_seconds(manager: Any) -> int:
-    get_call_duration = getattr(manager, "get_call_duration", None)
-    if not callable(get_call_duration):
-        return 0
-    return max(0, int(get_call_duration() or 0))
-
-
 def _extract_username(sip_address: str) -> str:
     if not sip_address:
         return "Unknown"
@@ -557,13 +433,6 @@ def _extract_username(sip_address: str) -> str:
     if ":" in username_part:
         return username_part.split(":")[-1]
     return username_part
-
-
-def _manager_owns_runtime_snapshot(manager: Any) -> bool:
-    owns_runtime_snapshot = getattr(manager, "owns_runtime_snapshot", None)
-    if not callable(owns_runtime_snapshot):
-        return False
-    return bool(owns_runtime_snapshot())
 
 
 def _runtime_call_history_unread_count(manager: Any) -> int:

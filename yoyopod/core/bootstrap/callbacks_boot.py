@@ -30,10 +30,6 @@ class CallbacksBoot:
             self.logger.warning("  Call runtime not available, skipping VoIP callbacks")
             return
 
-        self.app.voip_manager.on_incoming_call(call_runtime.handle_incoming_call)
-        self.app.voip_manager.on_call_state_change(
-            call_runtime.handle_call_state_change
-        )
         self.app.voip_manager.on_registration_change(
             call_runtime.handle_registration_change
         )

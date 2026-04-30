@@ -8,10 +8,8 @@ from loguru import logger
 
 from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.call import (
-    CallHistoryStore,
     CallRinger,
     CallSessionState,
-    CallSessionTracker,
     CallState,
     RegistrationState,
     sync_context_voip_status,
@@ -57,7 +55,6 @@ class CallRuntime:
         context: "AppContext | None",
         music_backend: "MusicBackend | None",
         voip_manager_provider: Callable[[], object | None],
-        call_history_store: CallHistoryStore | None = None,
         initial_voip_registered: bool = False,
     ) -> None:
         self.runtime = runtime
@@ -67,10 +64,8 @@ class CallRuntime:
         self.context = context
         self.music_backend = music_backend
         self.voip_manager_provider = voip_manager_provider
-        self.call_history_store = call_history_store
         self.voip_registered = initial_voip_registered
         self._ringer = CallRinger()
-        self._session_tracker = CallSessionTracker(call_history_store)
 
     def start_ringing(self) -> None:
         """Start playing the ring tone for an incoming call."""
@@ -88,80 +83,14 @@ class CallRuntime:
         """Log entry into the active-call-with-paused-music state."""
         logger.info("In call (music paused in background)")
 
-    def handle_incoming_call(self, caller_address: str, caller_name: str) -> None:
-        """Capture incoming-call metadata for the active incoming phase."""
-        if self._current_manager_owns_runtime_snapshot():
-            logger.debug("Waiting for Rust snapshot before mirroring incoming-call metadata")
-            return
-        logger.info(f"Incoming call metadata: {caller_name} ({caller_address})")
-        self._session_tracker.begin_incoming_call(caller_address, caller_name)
-        self._present_incoming_call_if_ready()
-
-    def handle_call_state_change(self, state: CallState) -> None:
-        """Coordinate high-level call state updates."""
-        if self._current_manager_owns_runtime_snapshot():
-            logger.debug("Waiting for Rust snapshot before mirroring call state {}", state.value)
-            return
-
-        logger.info(f"Call state changed: {state.value}")
-
-        if state in (
-            CallState.OUTGOING,
-            CallState.OUTGOING_PROGRESS,
-            CallState.OUTGOING_RINGING,
-            CallState.OUTGOING_EARLY_MEDIA,
-        ):
-            self._pause_music_for_call(phase="outgoing")
-            session = self._session_tracker.ensure_outgoing_call(self._current_caller_info())
-            self.runtime.call_fsm.transition("dial")
-            self.runtime.sync_app_state("call_outgoing")
-            self._show_outgoing_call(
-                session.sip_address,
-                session.display_name,
-            )
-            return
-
-        if state == CallState.INCOMING:
-            self._pause_music_for_call(phase="incoming")
-            self.runtime.call_fsm.transition("incoming")
-            self.runtime.sync_app_state("call_incoming_state")
-            self._present_incoming_call_if_ready()
-            return
-
-        if state in (CallState.CONNECTED, CallState.STREAMS_RUNNING):
-            self._session_tracker.mark_answered()
-            self.runtime.call_fsm.transition("connect")
-            state_change = self.runtime.sync_app_state("call_connected")
-            if state_change.entered(AppRuntimeState.CALL_ACTIVE_MUSIC_PAUSED):
-                logger.info("In call (music paused in background)")
-            self._show_in_call()
-            self.stop_ringing()
-            return
-
-        if state in (CallState.RELEASED, CallState.END, CallState.ERROR):
-            if not self._has_live_call_state():
-                logger.debug("Ignoring duplicate terminal call state {}", state.value)
-                return
-
-            local_end_action = self._consume_pending_terminal_action()
-            self._session_tracker.mark_terminal_state(
-                state,
-                local_end_action=local_end_action,
-            )
-            self.handle_call_ended(reason=state.value)
-            return
-
-        logger.debug("Call state {} does not change coordinator phase", state.value)
-
     def handle_call_ended(self, *, reason: str = "released") -> None:
         """Coordinate call cleanup and possible music resume."""
-        if not self.runtime.call_fsm.is_active and not self._session_tracker.has_live_session:
+        if not self.runtime.call_fsm.is_active:
             logger.warning(
                 "Ignoring terminal call teardown without an active session (reason: {})",
                 reason,
             )
             self.stop_ringing()
-            self._session_tracker.clear_pending_incoming_call()
             self._pop_call_screens()
             self.runtime.sync_app_state(f"call_ended:{reason}")
             return
@@ -169,8 +98,6 @@ class CallRuntime:
         logger.info("Call ended ({})", reason)
 
         self.stop_ringing()
-        self._session_tracker.clear_pending_incoming_call()
-        self._finalize_call_history()
         self._pop_call_screens()
 
         should_resume = self.runtime.call_interruption_policy.should_auto_resume(
@@ -250,11 +177,8 @@ class CallRuntime:
         self.stop_ringing()
         self._refresh_call_screen_if_visible()
 
-        if self.runtime.call_fsm.is_active or self._session_tracker.has_live_session:
-            if self._current_manager_owns_runtime_snapshot():
-                self._end_rust_snapshot_call(reason=reason or "unavailable")
-            else:
-                self.handle_call_ended(reason=reason or "unavailable")
+        if self.runtime.call_fsm.is_active:
+            self._end_rust_snapshot_call(reason=reason or "unavailable")
 
     def handle_runtime_snapshot_change(self, snapshot: VoIPRuntimeSnapshot) -> None:
         """Coordinate app side effects from the Rust-owned canonical VoIP snapshot."""
@@ -331,19 +255,6 @@ class CallRuntime:
         self._refresh_now_playing_screen()
         return True
 
-    def _present_incoming_call_if_ready(self) -> None:
-        """Show the incoming-call screen once state and caller metadata are both known."""
-
-        if self.runtime.call_fsm.state != CallSessionState.INCOMING:
-            return
-        if self._session_tracker.pending_incoming_call is None:
-            logger.debug("Incoming call phase entered before caller metadata arrived")
-            return
-
-        caller_address, caller_name = self._session_tracker.pending_incoming_call
-        self._show_incoming_call(caller_address, caller_name)
-        self.start_ringing()
-
     def _pop_call_screens(self) -> None:
         if self.screen_manager is None:
             return
@@ -374,39 +285,6 @@ class CallRuntime:
             return
         self.screen_manager.show_outgoing_call(callee_address, callee_name)
 
-    def _has_live_call_state(self) -> bool:
-        """Return whether the coordinator still has a live call to tear down."""
-
-        return self.runtime.call_fsm.is_active or self._session_tracker.has_live_session
-
-    def _consume_pending_terminal_action(self) -> str | None:
-        """Return any locally initiated teardown action awaiting terminal backend state."""
-
-        voip_manager = self._current_voip_manager()
-        consume_action = getattr(voip_manager, "consume_pending_terminal_action", None)
-        if callable(consume_action):
-            return consume_action()
-        return None
-
-    def _finalize_call_history(self) -> None:
-        """Persist the just-finished call into the Talk history store."""
-
-        self._session_tracker.finalize(
-            call_duration_seconds=self._current_call_duration_seconds(),
-        )
-        self._publish_call_summary_to_context()
-
-    def _publish_call_summary_to_context(self) -> None:
-        """Refresh Talk summary data stored in the shared app context."""
-
-        if self.context is None or self.call_history_store is None:
-            return
-
-        self.context.update_call_summary(
-            missed_calls=self.call_history_store.missed_count(),
-            recent_calls=self.call_history_store.recent_preview(),
-        )
-
     def _publish_call_summary_from_snapshot(self, snapshot: VoIPRuntimeSnapshot) -> None:
         """Refresh Talk summary data from the Rust-owned call-history snapshot."""
 
@@ -421,13 +299,6 @@ class CallRuntime:
         """Return the live VoIP manager currently owned by the application."""
 
         return self.voip_manager_provider()
-
-    def _current_manager_owns_runtime_snapshot(self) -> bool:
-        manager = self._current_voip_manager()
-        owns_runtime_snapshot = getattr(manager, "owns_runtime_snapshot", None)
-        if not callable(owns_runtime_snapshot):
-            return False
-        return bool(owns_runtime_snapshot())
 
     def _end_rust_snapshot_call(self, *, reason: str) -> None:
         """Clean up a Rust-owned terminal call without writing Python history."""

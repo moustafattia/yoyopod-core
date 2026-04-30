@@ -20,7 +20,7 @@ from yoyopod.ui.screens.voip.lvgl import LvglCallView
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.integrations.call import CallHistoryStore, VoIPManager
+    from yoyopod.integrations.call import VoIPManager
     from yoyopod.integrations.contacts.directory import PeopleManager
     from yoyopod.integrations.contacts.models import Contact
     from yoyopod.ui.screens.view import ScreenView
@@ -59,7 +59,6 @@ class CallScreen(Screen):
         context: Optional["AppContext"] = None,
         voip_manager: Optional["VoIPManager"] = None,
         people_directory: Optional["PeopleManager"] = None,
-        call_history_store: Optional["CallHistoryStore"] = None,
         contacts_provider: Callable[[], list["Contact"]] | None = None,
         *,
         app: Any | None = None,
@@ -67,7 +66,6 @@ class CallScreen(Screen):
         super().__init__(display, context, "Talk", app=app)
         self._explicit_voip_manager = voip_manager
         self._explicit_people_directory = people_directory
-        self._explicit_call_history_store = call_history_store
         self._explicit_contacts_provider = contacts_provider
         self.people: list[TalkPerson] = []
         self.deck_cards: list[TalkDeckCard] = []
@@ -93,14 +91,6 @@ class CallScreen(Screen):
         if directory is not None:
             return directory
         return getattr(self.app, "people_directory", None)
-
-    @property
-    def call_history_store(self) -> "CallHistoryStore | None":
-        """Resolve the call-history store from the constructor or owning app."""
-
-        if self._explicit_call_history_store is not None:
-            return self._explicit_call_history_store
-        return getattr(self.app, "call_history_store", None)
 
     def enter(self) -> None:
         """Refresh the contact deck when Talk becomes active."""

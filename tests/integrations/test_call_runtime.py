@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from yoyopod.core import AppContext
 from yoyopod.core.app_state import AppStateRuntime
 from yoyopod.integrations.call import (
     CallFSM,
-    CallHistoryStore,
     CallInterruptionPolicy,
 )
 from yoyopod.integrations.call.runtime import CallRuntime
@@ -148,8 +145,8 @@ def test_availability_change_uses_reported_registration_state() -> None:
     assert context.voip.registration_state == RegistrationState.NONE.value
 
 
-def test_raw_terminal_call_states_do_not_write_python_history(tmp_path: Path) -> None:
-    """Rust-owned call runtime should ignore raw call-state history classification."""
+def test_call_runtime_is_snapshot_only_without_python_session_ownership() -> None:
+    """Python call runtime should not expose direct call-state/session ownership hooks."""
 
     context = AppContext()
     voip_manager = _VoipManagerStub()
@@ -163,34 +160,22 @@ def test_raw_terminal_call_states_do_not_write_python_history(tmp_path: Path) ->
         context=context,
         music_backend=None,
         voip_manager_provider=lambda: voip_manager,
-        call_history_store=CallHistoryStore(tmp_path / "call_history.json"),
     )
 
-    runtime_owner.handle_incoming_call("sip:mama@example.com", "Mama")
-    runtime_owner.handle_call_state_change(CallState.INCOMING)
-    voip_manager._pending_terminal_action = "reject"
-    runtime_owner.handle_call_state_change(CallState.END)
-
-    voip_manager._caller_info = {
-        "address": "sip:dad@example.com",
-        "name": "Dad",
-        "display_name": "Dad",
-    }
-    runtime_owner.handle_call_state_change(CallState.OUTGOING)
-    runtime_owner.handle_call_state_change(CallState.ERROR)
-
-    assert runtime_owner.call_history_store.list_recent(2) == []  # type: ignore[union-attr]
+    assert not hasattr(runtime_owner, "handle_incoming_call")
+    assert not hasattr(runtime_owner, "handle_call_state_change")
+    assert not hasattr(runtime_owner, "call_history_store")
+    assert not hasattr(runtime_owner, "_session_tracker")
     assert runtime.call_fsm.state.value == "idle"
 
 
-def test_rust_snapshot_drives_call_runtime_without_python_history(tmp_path: Path) -> None:
+def test_rust_snapshot_drives_call_runtime_without_python_history() -> None:
     """CallRuntime should consume Rust snapshots instead of finalizing Python history."""
 
     context = AppContext()
     voip_manager = _VoipManagerStub()
     runtime = _build_runtime()
     screen_manager = _ScreenManagerStub()
-    history_store = CallHistoryStore(tmp_path / "call_history.json")
     runtime_owner = CallRuntime(
         runtime=runtime,
         screen_manager=screen_manager,
@@ -199,13 +184,7 @@ def test_rust_snapshot_drives_call_runtime_without_python_history(tmp_path: Path
         context=context,
         music_backend=None,
         voip_manager_provider=lambda: voip_manager,
-        call_history_store=history_store,
     )
-
-    runtime_owner.handle_call_state_change(CallState.INCOMING)
-
-    assert runtime.call_fsm.state.value == "idle"
-    assert history_store.list_recent() == []
 
     runtime_owner.handle_runtime_snapshot_change(
         VoIPRuntimeSnapshot(
@@ -266,4 +245,3 @@ def test_rust_snapshot_drives_call_runtime_without_python_history(tmp_path: Path
     assert runtime.call_fsm.state.value == "idle"
     assert context.talk.missed_calls == 1
     assert context.talk.recent_calls == ["mama"]
-    assert history_store.list_recent() == []

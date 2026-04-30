@@ -25,16 +25,13 @@ if TYPE_CHECKING:
     from yoyopod.integrations.call.events import (
         CallEndedEvent,
         CallHistoryUpdatedEvent,
-        CallStateChangedEvent,
-        IncomingCallEvent,
         RegistrationChangedEvent,
         VoiceNoteSummaryChangedEvent,
         VoIPAvailabilityChangedEvent,
         VoIPRuntimeSnapshotChangedEvent,
     )
     from yoyopod.integrations.call.runtime import CallRuntime
-    from yoyopod.integrations.call.history import CallHistoryEntry, CallHistoryStore
-    from yoyopod.integrations.call.lifecycle import ActiveCallSession, CallSessionTracker
+    from yoyopod.integrations.call.history import CallHistoryEntry
     from yoyopod.integrations.call.manager import VoIPManager
     from yoyopod.integrations.call.ringer import CallRinger
     from yoyopod.integrations.call.session import (
@@ -74,7 +71,6 @@ if TYPE_CHECKING:
 
 _PUBLIC_EXPORTS = {
     "AnswerCommand": ("yoyopod.integrations.call.commands", "AnswerCommand"),
-    "ActiveCallSession": ("yoyopod.integrations.call.lifecycle", "ActiveCallSession"),
     "CancelVoiceNoteRecordingCommand": (
         "yoyopod.integrations.call.commands",
         "CancelVoiceNoteRecordingCommand",
@@ -84,15 +80,11 @@ _PUBLIC_EXPORTS = {
     "CallEndedEvent": ("yoyopod.integrations.call.events", "CallEndedEvent"),
     "CallHistoryUpdatedEvent": ("yoyopod.integrations.call.events", "CallHistoryUpdatedEvent"),
     "CallInterruptionPolicy": ("yoyopod.integrations.call.session", "CallInterruptionPolicy"),
-    "CallStateChangedEvent": ("yoyopod.integrations.call.events", "CallStateChangedEvent"),
     "CallSessionState": ("yoyopod.integrations.call.session", "CallSessionState"),
-    "CallSessionTracker": ("yoyopod.integrations.call.lifecycle", "CallSessionTracker"),
     "CallHistoryEntry": ("yoyopod.integrations.call.history", "CallHistoryEntry"),
-    "CallHistoryStore": ("yoyopod.integrations.call.history", "CallHistoryStore"),
     "CallRinger": ("yoyopod.integrations.call.ringer", "CallRinger"),
     "DialCommand": ("yoyopod.integrations.call.commands", "DialCommand"),
     "HangupCommand": ("yoyopod.integrations.call.commands", "HangupCommand"),
-    "IncomingCallEvent": ("yoyopod.integrations.call.events", "IncomingCallEvent"),
     "is_voip_configured": ("yoyopod.integrations.call.status", "is_voip_configured"),
     "MarkHistorySeenCommand": ("yoyopod.integrations.call.commands", "MarkHistorySeenCommand"),
     "MuteCommand": ("yoyopod.integrations.call.commands", "MuteCommand"),
@@ -194,8 +186,6 @@ class CallIntegration:
     """Runtime handles owned by the scaffold call integration."""
 
     manager: object
-    history_store: object | None
-    session_tracker: object
     ringer: object
     last_voice_note_unread_count: int = 0
     last_voice_note_unread_by_address: dict[str, int] = field(default_factory=dict)
@@ -220,8 +210,6 @@ def setup(
 
     from yoyopod.integrations.call.events import (
         CallHistoryUpdatedEvent,
-        CallStateChangedEvent,
-        IncomingCallEvent,
         RegistrationChangedEvent,
         VoiceNoteSummaryChangedEvent,
         VoIPAvailabilityChangedEvent,
@@ -233,8 +221,6 @@ def setup(
         dial,
         handle_availability_changed_event,
         handle_call_history_updated_event,
-        handle_call_state_changed_event,
-        handle_incoming_call_event,
         handle_registration_changed_event,
         handle_runtime_snapshot_changed_event,
         handle_voice_note_summary_changed_event,
@@ -250,8 +236,6 @@ def setup(
         stop_voice_note_recording,
         unmute,
     )
-    from yoyopod.integrations.call.history import CallHistoryStore
-    from yoyopod.integrations.call.lifecycle import CallSessionTracker
     from yoyopod.integrations.call.manager import VoIPManager
     from yoyopod.integrations.call.ringer import CallRinger
 
@@ -266,36 +250,22 @@ def setup(
         event_scheduler=app.scheduler.run_on_main,
         background_iterate_enabled=background_iterate_enabled,
     )
+    if not _object_owns_runtime_snapshot(actual_manager):
+        raise ValueError("Call integration requires a Rust runtime snapshot manager")
     if call_history_store is not None:
-        actual_history_store = call_history_store
-    elif _object_owns_runtime_snapshot(actual_manager):
-        actual_history_store = None
-    else:
-        actual_config = actual_config or _resolve_voip_config(app, explicit=config)
-        actual_history_store = CallHistoryStore(actual_config.call_history_file)
+        raise ValueError("Python call history stores are no longer supported")
     actual_ringer = ringer or CallRinger()
     integration = CallIntegration(
         manager=actual_manager,
-        history_store=actual_history_store,
-        session_tracker=CallSessionTracker(actual_history_store),
         ringer=actual_ringer,
     )
 
     app.integrations["call"] = integration
     app.voip_manager = actual_manager
-    app.call_history_store = actual_history_store
-    app.call_session_tracker = integration.session_tracker
+    app.call_history_store = None
     app.call_ringer = actual_ringer
     app.get_call_duration = lambda: actual_manager.get_call_duration()
 
-    app.bus.subscribe(
-        IncomingCallEvent,
-        lambda event: handle_incoming_call_event(app, integration, event),
-    )
-    app.bus.subscribe(
-        CallStateChangedEvent,
-        lambda event: handle_call_state_changed_event(app, integration, event),
-    )
     app.bus.subscribe(
         RegistrationChangedEvent,
         lambda event: handle_registration_changed_event(app, integration, event),
@@ -317,14 +287,6 @@ def setup(
         lambda event: handle_voice_note_summary_changed_event(app, integration, event),
     )
 
-    actual_manager.on_incoming_call(
-        lambda caller_address, caller_name: app.bus.publish(
-            IncomingCallEvent(caller_address=caller_address, caller_name=caller_name)
-        )
-    )
-    actual_manager.on_call_state_change(
-        lambda state: app.bus.publish(CallStateChangedEvent(state=state))
-    )
     actual_manager.on_registration_change(
         lambda state: app.bus.publish(RegistrationChangedEvent(state=state))
     )
@@ -399,14 +361,6 @@ def setup(
     started = bool(getattr(actual_manager, "running", False))
     if start_manager:
         started = bool(actual_manager.start())
-        if started and getattr(actual_manager, "background_iterate_enabled", False):
-            ensure_background_iterate_running = getattr(
-                actual_manager,
-                "ensure_background_iterate_running",
-                None,
-            )
-            if callable(ensure_background_iterate_running):
-                ensure_background_iterate_running()
 
     if hasattr(app, "recovery_supervisor"):
         app.recovery_supervisor.register_retry_handler(
@@ -433,7 +387,6 @@ def teardown(app: Any) -> None:
     for attribute in (
         "voip_manager",
         "call_history_store",
-        "call_session_tracker",
         "call_ringer",
         "get_call_duration",
     ):
@@ -534,12 +487,6 @@ def _restart_manager(manager: object) -> bool:
     if not callable(start):
         return False
     started = bool(start())
-    if started:
-        ensure_background_iterate_running = getattr(
-            manager, "ensure_background_iterate_running", None
-        )
-        if callable(ensure_background_iterate_running):
-            ensure_background_iterate_running()
     return started
 
 
@@ -581,23 +528,18 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "AnswerCommand",
-    "ActiveCallSession",
     "CallIntegration",
     "CallEndedEvent",
     "CallFSM",
     "CallRuntime",
     "CallHistoryUpdatedEvent",
     "CallInterruptionPolicy",
-    "CallStateChangedEvent",
     "CallSessionState",
-    "CallSessionTracker",
     "CancelVoiceNoteRecordingCommand",
     "CallHistoryEntry",
-    "CallHistoryStore",
     "CallRinger",
     "DialCommand",
     "HangupCommand",
-    "IncomingCallEvent",
     "is_voip_configured",
     "MarkHistorySeenCommand",
     "MuteCommand",

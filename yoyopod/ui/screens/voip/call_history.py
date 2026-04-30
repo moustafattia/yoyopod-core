@@ -15,7 +15,7 @@ from yoyopod.ui.screens.voip.lvgl.call_history_view import LvglCallHistoryView
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.integrations.call import CallHistoryEntry, CallHistoryStore
+    from yoyopod.integrations.call import CallHistoryEntry
     from yoyopod.ui.screens.view import ScreenView
 
 
@@ -27,14 +27,12 @@ class CallHistoryScreen(Screen):
         display: Display,
         context: Optional["AppContext"] = None,
         voip_manager=None,
-        call_history_store: Optional["CallHistoryStore"] = None,
         actions: CallActions | None = None,
         *,
         app: Any | None = None,
     ) -> None:
         super().__init__(display, context, "CallHistory", app=app)
         self._explicit_voip_manager = voip_manager
-        self._explicit_call_history_store = call_history_store
         self._actions = actions
         self.entries: list["CallHistoryEntry"] = []
         self.selected_index = 0
@@ -50,14 +48,6 @@ class CallHistoryScreen(Screen):
             return self._explicit_voip_manager
         return getattr(self.app, "voip_manager", None)
 
-    @property
-    def call_history_store(self) -> "CallHistoryStore | None":
-        """Resolve the call-history store from the constructor or owning app."""
-
-        if self._explicit_call_history_store is not None:
-            return self._explicit_call_history_store
-        return getattr(self.app, "call_history_store", None)
-
     def enter(self) -> None:
         """Refresh call history and clear the unseen-missed badge count."""
         super().enter()
@@ -69,8 +59,6 @@ class CallHistoryScreen(Screen):
             mark_seen = getattr(self.voip_manager, "mark_call_history_seen", None)
             if callable(mark_seen):
                 mark_seen("")
-        elif self.call_history_store is not None:
-            self.call_history_store.mark_all_seen()
         self._sync_context_summary()
         self._ensure_lvgl_view()
 
@@ -103,8 +91,6 @@ class CallHistoryScreen(Screen):
         list_recent = getattr(self.voip_manager, "call_history_recent_entries", None)
         if callable(list_recent):
             self.entries = list(list_recent())
-        elif self.call_history_store is not None:
-            self.entries = self.call_history_store.list_recent()
         else:
             self.entries = []
         if self.entries:
@@ -126,12 +112,6 @@ class CallHistoryScreen(Screen):
                 recent_calls=list(recent_preview()),
             )
             return
-
-        if self.call_history_store is not None:
-            self.context.update_call_summary(
-                missed_calls=self.call_history_store.missed_count(),
-                recent_calls=self.call_history_store.recent_preview(),
-            )
 
     def _is_ready_to_call(self) -> bool:
         """Return whether VoIP is ready to redial from recents."""
