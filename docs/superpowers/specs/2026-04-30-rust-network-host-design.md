@@ -167,6 +167,15 @@ yoyopod_rs/
       modem.rs
       ppp.rs
       gps.rs
+    tests/
+      protocol.rs
+      runtime_snapshot.rs
+      lifecycle.rs
+      ppp.rs
+      gps.rs
+      config.rs
+      support/
+        mod.rs
 ```
 
 Recommended Rust module responsibilities:
@@ -191,6 +200,10 @@ Recommended Rust module responsibilities:
   Own GPS enable/query/fix parsing.
 - `worker.rs`
   Own stdio command handling and snapshot emission.
+
+The crate should follow the same general shape as the existing Rust hosts:
+focused runtime modules under `src/` and crate-level integration coverage under
+`tests/`.
 
 ## Config Ownership
 
