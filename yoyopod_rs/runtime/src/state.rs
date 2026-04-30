@@ -5,6 +5,9 @@ pub enum WorkerDomain {
     Ui,
     Media,
     Voip,
+    Network,
+    Power,
+    Voice,
 }
 
 impl WorkerDomain {
@@ -13,6 +16,9 @@ impl WorkerDomain {
             Self::Ui => "ui",
             Self::Media => "media",
             Self::Voip => "voip",
+            Self::Network => "network",
+            Self::Power => "power",
+            Self::Voice => "voice",
         }
     }
 }
@@ -197,6 +203,9 @@ pub struct RuntimeState {
     pub ui: WorkerHealth,
     pub media_worker: WorkerHealth,
     pub voip_worker: WorkerHealth,
+    pub network_worker: WorkerHealth,
+    pub power_worker: WorkerHealth,
+    pub voice_worker: WorkerHealth,
     pub loop_iterations: u64,
     pub last_loop_duration_ms: u64,
 }
@@ -210,6 +219,9 @@ impl Default for RuntimeState {
             ui: WorkerHealth::default(),
             media_worker: WorkerHealth::default(),
             voip_worker: WorkerHealth::default(),
+            network_worker: WorkerHealth::default(),
+            power_worker: WorkerHealth::default(),
+            voice_worker: WorkerHealth::default(),
             loop_iterations: 0,
             last_loop_duration_ms: 0,
         }
@@ -227,6 +239,9 @@ impl RuntimeState {
             WorkerDomain::Ui => &mut self.ui,
             WorkerDomain::Media => &mut self.media_worker,
             WorkerDomain::Voip => &mut self.voip_worker,
+            WorkerDomain::Network => &mut self.network_worker,
+            WorkerDomain::Power => &mut self.power_worker,
+            WorkerDomain::Voice => &mut self.voice_worker,
         };
         health.state = state;
         health.last_reason = reason.into();
@@ -376,6 +391,9 @@ impl RuntimeState {
                 WorkerDomain::Ui.as_str(): worker_payload(&self.ui),
                 WorkerDomain::Media.as_str(): worker_payload(&self.media_worker),
                 WorkerDomain::Voip.as_str(): worker_payload(&self.voip_worker),
+                WorkerDomain::Network.as_str(): worker_payload(&self.network_worker),
+                WorkerDomain::Power.as_str(): worker_payload(&self.power_worker),
+                WorkerDomain::Voice.as_str(): worker_payload(&self.voice_worker),
             },
             "loop": {
                 "iterations": self.loop_iterations,

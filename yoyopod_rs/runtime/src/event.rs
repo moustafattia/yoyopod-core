@@ -23,6 +23,11 @@ pub enum RuntimeEvent {
         domain: WorkerDomain,
         message: String,
     },
+    WorkerExited {
+        domain: WorkerDomain,
+        reason: String,
+    },
+    Shutdown,
     Ignored,
 }
 
@@ -30,8 +35,7 @@ pub enum RuntimeEvent {
 pub enum RuntimeCommand {
     WorkerCommand {
         domain: WorkerDomain,
-        message_type: String,
-        payload: Value,
+        envelope: WorkerEnvelope,
     },
     Shutdown,
 }
@@ -50,7 +54,10 @@ impl RuntimeEvent {
             Self::WorkerError { domain, message } => {
                 state.mark_worker(*domain, WorkerState::Degraded, message.clone());
             }
-            Self::UiInput(_) | Self::UiIntent { .. } | Self::Ignored => {}
+            Self::WorkerExited { domain, reason } => {
+                state.mark_worker(*domain, WorkerState::Stopped, reason.clone());
+            }
+            Self::UiInput(_) | Self::UiIntent { .. } | Self::Shutdown | Self::Ignored => {}
         }
     }
 }
@@ -87,10 +94,12 @@ pub fn commands_for_event(state: &RuntimeState, event: &RuntimeEvent) -> Vec<Run
         } => commands_for_ui_intent(state, domain, action, payload),
         RuntimeEvent::UiInput(payload) => commands_for_ui_input(state, payload),
         RuntimeEvent::VoipSnapshot(snapshot) => commands_for_voip_snapshot(state, snapshot),
+        RuntimeEvent::Shutdown => vec![RuntimeCommand::Shutdown],
         RuntimeEvent::WorkerReady { .. }
         | RuntimeEvent::MediaSnapshot(_)
         | RuntimeEvent::UiScreenChanged { .. }
         | RuntimeEvent::WorkerError { .. }
+        | RuntimeEvent::WorkerExited { .. }
         | RuntimeEvent::Ignored => Vec::new(),
     }
 }
@@ -101,7 +110,8 @@ fn runtime_event_from_message(
     payload: Value,
 ) -> RuntimeEvent {
     match message_type {
-        "ui.ready" | "media.ready" | "voip.ready" => RuntimeEvent::WorkerReady { domain },
+        "ui.ready" | "media.ready" | "voip.ready" | "network.ready" | "power.ready"
+        | "voice.ready" => RuntimeEvent::WorkerReady { domain },
         "media.snapshot" => RuntimeEvent::MediaSnapshot(payload),
         "voip.snapshot" => RuntimeEvent::VoipSnapshot(payload),
         "ui.input" => RuntimeEvent::UiInput(payload),
@@ -109,7 +119,12 @@ fn runtime_event_from_message(
         "ui.screen_changed" => string_field(&payload, "screen")
             .map(|screen| RuntimeEvent::UiScreenChanged { screen })
             .unwrap_or(RuntimeEvent::Ignored),
-        "ui.error" | "media.error" | "voip.error" => RuntimeEvent::WorkerError {
+        "worker.exited" => RuntimeEvent::WorkerExited {
+            domain,
+            reason: worker_exit_reason(&payload),
+        },
+        "ui.error" | "media.error" | "voip.error" | "network.error" | "power.error"
+        | "voice.error" => RuntimeEvent::WorkerError {
             domain,
             message: worker_error_message(message_type, &payload),
         },
@@ -124,6 +139,9 @@ fn runtime_intent_from_payload(payload: Value) -> RuntimeEvent {
     let Some(action) = string_field(&payload, "action") else {
         return RuntimeEvent::Ignored;
     };
+    if normalized(&domain) == "runtime" && normalized(&action) == "shutdown" {
+        return RuntimeEvent::Shutdown;
+    }
     let payload = payload
         .get("payload")
         .cloned()
@@ -148,7 +166,6 @@ fn commands_for_ui_intent(
     match domain.as_str() {
         "music" => commands_for_music_intent(state, &action, payload),
         "call" => commands_for_call_intent(state, &action, payload),
-        "runtime" if action == "shutdown" => vec![RuntimeCommand::Shutdown],
         _ => Vec::new(),
     }
 }
@@ -295,8 +312,7 @@ fn worker_command(
 ) -> RuntimeCommand {
     RuntimeCommand::WorkerCommand {
         domain,
-        message_type: message_type.into(),
-        payload,
+        envelope: WorkerEnvelope::command(message_type, None, payload),
     }
 }
 
@@ -309,6 +325,12 @@ fn worker_error_message(message_type: &str, payload: &Value) -> String {
         .or_else(|| string_field(payload, "error"))
         .or_else(|| string_field(payload, "code"))
         .unwrap_or_else(|| message_type.to_string())
+}
+
+fn worker_exit_reason(payload: &Value) -> String {
+    string_field(payload, "reason")
+        .or_else(|| string_field(payload, "message"))
+        .unwrap_or_else(|| "exited".to_string())
 }
 
 fn string_field(value: &Value, key: &str) -> Option<String> {

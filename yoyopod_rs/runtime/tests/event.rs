@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
-use yoyopod_runtime::event::{commands_for_event, runtime_event_from_worker, RuntimeCommand};
+use yoyopod_runtime::event::{
+    commands_for_event, runtime_event_from_worker, RuntimeCommand, RuntimeEvent,
+};
 use yoyopod_runtime::protocol::{EnvelopeKind, WorkerEnvelope};
 use yoyopod_runtime::state::{CallState, RuntimeState, WorkerDomain, WorkerState};
 
@@ -56,6 +58,50 @@ fn worker_error_marks_worker_degraded() {
 }
 
 #[test]
+fn health_only_worker_domains_decode_ready_and_error_events() {
+    for (domain, ready_type, error_type) in [
+        (WorkerDomain::Network, "network.ready", "network.error"),
+        (WorkerDomain::Power, "power.ready", "power.error"),
+        (WorkerDomain::Voice, "voice.ready", "voice.error"),
+    ] {
+        let ready = runtime_event_from_worker(
+            domain,
+            event_envelope(ready_type, json!({"capabilities": []})),
+        )
+        .expect("ready event");
+        let mut state = RuntimeState::default();
+
+        ready.apply(&mut state);
+
+        assert_eq!(
+            state.status_payload()["workers"][domain.as_str()]["state"],
+            "running"
+        );
+
+        let error = runtime_event_from_worker(
+            domain,
+            envelope(
+                EnvelopeKind::Error,
+                error_type,
+                json!({"message": "worker failed"}),
+            ),
+        )
+        .expect("error event");
+
+        error.apply(&mut state);
+
+        assert_eq!(
+            state.status_payload()["workers"][domain.as_str()]["state"],
+            "degraded"
+        );
+        assert_eq!(
+            state.status_payload()["workers"][domain.as_str()]["last_reason"],
+            "worker failed"
+        );
+    }
+}
+
+#[test]
 fn ui_screen_changed_updates_state() {
     let event = runtime_event_from_worker(
         WorkerDomain::Ui,
@@ -94,6 +140,37 @@ fn result_and_unknown_events_are_ignored() {
     assert_eq!(state, RuntimeState::default());
     assert!(commands_for_event(&state, &result).is_empty());
     assert!(commands_for_event(&state, &unknown).is_empty());
+}
+
+#[test]
+fn runtime_shutdown_intent_decodes_to_shutdown_event() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Ui,
+        ui_intent("runtime", "shutdown", json!({})),
+    )
+    .expect("event");
+
+    assert_eq!(event, RuntimeEvent::Shutdown);
+    assert_eq!(
+        commands_for_event(&RuntimeState::default(), &event),
+        vec![RuntimeCommand::Shutdown]
+    );
+}
+
+#[test]
+fn worker_exited_event_marks_worker_stopped() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Media,
+        event_envelope("worker.exited", json!({"reason": "process_exited"})),
+    )
+    .expect("event");
+    let mut state = RuntimeState::default();
+    state.mark_worker(WorkerDomain::Media, WorkerState::Running, "ready");
+
+    event.apply(&mut state);
+
+    assert_eq!(state.media_worker.state, WorkerState::Stopped);
+    assert_eq!(state.media_worker.last_reason, "process_exited");
 }
 
 #[test]
@@ -175,6 +252,25 @@ fn ui_music_shuffle_all_intent_routes_to_media_shuffle_all() {
             json!({})
         )]
     );
+}
+
+#[test]
+fn worker_command_routes_with_protocol_envelope() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Ui,
+        ui_intent("music", "shuffle_all", json!({})),
+    )
+    .expect("event");
+
+    let commands = commands_for_event(&RuntimeState::default(), &event);
+    let [RuntimeCommand::WorkerCommand { domain, envelope }] = commands.as_slice() else {
+        panic!("expected one worker command");
+    };
+
+    assert_eq!(*domain, WorkerDomain::Media);
+    assert_eq!(envelope.kind, EnvelopeKind::Command);
+    assert_eq!(envelope.message_type, "media.shuffle_all");
+    assert_eq!(envelope.payload, json!({}));
 }
 
 #[test]
@@ -582,7 +678,6 @@ fn envelope(kind: EnvelopeKind, message_type: &str, payload: Value) -> WorkerEnv
 fn worker_command(domain: WorkerDomain, message_type: &str, payload: Value) -> RuntimeCommand {
     RuntimeCommand::WorkerCommand {
         domain,
-        message_type: message_type.to_string(),
-        payload,
+        envelope: WorkerEnvelope::command(message_type, None, payload),
     }
 }
