@@ -109,27 +109,105 @@ fn runtime_event_from_message(
     message_type: &str,
     payload: Value,
 ) -> RuntimeEvent {
+    if message_type == "worker.exited" {
+        return RuntimeEvent::WorkerExited {
+            domain,
+            reason: worker_exit_reason(&payload),
+        };
+    }
+
+    match domain {
+        WorkerDomain::Ui => ui_event_from_message(message_type, payload),
+        WorkerDomain::Media => media_event_from_message(message_type, payload),
+        WorkerDomain::Voip => voip_event_from_message(message_type, payload),
+        WorkerDomain::Network => health_only_event_from_message(
+            domain,
+            message_type,
+            &payload,
+            "network.ready",
+            "network.error",
+        ),
+        WorkerDomain::Power => health_only_event_from_message(
+            domain,
+            message_type,
+            &payload,
+            "power.ready",
+            "power.error",
+        ),
+        WorkerDomain::Voice => health_only_event_from_message(
+            domain,
+            message_type,
+            &payload,
+            "voice.ready",
+            "voice.error",
+        ),
+    }
+}
+
+fn ui_event_from_message(message_type: &str, payload: Value) -> RuntimeEvent {
     match message_type {
-        "ui.ready" | "media.ready" | "voip.ready" | "network.ready" | "power.ready"
-        | "voice.ready" => RuntimeEvent::WorkerReady { domain },
-        "media.snapshot" => RuntimeEvent::MediaSnapshot(payload),
-        "voip.snapshot" => RuntimeEvent::VoipSnapshot(payload),
+        "ui.ready" => RuntimeEvent::WorkerReady {
+            domain: WorkerDomain::Ui,
+        },
         "ui.input" => RuntimeEvent::UiInput(payload),
         "ui.intent" => runtime_intent_from_payload(payload),
         "ui.screen_changed" => string_field(&payload, "screen")
             .map(|screen| RuntimeEvent::UiScreenChanged { screen })
             .unwrap_or(RuntimeEvent::Ignored),
-        "worker.exited" => RuntimeEvent::WorkerExited {
-            domain,
-            reason: worker_exit_reason(&payload),
-        },
-        "ui.error" | "media.error" | "voip.error" | "network.error" | "power.error"
-        | "voice.error" => RuntimeEvent::WorkerError {
-            domain,
+        "ui.error" => RuntimeEvent::WorkerError {
+            domain: WorkerDomain::Ui,
             message: worker_error_message(message_type, &payload),
         },
         _ => RuntimeEvent::Ignored,
     }
+}
+
+fn media_event_from_message(message_type: &str, payload: Value) -> RuntimeEvent {
+    match message_type {
+        "media.ready" => RuntimeEvent::WorkerReady {
+            domain: WorkerDomain::Media,
+        },
+        "media.snapshot" => RuntimeEvent::MediaSnapshot(payload),
+        "media.error" => RuntimeEvent::WorkerError {
+            domain: WorkerDomain::Media,
+            message: worker_error_message(message_type, &payload),
+        },
+        _ => RuntimeEvent::Ignored,
+    }
+}
+
+fn voip_event_from_message(message_type: &str, payload: Value) -> RuntimeEvent {
+    match message_type {
+        "voip.ready" => RuntimeEvent::WorkerReady {
+            domain: WorkerDomain::Voip,
+        },
+        "voip.snapshot" => RuntimeEvent::VoipSnapshot(payload),
+        "voip.error" => RuntimeEvent::WorkerError {
+            domain: WorkerDomain::Voip,
+            message: worker_error_message(message_type, &payload),
+        },
+        _ => RuntimeEvent::Ignored,
+    }
+}
+
+fn health_only_event_from_message(
+    domain: WorkerDomain,
+    message_type: &str,
+    payload: &Value,
+    ready_type: &str,
+    error_type: &str,
+) -> RuntimeEvent {
+    if message_type == ready_type {
+        return RuntimeEvent::WorkerReady { domain };
+    }
+    if message_type == error_type {
+        return RuntimeEvent::WorkerError {
+            domain,
+            message: worker_error_message(message_type, payload),
+        };
+    }
+
+    RuntimeEvent::Ignored
 }
 
 fn runtime_intent_from_payload(payload: Value) -> RuntimeEvent {

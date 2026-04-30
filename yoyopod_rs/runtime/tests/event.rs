@@ -143,6 +143,47 @@ fn result_and_unknown_events_are_ignored() {
 }
 
 #[test]
+fn wrong_domain_ui_intent_is_ignored_and_produces_no_commands() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Media,
+        ui_intent("runtime", "shutdown", json!({})),
+    )
+    .expect("event");
+
+    assert_eq!(event, RuntimeEvent::Ignored);
+    assert!(commands_for_event(&RuntimeState::default(), &event).is_empty());
+}
+
+#[test]
+fn wrong_domain_media_snapshot_does_not_mutate_media_state() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Ui,
+        event_envelope("media.snapshot", json!({"playback_state": "playing"})),
+    )
+    .expect("event");
+    let mut state = RuntimeState::default();
+
+    event.apply(&mut state);
+
+    assert_eq!(event, RuntimeEvent::Ignored);
+    assert_eq!(state.media.playback_state, "stopped");
+}
+
+#[test]
+fn wrong_domain_voip_snapshot_does_not_route_media_pause() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Media,
+        event_envelope("voip.snapshot", json!({"call_state": "incoming"})),
+    )
+    .expect("event");
+    let mut state = RuntimeState::default();
+    state.apply_media_snapshot(&json!({"playback_state": "playing"}));
+
+    assert_eq!(event, RuntimeEvent::Ignored);
+    assert!(commands_for_event(&state, &event).is_empty());
+}
+
+#[test]
 fn runtime_shutdown_intent_decodes_to_shutdown_event() {
     let event = runtime_event_from_worker(
         WorkerDomain::Ui,
