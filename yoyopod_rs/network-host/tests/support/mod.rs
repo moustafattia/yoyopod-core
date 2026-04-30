@@ -23,6 +23,7 @@ pub struct FakeModemController {
 pub struct FakeModemState {
     pub probe_results: VecDeque<Result<bool, ModemError>>,
     pub init_results: VecDeque<Result<ModemRegistration, ModemError>>,
+    pub live_fact_results: VecDeque<Result<ModemRegistration, ModemError>>,
     pub ppp_results: VecDeque<Result<PppLink, ModemError>>,
     pub ppp_health_results: VecDeque<PppHealth>,
     pub gps_results: VecDeque<Result<Option<GpsFix>, ModemError>>,
@@ -30,6 +31,7 @@ pub struct FakeModemState {
     pub open_calls: usize,
     pub close_calls: usize,
     pub query_gps_calls: usize,
+    pub refresh_facts_calls: usize,
     pub stop_ppp_calls: usize,
     pub reset_calls: usize,
     pub start_ppp_apns: Vec<Option<String>>,
@@ -40,6 +42,7 @@ impl Default for FakeModemState {
         Self {
             probe_results: VecDeque::from([Ok(true)]),
             init_results: VecDeque::from([Ok(registered_modem())]),
+            live_fact_results: VecDeque::from([Ok(registered_modem())]),
             ppp_results: VecDeque::from([Ok(ppp_link())]),
             ppp_health_results: VecDeque::from([PppHealth::Up(ppp_link())]),
             gps_results: VecDeque::from([Ok(None)]),
@@ -47,6 +50,7 @@ impl Default for FakeModemState {
             open_calls: 0,
             close_calls: 0,
             query_gps_calls: 0,
+            refresh_facts_calls: 0,
             stop_ppp_calls: 0,
             reset_calls: 0,
             start_ppp_apns: Vec::new(),
@@ -78,6 +82,13 @@ impl FakeModemController {
 
     pub fn set_ppp_results(&self, results: impl IntoIterator<Item = Result<PppLink, ModemError>>) {
         self.inner.lock().expect("fake modem lock").ppp_results = results.into_iter().collect();
+    }
+
+    pub fn set_live_fact_results(
+        &self,
+        results: impl IntoIterator<Item = Result<ModemRegistration, ModemError>>,
+    ) {
+        self.inner.lock().expect("fake modem lock").live_fact_results = results.into_iter().collect();
     }
 
     pub fn set_ppp_health_results(&self, results: impl IntoIterator<Item = PppHealth>) {
@@ -163,6 +174,15 @@ impl ModemController for FakeModemController {
             .unwrap_or_else(|| PppHealth::Up(ppp_link())))
     }
 
+    fn refresh_facts(&mut self) -> Result<ModemRegistration, ModemError> {
+        let mut inner = self.inner.lock().expect("fake modem lock");
+        inner.refresh_facts_calls += 1;
+        inner
+            .live_fact_results
+            .pop_front()
+            .unwrap_or_else(|| Ok(registered_modem()))
+    }
+
     fn query_gps(&mut self) -> Result<Option<GpsFix>, ModemError> {
         let mut inner = self.inner.lock().expect("fake modem lock");
         inner.query_gps_calls += 1;
@@ -209,6 +229,26 @@ pub fn registered_modem() -> ModemRegistration {
         carrier: "T-Mobile".to_string(),
         network_type: "4G".to_string(),
         signal_csq: Some(20),
+    }
+}
+
+pub fn roaming_modem() -> ModemRegistration {
+    ModemRegistration {
+        sim_ready: true,
+        registered: true,
+        carrier: "Vodafone".to_string(),
+        network_type: "3G".to_string(),
+        signal_csq: Some(9),
+    }
+}
+
+pub fn unregistered_modem() -> ModemRegistration {
+    ModemRegistration {
+        sim_ready: true,
+        registered: false,
+        carrier: "Vodafone".to_string(),
+        network_type: "3G".to_string(),
+        signal_csq: Some(9),
     }
 }
 

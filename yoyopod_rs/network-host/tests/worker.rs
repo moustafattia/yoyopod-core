@@ -14,7 +14,7 @@ use yoyopod_network_host::worker::{
 
 use crate::support::{
     berlin_fix, command, controlled_input, decode_output, enabled_config, encode_commands,
-    ppp_link, registered_modem, retryable_error, FakeModemController,
+    ppp_link, registered_modem, retryable_error, roaming_modem, FakeModemController,
 };
 
 #[test]
@@ -328,4 +328,47 @@ fn worker_emits_network_error_for_reset_failure() {
     assert!(envelopes.iter().any(|envelope| {
         envelope.message_type == "network.snapshot" && envelope.payload["state"] == "degraded"
     }));
+}
+
+#[test]
+fn worker_publishes_live_modem_fact_changes_while_running() {
+    let modem = FakeModemController::new();
+    modem.set_live_fact_results([Ok(roaming_modem())]);
+    let runtime = NetworkRuntime::new_with_policy_and_live_fact_poll_interval(
+        "config",
+        enabled_config(),
+        modem,
+        RecoveryPolicy::default(),
+        5,
+    );
+    let (input, handle) = controlled_input();
+    let worker = std::thread::spawn(move || {
+        let mut output = Vec::new();
+        run_with_runtime_io_and_poll_interval(
+            runtime,
+            input,
+            &mut output,
+            Duration::from_millis(1),
+        )
+        .expect("worker exits cleanly");
+        output
+    });
+
+    handle.sleep(Duration::from_millis(30));
+    handle.send(&command("worker.stop", "stop-1", json!({})));
+    handle.close();
+
+    let output = worker.join().expect("join worker");
+    let envelopes = decode_output(&output);
+    let live_snapshot = envelopes
+        .iter()
+        .find(|envelope| {
+            envelope.message_type == "network.snapshot"
+                && envelope.payload["carrier"] == "Vodafone"
+                && envelope.payload["signal"]["csq"] == 9
+        })
+        .expect("live modem facts snapshot");
+    assert_eq!(live_snapshot.payload["state"], "online");
+    assert_eq!(live_snapshot.payload["network_type"], "3G");
+    assert_eq!(live_snapshot.payload["registered"], true);
 }

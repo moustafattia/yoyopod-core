@@ -65,6 +65,7 @@ pub trait ModemController {
     fn close(&mut self) -> Result<(), ModemError>;
     fn probe(&mut self) -> Result<bool, ModemError>;
     fn initialize(&mut self, gps_enabled: bool) -> Result<ModemRegistration, ModemError>;
+    fn refresh_facts(&mut self) -> Result<ModemRegistration, ModemError>;
     fn start_ppp(&mut self, apn: Option<&str>, timeout_secs: u64) -> Result<PppLink, ModemError>;
     fn stop_ppp(&mut self) -> Result<(), ModemError>;
     fn ppp_health(&mut self) -> Result<PppHealth, ModemError>;
@@ -92,6 +93,13 @@ impl ModemController for NoopModemController {
     }
 
     fn initialize(&mut self, _gps_enabled: bool) -> Result<ModemRegistration, ModemError> {
+        Err(ModemError::fatal(
+            "modem_unavailable",
+            "modem runtime is unavailable",
+        ))
+    }
+
+    fn refresh_facts(&mut self) -> Result<ModemRegistration, ModemError> {
         Err(ModemError::fatal(
             "modem_unavailable",
             "modem runtime is unavailable",
@@ -180,6 +188,11 @@ impl ModemController for Sim7600ModemController {
         let pin = self.config.pin.clone();
         let mut at = self.at();
         initialize_session(&mut at, pin.as_deref(), gps_enabled)
+    }
+
+    fn refresh_facts(&mut self) -> Result<ModemRegistration, ModemError> {
+        let mut at = self.at();
+        read_live_facts(&mut at)
     }
 
     fn start_ppp(&mut self, apn: Option<&str>, timeout_secs: u64) -> Result<PppLink, ModemError> {
@@ -381,6 +394,27 @@ where
     })
 }
 
+fn read_live_facts<T>(at: &mut AtCommandSet<T>) -> Result<ModemRegistration, ModemError>
+where
+    T: LineTransport,
+{
+    let sim_ready = matches!(
+        at.get_sim_status().map_err(map_transport_error)?,
+        SimStatus::Ready
+    );
+    let signal = at.get_signal_quality().map_err(map_transport_error)?;
+    let carrier = at.get_carrier().map_err(map_transport_error)?;
+    let registered = at.get_registration().map_err(map_transport_error)?;
+
+    Ok(ModemRegistration {
+        sim_ready,
+        registered,
+        carrier: carrier.carrier,
+        network_type: carrier.network_type,
+        signal_csq: Some(signal.csq),
+    })
+}
+
 fn ensure_sim_ready<T>(at: &mut AtCommandSet<T>, pin: Option<&str>) -> Result<bool, ModemError>
 where
     T: LineTransport,
@@ -518,7 +552,7 @@ mod tests {
             .with_response("ATE0", "OK")
             .with_response("AT+CFUN=1", "OK")
             .with_response("AT+CPIN?", "+CPIN: SIM PIN\nOK")
-            .with_response("AT+CPIN=1234", "OK")
+            .with_response("AT+CPIN=\"1234\"", "OK")
             .with_response("AT+CPIN?", "+CPIN: READY\nOK")
             .with_response("AT+CSQ", "+CSQ: 20,0\nOK")
             .with_response("AT+COPS?", "+COPS: 0,0,\"T-Mobile\",7\nOK")

@@ -41,6 +41,8 @@ impl Default for RecoveryPolicy {
     }
 }
 
+const DEFAULT_LIVE_FACT_POLL_INTERVAL_MS: u64 = 5_000;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeCommandError {
     pub code: String,
@@ -62,6 +64,8 @@ pub struct NetworkRuntime<C> {
     controller: C,
     snapshot: NetworkRuntimeSnapshot,
     recovery_policy: RecoveryPolicy,
+    live_fact_poll_interval_ms: u64,
+    last_live_fact_poll_at_ms: Option<u64>,
     pending_snapshots: VecDeque<NetworkRuntimeSnapshot>,
     last_published_snapshot: Option<NetworkRuntimeSnapshot>,
 }
@@ -71,7 +75,13 @@ where
     C: ModemController,
 {
     pub fn new(config_dir: impl Into<String>, config: NetworkHostConfig, controller: C) -> Self {
-        Self::new_with_policy(config_dir, config, controller, RecoveryPolicy::default())
+        Self::new_with_policy_and_live_fact_poll_interval(
+            config_dir,
+            config,
+            controller,
+            RecoveryPolicy::default(),
+            DEFAULT_LIVE_FACT_POLL_INTERVAL_MS,
+        )
     }
 
     pub fn new_with_policy(
@@ -79,6 +89,22 @@ where
         config: NetworkHostConfig,
         controller: C,
         recovery_policy: RecoveryPolicy,
+    ) -> Self {
+        Self::new_with_policy_and_live_fact_poll_interval(
+            config_dir,
+            config,
+            controller,
+            recovery_policy,
+            DEFAULT_LIVE_FACT_POLL_INTERVAL_MS,
+        )
+    }
+
+    pub fn new_with_policy_and_live_fact_poll_interval(
+        config_dir: impl Into<String>,
+        config: NetworkHostConfig,
+        controller: C,
+        recovery_policy: RecoveryPolicy,
+        live_fact_poll_interval_ms: u64,
     ) -> Self {
         let config_dir = config_dir.into();
         let mut snapshot = NetworkRuntimeSnapshot::from_config(&config_dir, &config);
@@ -88,6 +114,8 @@ where
             controller,
             snapshot,
             recovery_policy,
+            live_fact_poll_interval_ms: live_fact_poll_interval_ms.max(1),
+            last_live_fact_poll_at_ms: None,
             pending_snapshots: VecDeque::new(),
             last_published_snapshot: None,
         }
@@ -114,6 +142,7 @@ where
         self.snapshot.reconnect_attempts = reconnect_attempts;
         self.snapshot.gps = gps;
         self.snapshot.updated_at_ms = now_ms;
+        self.last_live_fact_poll_at_ms = None;
 
         if !self.config.enabled {
             self.snapshot.state = NetworkLifecycleState::Off;
@@ -137,6 +166,7 @@ where
     pub fn tick_at(&mut self, now_ms: u64) -> &NetworkRuntimeSnapshot {
         if self.snapshot.state == NetworkLifecycleState::Online {
             let _ = self.poll_ppp_health(now_ms, false);
+            self.refresh_live_facts_if_due(now_ms, false);
         }
 
         if self.snapshot.retryable
@@ -162,7 +192,10 @@ where
         let now_ms = now_ms();
         match self.poll_ppp_health(now_ms, true) {
             Some(error) => Err(error),
-            None => Ok(&self.snapshot),
+            None => {
+                self.refresh_live_facts_if_due(now_ms, true);
+                Ok(&self.snapshot)
+            }
         }
     }
 
@@ -258,6 +291,7 @@ where
         self.snapshot.retryable = false;
         self.snapshot.recovering = false;
         self.snapshot.next_retry_at_ms = None;
+        self.last_live_fact_poll_at_ms = None;
         self.touch(now_ms);
         self.publish_snapshot();
         &self.snapshot
@@ -404,8 +438,44 @@ where
         Ok(())
     }
 
+    fn refresh_live_facts_if_due(&mut self, now_ms: u64, force: bool) {
+        if !matches!(
+            self.snapshot.state,
+            NetworkLifecycleState::Online | NetworkLifecycleState::Registered
+        ) {
+            return;
+        }
+
+        if !force
+            && self
+                .last_live_fact_poll_at_ms
+                .is_some_and(|last| now_ms.saturating_sub(last) < self.live_fact_poll_interval_ms)
+        {
+            return;
+        }
+
+        self.last_live_fact_poll_at_ms = Some(now_ms);
+        if let Ok(facts) = self.controller.refresh_facts() {
+            self.apply_live_facts(now_ms, facts);
+        }
+    }
+
     fn apply_registration(&mut self, now_ms: u64, registration: ModemRegistration) {
         self.snapshot.state = NetworkLifecycleState::Registered;
+        self.apply_fact_fields(registration);
+        self.snapshot.error_code.clear();
+        self.snapshot.error_message.clear();
+        self.touch(now_ms);
+        self.publish_snapshot();
+    }
+
+    fn apply_live_facts(&mut self, now_ms: u64, facts: ModemRegistration) {
+        self.apply_fact_fields(facts);
+        self.touch(now_ms);
+        self.publish_snapshot();
+    }
+
+    fn apply_fact_fields(&mut self, registration: ModemRegistration) {
         self.snapshot.sim_ready = registration.sim_ready;
         self.snapshot.registered = registration.registered;
         self.snapshot.carrier = registration.carrier;
@@ -414,13 +484,10 @@ where
             csq: registration.signal_csq,
             bars: registration.signal_csq.map(signal_bars).unwrap_or_default(),
         };
-        self.snapshot.error_code.clear();
-        self.snapshot.error_message.clear();
-        self.touch(now_ms);
-        self.publish_snapshot();
     }
 
     fn apply_online(&mut self, now_ms: u64, link: PppLink) {
+        let was_online = self.snapshot.state == NetworkLifecycleState::Online;
         self.snapshot.state = NetworkLifecycleState::Online;
         self.snapshot.ppp = PppSnapshot {
             up: true,
@@ -434,6 +501,9 @@ where
         self.snapshot.next_retry_at_ms = None;
         self.snapshot.error_code.clear();
         self.snapshot.error_message.clear();
+        if !was_online {
+            self.last_live_fact_poll_at_ms = Some(now_ms);
+        }
         self.touch(now_ms);
         self.publish_snapshot();
     }
@@ -499,6 +569,8 @@ impl NetworkRuntime<NoopModemController> {
             controller: NoopModemController,
             snapshot,
             recovery_policy: RecoveryPolicy::default(),
+            live_fact_poll_interval_ms: DEFAULT_LIVE_FACT_POLL_INTERVAL_MS,
+            last_live_fact_poll_at_ms: None,
             pending_snapshots: VecDeque::new(),
             last_published_snapshot: None,
         }

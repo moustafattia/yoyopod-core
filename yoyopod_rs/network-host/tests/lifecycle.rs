@@ -5,7 +5,7 @@ use yoyopod_network_host::snapshot::NetworkLifecycleState;
 
 use crate::support::{
     berlin_fix, blank_apn_config, enabled_config, fatal_error, ppp_link, registered_modem,
-    retryable_error, FakeModemController,
+    retryable_error, roaming_modem, unregistered_modem, FakeModemController,
 };
 
 #[test]
@@ -225,4 +225,55 @@ fn reset_modem_retries_bringup_and_tracks_reconnect_attempts() {
     let state = modem.state();
     assert_eq!(state.reset_calls, 1);
     assert_eq!(state.open_calls, 2);
+}
+
+#[test]
+fn tick_refreshes_live_modem_facts_and_emits_snapshot_when_they_change() {
+    let modem = FakeModemController::new();
+    modem.set_live_fact_results([Ok(roaming_modem())]);
+    let mut runtime = NetworkRuntime::new_with_policy(
+        "config",
+        enabled_config(),
+        modem.clone(),
+        RecoveryPolicy::new(100, 400),
+    );
+
+    runtime.start_at(1_000);
+    runtime.drain_snapshot_events();
+
+    runtime.tick_at(6_000);
+    let snapshots = runtime.drain_snapshot_events();
+    let snapshot = snapshots.last().expect("live facts snapshot");
+
+    assert_eq!(snapshot.state, NetworkLifecycleState::Online);
+    assert_eq!(snapshot.carrier, "Vodafone");
+    assert_eq!(snapshot.network_type, "3G");
+    assert_eq!(snapshot.signal.csq, Some(9));
+    assert_eq!(snapshot.signal.bars, 1);
+    assert!(snapshot.registered);
+    assert_eq!(modem.state().refresh_facts_calls, 1);
+}
+
+#[test]
+fn tick_refreshes_registration_loss_without_restart() {
+    let modem = FakeModemController::new();
+    modem.set_live_fact_results([Ok(unregistered_modem())]);
+    let mut runtime = NetworkRuntime::new_with_policy(
+        "config",
+        enabled_config(),
+        modem,
+        RecoveryPolicy::new(100, 400),
+    );
+
+    runtime.start_at(1_000);
+    runtime.drain_snapshot_events();
+
+    runtime.tick_at(6_000);
+    let snapshots = runtime.drain_snapshot_events();
+    let snapshot = snapshots.last().expect("registration loss snapshot");
+
+    assert_eq!(snapshot.state, NetworkLifecycleState::Online);
+    assert!(!snapshot.registered);
+    assert_eq!(snapshot.carrier, "Vodafone");
+    assert_eq!(snapshot.signal.csq, Some(9));
 }
