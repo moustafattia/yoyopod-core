@@ -22,6 +22,9 @@ yoyopod_rust_host_binary(
 
 MEDIA_HOST_TESTS = [
     "config",
+    "host",
+    "mpv_ipc",
+    "mpv_process",
     "protocol",
     "worker",
 ]
