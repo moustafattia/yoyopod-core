@@ -133,12 +133,27 @@ where
                     LoopControl::Shutdown => break,
                 }
             }
-            Ok(Err(error)) => return Err(error.into()),
+            Ok(Err(error)) => {
+                write_envelope(
+                    output,
+                    &WorkerEnvelope::error(
+                        "network.error",
+                        None,
+                        "input_read_failed",
+                        error.to_string(),
+                    ),
+                )?;
+                shutdown_for_implicit_exit(output, &mut runtime, "input_error")?;
+                return Err(error.into());
+            }
             Err(RecvTimeoutError::Timeout) => {
                 runtime.tick();
                 emit_pending_snapshots(output, &mut runtime)?;
             }
-            Err(RecvTimeoutError::Disconnected) => break,
+            Err(RecvTimeoutError::Disconnected) => {
+                shutdown_for_implicit_exit(output, &mut runtime, "input_closed")?;
+                break;
+            }
         }
     }
 
@@ -247,6 +262,20 @@ where
         write_envelope(output, &snapshot_event(&snapshot))?;
     }
     Ok(())
+}
+
+fn shutdown_for_implicit_exit<C, W>(
+    output: &mut W,
+    runtime: &mut NetworkRuntime<C>,
+    reason: &str,
+) -> Result<()>
+where
+    C: ModemController,
+    W: Write,
+{
+    runtime.shutdown();
+    emit_pending_snapshots(output, runtime)?;
+    write_envelope(output, &stopped_event(reason))
 }
 
 fn write_envelope(output: &mut dyn Write, envelope: &WorkerEnvelope) -> Result<()> {

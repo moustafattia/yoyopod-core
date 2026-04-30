@@ -1,7 +1,7 @@
 mod support;
 
 use std::fs;
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, Read};
 use std::time::Duration;
 
 use serde_json::json;
@@ -17,6 +17,14 @@ use crate::support::{
     ppp_link, registered_modem, retryable_error, roaming_modem, FakeModemController,
 };
 
+struct ErroringInput;
+
+impl Read for ErroringInput {
+    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::other("synthetic read failure"))
+    }
+}
+
 #[test]
 fn worker_emits_startup_transition_snapshots_in_order() {
     let modem = FakeModemController::new();
@@ -28,7 +36,7 @@ fn worker_emits_startup_transition_snapshots_in_order() {
     let envelopes = decode_output(&output);
     assert_eq!(envelopes[0].message_type, "network.ready");
     assert_eq!(
-        envelopes[1..]
+        envelopes[1..7]
             .iter()
             .map(|envelope| envelope.payload["state"].as_str().unwrap_or_default())
             .collect::<Vec<_>>(),
@@ -40,6 +48,13 @@ fn worker_emits_startup_transition_snapshots_in_order() {
             "ppp_starting",
             "online",
         ]
+    );
+    assert!(envelopes.iter().any(|envelope| {
+        envelope.message_type == "network.snapshot" && envelope.payload["state"] == "off"
+    }));
+    assert_eq!(
+        envelopes.last().expect("final envelope").message_type,
+        "network.stopped"
     );
 }
 
@@ -444,5 +459,93 @@ fn worker_publishes_autonomous_live_fact_refresh_failure_without_command() {
         envelope.message_type == "network.snapshot"
             && envelope.payload["state"] == "degraded"
             && envelope.payload["error_code"] == "signal_read_failed"
+    }));
+}
+
+#[test]
+fn worker_eof_triggers_runtime_shutdown_cleanup() {
+    let modem = FakeModemController::new();
+    let runtime = NetworkRuntime::new("config", enabled_config(), modem.clone());
+    let mut output = Vec::new();
+
+    run_with_runtime_io(runtime, io::empty(), &mut output).expect("worker exits cleanly");
+
+    let state = modem.state();
+    assert_eq!(state.stop_ppp_calls, 1);
+    assert_eq!(state.close_calls, 1);
+
+    let envelopes = decode_output(&output);
+    assert!(envelopes.iter().any(|envelope| {
+        envelope.message_type == "network.snapshot" && envelope.payload["state"] == "ppp_stopping"
+    }));
+    assert!(envelopes.iter().any(|envelope| {
+        envelope.message_type == "network.snapshot" && envelope.payload["state"] == "off"
+    }));
+    assert_eq!(
+        envelopes.last().expect("final envelope").message_type,
+        "network.stopped"
+    );
+}
+
+#[test]
+fn worker_read_error_shuts_runtime_down_before_returning_error() {
+    let modem = FakeModemController::new();
+    let runtime = NetworkRuntime::new("config", enabled_config(), modem.clone());
+    let mut output = Vec::new();
+
+    let error =
+        run_with_runtime_io(runtime, ErroringInput, &mut output).expect_err("read error expected");
+    assert!(error.to_string().contains("synthetic read failure"));
+
+    let state = modem.state();
+    assert_eq!(state.stop_ppp_calls, 1);
+    assert_eq!(state.close_calls, 1);
+
+    let envelopes = decode_output(&output);
+    assert!(envelopes.iter().any(|envelope| {
+        envelope.message_type == "network.snapshot" && envelope.payload["state"] == "off"
+    }));
+}
+
+#[test]
+fn worker_repeated_health_calls_stay_errors_while_runtime_is_degraded() {
+    let modem = FakeModemController::new();
+    modem.set_ppp_results([Err(retryable_error(
+        "ppp_start_failed",
+        "PPP failed to start",
+    ))]);
+    let runtime = NetworkRuntime::new_with_policy(
+        "config",
+        enabled_config(),
+        modem,
+        RecoveryPolicy::new(1_000, 2_000),
+    );
+    let input = encode_commands(&[
+        command("network.health", "health-1", json!({})),
+        command("network.health", "health-2", json!({})),
+        command("worker.stop", "stop-1", json!({})),
+    ]);
+    let mut output = Vec::new();
+
+    run_with_runtime_io(runtime, Cursor::new(input), &mut output).expect("worker exits cleanly");
+
+    let envelopes = decode_output(&output);
+    let health_errors: Vec<_> = envelopes
+        .iter()
+        .filter(|envelope| {
+            envelope.kind == yoyopod_network_host::protocol::EnvelopeKind::Error
+                && matches!(
+                    envelope.request_id.as_deref(),
+                    Some("health-1") | Some("health-2")
+                )
+        })
+        .collect();
+    assert_eq!(health_errors.len(), 2);
+    assert!(health_errors
+        .iter()
+        .all(|envelope| envelope.payload["code"] == "ppp_start_failed"));
+    assert!(envelopes.iter().all(|envelope| {
+        !(envelope.kind == yoyopod_network_host::protocol::EnvelopeKind::Result
+            && envelope.message_type == "network.health")
     }));
 }

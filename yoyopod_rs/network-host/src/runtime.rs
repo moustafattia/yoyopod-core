@@ -192,7 +192,13 @@ where
         let now_ms = now_ms();
         match self.poll_ppp_health(now_ms, true) {
             Some(error) => Err(error),
-            None => self.refresh_live_facts_if_due(now_ms, true).map(|_| &self.snapshot),
+            None => {
+                self.refresh_live_facts_if_due(now_ms, true)?;
+                match self.active_fault_error() {
+                    Some(error) => Err(error),
+                    None => Ok(&self.snapshot),
+                }
+            }
         }
     }
 
@@ -551,6 +557,20 @@ where
             default_route_owned: false,
             last_failure: self.snapshot.ppp.last_failure.clone(),
         };
+    }
+
+    fn active_fault_error(&self) -> Option<RuntimeCommandError> {
+        let unhealthy = self.snapshot.state == NetworkLifecycleState::Degraded
+            || self.snapshot.retryable
+            || self.snapshot.recovering;
+        if unhealthy && !self.snapshot.error_code.is_empty() {
+            Some(RuntimeCommandError {
+                code: self.snapshot.error_code.clone(),
+                message: self.snapshot.error_message.clone(),
+            })
+        } else {
+            None
+        }
     }
 
     fn touch(&mut self, now_ms: u64) {

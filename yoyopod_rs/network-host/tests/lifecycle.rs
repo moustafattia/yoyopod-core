@@ -335,3 +335,33 @@ fn autonomous_live_fact_refresh_failure_transitions_runtime_into_retryable_fault
     assert_eq!(snapshot.next_retry_at_ms, Some(6_100));
     assert_eq!(modem.state().refresh_facts_calls, 1);
 }
+
+#[test]
+fn repeated_health_calls_keep_returning_error_while_runtime_is_degraded() {
+    let modem = FakeModemController::new();
+    modem.set_ppp_results([Err(retryable_error(
+        "ppp_start_failed",
+        "PPP failed to start",
+    ))]);
+    let mut runtime = NetworkRuntime::new_with_policy(
+        "config",
+        enabled_config(),
+        modem,
+        RecoveryPolicy::new(100, 400),
+    );
+
+    runtime.start_at(1_000);
+    runtime.drain_snapshot_events();
+
+    let first = runtime
+        .health_command()
+        .expect_err("degraded runtime should fail health checks");
+    let second = runtime
+        .health_command()
+        .expect_err("repeated health should keep failing until recovery");
+
+    assert_eq!(first.code, "ppp_start_failed");
+    assert_eq!(second.code, "ppp_start_failed");
+    assert_eq!(runtime.snapshot().state, NetworkLifecycleState::Degraded);
+    assert_eq!(runtime.snapshot().error_code, "ppp_start_failed");
+}
