@@ -116,7 +116,7 @@ jobs:
         working-directory: workers/voice/go
         run: go test ./...
 
-  ui-rust:
+  rust-device-arm64:
     runs-on: ubuntu-24.04-arm
     env:
       RUST_ARTIFACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -142,75 +142,50 @@ jobs:
           sudo apt-get install -y pkg-config liblinphone-dev
 
       - name: Run Bazel Rust host tests
-        run: bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/media-host/... //yoyopod_rs/voip-host/... //yoyopod_rs/runtime/...
+        run: bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/media-host/... //yoyopod_rs/voip-host/... //yoyopod_rs/network-host/... //yoyopod_rs/runtime/...
 
-      - name: Run Rust UI host tests
+      - name: Run Rust workspace tests
         working-directory: yoyopod_rs
         run: cargo test --workspace --locked --features whisplay-hardware,native-lvgl
 
-      - name: Build Rust UI Whisplay host
+      - name: Build Rust device ARM64 bundle
         working-directory: yoyopod_rs
         run: |
           set -euo pipefail
-          cargo build --release -p yoyopod-ui-host --features whisplay-hardware,native-lvgl --locked
-          mkdir -p ui-host/build
-          cp target/release/yoyopod-ui-host ui-host/build/yoyopod-ui-host
+          cargo build --release --locked \
+            -p yoyopod-runtime \
+            -p yoyopod-ui-host \
+            -p yoyopod-media-host \
+            -p yoyopod-voip-host \
+            -p yoyopod-network-host \
+            --features yoyopod-ui-host/whisplay-hardware,yoyopod-ui-host/native-lvgl,yoyopod-voip-host/native-liblinphone
 
-      - name: Upload Rust UI ARM64 host
+          bundle_name="yoyopod-rust-device-arm64-${RUST_ARTIFACT_SHA}"
+          bundle_root="target/${bundle_name}"
+          rm -rf "${bundle_root}" "target/${bundle_name}.tar.gz"
+          mkdir -p \
+            "${bundle_root}/yoyopod_rs/runtime/build" \
+            "${bundle_root}/yoyopod_rs/ui-host/build" \
+            "${bundle_root}/yoyopod_rs/media-host/build" \
+            "${bundle_root}/yoyopod_rs/voip-host/build" \
+            "${bundle_root}/yoyopod_rs/network-host/build"
+          cp target/release/yoyopod-runtime "${bundle_root}/yoyopod_rs/runtime/build/yoyopod-runtime"
+          cp target/release/yoyopod-ui-host "${bundle_root}/yoyopod_rs/ui-host/build/yoyopod-ui-host"
+          cp target/release/yoyopod-media-host "${bundle_root}/yoyopod_rs/media-host/build/yoyopod-media-host"
+          cp target/release/yoyopod-voip-host "${bundle_root}/yoyopod_rs/voip-host/build/yoyopod-voip-host"
+          cp target/release/yoyopod-network-host "${bundle_root}/yoyopod_rs/network-host/build/yoyopod-network-host"
+          tar -C "${bundle_root}" -czf "target/${bundle_name}.tar.gz" yoyopod_rs
+
+      - name: Upload Rust device ARM64 bundle
         uses: actions/upload-artifact@v4
         with:
-          name: yoyopod-ui-host-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/ui-host/build/yoyopod-ui-host
-          if-no-files-found: error
-
-      - name: Build Rust media host
-        working-directory: yoyopod_rs
-        run: |
-          set -euo pipefail
-          cargo build --release -p yoyopod-media-host --locked
-          mkdir -p media-host/build
-          cp target/release/yoyopod-media-host media-host/build/yoyopod-media-host
-
-      - name: Upload Rust media ARM64 host
-        uses: actions/upload-artifact@v4
-        with:
-          name: yoyopod-media-host-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/media-host/build/yoyopod-media-host
-          if-no-files-found: error
-
-      - name: Build Rust VoIP host
-        working-directory: yoyopod_rs
-        run: |
-          set -euo pipefail
-          cargo build --release -p yoyopod-voip-host --features native-liblinphone --locked
-          mkdir -p voip-host/build
-          cp target/release/yoyopod-voip-host voip-host/build/yoyopod-voip-host
-
-      - name: Upload Rust VoIP ARM64 host
-        uses: actions/upload-artifact@v4
-        with:
-          name: yoyopod-voip-host-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/voip-host/build/yoyopod-voip-host
-          if-no-files-found: error
-
-      - name: Build Rust runtime
-        working-directory: yoyopod_rs
-        run: |
-          set -euo pipefail
-          cargo build --release -p yoyopod-runtime --locked
-          mkdir -p runtime/build
-          cp target/release/yoyopod-runtime runtime/build/yoyopod-runtime
-
-      - name: Upload Rust runtime ARM64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: yoyopod-runtime-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/runtime/build/yoyopod-runtime
+          name: yoyopod-rust-device-arm64-${{ env.RUST_ARTIFACT_SHA }}
+          path: yoyopod_rs/target/yoyopod-rust-device-arm64-${{ env.RUST_ARTIFACT_SHA }}.tar.gz
           if-no-files-found: error
 
   slot-arm64:
     runs-on: ubuntu-latest
-    needs: [changes, quality, test, voice-go, ui-rust]
+    needs: [changes, quality, test, voice-go, rust-device-arm64]
     env:
       RUST_ARTIFACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     if: >-
@@ -240,29 +215,16 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Download Rust UI host artifact
+      - name: Download Rust device ARM64 bundle
         uses: actions/download-artifact@v4
         with:
-          name: yoyopod-ui-host-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/ui-host/build
+          name: yoyopod-rust-device-arm64-${{ env.RUST_ARTIFACT_SHA }}
+          path: .artifacts/rust-device
 
-      - name: Download Rust media host artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: yoyopod-media-host-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/media-host/build
-
-      - name: Download Rust VoIP host artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: yoyopod-voip-host-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/voip-host/build
-
-      - name: Download Rust runtime artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: yoyopod-runtime-${{ env.RUST_ARTIFACT_SHA }}
-          path: yoyopod_rs/runtime/build
+      - name: Extract Rust device ARM64 bundle
+        run: |
+          set -euo pipefail
+          tar -xzf ".artifacts/rust-device/yoyopod-rust-device-arm64-${RUST_ARTIFACT_SHA}.tar.gz" -C .
 
       - name: Build ARM64 slot artifact
         run: |

@@ -15,6 +15,7 @@ APP_NATIVE_RUNTIME_ARTIFACTS: tuple[Path, ...] = (
     Path("yoyopod") / "ui" / "lvgl_binding" / "native" / "build" / "lvgl" / "lib" / "liblvgl.so.9",
     Path("yoyopod_rs") / "media-host" / "build" / "yoyopod-media-host",
     Path("yoyopod_rs") / "voip-host" / "build" / "yoyopod-voip-host",
+    Path("yoyopod_rs") / "network-host" / "build" / "yoyopod-network-host",
     Path("yoyopod_rs") / "runtime" / "build" / "yoyopod-runtime",
 )
 

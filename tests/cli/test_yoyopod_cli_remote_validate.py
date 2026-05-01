@@ -41,7 +41,8 @@ def test_build_validate_minimal() -> None:
         "git checkout --force -B 'main' 'origin/main'" in shell
     )
     assert "test -x yoyopod_rs/media-host/build/yoyopod-media-host" in shell
-    assert "CI-built Rust media artifact" in shell
+    assert "CI-built Rust media binary" in shell
+    assert "yoyopod-rust-device-arm64-<sha>" in shell
     assert ".venv/bin/python -m yoyopod_cli.main pi validate deploy" in shell
     assert ".venv/bin/python -m yoyopod_cli.main pi validate smoke" in shell
     assert "--with-power" not in shell
@@ -92,7 +93,8 @@ def test_build_validate_with_voip_call_soak() -> None:
         voip_soak_seconds=30.0,
     )
 
-    assert "CI-built Rust VoIP host artifact" in shell
+    assert "CI-built Rust VoIP host binary" in shell
+    assert "yoyopod-rust-device-arm64-<sha>" in shell
     assert (
         ".venv/bin/python -m yoyopod_cli.main pi validate voip --soak call "
         "--soak-target sip:hagarmo@sip.linphone.org --soak-seconds 30.0"
@@ -116,7 +118,8 @@ def test_build_validate_with_rust_ui_poc() -> None:
 
     assert "build rust-ui-poc" not in shell
     assert "test -x yoyopod_rs/ui-host/build/yoyopod-ui-host" in shell
-    assert "CI-built Rust UI artifact" in shell
+    assert "CI-built Rust UI binary" in shell
+    assert "yoyopod-rust-device-arm64-<sha>" in shell
     assert (
         "venv/bin/python -m yoyopod_cli.main pi rust-ui-host "
         "--worker yoyopod_rs/ui-host/build/yoyopod-ui-host"

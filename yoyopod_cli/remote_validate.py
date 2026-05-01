@@ -149,8 +149,9 @@ def _build_validate(
     steps.append("git clean -fd")
     media_worker = shell_quote(_RUST_MEDIA_HOST_WORKER)
     media_message = shell_quote(
-        "Missing executable CI-built Rust media artifact at "
-        f"{_RUST_MEDIA_HOST_WORKER}. Download the GitHub Actions artifact "
+        "Missing executable CI-built Rust media binary at "
+        f"{_RUST_MEDIA_HOST_WORKER}. Download and extract the GitHub Actions "
+        "artifact yoyopod-rust-device-arm64-<sha> "
         "for this exact commit before Pi validation; do not build Rust binaries on the Pi."
     )
     steps.append(f"test -x {media_worker} || (echo {media_message} >&2 && exit 1)")
@@ -168,9 +169,9 @@ def _build_validate(
     if with_voip or with_voip_call_soak:
         voip_worker = shell_quote(_RUST_VOIP_HOST_WORKER)
         voip_message = shell_quote(
-            "Missing executable CI-built Rust VoIP host artifact. Download the GitHub Actions "
-            "artifact for this exact commit before VoIP validation; do not build "
-            "Rust binaries on the Pi."
+            "Missing executable CI-built Rust VoIP host binary. Download and extract the "
+            "GitHub Actions artifact yoyopod-rust-device-arm64-<sha> for this exact "
+            "commit before VoIP validation; do not build Rust binaries on the Pi."
         )
         steps.append(f"test -x {voip_worker} || (echo {voip_message} >&2 && exit 1)")
     if with_voip:
@@ -198,8 +199,9 @@ def _build_validate(
     if with_rust_ui_host or with_rust_ui_poc:
         worker = shell_quote(_RUST_UI_HOST_WORKER)
         message = shell_quote(
-            "Missing executable CI-built Rust UI artifact at "
-            f"{_RUST_UI_HOST_WORKER}. Download the GitHub Actions artifact "
+            "Missing executable CI-built Rust UI binary at "
+            f"{_RUST_UI_HOST_WORKER}. Download and extract the GitHub Actions "
+            "artifact yoyopod-rust-device-arm64-<sha> "
             "for this exact commit before Rust UI host validation; do not build Rust on the Pi."
         )
         steps.append(f"test -x {worker} || (echo {message} >&2 && exit 1)")

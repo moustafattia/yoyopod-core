@@ -223,9 +223,9 @@ With that override, `yoyopod-dev.service` executes:
 ```
 
 Use committed GitHub Actions artifacts for the exact commit under test. Install
-`yoyopod-runtime-<sha>` plus the needed Rust worker artifacts into the dev
-checkout before restarting the service. Do not build Rust binaries on the Pi
-Zero 2W unless the user explicitly overrides that rule.
+`yoyopod-rust-device-arm64-<sha>` into the dev checkout before restarting the
+service. Do not build Rust binaries on the Pi Zero 2W unless the user
+explicitly overrides that rule.
 
 ### Run validation
 

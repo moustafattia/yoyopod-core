@@ -1,8 +1,8 @@
 # Rust UI Host
 
-The Rust UI Host is the Whisplay UI owner. Python still owns the app/runtime
-services for now; Rust owns UI state, screen focus, one-button transitions, and
-Whisplay rendering when the host is enabled or launched directly.
+The Rust UI Host is the Whisplay UI worker used by the Rust runtime. Rust owns
+UI state, screen focus, one-button transitions, and Whisplay rendering when the
+host is enabled or launched directly.
 
 ## Build
 
@@ -20,15 +20,19 @@ Direct native-LVGL builds require `YOYOPOD_LVGL_SOURCE_DIR` to point at an
 LVGL 9.5 checkout.
 
 CI builds the Whisplay host on a native Linux ARM64 runner with
-`whisplay-hardware,native-lvgl` enabled and uploads it as the
-`yoyopod-ui-host-<exact-commit-sha>` artifact.
+`whisplay-hardware,native-lvgl` enabled and packages it with the other Rust
+runtime binaries as:
+
+```bash
+yoyopod-rust-device-arm64-<exact-commit-sha>
+```
 
 For Raspberry Pi Zero 2W hardware validation, the deploy path is always:
 
 1. Commit and push the branch.
-2. Wait for the GitHub Actions `ui-rust` job to pass for the exact commit.
-3. Download the matching `yoyopod-ui-host-<sha>` artifact.
-4. Copy it to `yoyopod_rs/ui-host/build/yoyopod-ui-host` on the Pi checkout.
+2. Wait for the GitHub Actions `rust-device-arm64` job to pass for the exact commit.
+3. Download and extract `yoyopod-rust-device-arm64-<sha>`.
+4. Confirm it installed `yoyopod_rs/ui-host/build/yoyopod-ui-host` on the Pi checkout.
 
 Do not run `cargo build` or `yoyopod build rust-ui-host` on the Pi Zero 2W
 unless the user explicitly overrides this rule. Local builds are for developer
@@ -58,7 +62,7 @@ The Whisplay defaults match the vendor board mapping:
 
 ## Run On Pi
 
-First copy the CI artifact into the dev checkout and make it executable:
+First extract the CI device bundle into the dev checkout and make the UI host executable:
 
 ```bash
 mkdir -p yoyopod_rs/ui-host/build
@@ -84,17 +88,17 @@ For one-button validation, run both checks:
 
 The Rust host accepts these UI-owner commands over line-delimited JSON:
 
-- `ui.runtime_snapshot` - Python sends the latest app/runtime snapshot. Rust
-  sends generic runtime state only through this payload. Rust applies
+- `ui.runtime_snapshot` - The runtime sends the latest app/runtime snapshot.
+  Rust sends generic runtime state only through this payload. Rust applies
   call/loading/error preemption, owns the active screen, renders the screen,
   and emits `ui.screen_changed` when the Rust route changes.
-- `ui.input_action` - Python or tests inject one semantic action
+- `ui.input_action` - Runtime or tests inject one semantic action
   (`advance`, `select`, `back`, `ptt_press`, `ptt_release`). Rust applies it to
   the active screen and emits `ui.intent` when Python runtime work is needed.
 - `ui.tick` - Rust polls the Whisplay button, runs the one-button gesture
   machine, applies generated actions, emits intents, and renders dirty screens.
 
-Python sends generic `ui.runtime_snapshot` payloads only. The Rust host no
+The Rust host receives generic `ui.runtime_snapshot` payloads only. It no
 longer accepts `ui.show_hub`.
 
 Legacy compatibility code still exists under `yoyopod/ui/rust_sidecar/`, while

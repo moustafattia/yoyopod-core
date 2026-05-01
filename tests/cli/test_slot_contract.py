@@ -23,6 +23,9 @@ def test_slot_contract_includes_rust_runtime_artifact() -> None:
     assert Path("yoyopod_rs") / "runtime" / "build" / "yoyopod-runtime" in (
         APP_NATIVE_RUNTIME_ARTIFACTS
     )
+    assert Path("yoyopod_rs") / "network-host" / "build" / "yoyopod-network-host" in (
+        APP_NATIVE_RUNTIME_ARTIFACTS
+    )
 
 
 def test_self_contained_contract_rejects_symlinked_launch_python(

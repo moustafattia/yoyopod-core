@@ -25,10 +25,12 @@ def test_slot_arm64_pr_build_is_label_gated() -> None:
     assert "github.event_name == 'push'" in workflow
 
 
-def test_rust_ui_ci_builds_arm64_binary_artifact() -> None:
+def test_rust_ci_builds_arm64_device_bundle_artifact() -> None:
     workflow = CI_YML.read_text(encoding="utf-8")
 
+    assert "rust-device-arm64:" in workflow
     assert "runs-on: ubuntu-24.04-arm" in workflow
+    assert "needs: [changes, quality, test, voice-go, rust-device-arm64]" in workflow
     assert "RUST_ARTIFACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert "YOYOPOD_LVGL_SOURCE_DIR: ${{ github.workspace }}/.cache/lvgl/lvgl-9.5.0" in workflow
     assert "working-directory: yoyopod_rs" in workflow
@@ -36,33 +38,35 @@ def test_rust_ui_ci_builds_arm64_binary_artifact() -> None:
     assert "git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git .cache/lvgl/lvgl-9.5.0" in workflow
     assert (
         "bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/media-host/... "
-        "//yoyopod_rs/voip-host/... //yoyopod_rs/runtime/..."
+        "//yoyopod_rs/voip-host/... //yoyopod_rs/network-host/... //yoyopod_rs/runtime/..."
     ) in workflow
     assert "cargo test --workspace --locked --features whisplay-hardware,native-lvgl" in workflow
     assert (
-        "cargo build --release -p yoyopod-ui-host --features whisplay-hardware,native-lvgl --locked"
+        "cargo build --release --locked"
         in workflow
     )
-    assert "cargo build --release -p yoyopod-media-host --locked" in workflow
-    assert "cargo build --release -p yoyopod-runtime --locked" in workflow
+    assert "-p yoyopod-runtime" in workflow
+    assert "-p yoyopod-ui-host" in workflow
+    assert "-p yoyopod-media-host" in workflow
+    assert "-p yoyopod-voip-host" in workflow
+    assert "-p yoyopod-network-host" in workflow
+    assert (
+        "--features yoyopod-ui-host/whisplay-hardware,yoyopod-ui-host/native-lvgl,yoyopod-voip-host/native-liblinphone"
+        in workflow
+    )
     assert "uses: actions/upload-artifact@v4" in workflow
-    assert "name: yoyopod-ui-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
-    assert "name: yoyopod-media-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
-    assert "name: yoyopod-voip-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
-    assert "name: yoyopod-runtime-${{ env.RUST_ARTIFACT_SHA }}" in workflow
+    assert "name: yoyopod-rust-device-arm64-${{ env.RUST_ARTIFACT_SHA }}" in workflow
+    assert "yoyopod-rust-device-arm64-${{ env.RUST_ARTIFACT_SHA }}.tar.gz" in workflow
     assert "yoyopod_rs/ui-host/build/yoyopod-ui-host" in workflow
     assert "yoyopod_rs/media-host/build/yoyopod-media-host" in workflow
     assert "yoyopod_rs/voip-host/build/yoyopod-voip-host" in workflow
+    assert "yoyopod_rs/network-host/build/yoyopod-network-host" in workflow
     assert "yoyopod_rs/runtime/build/yoyopod-runtime" in workflow
-    assert (
-        "cargo build --release -p yoyopod-voip-host --features native-liblinphone --locked"
-        in workflow
-    )
     assert "yoyopod-liblinphone-shim" not in workflow
     assert "liblinphone-shim/build" not in workflow
     assert "actions/download-artifact@v4" in workflow
-    assert "path: yoyopod_rs/media-host/build" in workflow
-    assert "path: yoyopod_rs/runtime/build" in workflow
+    assert "tar -xzf" in workflow
+    assert "path: .artifacts/rust-device" in workflow
 
 
 def test_slot_arm64_change_detector_includes_rust_workspace() -> None:
@@ -95,6 +99,8 @@ def test_rust_bazel_feature_folder_layout_is_checked_in() -> None:
     assert (REPO_ROOT / "yoyopod_rs" / "ui-host" / "tests" / "README.md").exists()
     assert (REPO_ROOT / "yoyopod_rs" / "voip-host" / "BUILD.bazel").exists()
     assert (REPO_ROOT / "yoyopod_rs" / "voip-host" / "tests" / "README.md").exists()
+    assert (REPO_ROOT / "yoyopod_rs" / "network-host" / "BUILD.bazel").exists()
+    assert (REPO_ROOT / "yoyopod_rs" / "network-host" / "tests" / "README.md").exists()
     assert (REPO_ROOT / "yoyopod_rs" / "runtime" / "BUILD.bazel").exists()
     assert not (REPO_ROOT / "yoyopod_rs" / "crates").exists()
 
@@ -149,7 +155,7 @@ def test_dockerignore_preserves_rust_artifact_build_dirs_for_slot_builder() -> N
         "yoyopod_rs/ui-host/build",
         "yoyopod_rs/media-host/build",
         "yoyopod_rs/voip-host/build",
+        "yoyopod_rs/network-host/build",
         "yoyopod_rs/runtime/build",
-        "yoyopod_rs/liblinphone-shim/build",
     ):
         assert f"!{artifact_dir}/" in dockerignore

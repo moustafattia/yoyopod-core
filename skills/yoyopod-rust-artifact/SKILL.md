@@ -34,16 +34,27 @@ Pi when native/CMake inputs change.
 Use the artifact whose suffix equals the exact commit under test, not a pull
 request merge SHA.
 
-| Artifact | Pi install path | Purpose |
-| --- | --- | --- |
-| `yoyopod-runtime-<sha>` | `/opt/yoyopod-dev/checkout/yoyopod_rs/runtime/build/yoyopod-runtime` | Top-level Rust runtime entrypoint when `YOYOPOD_DEV_RUNTIME=rust`. |
-| `yoyopod-ui-host-<sha>` | `/opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build/yoyopod-ui-host` | Whisplay UI worker and LVGL renderer. |
-| `yoyopod-media-host-<sha>` | `/opt/yoyopod-dev/checkout/yoyopod_rs/media-host/build/yoyopod-media-host` | Rust media/mpv worker. |
-| `yoyopod-voip-host-<sha>` | `/opt/yoyopod-dev/checkout/yoyopod_rs/voip-host/build/yoyopod-voip-host` | Rust Liblinphone/SIP worker. |
+The CI artifact is:
 
-`yoyopod_rs/network-host/` is part of the Rust port, but only treat it as a
-deployable artifact when the CI workflow uploads `yoyopod-network-host-<sha>`.
-Do not invent an artifact name that CI does not produce.
+```bash
+yoyopod-rust-device-arm64-<sha>
+```
+
+It contains:
+
+```bash
+yoyopod-rust-device-arm64-<sha>.tar.gz
+```
+
+That tarball extracts an install-ready `yoyopod_rs/.../build/...` tree:
+
+| Path inside extracted tree | Purpose |
+| --- | --- |
+| `yoyopod_rs/runtime/build/yoyopod-runtime` | Top-level Rust runtime entrypoint when `YOYOPOD_DEV_RUNTIME=rust`. |
+| `yoyopod_rs/ui-host/build/yoyopod-ui-host` | Whisplay UI worker and LVGL renderer. |
+| `yoyopod_rs/media-host/build/yoyopod-media-host` | Rust media/mpv worker. |
+| `yoyopod_rs/voip-host/build/yoyopod-voip-host` | Rust Liblinphone/SIP worker. |
+| `yoyopod_rs/network-host/build/yoyopod-network-host` | Rust SIM7600/PPP/GPS worker. |
 
 ## Steps
 
@@ -71,19 +82,17 @@ Do not invent an artifact name that CI does not produce.
    conclusion is `success`. If the run is still queued or in progress, wait.
    If it failed, inspect the failed job before hardware deploy.
 
-5. **Download the needed artifacts locally.** For a full Rust-runtime hardware
-   run, download at least runtime, UI, media, and VoIP:
+5. **Download and extract the Rust device bundle locally.**
 
    ```bash
-   mkdir -p .artifacts/rust/<sha>
-   gh run download <run-id> --name yoyopod-runtime-<sha> --dir .artifacts/rust/<sha>/runtime
-   gh run download <run-id> --name yoyopod-ui-host-<sha> --dir .artifacts/rust/<sha>/ui-host
-   gh run download <run-id> --name yoyopod-media-host-<sha> --dir .artifacts/rust/<sha>/media-host
-   gh run download <run-id> --name yoyopod-voip-host-<sha> --dir .artifacts/rust/<sha>/voip-host
-   chmod +x .artifacts/rust/<sha>/runtime/yoyopod-runtime
-   chmod +x .artifacts/rust/<sha>/ui-host/yoyopod-ui-host
-   chmod +x .artifacts/rust/<sha>/media-host/yoyopod-media-host
-   chmod +x .artifacts/rust/<sha>/voip-host/yoyopod-voip-host
+   mkdir -p .artifacts/rust-device/<sha>
+   gh run download <run-id> --name yoyopod-rust-device-arm64-<sha> --dir .artifacts/rust-device/<sha>
+   tar -xzf .artifacts/rust-device/<sha>/yoyopod-rust-device-arm64-<sha>.tar.gz -C .artifacts/rust-device/<sha>
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/runtime/build/yoyopod-runtime
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/ui-host/build/yoyopod-ui-host
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/media-host/build/yoyopod-media-host
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/voip-host/build/yoyopod-voip-host
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/network-host/build/yoyopod-network-host
    ```
 
 6. **Make sure the Pi dev checkout is on the same commit.**
@@ -98,12 +107,8 @@ Do not invent an artifact name that CI does not produce.
 7. **Install the CI-built Rust binaries on the Pi.**
 
    ```bash
-   ssh <user>@<host> 'mkdir -p /opt/yoyopod-dev/checkout/yoyopod_rs/runtime/build /opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build /opt/yoyopod-dev/checkout/yoyopod_rs/media-host/build /opt/yoyopod-dev/checkout/yoyopod_rs/voip-host/build'
-   scp .artifacts/rust/<sha>/runtime/yoyopod-runtime <user>@<host>:/opt/yoyopod-dev/checkout/yoyopod_rs/runtime/build/yoyopod-runtime
-   scp .artifacts/rust/<sha>/ui-host/yoyopod-ui-host <user>@<host>:/opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build/yoyopod-ui-host
-   scp .artifacts/rust/<sha>/media-host/yoyopod-media-host <user>@<host>:/opt/yoyopod-dev/checkout/yoyopod_rs/media-host/build/yoyopod-media-host
-   scp .artifacts/rust/<sha>/voip-host/yoyopod-voip-host <user>@<host>:/opt/yoyopod-dev/checkout/yoyopod_rs/voip-host/build/yoyopod-voip-host
-   ssh <user>@<host> 'chmod +x /opt/yoyopod-dev/checkout/yoyopod_rs/runtime/build/yoyopod-runtime /opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build/yoyopod-ui-host /opt/yoyopod-dev/checkout/yoyopod_rs/media-host/build/yoyopod-media-host /opt/yoyopod-dev/checkout/yoyopod_rs/voip-host/build/yoyopod-voip-host'
+   scp .artifacts/rust-device/<sha>/yoyopod-rust-device-arm64-<sha>.tar.gz <user>@<host>:/tmp/yoyopod-rust-device-arm64-<sha>.tar.gz
+   ssh <user>@<host> 'cd /opt/yoyopod-dev/checkout && tar -xzf /tmp/yoyopod-rust-device-arm64-<sha>.tar.gz && chmod +x yoyopod_rs/runtime/build/yoyopod-runtime yoyopod_rs/ui-host/build/yoyopod-ui-host yoyopod_rs/media-host/build/yoyopod-media-host yoyopod_rs/voip-host/build/yoyopod-voip-host yoyopod_rs/network-host/build/yoyopod-network-host'
    ```
 
 8. **Select the Rust dev-lane owner and restart.** The dev service still has a
