@@ -266,7 +266,10 @@ impl NativeLvglFacade {
         unsafe {
             match role {
                 "hub_card_panel" => {
-                    sys::lv_obj_set_style_pad_all(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_left(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_right(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_top(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_bottom(obj.as_ptr(), 0, SELECTOR);
                     sys::lv_obj_set_style_shadow_width(obj.as_ptr(), 24, SELECTOR);
                     sys::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
                     sys::lv_obj_set_scrollbar_mode(obj.as_ptr(), sys::LV_SCROLLBAR_MODE_OFF);

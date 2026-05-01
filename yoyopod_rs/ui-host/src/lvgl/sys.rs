@@ -128,7 +128,10 @@ unsafe extern "C" {
         selector: LvStyleSelector,
     );
     pub fn lv_obj_set_style_text_align(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
-    pub fn lv_obj_set_style_pad_all(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_pad_top(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_pad_bottom(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_pad_left(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_pad_right(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
     pub fn lv_obj_set_scrollbar_mode(obj: *mut lv_obj_t, mode: i32);
     pub fn lv_obj_align(obj: *mut lv_obj_t, align: i32, x_ofs: i32, y_ofs: i32);
     pub fn lv_obj_center(obj: *mut lv_obj_t);
