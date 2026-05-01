@@ -101,17 +101,14 @@ impl ScreenController for PlaylistController {
             facade.set_visible(empty_panel, empty)?;
         }
         if let Some(empty_icon) = self.empty_icon {
-            facade.set_icon(empty_icon, "playlist")?;
+            facade.set_icon(empty_icon, playlist_empty_icon(model))?;
             facade.set_accent(empty_icon, accent)?;
         }
         if let Some(empty_title) = self.empty_title {
-            facade.set_text(
-                empty_title,
-                &format!("No {}", list.title.to_ascii_lowercase()),
-            )?;
+            facade.set_text(empty_title, playlist_empty_title(model))?;
         }
         if let Some(empty_subtitle) = self.empty_subtitle {
-            facade.set_text(empty_subtitle, &list.subtitle)?;
+            facade.set_text(empty_subtitle, playlist_empty_subtitle(model, list))?;
         }
         sync_rows(
             facade,
@@ -163,5 +160,32 @@ fn accent_for_playlist(model: &ListScreenModel) -> u32 {
     match model.title.to_ascii_lowercase().as_str() {
         "contacts" | "history" | "recents" => 0x00D4FF,
         _ => 0x00FF88,
+    }
+}
+
+fn playlist_empty_title(model: &ScreenModel) -> &'static str {
+    match model {
+        ScreenModel::Contacts(_) => "No contacts",
+        ScreenModel::CallHistory(_) => "No recent calls",
+        ScreenModel::Playlists(_) => "No playlists",
+        ScreenModel::RecentTracks(_) => "No recent tracks",
+        _ => "No items",
+    }
+}
+
+fn playlist_empty_subtitle<'a>(model: &ScreenModel, list: &'a ListScreenModel) -> &'a str {
+    match model {
+        ScreenModel::Contacts(_) | ScreenModel::CallHistory(_) => &list.subtitle,
+        ScreenModel::Playlists(_) => "Saved mixes will appear here.",
+        ScreenModel::RecentTracks(_) => "Recent songs will appear here.",
+        _ => &list.subtitle,
+    }
+}
+
+fn playlist_empty_icon(model: &ScreenModel) -> &'static str {
+    match model {
+        ScreenModel::Contacts(_) | ScreenModel::CallHistory(_) => "talk",
+        ScreenModel::RecentTracks(_) => "recent",
+        _ => "playlist",
     }
 }

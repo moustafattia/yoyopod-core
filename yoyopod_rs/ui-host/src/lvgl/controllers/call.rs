@@ -80,10 +80,10 @@ impl ScreenController for CallController {
                 .sync(facade, root, "call_footer", &call.chrome.footer)?;
         }
         if let Some(icon_halo) = self.icon_halo {
-            facade.set_accent(icon_halo, accent)?;
+            facade.set_variant(icon_halo, "call_halo", accent)?;
         }
         if let Some(panel) = self.panel {
-            facade.set_accent(panel, call_panel_accent(model))?;
+            facade.set_variant(panel, call_panel_variant(model), accent)?;
         }
 
         if let Some(title) = self.title {
@@ -94,15 +94,20 @@ impl ScreenController for CallController {
             facade.set_accent(icon_label, call_icon_accent(model))?;
         }
         if let Some(state_chip) = self.state_chip {
+            let (x, y, width) = call_state_chip_geometry(model);
+            facade.set_geometry(state_chip, x, y, width, 24)?;
             facade.set_accent(state_chip, call_state_accent(model))?;
         }
         if let Some(state_label) = self.state_label {
             let state_text = call_state_text(model, call);
+            let (_, _, width) = call_state_chip_geometry(model);
+            facade.set_geometry(state_label, 0, 6, width, 12)?;
             facade.set_text(state_label, &state_text)?;
             facade.set_accent(state_label, call_state_accent(model))?;
         }
         if let Some(mute_badge) = self.mute_badge {
             facade.set_visible(mute_badge, call.muted)?;
+            facade.set_variant(mute_badge, "call_mute", 0xFF675D)?;
         }
         if let Some(mute_label) = self.mute_label {
             facade.set_text(mute_label, "MUTED")?;
@@ -166,10 +171,10 @@ fn call_state_accent(model: &ScreenModel) -> u32 {
     }
 }
 
-fn call_panel_accent(model: &ScreenModel) -> u32 {
+fn call_panel_variant(model: &ScreenModel) -> &'static str {
     match model {
-        ScreenModel::OutgoingCall(_) => 0x214E5D,
-        _ => 0x00D4FF,
+        ScreenModel::OutgoingCall(_) => "call_panel_outlined",
+        _ => "call_panel_filled",
     }
 }
 
@@ -177,6 +182,14 @@ fn call_icon_accent(model: &ScreenModel) -> u32 {
     match model {
         ScreenModel::OutgoingCall(_) => 0x00D4FF,
         _ => 0xFFFFFF,
+    }
+}
+
+fn call_state_chip_geometry(model: &ScreenModel) -> (i32, i32, i32) {
+    match model {
+        ScreenModel::OutgoingCall(_) => (62, 208, 116),
+        ScreenModel::InCall(_) => (48, 206, 144),
+        _ => (54, 208, 132),
     }
 }
 

@@ -296,8 +296,13 @@ impl NativeLvglFacade {
                 | "footer_bar"
                 | "talk_card_panel"
                 | "talk_card_glow"
+                | "talk_actions_primary_button"
                 | "ask_icon_glow"
                 | "ask_icon_halo"
+                | "call_panel"
+                | "call_icon_halo"
+                | "call_state_chip"
+                | "call_mute_badge"
                 | "power_icon_halo"
                 | "power_row"
                 | "status_bar"
@@ -436,6 +441,109 @@ impl NativeLvglFacade {
                     sys::lv_obj_center(obj.as_ptr());
                 }
                 "now_playing_state_label" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                "talk_actions_header_label" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                "talk_actions_header_name" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_DOTS);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "talk_actions_title_label" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_DOTS);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "talk_actions_button_label" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                "talk_actions_status_label" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "call_state_icon" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_24,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                "call_title" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_DOTS);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "call_state_label" | "call_mute_label" => {
                     sys::lv_obj_set_style_text_font(
                         obj.as_ptr(),
                         &sys::lv_font_montserrat_12,
@@ -1122,6 +1230,12 @@ impl NativeLvglFacade {
                 width: 40,
                 height: 24,
             },
+            "talk_actions_title_label" => Layout {
+                x: 30,
+                y: 198,
+                width: 180,
+                height: 22,
+            },
             "talk_actions_status_label" => Layout {
                 x: 30,
                 y: 220,
@@ -1179,7 +1293,7 @@ impl NativeLvglFacade {
             "call_title" => Layout {
                 x: 30,
                 y: 176,
-                width: 200,
+                width: 180,
                 height: 24,
             },
             "call_subtitle" => Layout {
@@ -1376,7 +1490,13 @@ impl LvglFacade for NativeLvglFacade {
             sys::lv_label_set_text(node.obj.as_ptr(), text.as_ptr());
             if matches!(
                 node.role,
-                "now_playing_icon_label" | "now_playing_state_label"
+                "now_playing_icon_label"
+                    | "now_playing_state_label"
+                    | "talk_actions_header_label"
+                    | "talk_actions_button_label"
+                    | "call_state_icon"
+                    | "call_state_label"
+                    | "call_mute_label"
             ) {
                 sys::lv_obj_center(node.obj.as_ptr());
             }
@@ -1685,6 +1805,136 @@ impl NativeLvglFacade {
                         SELECTOR,
                     );
                 }
+                ("talk_actions_primary_button", "talk_action_primary") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::SURFACE_RAISED_RGB),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
+                    sys::lv_obj_set_style_border_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                }
+                ("talk_actions_primary_button", "talk_action_selected") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_width(obj.as_ptr(), 0, SELECTOR);
+                }
+                ("talk_actions_primary_button", "talk_action_unselected") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::SURFACE_RAISED_RGB),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
+                    sys::lv_obj_set_style_border_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                }
+                ("talk_actions_button_label", "talk_action_primary") => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_24,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                ("talk_actions_button_label", "talk_action_unselected") => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                ("talk_actions_button_label", "talk_action_selected") => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::INK_RGB),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                ("talk_actions_status_label", "talk_action_status") => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                }
+                ("call_icon_halo", "call_halo") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 68)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                ("call_panel", "call_panel_filled") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_width(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_shadow_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_shadow_width(obj.as_ptr(), 22, SELECTOR);
+                    sys::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
+                }
+                ("call_panel", "call_panel_outlined") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 80)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
+                    sys::lv_obj_set_style_border_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_shadow_width(obj.as_ptr(), 0, SELECTOR);
+                }
+                ("call_mute_badge", "call_mute") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 85)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
                 ("now_playing_icon_halo", "now_playing_playing") => {
                     sys::lv_obj_set_style_bg_color(
                         obj.as_ptr(),
@@ -1841,13 +2091,21 @@ impl NativeLvglFacade {
                     );
                     sys::lv_obj_set_style_bg_opa(obj.as_ptr(), 102, SELECTOR);
                 }
-                "talk_card_glow" | "call_icon_halo" => {
+                "talk_card_glow" => {
                     sys::lv_obj_set_style_bg_color(
                         obj.as_ptr(),
                         sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 68)),
                         SELECTOR,
                     );
                     sys::lv_obj_set_style_bg_opa(obj.as_ptr(), 96, SELECTOR);
+                }
+                "call_icon_halo" => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 68)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
                 }
                 "hub_card_panel" | "talk_card_panel" | "call_panel" => {
                     sys::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);

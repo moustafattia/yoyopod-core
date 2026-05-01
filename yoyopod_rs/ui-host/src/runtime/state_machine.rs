@@ -19,6 +19,7 @@ pub enum UiScreen {
     Talk,
     Contacts,
     CallHistory,
+    TalkContact,
     VoiceNote,
     IncomingCall,
     OutgoingCall,
@@ -40,6 +41,7 @@ impl UiScreen {
             Self::Talk => "talk",
             Self::Contacts => "contacts",
             Self::CallHistory => "call_history",
+            Self::TalkContact => "talk_contact",
             Self::VoiceNote => "voice_note",
             Self::IncomingCall => "incoming_call",
             Self::OutgoingCall => "outgoing_call",
@@ -70,6 +72,7 @@ pub struct UiRuntime {
     intents: Vec<UiIntent>,
     dirty: bool,
     last_app_state: String,
+    selected_contact: Option<ListItemSnapshot>,
 }
 
 impl Default for UiRuntime {
@@ -82,6 +85,7 @@ impl Default for UiRuntime {
             intents: Vec::new(),
             dirty: true,
             last_app_state: "hub".to_string(),
+            selected_contact: None,
         }
     }
 }
@@ -102,8 +106,8 @@ impl UiRuntime {
             InputAction::Advance => self.advance_focus(),
             InputAction::Select => self.select_focused(),
             InputAction::Back => self.go_back_or_emit(),
-            InputAction::PttPress => self.intents.push(UiIntent::new("voice", "capture_start")),
-            InputAction::PttRelease => self.intents.push(UiIntent::new("voice", "capture_stop")),
+            InputAction::PttPress => self.handle_ptt_press(),
+            InputAction::PttRelease => self.handle_ptt_release(),
         }
         self.clamp_focus();
         self.dirty = true;
@@ -138,11 +142,37 @@ impl UiRuntime {
     }
 
     pub fn active_view(&self) -> UiView {
-        Self::view_for_screen(self.active_screen, &self.snapshot, self.focus_index)
+        match self.active_screen {
+            UiScreen::TalkContact => screens::call::talk_contact_view(
+                &self.snapshot,
+                self.focus_index,
+                self.selected_contact.as_ref(),
+            ),
+            UiScreen::VoiceNote => screens::ask::voice_note_view(
+                &self.snapshot,
+                self.focus_index,
+                self.selected_contact.as_ref(),
+            ),
+            _ => Self::view_for_screen(self.active_screen, &self.snapshot, self.focus_index),
+        }
     }
 
     pub fn active_screen_model(&self) -> ScreenModel {
-        Self::screen_model_for_screen(self.active_screen, &self.snapshot, self.focus_index)
+        match self.active_screen {
+            UiScreen::TalkContact => ScreenModel::TalkContact(screens::call::talk_contact_model(
+                &self.snapshot,
+                self.focus_index,
+                self.selected_contact.as_ref(),
+            )),
+            UiScreen::VoiceNote => ScreenModel::VoiceNote(screens::ask::voice_note_model(
+                &self.snapshot,
+                self.focus_index,
+                self.selected_contact.as_ref(),
+            )),
+            _ => {
+                Self::screen_model_for_screen(self.active_screen, &self.snapshot, self.focus_index)
+            }
+        }
     }
 
     pub fn view_for_screen(
@@ -160,7 +190,8 @@ impl UiRuntime {
             UiScreen::Talk => screens::talk::view(focus_index),
             UiScreen::Contacts => screens::call::contacts_view(snapshot, focus_index),
             UiScreen::CallHistory => screens::call::call_history_view(snapshot, focus_index),
-            UiScreen::VoiceNote => screens::ask::voice_note_view(snapshot, focus_index),
+            UiScreen::TalkContact => screens::call::talk_contact_view(snapshot, focus_index, None),
+            UiScreen::VoiceNote => screens::ask::voice_note_view(snapshot, focus_index, None),
             UiScreen::IncomingCall => screens::call::incoming_view(snapshot, focus_index),
             UiScreen::OutgoingCall => screens::call::outgoing_view(snapshot, focus_index),
             UiScreen::InCall => screens::call::in_call_view(snapshot, focus_index),
@@ -195,7 +226,14 @@ impl UiRuntime {
             UiScreen::CallHistory => {
                 ScreenModel::CallHistory(screens::call::call_history_model(snapshot, focus_index))
             }
-            UiScreen::VoiceNote => ScreenModel::VoiceNote(screens::ask::voice_note_model(snapshot)),
+            UiScreen::TalkContact => ScreenModel::TalkContact(screens::call::talk_contact_model(
+                snapshot,
+                focus_index,
+                None,
+            )),
+            UiScreen::VoiceNote => {
+                ScreenModel::VoiceNote(screens::ask::voice_note_model(snapshot, focus_index, None))
+            }
             UiScreen::IncomingCall => {
                 ScreenModel::IncomingCall(screens::call::incoming_model(snapshot))
             }
@@ -264,6 +302,7 @@ impl UiRuntime {
             "call" | "talk" => Some(UiScreen::Talk),
             "contacts" => Some(UiScreen::Contacts),
             "call_history" => Some(UiScreen::CallHistory),
+            "talk_contact" => Some(UiScreen::TalkContact),
             "voice_note" => Some(UiScreen::VoiceNote),
             "incoming_call" => Some(UiScreen::IncomingCall),
             "outgoing_call" => Some(UiScreen::OutgoingCall),
@@ -331,14 +370,15 @@ impl UiRuntime {
                 }
             }
             UiScreen::NowPlaying => self.intents.push(UiIntent::new("music", "play_pause")),
-            UiScreen::Ask | UiScreen::VoiceNote => {
-                self.intents.push(UiIntent::new("voice", "capture_toggle"))
-            }
+            UiScreen::Ask => self.intents.push(UiIntent::new("voice", "capture_toggle")),
+            UiScreen::VoiceNote => self.select_voice_note(),
             UiScreen::Contacts => {
                 if let Some(item) = self.snapshot.call.contacts.get(self.focus_index).cloned() {
-                    self.emit_call_start(&item);
+                    self.selected_contact = Some(item);
+                    self.push_screen(UiScreen::TalkContact);
                 }
             }
+            UiScreen::TalkContact => self.select_talk_contact_action(),
             UiScreen::CallHistory => {
                 if let Some(item) = self.snapshot.call.history.get(self.focus_index).cloned() {
                     self.emit_call_start(&item);
@@ -356,6 +396,19 @@ impl UiRuntime {
             UiScreen::OutgoingCall | UiScreen::InCall => {
                 self.intents.push(UiIntent::new("call", "hangup"))
             }
+            UiScreen::VoiceNote if self.voice_note_phase() == "recording" => {
+                self.intents.push(UiIntent::new("voice", "capture_cancel"));
+                self.pop_screen_or_hub();
+            }
+            UiScreen::VoiceNote
+                if matches!(
+                    self.voice_note_phase().as_str(),
+                    "review" | "failed" | "sent"
+                ) =>
+            {
+                self.intents.push(UiIntent::new("voice", "discard"));
+                self.pop_screen_or_hub();
+            }
             UiScreen::Loading | UiScreen::Error => self.pop_screen_or_hub(),
             UiScreen::Hub => {}
             _ => self.pop_screen_or_hub(),
@@ -368,6 +421,138 @@ impl UiRuntime {
             "start",
             json!({"id": item.id, "name": item.title}),
         ));
+    }
+
+    fn select_talk_contact_action(&mut self) {
+        let actions =
+            screens::call::talk_contact_actions(&self.snapshot, self.selected_contact.as_ref());
+        let Some(action) = actions.get(self.focus_index) else {
+            return;
+        };
+        match action.kind {
+            "call" => {
+                if let Some(item) = self.selected_contact.clone() {
+                    self.emit_call_start(&item);
+                }
+            }
+            "voice_note" => self.push_screen(UiScreen::VoiceNote),
+            "play_note" => {
+                if let Some(payload) = self.latest_voice_note_payload() {
+                    self.intents
+                        .push(UiIntent::with_payload("voice", "play_latest", payload));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn select_voice_note(&mut self) {
+        match self.voice_note_phase().as_str() {
+            "ready" => self.pop_screen_or_hub(),
+            "recording" => self.intents.push(UiIntent::new("voice", "capture_stop")),
+            "review" => match self.focus_index {
+                0 => {
+                    if let Some(payload) = self.voice_note_recipient_payload() {
+                        self.intents
+                            .push(UiIntent::with_payload("voice", "send", payload));
+                    }
+                }
+                1 => self.intents.push(UiIntent::new("voice", "play")),
+                _ => self.intents.push(UiIntent::new("voice", "discard")),
+            },
+            "failed" => match self.focus_index {
+                0 => {
+                    if let Some(payload) = self.voice_note_recipient_payload() {
+                        self.intents
+                            .push(UiIntent::with_payload("voice", "send", payload));
+                    }
+                }
+                _ => self.intents.push(UiIntent::new("voice", "discard")),
+            },
+            "sent" => {
+                self.intents.push(UiIntent::new("voice", "discard"));
+                self.pop_screen_or_hub();
+            }
+            "sending" => {}
+            _ => {}
+        }
+    }
+
+    fn handle_ptt_press(&mut self) {
+        if self.active_screen == UiScreen::VoiceNote && self.voice_note_phase() == "ready" {
+            if let Some(payload) = self.voice_note_recipient_payload() {
+                self.intents
+                    .push(UiIntent::with_payload("voice", "capture_start", payload));
+            }
+            return;
+        }
+        if self.active_screen == UiScreen::Ask {
+            self.intents.push(UiIntent::new("voice", "capture_start"));
+        }
+    }
+
+    fn handle_ptt_release(&mut self) {
+        if self.active_screen == UiScreen::VoiceNote && self.voice_note_phase() == "recording" {
+            self.intents.push(UiIntent::new("voice", "capture_stop"));
+            return;
+        }
+        if self.active_screen == UiScreen::Ask {
+            self.intents.push(UiIntent::new("voice", "capture_stop"));
+        }
+    }
+
+    pub fn wants_ptt_passthrough(&self) -> bool {
+        self.active_screen == UiScreen::VoiceNote
+            && matches!(self.voice_note_phase().as_str(), "ready" | "recording")
+    }
+
+    fn voice_note_phase(&self) -> String {
+        let phase = self.snapshot.voice.phase.trim().to_ascii_lowercase();
+        if self.snapshot.voice.capture_in_flight
+            || self.snapshot.voice.ptt_active
+            || phase == "recording"
+        {
+            return "recording".to_string();
+        }
+        if matches!(phase.as_str(), "review" | "sending" | "sent" | "failed") {
+            return phase;
+        }
+        "ready".to_string()
+    }
+
+    fn voice_note_recipient_payload(&self) -> Option<serde_json::Value> {
+        let contact = self
+            .selected_contact
+            .as_ref()
+            .or_else(|| self.snapshot.call.contacts.first())?;
+        if contact.id.trim().is_empty() {
+            return None;
+        }
+        Some(json!({
+            "id": contact.id,
+            "recipient_address": contact.id,
+            "recipient_name": contact.title,
+        }))
+    }
+
+    fn latest_voice_note_payload(&self) -> Option<serde_json::Value> {
+        let contact = self
+            .selected_contact
+            .as_ref()
+            .or_else(|| self.snapshot.call.contacts.first())?;
+        let note = self
+            .snapshot
+            .call
+            .latest_voice_note_by_contact
+            .get(&contact.id)?;
+        if note.local_file_path.trim().is_empty() {
+            return None;
+        }
+        Some(json!({
+            "id": contact.id,
+            "recipient_name": contact.title,
+            "file_path": note.local_file_path,
+        }))
     }
 
     fn push_screen(&mut self, screen: UiScreen) {
@@ -426,6 +611,11 @@ impl UiRuntime {
             UiScreen::Talk => screens::talk::items().len(),
             UiScreen::Contacts => self.snapshot.call.contacts.len(),
             UiScreen::CallHistory => self.snapshot.call.history.len(),
+            UiScreen::TalkContact => {
+                screens::call::talk_contact_actions(&self.snapshot, self.selected_contact.as_ref())
+                    .len()
+            }
+            UiScreen::VoiceNote => screens::ask::voice_note_action_count(&self.snapshot),
             UiScreen::Power => screens::power::items(&self.snapshot).len().max(1),
             _ => 0,
         }

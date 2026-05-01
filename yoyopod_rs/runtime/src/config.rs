@@ -19,6 +19,7 @@ pub struct RuntimeConfig {
     pub ui: UiConfig,
     pub media: MediaRuntimeConfig,
     pub voip: VoipRuntimeConfig,
+    pub people: PeopleRuntimeConfig,
     pub worker_paths: WorkerPaths,
     pub pid_file: String,
     pub log_file: String,
@@ -42,6 +43,19 @@ pub struct MediaRuntimeConfig {
     pub remote_cache_dir: String,
     pub remote_cache_max_bytes: u64,
     pub auto_resume_after_call: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeopleRuntimeConfig {
+    pub contacts: Vec<ContactRuntimeConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContactRuntimeConfig {
+    pub name: String,
+    pub display_name: String,
+    pub sip_address: String,
+    pub favorite: bool,
 }
 
 #[derive(Clone, PartialEq, Deserialize)]
@@ -102,6 +116,7 @@ impl RuntimeConfig {
         let calling = read_yaml(config_dir.join("communication/calling.yaml"))?;
         let messaging = read_yaml(config_dir.join("communication/messaging.yaml"))?;
         let secrets = read_yaml(config_dir.join("communication/calling.secrets.yaml"))?;
+        let people = read_yaml(config_dir.join("people/directory.yaml"))?;
 
         let default_volume = int_at_env(
             &music,
@@ -296,6 +311,9 @@ impl RuntimeConfig {
                 mic_gain: int_at(&hardware, &["communication_audio", "mic_gain"], 80),
                 output_volume: default_volume,
             },
+            people: PeopleRuntimeConfig {
+                contacts: load_people_contacts(&runtime_root, &people)?,
+            },
             worker_paths: WorkerPaths {
                 ui: ui_worker_path(),
                 media: env_or_default(
@@ -341,6 +359,20 @@ impl MediaRuntimeConfig {
             "remote_cache_dir": self.remote_cache_dir,
             "remote_cache_max_bytes": self.remote_cache_max_bytes,
         })
+    }
+}
+
+impl PeopleRuntimeConfig {
+    pub fn to_contact_items(&self) -> Vec<crate::state::ListItem> {
+        self.contacts
+            .iter()
+            .map(|contact| crate::state::ListItem {
+                id: contact.sip_address.clone(),
+                title: contact.display_name.clone(),
+                subtitle: String::new(),
+                icon_key: format!("mono:{}", talk_monogram(&contact.display_name)),
+            })
+            .collect()
     }
 }
 
@@ -490,12 +522,93 @@ fn read_yaml(path: PathBuf) -> Result<Value, ConfigError> {
     Ok(serde_json::to_value(value).unwrap_or_else(|_| json!({})))
 }
 
+fn load_people_contacts(
+    runtime_root: &Path,
+    directory: &Value,
+) -> Result<Vec<ContactRuntimeConfig>, ConfigError> {
+    let contacts_file = PathBuf::from(resolve_runtime_path(
+        runtime_root,
+        string_at(directory, &["contacts_file"], "data/people/contacts.yaml"),
+    ));
+    let contacts_seed_file = PathBuf::from(resolve_runtime_path(
+        runtime_root,
+        string_at(
+            directory,
+            &["contacts_seed_file"],
+            "config/people/contacts.seed.yaml",
+        ),
+    ));
+    let source = if contacts_file.exists() {
+        contacts_file
+    } else {
+        contacts_seed_file
+    };
+    let payload = read_yaml(source)?;
+    Ok(contact_configs_from_value(&payload))
+}
+
+fn contact_configs_from_value(value: &Value) -> Vec<ContactRuntimeConfig> {
+    let Some(contacts) = value.get("contacts").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let contacts = contacts
+        .iter()
+        .filter_map(contact_config_from_value)
+        .collect::<Vec<_>>();
+    let (mut favorites, others): (Vec<_>, Vec<_>) =
+        contacts.into_iter().partition(|contact| contact.favorite);
+    favorites.extend(others);
+    favorites
+}
+
+fn contact_config_from_value(value: &Value) -> Option<ContactRuntimeConfig> {
+    if !value.is_object() {
+        return None;
+    }
+    let can_call = value
+        .get("can_call")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    if !can_call {
+        return None;
+    }
+    let sip_address = string_field(value, "sip_address")?;
+    if sip_address.trim().is_empty() {
+        return None;
+    }
+    let name = string_field(value, "name").unwrap_or_else(|| sip_address.clone());
+    let notes = string_field(value, "notes").unwrap_or_default();
+    let display_name = if notes.trim().is_empty() {
+        name.clone()
+    } else {
+        notes.trim().to_string()
+    };
+    Some(ContactRuntimeConfig {
+        name,
+        display_name,
+        sip_address,
+        favorite: value
+            .get("favorite")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    })
+}
+
 fn at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
     let mut current = value;
     for segment in path {
         current = current.get(*segment)?;
     }
     Some(current)
+}
+
+fn string_field(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
 }
 
 fn string_at_env(value: &Value, path: &[&str], default: &str, env: &str) -> String {
@@ -609,5 +722,31 @@ fn redacted_secret(value: &str) -> &'static str {
         ""
     } else {
         "<redacted>"
+    }
+}
+
+fn talk_monogram(text: &str) -> String {
+    let words = text.split_whitespace().collect::<Vec<_>>();
+    if words.is_empty() {
+        return "T".to_string();
+    }
+
+    let mut result = String::new();
+    if words.len() > 1 {
+        for word in words.iter().take(2) {
+            if let Some(letter) = word.chars().next() {
+                result.push(letter.to_ascii_uppercase());
+            }
+        }
+    } else {
+        for letter in words[0].chars().take(2) {
+            result.push(letter.to_ascii_uppercase());
+        }
+    }
+
+    if result.is_empty() {
+        "T".to_string()
+    } else {
+        result
     }
 }

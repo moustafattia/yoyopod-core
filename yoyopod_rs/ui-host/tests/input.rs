@@ -47,6 +47,33 @@ fn long_hold_emits_back_once_at_threshold() {
 }
 
 #[test]
+fn ptt_passthrough_hold_emits_press_and_release() {
+    let mut machine = machine();
+
+    machine.observe_ptt_passthrough(true, 100);
+    let press = machine.tick_ptt_passthrough(900);
+    let release = machine.observe_ptt_passthrough(false, 1000);
+    let debounced_release = machine.tick_ptt_passthrough(1050);
+
+    assert_eq!(press, vec![InputEvent::ptt_press(800)]);
+    assert!(release.is_empty());
+    assert_eq!(debounced_release, vec![InputEvent::ptt_release(900)]);
+}
+
+#[test]
+fn ptt_passthrough_double_tap_still_emits_select() {
+    let mut machine = machine();
+
+    machine.observe_ptt_passthrough(true, 10);
+    machine.observe_ptt_passthrough(false, 80);
+    machine.observe_ptt_passthrough(true, 180);
+    machine.observe_ptt_passthrough(false, 230);
+    let events = machine.tick_ptt_passthrough(280);
+
+    assert_eq!(events, vec![InputEvent::select(50)]);
+}
+
+#[test]
 fn debounce_filters_short_transition_noise() {
     let mut machine = machine();
 

@@ -160,6 +160,26 @@ pub struct CallViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TalkActionButtonModel {
+    pub title: String,
+    pub icon_key: String,
+    pub color_kind: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TalkActionsViewModel {
+    pub chrome: ChromeModel,
+    pub contact_name: String,
+    pub title: String,
+    pub status: String,
+    pub status_kind: i32,
+    pub buttons: Vec<TalkActionButtonModel>,
+    pub selected_index: usize,
+    pub layout_kind: i32,
+    pub button_size_kind: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PowerViewModel {
     pub chrome: ChromeModel,
     pub title: String,
@@ -209,7 +229,8 @@ pub enum ScreenModel {
     Talk(ListScreenModel),
     Contacts(ListScreenModel),
     CallHistory(ListScreenModel),
-    VoiceNote(AskViewModel),
+    TalkContact(TalkActionsViewModel),
+    VoiceNote(TalkActionsViewModel),
     IncomingCall(CallViewModel),
     OutgoingCall(CallViewModel),
     InCall(CallViewModel),
@@ -230,6 +251,7 @@ impl ScreenModel {
             Self::Talk(_) => UiScreen::Talk,
             Self::Contacts(_) => UiScreen::Contacts,
             Self::CallHistory(_) => UiScreen::CallHistory,
+            Self::TalkContact(_) => UiScreen::TalkContact,
             Self::VoiceNote(_) => UiScreen::VoiceNote,
             Self::IncomingCall(_) => UiScreen::IncomingCall,
             Self::OutgoingCall(_) => UiScreen::OutgoingCall,

@@ -12,5 +12,5 @@ pub mod talk;
 pub use models::{
     AskViewModel, CallViewModel, ChromeModel, HubCardModel, HubViewModel, ListRowModel,
     ListScreenModel, NowPlayingViewModel, OverlayViewModel, PowerViewModel, ScreenModel,
-    StatusBarModel,
+    StatusBarModel, TalkActionButtonModel, TalkActionsViewModel,
 };

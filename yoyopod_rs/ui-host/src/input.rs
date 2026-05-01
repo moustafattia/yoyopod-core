@@ -57,6 +57,24 @@ impl InputEvent {
             duration_ms,
         }
     }
+
+    pub fn ptt_press(duration_ms: u64) -> Self {
+        Self {
+            action: InputAction::PttPress,
+            method: "hold_started",
+            timestamp_ms: 0,
+            duration_ms,
+        }
+    }
+
+    pub fn ptt_release(duration_ms: u64) -> Self {
+        Self {
+            action: InputAction::PttRelease,
+            method: "hold_released",
+            timestamp_ms: 0,
+            duration_ms,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -111,9 +129,22 @@ impl OneButtonMachine {
         events
     }
 
+    pub fn observe_ptt_passthrough(&mut self, pressed: bool, now_ms: u64) -> Vec<InputEvent> {
+        let events = self.advance_ptt_passthrough(now_ms);
+        if pressed != self.raw_pressed {
+            self.raw_pressed = pressed;
+            self.raw_transition_at_ms = Some(now_ms);
+        }
+        events
+    }
+
     #[allow(dead_code)]
     pub fn tick(&mut self, now_ms: u64) -> Vec<InputEvent> {
         self.advance(now_ms)
+    }
+
+    pub fn tick_ptt_passthrough(&mut self, now_ms: u64) -> Vec<InputEvent> {
+        self.advance_ptt_passthrough(now_ms)
     }
 
     fn advance(&mut self, now_ms: u64) -> Vec<InputEvent> {
@@ -138,6 +169,46 @@ impl OneButtonMachine {
                 if duration >= self.timing.long_hold_ms {
                     self.hold_back_fired = true;
                     events.push(InputEvent::back(duration));
+                }
+            }
+        }
+
+        if !self.debounced_pressed {
+            if let Some(pending_ms) = self.pending_single_tap_ms {
+                if now_ms.saturating_sub(pending_ms) >= self.timing.double_tap_ms {
+                    self.pending_single_tap_ms = None;
+                    events.push(InputEvent::advance(pending_ms));
+                }
+            }
+        }
+
+        events
+    }
+
+    fn advance_ptt_passthrough(&mut self, now_ms: u64) -> Vec<InputEvent> {
+        let mut events = Vec::new();
+
+        if let Some(transition_at_ms) = self.raw_transition_at_ms {
+            if now_ms.saturating_sub(transition_at_ms) >= self.timing.debounce_ms {
+                self.raw_transition_at_ms = None;
+                if self.raw_pressed != self.debounced_pressed {
+                    if self.raw_pressed {
+                        events.extend(self.handle_press(transition_at_ms));
+                    } else {
+                        events.extend(self.handle_ptt_release(transition_at_ms));
+                    }
+                }
+            }
+        }
+
+        if self.debounced_pressed && !self.hold_back_fired {
+            if let Some(press_start_ms) = self.press_start_ms {
+                let duration = now_ms.saturating_sub(press_start_ms);
+                if duration >= self.timing.long_hold_ms {
+                    self.hold_back_fired = true;
+                    self.pending_single_tap_ms = None;
+                    self.double_tap_candidate = false;
+                    events.push(InputEvent::ptt_press(duration));
                 }
             }
         }
@@ -184,6 +255,32 @@ impl OneButtonMachine {
             self.double_tap_candidate = false;
             self.hold_back_fired = false;
             return Vec::new();
+        }
+
+        if self.double_tap_candidate {
+            self.pending_single_tap_ms = None;
+            self.double_tap_candidate = false;
+            return vec![InputEvent::select(duration)];
+        }
+
+        self.pending_single_tap_ms = Some(now_ms);
+        self.double_tap_candidate = false;
+        Vec::new()
+    }
+
+    fn handle_ptt_release(&mut self, now_ms: u64) -> Vec<InputEvent> {
+        self.debounced_pressed = false;
+        let duration = self
+            .press_start_ms
+            .map(|started| now_ms.saturating_sub(started))
+            .unwrap_or(0);
+        self.press_start_ms = None;
+
+        if self.hold_back_fired || duration >= self.timing.long_hold_ms {
+            self.pending_single_tap_ms = None;
+            self.double_tap_candidate = false;
+            self.hold_back_fired = false;
+            return vec![InputEvent::ptt_release(duration)];
         }
 
         if self.double_tap_candidate {

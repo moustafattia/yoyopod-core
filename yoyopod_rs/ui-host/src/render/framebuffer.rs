@@ -143,7 +143,7 @@ fn render_screen_body(framebuffer: &mut Framebuffer, model: &ScreenModel) {
                 ((now_playing.progress_permille.clamp(0, 1000) as usize) * 120) / 1000;
             framebuffer.fill_rect(60, 178, progress_width, 8, rgb565(0, 255, 136));
         }
-        ScreenModel::Ask(_) | ScreenModel::VoiceNote(_) => {
+        ScreenModel::Ask(_) | ScreenModel::TalkContact(_) | ScreenModel::VoiceNote(_) => {
             framebuffer.fill_rect(62, 52, 116, 116, rgb565(99, 102, 241));
             framebuffer.fill_rect(94, 78, 52, 68, rgb565(255, 255, 255));
         }
@@ -248,7 +248,8 @@ fn chrome(model: &ScreenModel) -> &ChromeModel {
         | ScreenModel::Contacts(list)
         | ScreenModel::CallHistory(list) => &list.chrome,
         ScreenModel::NowPlaying(now_playing) => &now_playing.chrome,
-        ScreenModel::Ask(ask) | ScreenModel::VoiceNote(ask) => &ask.chrome,
+        ScreenModel::Ask(ask) => &ask.chrome,
+        ScreenModel::TalkContact(actions) | ScreenModel::VoiceNote(actions) => &actions.chrome,
         ScreenModel::IncomingCall(call)
         | ScreenModel::OutgoingCall(call)
         | ScreenModel::InCall(call) => &call.chrome,

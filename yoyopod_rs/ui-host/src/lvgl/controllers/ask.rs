@@ -128,7 +128,7 @@ fn ask_state_variant(title: &str) -> &'static str {
 
 fn ask_model(model: &ScreenModel) -> Result<&AskViewModel> {
     match model {
-        ScreenModel::Ask(ask) | ScreenModel::VoiceNote(ask) => Ok(ask),
+        ScreenModel::Ask(ask) => Ok(ask),
         _ => bail!(
             "ask controller received non-ask screen model: {}",
             model.screen().as_str()

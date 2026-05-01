@@ -142,6 +142,7 @@ pub fn style_for_role(role: &str) -> WidgetStyle {
         "playlist_underline" => WidgetStyle::panel(ACCENT_GREEN_RGB, None, 3),
         "talk_actions_header_box" => WidgetStyle::panel(SURFACE_RAISED_RGB, None, 12),
         "call_state_chip" => WidgetStyle::panel(SURFACE_RAISED_RGB, None, 12),
+        "call_mute_badge" => WidgetStyle::panel(0x49353B, None, 12),
         "talk_actions_primary_button" => {
             WidgetStyle::panel(SURFACE_RAISED_RGB, Some(ACCENT_CYAN_RGB), 44)
         }
@@ -155,6 +156,7 @@ pub fn style_for_role(role: &str) -> WidgetStyle {
         | "overlay_title"
         | "now_playing_title"
         | "talk_title"
+        | "talk_actions_title_label"
         | "listen_empty_title"
         | "playlist_empty_title" => WidgetStyle::label(INK_RGB),
         "hub_subtitle"
@@ -210,7 +212,6 @@ pub fn style_for_role(role: &str) -> WidgetStyle {
             WidgetStyle::label(INK_RGB)
         }
         "now_playing_progress" => WidgetStyle::label(ACCENT_GREEN_RGB),
-        "call_mute_badge" => WidgetStyle::panel(0x49353B, None, 12),
         "call_mute_label" => WidgetStyle::label(ERROR_RGB),
         _ => WidgetStyle::label(INK_RGB),
     }

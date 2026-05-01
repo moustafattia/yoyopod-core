@@ -313,7 +313,8 @@ fn chrome(model: &ScreenModel) -> &ChromeModel {
         | ScreenModel::Contacts(model)
         | ScreenModel::CallHistory(model) => &model.chrome,
         ScreenModel::NowPlaying(model) => &model.chrome,
-        ScreenModel::Ask(model) | ScreenModel::VoiceNote(model) => &model.chrome,
+        ScreenModel::Ask(model) => &model.chrome,
+        ScreenModel::TalkContact(model) | ScreenModel::VoiceNote(model) => &model.chrome,
         ScreenModel::IncomingCall(model)
         | ScreenModel::OutgoingCall(model)
         | ScreenModel::InCall(model) => &model.chrome,
@@ -504,7 +505,9 @@ mod shim {
                 | ScreenModel::CallHistory(model) => sync_playlist(model),
                 ScreenModel::NowPlaying(model) => sync_now_playing(model),
                 ScreenModel::Talk(model) => sync_talk(model),
-                ScreenModel::VoiceNote(model) => sync_talk_actions(model),
+                ScreenModel::TalkContact(model) | ScreenModel::VoiceNote(model) => {
+                    sync_talk_actions(model)
+                }
                 ScreenModel::IncomingCall(model) => sync_incoming_call(model),
                 ScreenModel::OutgoingCall(model) => sync_outgoing_call(model),
                 ScreenModel::InCall(model) => sync_in_call(model),
@@ -621,31 +624,67 @@ mod shim {
         )
     }
 
-    fn sync_talk_actions(model: &AskViewModel) -> Result<()> {
-        let contact_name = cstring(&model.title)?;
-        let title_text = cstring(&model.subtitle)?;
+    fn sync_talk_actions(model: &crate::screens::TalkActionsViewModel) -> Result<()> {
+        let contact_name = cstring(&model.contact_name)?;
+        let title_text = cstring(&model.title)?;
+        let status_text = cstring(&model.status)?;
         let footer = cstring(&model.chrome.footer)?;
-        let icon = cstring(&model.icon_key)?;
-        let empty = cstring("")?;
+        let icon_0 = cstring(
+            model
+                .buttons
+                .first()
+                .map(|button| button.icon_key.as_str())
+                .unwrap_or(""),
+        )?;
+        let icon_1 = cstring(
+            model
+                .buttons
+                .get(1)
+                .map(|button| button.icon_key.as_str())
+                .unwrap_or(""),
+        )?;
+        let icon_2 = cstring(
+            model
+                .buttons
+                .get(2)
+                .map(|button| button.icon_key.as_str())
+                .unwrap_or(""),
+        )?;
 
         check(
             unsafe {
                 sys::yoyopod_lvgl_talk_actions_sync(
                     contact_name.as_ptr(),
                     title_text.as_ptr(),
-                    ptr::null(),
-                    0,
+                    if model.status.is_empty() {
+                        ptr::null()
+                    } else {
+                        status_text.as_ptr()
+                    },
+                    model.status_kind,
                     footer.as_ptr(),
-                    icon.as_ptr(),
-                    0,
-                    empty.as_ptr(),
-                    0,
-                    empty.as_ptr(),
-                    0,
-                    1,
-                    0,
-                    1,
-                    2,
+                    icon_0.as_ptr(),
+                    model
+                        .buttons
+                        .first()
+                        .map(|button| button.color_kind)
+                        .unwrap_or(0),
+                    icon_1.as_ptr(),
+                    model
+                        .buttons
+                        .get(1)
+                        .map(|button| button.color_kind)
+                        .unwrap_or(0),
+                    icon_2.as_ptr(),
+                    model
+                        .buttons
+                        .get(2)
+                        .map(|button| button.color_kind)
+                        .unwrap_or(0),
+                    model.buttons.len().min(3) as i32,
+                    model.selected_index as i32,
+                    model.layout_kind,
+                    model.button_size_kind,
                     model.chrome.status.voip_state,
                     model.chrome.status.battery_percent,
                     bool_i32(model.chrome.status.charging),

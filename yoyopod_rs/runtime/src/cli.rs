@@ -93,6 +93,8 @@ fn start_workers(
     hardware: &str,
 ) -> Result<RuntimeState> {
     let mut state = RuntimeState::default();
+    state.seed_contacts(config.people.to_contact_items());
+    state.configure_voice_note_store_dir(config.voip.voice_note_store_dir.clone());
     state.mark_worker(WorkerDomain::Ui, WorkerState::Starting, "starting");
 
     if !workers.start(WorkerSpec::new(

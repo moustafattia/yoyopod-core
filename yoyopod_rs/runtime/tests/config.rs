@@ -403,6 +403,61 @@ calling:
 }
 
 #[test]
+fn people_contacts_load_from_mutable_file_or_seed_with_python_display_names() {
+    let _lock = lock_env();
+    let _env = clean_config_env();
+    let root = temp_config_dir("people-contacts");
+    let config_dir = root.join("config");
+    write(
+        &config_dir.join("people/directory.yaml"),
+        r#"
+contacts_file: "data/people/contacts.yaml"
+contacts_seed_file: "config/people/contacts.seed.yaml"
+"#,
+    );
+    write(
+        &config_dir.join("people/contacts.seed.yaml"),
+        r#"
+contacts:
+  - name: "Hagar"
+    sip_address: "sip:hagar@example.test"
+    favorite: true
+    notes: "Mama"
+  - name: "Ignored"
+    sip_address: ""
+  - name: "Baba"
+    sip_address: "sip:baba@example.test"
+    favorite: false
+"#,
+    );
+
+    let seed_config = RuntimeConfig::load(&config_dir).expect("load seed contacts");
+
+    assert_eq!(seed_config.people.contacts.len(), 2);
+    assert_eq!(seed_config.people.contacts[0].name, "Hagar");
+    assert_eq!(seed_config.people.contacts[0].display_name, "Mama");
+    assert_eq!(seed_config.people.to_contact_items()[0].icon_key, "mono:MA");
+
+    write(
+        &root.join("data/people/contacts.yaml"),
+        r#"
+contacts:
+  - name: "Local"
+    sip_address: "sip:local@example.test"
+    notes: "Local Name"
+"#,
+    );
+    let mutable_config = RuntimeConfig::load(&config_dir).expect("load mutable contacts");
+
+    assert_eq!(mutable_config.people.contacts.len(), 1);
+    assert_eq!(mutable_config.people.contacts[0].display_name, "Local Name");
+    assert_eq!(
+        mutable_config.people.contacts[0].sip_address,
+        "sip:local@example.test"
+    );
+}
+
+#[test]
 fn hosted_linphone_worker_payload_uses_effective_defaults_without_storing_them() {
     let _lock = lock_env();
     let _env = clean_config_env();

@@ -121,7 +121,12 @@ where
                         let renderer = renderer_from_payload(&envelope.payload)?;
                         let pressed = button.pressed()?;
                         let now_ms = crate::protocol::monotonic_millis();
-                        for event in button_machine.observe(pressed, now_ms) {
+                        let button_events = if ui_runtime.wants_ptt_passthrough() {
+                            button_machine.observe_ptt_passthrough(pressed, now_ms)
+                        } else {
+                            button_machine.observe(pressed, now_ms)
+                        };
+                        for event in button_events {
                             input_events += 1;
                             emit(
                                 output,
@@ -155,7 +160,12 @@ where
                     "ui.poll_input" => {
                         let pressed = button.pressed()?;
                         let now_ms = crate::protocol::monotonic_millis();
-                        for event in button_machine.observe(pressed, now_ms) {
+                        let button_events = if ui_runtime.wants_ptt_passthrough() {
+                            button_machine.observe_ptt_passthrough(pressed, now_ms)
+                        } else {
+                            button_machine.observe(pressed, now_ms)
+                        };
+                        for event in button_events {
                             input_events += 1;
                             emit(
                                 output,
@@ -480,7 +490,8 @@ fn screen_model_title(model: &ScreenModel) -> &str {
         | ScreenModel::Contacts(list)
         | ScreenModel::CallHistory(list) => &list.title,
         ScreenModel::NowPlaying(now_playing) => &now_playing.title,
-        ScreenModel::Ask(ask) | ScreenModel::VoiceNote(ask) => &ask.title,
+        ScreenModel::Ask(ask) => &ask.title,
+        ScreenModel::TalkContact(actions) | ScreenModel::VoiceNote(actions) => &actions.title,
         ScreenModel::IncomingCall(call)
         | ScreenModel::OutgoingCall(call)
         | ScreenModel::InCall(call) => &call.title,

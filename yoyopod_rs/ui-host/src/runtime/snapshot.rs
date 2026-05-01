@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeSnapshot {
@@ -115,6 +116,10 @@ pub struct CallRuntimeSnapshot {
     pub contacts: Vec<ListItemSnapshot>,
     #[serde(default)]
     pub history: Vec<ListItemSnapshot>,
+    #[serde(default)]
+    pub unread_voice_notes_by_contact: BTreeMap<String, usize>,
+    #[serde(default)]
+    pub latest_voice_note_by_contact: BTreeMap<String, VoiceNoteSummarySnapshot>,
 }
 
 impl Default for CallRuntimeSnapshot {
@@ -127,8 +132,28 @@ impl Default for CallRuntimeSnapshot {
             muted: false,
             contacts: Vec::new(),
             history: Vec::new(),
+            unread_voice_notes_by_contact: BTreeMap::new(),
+            latest_voice_note_by_contact: BTreeMap::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct VoiceNoteSummarySnapshot {
+    #[serde(default)]
+    pub message_id: String,
+    #[serde(default)]
+    pub direction: String,
+    #[serde(default)]
+    pub delivery_state: String,
+    #[serde(default)]
+    pub local_file_path: String,
+    #[serde(default)]
+    pub duration_ms: i32,
+    #[serde(default)]
+    pub unread: bool,
+    #[serde(default)]
+    pub display_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

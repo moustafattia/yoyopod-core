@@ -6,7 +6,8 @@ use yoyopod_ui_host::lvgl::{
 use yoyopod_ui_host::runtime::UiScreen;
 use yoyopod_ui_host::screens::{
     CallViewModel, ChromeModel, HubCardModel, HubViewModel, ListRowModel, ListScreenModel,
-    OverlayViewModel, PowerViewModel, ScreenModel, StatusBarModel,
+    OverlayViewModel, PowerViewModel, ScreenModel, StatusBarModel, TalkActionButtonModel,
+    TalkActionsViewModel,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -412,23 +413,22 @@ fn shrinking_list_scene_hides_stale_rows_without_rebuild() -> Result<()> {
 }
 
 #[test]
-fn ask_scene_updates_title_subtitle_footer_in_place() -> Result<()> {
+fn talk_actions_scene_updates_voice_note_primary_state_in_place() -> Result<()> {
     let facade = FakeFacade::default();
     let mut renderer = LvglRenderer::new(facade);
 
-    renderer.render(&ask_screen_model())?;
+    renderer.render(&voice_note_screen_model())?;
     let first_len = renderer.facade().events().len();
 
-    renderer.render(&voice_note_screen_model())?;
+    renderer.render(&voice_note_recording_screen_model())?;
 
     let events = renderer.facade().events();
     let second_pass = &events[first_len..];
-    let title_id = created_label_id(events, "ask_title");
-    let subtitle_id = created_label_id(events, "ask_subtitle");
-    let footer_id = created_label_id(events, "ask_footer");
-    let icon_id = created_label_id(events, "ask_icon");
+    let status_id = created_label_id(events, "talk_actions_status_label");
+    let footer_id = created_label_id(events, "talk_actions_footer");
+    let icon_id = created_label_id(events, "talk_actions_button_label");
 
-    assert_eq!(renderer.active_scene(), Some(SceneKey::Ask));
+    assert_eq!(renderer.active_scene(), Some(SceneKey::TalkActions));
     assert_eq!(renderer.active_screen(), Some(UiScreen::VoiceNote));
     assert!(!second_pass.iter().any(|event| matches!(
         event,
@@ -436,16 +436,11 @@ fn ask_scene_updates_title_subtitle_footer_in_place() -> Result<()> {
             | FacadeEvent::CreateContainer { .. }
             | FacadeEvent::CreateLabel { .. }
     )));
-    assert!(has_text(second_pass, title_id, "Voice Note"));
-    assert!(has_text(second_pass, subtitle_id, "Ready to record"));
-    assert!(has_text(
-        second_pass,
-        footer_id,
-        "2x Tap = Record | Hold = Back"
-    ));
+    assert!(has_text(second_pass, status_id, "Recording"));
+    assert!(has_text(second_pass, footer_id, "Release to stop"));
     assert!(second_pass.contains(&FacadeEvent::SetIcon {
         id: icon_id,
-        icon_key: "microphone".to_string(),
+        icon_key: "voice_note".to_string(),
     }));
 
     Ok(())
@@ -647,6 +642,15 @@ fn scene_key_groups_raw_screens_into_future_shared_controller_families() {
     assert_eq!(SceneKey::for_screen(UiScreen::IncomingCall), SceneKey::Call);
     assert_eq!(SceneKey::for_screen(UiScreen::OutgoingCall), SceneKey::Call);
     assert_eq!(SceneKey::for_screen(UiScreen::InCall), SceneKey::Call);
+    assert_eq!(
+        SceneKey::for_screen(UiScreen::TalkContact),
+        SceneKey::TalkActions
+    );
+    assert_eq!(
+        SceneKey::for_screen(UiScreen::VoiceNote),
+        SceneKey::TalkActions
+    );
+    assert_eq!(SceneKey::for_screen(UiScreen::Ask), SceneKey::Ask);
     assert_eq!(SceneKey::for_screen(UiScreen::Power), SceneKey::Power);
     assert_eq!(SceneKey::for_screen(UiScreen::Loading), SceneKey::Overlay);
     assert_eq!(SceneKey::for_screen(UiScreen::Error), SceneKey::Overlay);
@@ -685,6 +689,10 @@ fn native_scene_key_matches_python_c_lvgl_retained_scene_contract() {
     assert_eq!(
         NativeSceneKey::for_screen(UiScreen::CallHistory),
         NativeSceneKey::Playlist
+    );
+    assert_eq!(
+        NativeSceneKey::for_screen(UiScreen::TalkContact),
+        NativeSceneKey::TalkActions
     );
     assert_eq!(
         NativeSceneKey::for_screen(UiScreen::VoiceNote),
@@ -901,11 +909,7 @@ fn call_scene_updates_icon_footer_and_mute_visibility_without_rebuild() -> Resul
     )));
     assert!(has_text(second_pass, title_id, "Alice"));
     assert!(has_text(second_pass, state_id, "IN CALL | 00:42"));
-    assert!(has_text(
-        second_pass,
-        footer_id,
-        "Tap = Mute | Hold = Hang Up"
-    ));
+    assert!(has_text(second_pass, footer_id, "Tap = Mute | Hold = End"));
     assert!(has_text(second_pass, icon_id, "AL"));
     assert!(second_pass.contains(&FacadeEvent::SetVisible {
         id: mute_badge_id,
@@ -1140,14 +1144,44 @@ fn ask_screen_model() -> ScreenModel {
 }
 
 fn voice_note_screen_model() -> ScreenModel {
-    ScreenModel::VoiceNote(yoyopod_ui_host::screens::AskViewModel {
+    ScreenModel::VoiceNote(TalkActionsViewModel {
         chrome: ChromeModel {
-            footer: "2x Tap = Record | Hold = Back".to_string(),
+            footer: "Hold record / Double back".to_string(),
             ..chrome_model()
         },
+        contact_name: "Friend".to_string(),
         title: "Voice Note".to_string(),
-        subtitle: "Ready to record".to_string(),
-        icon_key: "microphone".to_string(),
+        status: "Hold to record".to_string(),
+        status_kind: 4,
+        buttons: vec![TalkActionButtonModel {
+            title: "Voice Note".to_string(),
+            icon_key: "voice_note".to_string(),
+            color_kind: 3,
+        }],
+        selected_index: 0,
+        layout_kind: 1,
+        button_size_kind: 2,
+    })
+}
+
+fn voice_note_recording_screen_model() -> ScreenModel {
+    ScreenModel::VoiceNote(TalkActionsViewModel {
+        chrome: ChromeModel {
+            footer: "Release to stop".to_string(),
+            ..chrome_model()
+        },
+        contact_name: "Friend".to_string(),
+        title: "Recording".to_string(),
+        status: "Recording".to_string(),
+        status_kind: 3,
+        buttons: vec![TalkActionButtonModel {
+            title: "Recording".to_string(),
+            icon_key: "voice_note".to_string(),
+            color_kind: 3,
+        }],
+        selected_index: 0,
+        layout_kind: 1,
+        button_size_kind: 2,
     })
 }
 
@@ -1182,7 +1216,7 @@ fn incoming_call_screen_model() -> ScreenModel {
 fn in_call_screen_model() -> ScreenModel {
     ScreenModel::InCall(CallViewModel {
         chrome: ChromeModel {
-            footer: "Tap = Mute | Hold = Hang Up".to_string(),
+            footer: "Tap = Mute | Hold = End".to_string(),
             ..chrome_model()
         },
         title: "Alice".to_string(),
