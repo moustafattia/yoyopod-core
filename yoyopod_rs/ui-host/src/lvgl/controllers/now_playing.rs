@@ -83,31 +83,33 @@ impl ScreenController for NowPlayingController {
 
         self.ensure_widgets(facade)?;
         let accent = 0x00FF88;
+        let state_variant = playback_state_variant(&now_playing.state_text);
 
         if let Some(root) = self.root {
             self.status
                 .sync(facade, root, &now_playing.chrome.status, false)?;
-            self.footer.sync_with_accent(
+            self.footer.sync_with_variant(
                 facade,
                 root,
                 "now_playing_footer",
                 &now_playing.chrome.footer,
+                state_variant,
                 accent,
             )?;
         }
         if let Some(icon_halo) = self.icon_halo {
-            facade.set_accent(icon_halo, accent)?;
+            facade.set_variant(icon_halo, state_variant, accent)?;
         }
         if let Some(icon_label) = self.icon_label {
             facade.set_icon(icon_label, "music_note")?;
-            facade.set_accent(icon_label, accent)?;
+            facade.set_variant(icon_label, state_variant, accent)?;
         }
         if let Some(state_chip) = self.state_chip {
-            facade.set_accent(state_chip, accent)?;
+            facade.set_variant(state_chip, state_variant, accent)?;
         }
         if let Some(state_label) = self.state_label {
             facade.set_text(state_label, &now_playing.state_text)?;
-            facade.set_accent(state_label, accent)?;
+            facade.set_variant(state_label, state_variant, accent)?;
         }
 
         if let Some(title) = self.title {
@@ -118,7 +120,7 @@ impl ScreenController for NowPlayingController {
         }
         if let Some(progress_fill) = self.progress_fill {
             facade.set_progress(progress_fill, progress_value)?;
-            facade.set_accent(progress_fill, accent)?;
+            facade.set_variant(progress_fill, state_variant, accent)?;
         }
 
         Ok(())
@@ -141,6 +143,15 @@ impl ScreenController for NowPlayingController {
             facade.destroy(root)?;
         }
         Ok(())
+    }
+}
+
+fn playback_state_variant(state_text: &str) -> &'static str {
+    match state_text.trim().to_ascii_lowercase().as_str() {
+        "paused" => "now_playing_paused",
+        "stopped" => "now_playing_stopped",
+        "offline" => "now_playing_offline",
+        _ => "now_playing_playing",
     }
 }
 

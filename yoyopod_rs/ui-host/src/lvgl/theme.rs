@@ -132,7 +132,7 @@ pub fn style_for_role(role: &str) -> WidgetStyle {
         "now_playing_panel" | "listen_panel" | "playlist_panel" => WidgetStyle::plain(),
         "now_playing_icon_halo" => WidgetStyle::panel(SURFACE_RAISED_RGB, Some(BORDER_RGB), 20),
         "now_playing_state_chip" => WidgetStyle::panel(SURFACE_RAISED_RGB, None, 12),
-        "now_playing_progress_track" => WidgetStyle::panel(0x2D313A, None, 4),
+        "now_playing_progress_track" => WidgetStyle::panel(0x2C2F37, None, 4),
         "now_playing_progress_fill" => WidgetStyle::panel(ACCENT_GREEN_RGB, None, 4),
         "listen_row" | "playlist_row" | "list_row" => {
             WidgetStyle::panel(SURFACE_RAISED_RGB, Some(BORDER_RGB), 16)

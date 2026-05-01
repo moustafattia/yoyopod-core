@@ -25,7 +25,7 @@ pub fn now_playing_model(snapshot: &RuntimeSnapshot) -> NowPlayingViewModel {
         title: snapshot.music.title.clone(),
         artist: snapshot.music.artist.clone(),
         state_text: if snapshot.music.playing {
-            "Playing".to_string()
+            "Now Playing".to_string()
         } else if snapshot.music.paused {
             "Paused".to_string()
         } else {

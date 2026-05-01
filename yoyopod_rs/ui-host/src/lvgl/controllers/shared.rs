@@ -282,6 +282,22 @@ impl FooterLabel {
         Ok(())
     }
 
+    pub(crate) fn sync_with_variant(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        root: WidgetId,
+        label_role: &'static str,
+        text: &str,
+        variant: &'static str,
+        accent: u32,
+    ) -> Result<()> {
+        self.sync(facade, root, label_role, text)?;
+        if let Some(label) = self.label {
+            facade.set_variant(label, variant, accent)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn clear(&mut self) {
         *self = Self::default();
     }

@@ -274,6 +274,24 @@ impl NativeLvglFacade {
                     sys::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
                     sys::lv_obj_set_scrollbar_mode(obj.as_ptr(), sys::LV_SCROLLBAR_MODE_OFF);
                 }
+                "now_playing_panel"
+                | "now_playing_state_chip"
+                | "now_playing_progress_track"
+                | "now_playing_progress_fill" => {
+                    sys::lv_obj_set_style_pad_left(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_right(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_top(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_bottom(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_shadow_width(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_outline_width(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_scrollbar_mode(obj.as_ptr(), sys::LV_SCROLLBAR_MODE_OFF);
+                }
+                "now_playing_icon_halo" => {
+                    sys::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
+                    sys::lv_obj_set_style_shadow_width(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_outline_width(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_scrollbar_mode(obj.as_ptr(), sys::LV_SCROLLBAR_MODE_OFF);
+                }
                 "hub_icon_glow"
                 | "footer_bar"
                 | "talk_card_panel"
@@ -396,6 +414,59 @@ impl NativeLvglFacade {
                     sys::lv_obj_set_style_text_font(
                         obj.as_ptr(),
                         &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "now_playing_icon_label" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_24,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                "now_playing_state_label" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_center(obj.as_ptr());
+                }
+                "now_playing_title" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_WRAP);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_18,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_line_space(obj.as_ptr(), -2, SELECTOR);
+                }
+                "now_playing_artist" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_DOTS);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
                         SELECTOR,
                     );
                     sys::lv_obj_set_style_text_align(
@@ -956,10 +1027,10 @@ impl NativeLvglFacade {
                 height: 66,
             },
             "now_playing_icon_label" => Layout {
-                x: 16,
-                y: 21,
-                width: 60,
-                height: 24,
+                x: 0,
+                y: 19,
+                width: 92,
+                height: 28,
             },
             "now_playing_state_chip" => Layout {
                 x: 70,
@@ -968,10 +1039,10 @@ impl NativeLvglFacade {
                 height: 24,
             },
             "now_playing_state_label" => Layout {
-                x: 10,
-                y: 6,
-                width: 80,
-                height: 12,
+                x: 0,
+                y: 5,
+                width: 100,
+                height: 14,
             },
             "now_playing_title" => Layout {
                 x: 16,
@@ -1294,7 +1365,7 @@ impl LvglFacade for NativeLvglFacade {
     }
 
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()> {
-        let obj = self.widget_obj(widget)?;
+        let node = self.widget_node_mut(widget)?;
         let text = CString::new(text).with_context(|| {
             format!(
                 "LVGL text for widget {} contains an interior NUL byte",
@@ -1302,7 +1373,13 @@ impl LvglFacade for NativeLvglFacade {
             )
         })?;
         unsafe {
-            sys::lv_label_set_text(obj.as_ptr(), text.as_ptr());
+            sys::lv_label_set_text(node.obj.as_ptr(), text.as_ptr());
+            if matches!(
+                node.role,
+                "now_playing_icon_label" | "now_playing_state_label"
+            ) {
+                sys::lv_obj_center(node.obj.as_ptr());
+            }
         }
         Ok(())
     }
@@ -1608,6 +1685,144 @@ impl NativeLvglFacade {
                         SELECTOR,
                     );
                 }
+                ("now_playing_icon_halo", "now_playing_playing") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 80)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 60)),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_icon_halo", "now_playing_paused" | "now_playing_stopped") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(
+                            theme::SURFACE_RAISED_RGB,
+                            theme::BACKGROUND_RGB,
+                            20,
+                        )),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(theme::MUTED_RGB, theme::BACKGROUND_RGB, 60)),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_icon_halo", "now_playing_offline") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 82)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 60)),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_icon_label" | "now_playing_state_label", "now_playing_playing") => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                }
+                (
+                    "now_playing_icon_label" | "now_playing_state_label",
+                    "now_playing_paused" | "now_playing_stopped",
+                ) => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::MUTED_RGB),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_icon_label", "now_playing_offline") => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::INK_RGB),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_state_label", "now_playing_offline") => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::ERROR_RGB),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_state_chip", "now_playing_playing") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 65)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                ("now_playing_state_chip", "now_playing_paused" | "now_playing_stopped") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::SURFACE_RAISED_RGB),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                ("now_playing_state_chip", "now_playing_offline") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 78)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                ("now_playing_progress_fill", "now_playing_playing") => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(accent_rgb),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                (
+                    "now_playing_progress_fill",
+                    "now_playing_paused" | "now_playing_stopped" | "now_playing_offline",
+                ) => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::MUTED_DIM_RGB),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                ("now_playing_footer", "now_playing_playing") => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(accent_rgb, theme::SURFACE_RGB, 55)),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_footer", "now_playing_paused" | "now_playing_stopped") => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::MUTED_RGB),
+                        SELECTOR,
+                    );
+                }
+                ("now_playing_footer", "now_playing_offline") => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::MUTED_DIM_RGB),
+                        SELECTOR,
+                    );
+                }
                 _ => {}
             }
         }
@@ -1660,10 +1875,18 @@ impl NativeLvglFacade {
                     );
                     sys::lv_obj_set_style_bg_opa(obj.as_ptr(), 76, SELECTOR);
                 }
-                "call_state_chip" | "now_playing_state_chip" => {
+                "call_state_chip" => {
                     sys::lv_obj_set_style_bg_color(
                         obj.as_ptr(),
                         sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 85)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                "now_playing_state_chip" => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 65)),
                         SELECTOR,
                     );
                     sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
@@ -1741,7 +1964,14 @@ impl NativeLvglFacade {
                 "status_gps_ring" | "status_battery_outline" => {
                     sys::lv_obj_set_style_border_color(obj.as_ptr(), accent, SELECTOR);
                 }
-                "listen_footer" | "now_playing_footer" | "power_footer" => {
+                "now_playing_footer" => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::SURFACE_RGB, 55)),
+                        SELECTOR,
+                    );
+                }
+                "listen_footer" | "power_footer" => {
                     sys::lv_obj_set_style_text_color(
                         obj.as_ptr(),
                         sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 65)),

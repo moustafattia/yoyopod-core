@@ -44,6 +44,11 @@ enum FacadeEvent {
         id: WidgetId,
         visible: bool,
     },
+    SetVariant {
+        id: WidgetId,
+        variant: &'static str,
+        accent_rgb: u32,
+    },
     Destroy {
         id: WidgetId,
     },
@@ -132,6 +137,20 @@ impl LvglFacade for FakeFacade {
         Ok(())
     }
 
+    fn set_variant(
+        &mut self,
+        widget: WidgetId,
+        variant: &'static str,
+        accent_rgb: u32,
+    ) -> Result<()> {
+        self.events.push(FacadeEvent::SetVariant {
+            id: widget,
+            variant,
+            accent_rgb,
+        });
+        Ok(())
+    }
+
     fn destroy(&mut self, widget: WidgetId) -> Result<()> {
         self.events.push(FacadeEvent::Destroy { id: widget });
         if self.destroy_failures_remaining > 0 {
@@ -170,6 +189,19 @@ fn has_text(events: &[FacadeEvent], id: WidgetId, text: &str) -> bool {
                 id: event_id,
                 text: event_text,
             } if *event_id == id && event_text == text
+        )
+    })
+}
+
+fn has_variant(events: &[FacadeEvent], id: WidgetId, variant: &'static str) -> bool {
+    events.iter().any(|event| {
+        matches!(
+            event,
+            FacadeEvent::SetVariant {
+                id: event_id,
+                variant: event_variant,
+                ..
+            } if *event_id == id && *event_variant == variant
         )
     })
 }
@@ -437,6 +469,7 @@ fn now_playing_scene_updates_progress_state_and_title_without_rebuild() -> Resul
     let second_pass = &events[first_len..];
     let title_id = created_label_id(events, "now_playing_title");
     let state_id = created_label_id(events, "now_playing_state_label");
+    let footer_id = created_label_id(events, "now_playing_footer");
     let progress_id = created_container_ids(events, "now_playing_progress_fill")
         .into_iter()
         .next()
@@ -452,10 +485,46 @@ fn now_playing_scene_updates_progress_state_and_title_without_rebuild() -> Resul
     )));
     assert!(has_text(second_pass, title_id, "Track B"));
     assert!(has_text(second_pass, state_id, "Paused"));
+    assert!(has_variant(second_pass, state_id, "now_playing_paused"));
+    assert!(has_variant(second_pass, footer_id, "now_playing_paused"));
+    assert!(has_variant(second_pass, progress_id, "now_playing_paused"));
     assert!(second_pass.contains(&FacadeEvent::SetProgress {
         id: progress_id,
         value: 640,
     }));
+
+    Ok(())
+}
+
+#[test]
+fn now_playing_stopped_state_uses_gray_variant() -> Result<()> {
+    let facade = FakeFacade::default();
+    let mut renderer = LvglRenderer::new(facade);
+
+    renderer.render(&now_playing_screen_model(
+        "Nothing Playing",
+        "",
+        "Stopped",
+        0,
+    ))?;
+
+    let events = renderer.facade().events();
+    let state_chip_id = created_container_ids(events, "now_playing_state_chip")
+        .into_iter()
+        .next()
+        .expect("now-playing state chip should exist");
+    let state_label_id = created_label_id(events, "now_playing_state_label");
+    let footer_id = created_label_id(events, "now_playing_footer");
+    let progress_id = created_container_ids(events, "now_playing_progress_fill")
+        .into_iter()
+        .next()
+        .expect("now-playing progress fill should exist");
+
+    assert!(has_text(events, state_label_id, "Stopped"));
+    assert!(has_variant(events, state_chip_id, "now_playing_stopped"));
+    assert!(has_variant(events, state_label_id, "now_playing_stopped"));
+    assert!(has_variant(events, footer_id, "now_playing_stopped"));
+    assert!(has_variant(events, progress_id, "now_playing_stopped"));
 
     Ok(())
 }
