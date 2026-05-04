@@ -330,6 +330,104 @@ impl Default for CloudRuntimeState {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PowerSafetyConfig {
+    pub enabled: bool,
+    pub low_battery_warning_percent: f64,
+    pub low_battery_warning_cooldown_seconds: f64,
+    pub auto_shutdown_enabled: bool,
+    pub critical_shutdown_percent: f64,
+    pub shutdown_delay_seconds: f64,
+    pub shutdown_command: String,
+    pub shutdown_state_file: String,
+}
+
+impl Default for PowerSafetyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            low_battery_warning_percent: 20.0,
+            low_battery_warning_cooldown_seconds: 300.0,
+            auto_shutdown_enabled: true,
+            critical_shutdown_percent: 10.0,
+            shutdown_delay_seconds: 15.0,
+            shutdown_command: "sudo -n shutdown -h now".to_string(),
+            shutdown_state_file: "data/last_shutdown_state.json".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PowerSafetyState {
+    pub config: PowerSafetyConfig,
+    pub low_battery_warning_active: bool,
+    pub next_warning_at_seconds: u64,
+    pub shutdown_pending: bool,
+    pub shutdown_reason: String,
+    pub shutdown_requested_at_seconds: u64,
+    pub shutdown_execute_at_seconds: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PowerSafetyAction {
+    LowBatteryWarning {
+        threshold_percent: f64,
+        battery_percent: f64,
+        next_warning_at_seconds: u64,
+    },
+    GracefulShutdownRequested {
+        reason: String,
+        delay_seconds: f64,
+        battery_percent: f64,
+        requested_at_seconds: u64,
+        execute_at_seconds: u64,
+    },
+    GracefulShutdownCancelled {
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PowerRuntimeState {
+    pub available: bool,
+    pub source: String,
+    pub battery_percent: i32,
+    pub battery_known: bool,
+    pub charging: bool,
+    pub charging_known: bool,
+    pub external_power: bool,
+    pub external_power_known: bool,
+    pub model: String,
+    pub firmware_version: String,
+    pub voltage_text: String,
+    pub rtc_time: String,
+    pub alarm_text: String,
+    pub error: String,
+    pub safety: PowerSafetyState,
+}
+
+impl Default for PowerRuntimeState {
+    fn default() -> Self {
+        Self {
+            available: true,
+            source: "pisugar".to_string(),
+            battery_percent: 100,
+            battery_known: true,
+            charging: false,
+            charging_known: true,
+            external_power: false,
+            external_power_known: true,
+            model: String::new(),
+            firmware_version: String::new(),
+            voltage_text: "Unknown".to_string(),
+            rtc_time: "Unknown".to_string(),
+            alarm_text: "Unknown".to_string(),
+            error: String::new(),
+            safety: PowerSafetyState::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetupRow {
     pub label: String,
@@ -349,12 +447,13 @@ impl SetupRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeState {
     pub current_screen: String,
     pub media: MediaState,
     pub call: CallRuntimeState,
     pub voice: VoiceRuntimeState,
+    pub power: PowerRuntimeState,
     pub network: NetworkRuntimeState,
     pub cloud: CloudRuntimeState,
     pub ui: WorkerHealth,
@@ -375,6 +474,7 @@ impl Default for RuntimeState {
             media: MediaState::default(),
             call: CallRuntimeState::default(),
             voice: VoiceRuntimeState::default(),
+            power: PowerRuntimeState::default(),
             network: NetworkRuntimeState::default(),
             cloud: CloudRuntimeState::default(),
             ui: WorkerHealth::default(),
@@ -421,6 +521,187 @@ impl RuntimeState {
         let voice_note_store_dir = voice_note_store_dir.into();
         if !voice_note_store_dir.trim().is_empty() {
             self.voice.voice_note_store_dir = voice_note_store_dir;
+        }
+    }
+
+    pub fn configure_power_safety(&mut self, config: PowerSafetyConfig) {
+        self.power.safety.config = config;
+    }
+
+    pub fn power_safety_actions(
+        &self,
+        snapshot: &Value,
+        now_seconds: u64,
+    ) -> Vec<PowerSafetyAction> {
+        let snapshot = snapshot.get("snapshot").unwrap_or(snapshot);
+        if !self.power.safety.config.enabled {
+            return Vec::new();
+        }
+        if !snapshot
+            .get("available")
+            .and_then(Value::as_bool)
+            .unwrap_or(self.power.available)
+        {
+            return Vec::new();
+        }
+
+        let Some(battery) = snapshot
+            .get("battery")
+            .filter(|battery| battery.is_object())
+        else {
+            return Vec::new();
+        };
+        let Some(battery_percent) =
+            f64_field(battery, "level_percent").filter(|level| level.is_finite())
+        else {
+            return Vec::new();
+        };
+
+        let has_external_power = battery
+            .get("power_plugged")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            || battery
+                .get("charging")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+        if has_external_power {
+            if self.power.safety.shutdown_pending {
+                return vec![PowerSafetyAction::GracefulShutdownCancelled {
+                    reason: "external_power_restored".to_string(),
+                }];
+            }
+            return Vec::new();
+        }
+
+        let config = &self.power.safety.config;
+        if config.auto_shutdown_enabled
+            && battery_percent <= config.critical_shutdown_percent
+            && !self.power.safety.shutdown_pending
+        {
+            return vec![PowerSafetyAction::GracefulShutdownRequested {
+                reason: "critical_battery".to_string(),
+                delay_seconds: config.shutdown_delay_seconds,
+                battery_percent,
+                requested_at_seconds: now_seconds,
+                execute_at_seconds: now_seconds
+                    + seconds_to_u64_ceiling(config.shutdown_delay_seconds),
+            }];
+        }
+
+        if battery_percent > config.low_battery_warning_percent {
+            return Vec::new();
+        }
+        if now_seconds < self.power.safety.next_warning_at_seconds {
+            return Vec::new();
+        }
+
+        vec![PowerSafetyAction::LowBatteryWarning {
+            threshold_percent: config.low_battery_warning_percent,
+            battery_percent,
+            next_warning_at_seconds: now_seconds
+                + seconds_to_u64_ceiling(config.low_battery_warning_cooldown_seconds),
+        }]
+    }
+
+    pub fn power_shutdown_due(&self, now_seconds: u64) -> bool {
+        self.power.safety.shutdown_pending
+            && self.power.safety.shutdown_execute_at_seconds <= now_seconds
+    }
+
+    pub fn power_shutdown_state_payload(&self, saved_at_seconds: u64) -> Value {
+        json!({
+            "saved_at_epoch_seconds": saved_at_seconds,
+            "shutdown": {
+                "reason": self.power.safety.shutdown_reason,
+                "requested_at_epoch_seconds": self.power.safety.shutdown_requested_at_seconds,
+                "execute_at_epoch_seconds": self.power.safety.shutdown_execute_at_seconds,
+                "command": self.power.safety.config.shutdown_command,
+            },
+            "screen": {
+                "current": self.current_screen,
+            },
+            "power": {
+                "available": self.power.available,
+                "battery_percent": self.power.battery_percent,
+                "battery_known": self.power.battery_known,
+                "charging": self.power.charging,
+                "charging_known": self.power.charging_known,
+                "external_power": self.power.external_power,
+                "external_power_known": self.power.external_power_known,
+                "source": self.power.source,
+                "model": self.power.model,
+                "error": self.power.error,
+            },
+            "media": {
+                "connected": self.media.connected,
+                "playback_state": self.media.playback_state,
+                "title": self.media.title,
+                "artist": self.media.artist,
+                "progress_permille": self.media.progress_permille,
+            },
+            "voip": {
+                "registered": self.call.registered,
+                "registration_state": self.call.registration_state,
+                "call_state": self.call.state.as_str(),
+                "peer_name": self.call.peer_name,
+                "peer_address": self.call.peer_address,
+                "muted": self.call.muted,
+            },
+            "network": {
+                "enabled": self.network.enabled,
+                "connected": self.network.connected,
+                "connection_type": self.network.connection_type,
+                "signal_strength": self.network.signal_strength,
+                "gps_has_fix": self.network.gps_has_fix,
+            },
+            "cloud": {
+                "device_id": self.cloud.device_id,
+                "provisioning_state": self.cloud.provisioning_state,
+                "cloud_state": self.cloud.cloud_state,
+                "mqtt_connected": self.cloud.mqtt_connected,
+            },
+            "loop": {
+                "iterations": self.loop_iterations,
+                "last_duration_ms": self.last_loop_duration_ms,
+            },
+        })
+    }
+
+    pub fn mark_power_shutdown_completed(&mut self) {
+        self.power.safety.shutdown_pending = false;
+    }
+
+    fn apply_power_safety_actions(&mut self, actions: &[PowerSafetyAction]) {
+        for action in actions {
+            match action {
+                PowerSafetyAction::LowBatteryWarning {
+                    next_warning_at_seconds,
+                    ..
+                } => {
+                    self.power.safety.low_battery_warning_active = true;
+                    self.power.safety.next_warning_at_seconds = *next_warning_at_seconds;
+                }
+                PowerSafetyAction::GracefulShutdownRequested {
+                    reason,
+                    requested_at_seconds,
+                    execute_at_seconds,
+                    ..
+                } => {
+                    self.power.safety.shutdown_pending = true;
+                    self.power.safety.shutdown_reason = reason.clone();
+                    self.power.safety.shutdown_requested_at_seconds = *requested_at_seconds;
+                    self.power.safety.shutdown_execute_at_seconds = *execute_at_seconds;
+                }
+                PowerSafetyAction::GracefulShutdownCancelled { .. } => {
+                    self.power.safety.shutdown_pending = false;
+                    self.power.safety.shutdown_reason.clear();
+                    self.power.safety.shutdown_requested_at_seconds = 0;
+                    self.power.safety.shutdown_execute_at_seconds = 0;
+                    self.power.safety.low_battery_warning_active = false;
+                    self.power.safety.next_warning_at_seconds = 0;
+                }
+            }
         }
     }
 
@@ -682,6 +963,99 @@ impl RuntimeState {
         }
     }
 
+    pub fn apply_power_snapshot(&mut self, snapshot: &Value) {
+        let snapshot = snapshot.get("snapshot").unwrap_or(snapshot);
+        let safety_actions = self.power_safety_actions(snapshot, current_epoch_seconds());
+        if let Some(available) = snapshot.get("available").and_then(Value::as_bool) {
+            self.power.available = available;
+        }
+        if let Some(source) = string_field(snapshot, "source") {
+            self.power.source = source;
+        }
+        if let Some(error) = string_field(snapshot, "error") {
+            self.power.error = error;
+        }
+        if let Some(device) = snapshot.get("device").filter(|device| device.is_object()) {
+            if let Some(model) = string_field(device, "model") {
+                self.power.model = model;
+            }
+            if let Some(firmware_version) = string_field(device, "firmware_version") {
+                self.power.firmware_version = firmware_version;
+            }
+        }
+        if let Some(battery) = snapshot
+            .get("battery")
+            .filter(|battery| battery.is_object())
+        {
+            if let Some(level_percent) = f64_field(battery, "level_percent") {
+                if level_percent.is_finite() {
+                    self.power.battery_percent = (level_percent.round() as i32).clamp(0, 100);
+                    self.power.battery_known = true;
+                }
+            }
+            if let Some(charging) = battery.get("charging").and_then(Value::as_bool) {
+                self.power.charging = charging;
+                self.power.charging_known = true;
+            }
+            if let Some(power_plugged) = battery.get("power_plugged").and_then(Value::as_bool) {
+                self.power.external_power = power_plugged;
+                self.power.external_power_known = true;
+            }
+            self.power.voltage_text = format_voltage_text(
+                f64_field(battery, "voltage_volts"),
+                f64_field(battery, "temperature_celsius"),
+            );
+        }
+        if let Some(rtc) = snapshot.get("rtc").filter(|rtc| rtc.is_object()) {
+            if let Some(time) = string_field(rtc, "time") {
+                self.power.rtc_time = compact_datetime_text(&time);
+            }
+            if let Some(alarm_enabled) = rtc.get("alarm_enabled").and_then(Value::as_bool) {
+                self.power.alarm_text = if alarm_enabled {
+                    string_field(rtc, "alarm_time")
+                        .map(|time| compact_time_text(&time))
+                        .unwrap_or_else(|| "On".to_string())
+                } else {
+                    "Off".to_string()
+                };
+            }
+        }
+        self.reconcile_power_safety(snapshot);
+        self.apply_power_safety_actions(&safety_actions);
+    }
+
+    fn reconcile_power_safety(&mut self, snapshot: &Value) {
+        if !self.power.available {
+            self.power.safety.shutdown_pending = false;
+            self.power.safety.shutdown_reason.clear();
+            self.power.safety.shutdown_requested_at_seconds = 0;
+            self.power.safety.shutdown_execute_at_seconds = 0;
+            return;
+        }
+        let Some(battery) = snapshot
+            .get("battery")
+            .filter(|battery| battery.is_object())
+        else {
+            return;
+        };
+        let has_external_power = battery
+            .get("power_plugged")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            || battery
+                .get("charging")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+        let battery_percent = f64_field(battery, "level_percent");
+        if has_external_power
+            || battery_percent
+                .is_some_and(|level| level > self.power.safety.config.low_battery_warning_percent)
+        {
+            self.power.safety.low_battery_warning_active = false;
+            self.power.safety.next_warning_at_seconds = 0;
+        }
+    }
+
     pub fn apply_cloud_snapshot(&mut self, snapshot: &Value) {
         let snapshot = snapshot.get("snapshot").unwrap_or(snapshot);
         if let Some(device_id) = string_field(snapshot, "device_id") {
@@ -735,9 +1109,9 @@ impl RuntimeState {
                 "ptt_active": self.voice.phase == "recording",
             },
             "power": {
-                "battery_percent": 100,
-                "charging": false,
-                "power_available": true,
+                "battery_percent": self.power.battery_percent,
+                "charging": self.power.charging,
+                "power_available": self.power.available,
                 "rows": self.power_rows(),
                 "pages": self.setup_pages(),
             },
@@ -803,8 +1177,8 @@ impl RuntimeState {
 
     fn power_rows(&self) -> Vec<String> {
         vec![
-            "Battery 100%".to_string(),
-            "On battery".to_string(),
+            format!("Battery {}", self.power_battery_value()),
+            self.power_external_value().to_string(),
             self.network_status_row(),
             if self.call.registered {
                 "VoIP ready".to_string()
@@ -825,15 +1199,7 @@ impl RuntimeState {
     }
 
     fn setup_pages(&self) -> Vec<Value> {
-        let mut pages = vec![setup_page(
-            "Power",
-            "battery",
-            vec![
-                SetupRow::new("Battery", "100%"),
-                SetupRow::new("Charging", "On battery"),
-                SetupRow::new("External", "Available"),
-            ],
-        )];
+        let mut pages = vec![setup_page("Power", "battery", self.power_setup_rows())];
 
         if self.network.enabled {
             pages.push(setup_page(
@@ -944,6 +1310,73 @@ impl RuntimeState {
         }
     }
 
+    fn power_setup_rows(&self) -> Vec<SetupRow> {
+        if !self.power.available {
+            return vec![
+                SetupRow::new("Source", self.power.source.clone()),
+                SetupRow::new("Model", self.power_model_value()),
+                SetupRow::new("Status", "Offline"),
+                SetupRow::new("Reason", truncate(&self.power_error_value(), 18)),
+                SetupRow::new("RTC", self.power.rtc_time.clone()),
+                SetupRow::new("Alarm", self.power.alarm_text.clone()),
+            ];
+        }
+
+        vec![
+            SetupRow::new("Model", self.power_model_value()),
+            SetupRow::new("Battery", self.power_battery_value()),
+            SetupRow::new("Charging", self.power_charging_value()),
+            SetupRow::new("External", self.power_external_value()),
+            SetupRow::new("Voltage", self.power.voltage_text.clone()),
+            SetupRow::new("RTC", self.power.rtc_time.clone()),
+            SetupRow::new("Alarm", self.power.alarm_text.clone()),
+        ]
+    }
+
+    fn power_battery_value(&self) -> String {
+        if !self.power.battery_known {
+            return "Unknown".to_string();
+        }
+        let suffix = if self.power.charging { " chg" } else { "" };
+        format!("{}%{suffix}", self.power.battery_percent)
+    }
+
+    fn power_charging_value(&self) -> &'static str {
+        if !self.power.charging_known {
+            "Unknown"
+        } else if self.power.charging {
+            "Charging"
+        } else {
+            "Idle"
+        }
+    }
+
+    fn power_external_value(&self) -> &'static str {
+        if !self.power.external_power_known {
+            "Unknown"
+        } else if self.power.external_power {
+            "Plugged"
+        } else {
+            "On battery"
+        }
+    }
+
+    fn power_model_value(&self) -> String {
+        if self.power.model.trim().is_empty() {
+            "Unknown".to_string()
+        } else {
+            self.power.model.clone()
+        }
+    }
+
+    fn power_error_value(&self) -> String {
+        if self.power.error.trim().is_empty() {
+            "Unavailable".to_string()
+        } else {
+            self.power.error.clone()
+        }
+    }
+
     pub fn status_payload(&self) -> Value {
         json!({
             "screen": {
@@ -970,6 +1403,22 @@ impl RuntimeState {
                 "mqtt_connected": self.cloud.mqtt_connected,
                 "last_error_summary": self.cloud.last_error_summary,
             },
+            "power": {
+                "available": self.power.available,
+                "battery_percent": self.power.battery_percent,
+                "charging": self.power.charging,
+                "external_power": self.power.external_power,
+                "source": self.power.source,
+                "model": self.power.model,
+                "error": self.power.error,
+                "low_battery_warning_active": self.power.safety.low_battery_warning_active,
+                "shutdown_pending": self.power.safety.shutdown_pending,
+                "shutdown_reason": self.power.safety.shutdown_reason,
+                "warning_threshold_percent": self.power.safety.config.low_battery_warning_percent,
+                "critical_shutdown_percent": self.power.safety.config.critical_shutdown_percent,
+                "shutdown_delay_seconds": self.power.safety.config.shutdown_delay_seconds,
+                "shutdown_state_file": self.power.safety.config.shutdown_state_file,
+            },
             "workers": {
                 WorkerDomain::Ui.as_str(): worker_payload(&self.ui),
                 WorkerDomain::Cloud.as_str(): worker_payload(&self.cloud_worker),
@@ -994,6 +1443,13 @@ fn string_field(value: &Value, key: &str) -> Option<String> {
 fn i32_field(value: &Value, key: &str) -> Option<i32> {
     let raw = value.get(key)?.as_i64()?;
     i32::try_from(raw).ok()
+}
+
+fn f64_field(value: &Value, key: &str) -> Option<f64> {
+    let value = value.get(key)?;
+    value
+        .as_f64()
+        .or_else(|| value.as_str()?.trim().parse::<f64>().ok())
 }
 
 fn i64_field(value: &Value, key: &str) -> Option<i64> {
@@ -1127,6 +1583,48 @@ fn setup_rows(value: Option<&Value>) -> Option<Vec<SetupRow>> {
     Some(parsed)
 }
 
+fn format_voltage_text(voltage: Option<f64>, temperature: Option<f64>) -> String {
+    match (voltage, temperature) {
+        (Some(voltage), Some(temperature)) if voltage.is_finite() && temperature.is_finite() => {
+            format!("{voltage:.2}V {temperature:.0}C")
+        }
+        (Some(voltage), _) if voltage.is_finite() => format!("{voltage:.2} V"),
+        (_, Some(temperature)) if temperature.is_finite() => format!("{temperature:.1} C"),
+        _ => "Unknown".to_string(),
+    }
+}
+
+fn compact_datetime_text(value: &str) -> String {
+    let value = value.trim();
+    if value.len() >= 16 && value.as_bytes().get(10) == Some(&b'T') {
+        format!("{} {}", &value[5..10], &value[11..16])
+    } else {
+        value.to_string()
+    }
+}
+
+fn compact_time_text(value: &str) -> String {
+    let value = value.trim();
+    if value.len() >= 16 && value.as_bytes().get(10) == Some(&b'T') {
+        value[11..16].to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn truncate(value: &str, max_length: usize) -> String {
+    if value.len() <= max_length {
+        value.to_string()
+    } else if max_length <= 3 {
+        value.chars().take(max_length).collect()
+    } else {
+        format!(
+            "{}...",
+            value.chars().take(max_length - 3).collect::<String>()
+        )
+    }
+}
+
 fn voice_note_summary_from_value(value: &Value) -> Option<VoiceNoteSummary> {
     if !value.is_object() {
         return None;
@@ -1181,6 +1679,21 @@ fn current_millis() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or_default()
+}
+
+fn current_epoch_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
+}
+
+fn seconds_to_u64_ceiling(seconds: f64) -> u64 {
+    if !seconds.is_finite() || seconds <= 0.0 {
+        0
+    } else {
+        seconds.ceil() as u64
+    }
 }
 
 fn normalized(value: &str) -> String {

@@ -15,11 +15,13 @@ const LINPHONE_HOSTED_LIME_SERVER_URL: &str =
 const RUST_UI_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/ui-host/build/yoyopod-ui-host";
 const RUST_CLOUD_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/cloud-host/build/yoyopod-cloud-host";
 const RUST_NETWORK_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/network-host/build/yoyopod-network-host";
+const RUST_POWER_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/power-host/build/yoyopod-power-host";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RuntimeConfig {
     pub ui: UiConfig,
     pub media: MediaRuntimeConfig,
+    pub power: PowerRuntimeConfig,
     pub voip: VoipRuntimeConfig,
     pub people: PeopleRuntimeConfig,
     pub worker_paths: WorkerPaths,
@@ -45,6 +47,18 @@ pub struct MediaRuntimeConfig {
     pub remote_cache_dir: String,
     pub remote_cache_max_bytes: u64,
     pub auto_resume_after_call: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PowerRuntimeConfig {
+    pub enabled: bool,
+    pub low_battery_warning_percent: f64,
+    pub low_battery_warning_cooldown_seconds: f64,
+    pub auto_shutdown_enabled: bool,
+    pub critical_shutdown_percent: f64,
+    pub shutdown_delay_seconds: f64,
+    pub shutdown_command: String,
+    pub shutdown_state_file: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +106,7 @@ pub struct WorkerPaths {
     pub media: String,
     pub voip: String,
     pub network: String,
+    pub power: String,
 }
 
 #[derive(Debug, Error)]
@@ -121,6 +136,7 @@ impl RuntimeConfig {
         let messaging = read_yaml(config_dir.join("communication/messaging.yaml"))?;
         let secrets = read_yaml(config_dir.join("communication/calling.secrets.yaml"))?;
         let people = read_yaml(config_dir.join("people/directory.yaml"))?;
+        let power = read_yaml(config_dir.join("power/backend.yaml"))?;
 
         let default_volume = int_at_env(
             &music,
@@ -195,6 +211,54 @@ impl RuntimeConfig {
                     &["audio", "auto_resume_after_call"],
                     true,
                     "YOYOPOD_AUTO_RESUME_AFTER_CALL",
+                ),
+            },
+            power: PowerRuntimeConfig {
+                enabled: bool_at_env(&power, &["power", "enabled"], true, "YOYOPOD_POWER_ENABLED"),
+                low_battery_warning_percent: f64_at_env(
+                    &power,
+                    &["power", "low_battery_warning_percent"],
+                    20.0,
+                    "YOYOPOD_LOW_BATTERY_WARNING_PERCENT",
+                ),
+                low_battery_warning_cooldown_seconds: f64_at_env(
+                    &power,
+                    &["power", "low_battery_warning_cooldown_seconds"],
+                    300.0,
+                    "YOYOPOD_LOW_BATTERY_WARNING_COOLDOWN_SECONDS",
+                ),
+                auto_shutdown_enabled: bool_at_env(
+                    &power,
+                    &["power", "auto_shutdown_enabled"],
+                    true,
+                    "YOYOPOD_AUTO_SHUTDOWN_ENABLED",
+                ),
+                critical_shutdown_percent: f64_at_env(
+                    &power,
+                    &["power", "critical_shutdown_percent"],
+                    10.0,
+                    "YOYOPOD_CRITICAL_BATTERY_SHUTDOWN_PERCENT",
+                ),
+                shutdown_delay_seconds: f64_at_env(
+                    &power,
+                    &["power", "shutdown_delay_seconds"],
+                    15.0,
+                    "YOYOPOD_POWER_SHUTDOWN_DELAY_SECONDS",
+                ),
+                shutdown_command: string_at_env(
+                    &power,
+                    &["power", "shutdown_command"],
+                    "sudo -n shutdown -h now",
+                    "YOYOPOD_POWER_SHUTDOWN_COMMAND",
+                ),
+                shutdown_state_file: resolve_runtime_path(
+                    &runtime_root,
+                    string_at_env(
+                        &power,
+                        &["power", "shutdown_state_file"],
+                        "data/last_shutdown_state.json",
+                        "YOYOPOD_POWER_SHUTDOWN_STATE_FILE",
+                    ),
                 ),
             },
             voip: VoipRuntimeConfig {
@@ -336,6 +400,10 @@ impl RuntimeConfig {
                     "YOYOPOD_RUST_NETWORK_HOST_WORKER",
                     RUST_NETWORK_HOST_DEFAULT_WORKER,
                 ),
+                power: env_or_default(
+                    "YOYOPOD_RUST_POWER_HOST_WORKER",
+                    RUST_POWER_HOST_DEFAULT_WORKER,
+                ),
             },
             pid_file: resolve_runtime_path(
                 &runtime_root,
@@ -371,6 +439,21 @@ impl MediaRuntimeConfig {
             "remote_cache_dir": self.remote_cache_dir,
             "remote_cache_max_bytes": self.remote_cache_max_bytes,
         })
+    }
+}
+
+impl PowerRuntimeConfig {
+    pub fn to_safety_config(&self) -> crate::state::PowerSafetyConfig {
+        crate::state::PowerSafetyConfig {
+            enabled: self.enabled,
+            low_battery_warning_percent: self.low_battery_warning_percent,
+            low_battery_warning_cooldown_seconds: self.low_battery_warning_cooldown_seconds,
+            auto_shutdown_enabled: self.auto_shutdown_enabled,
+            critical_shutdown_percent: self.critical_shutdown_percent,
+            shutdown_delay_seconds: self.shutdown_delay_seconds,
+            shutdown_command: self.shutdown_command.clone(),
+            shutdown_state_file: self.shutdown_state_file.clone(),
+        }
     }
 }
 
@@ -639,6 +722,12 @@ fn uint_at_env(value: &Value, path: &[&str], default: u64, env: &str) -> u64 {
         .unwrap_or_else(|| uint_at(value, path, default))
 }
 
+fn f64_at_env(value: &Value, path: &[&str], default: f64, env: &str) -> f64 {
+    env_string(env)
+        .and_then(|text| text.parse::<f64>().ok())
+        .unwrap_or_else(|| f64_at(value, path, default))
+}
+
 fn bool_at_env(value: &Value, path: &[&str], default: bool, env: &str) -> bool {
     env_string(env)
         .and_then(|text| parse_bool(&text))
@@ -670,6 +759,16 @@ fn uint_at(value: &Value, path: &[&str], default: u64) -> u64 {
             value
                 .as_u64()
                 .or_else(|| value.as_str()?.trim().parse::<u64>().ok())
+        })
+        .unwrap_or(default)
+}
+
+fn f64_at(value: &Value, path: &[&str], default: f64) -> f64 {
+    at_path(value, path)
+        .and_then(|value| {
+            value
+                .as_f64()
+                .or_else(|| value.as_str()?.trim().parse::<f64>().ok())
         })
         .unwrap_or(default)
 }

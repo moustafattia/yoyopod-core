@@ -1,9 +1,13 @@
 use std::collections::VecDeque;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
+use yoyopod_runtime::config::RuntimeConfig;
 use yoyopod_runtime::protocol::{EnvelopeKind, WorkerEnvelope};
 use yoyopod_runtime::runtime_loop::{LoopIo, RuntimeLoop};
-use yoyopod_runtime::state::{RuntimeState, WorkerDomain};
+use yoyopod_runtime::state::{PowerSafetyConfig, RuntimeState, WorkerDomain};
 use yoyopod_runtime::worker::WorkerProtocolError;
 
 #[test]
@@ -265,12 +269,239 @@ fn cloud_remote_media_command_nacks_when_media_dispatch_fails() {
     );
 }
 
+#[test]
+fn low_battery_snapshot_publishes_warning_once_per_cooldown() {
+    let mut state = RuntimeState::default();
+    state.configure_power_safety(PowerSafetyConfig {
+        enabled: true,
+        low_battery_warning_percent: 20.0,
+        low_battery_warning_cooldown_seconds: 300.0,
+        auto_shutdown_enabled: true,
+        critical_shutdown_percent: 10.0,
+        shutdown_delay_seconds: 15.0,
+        shutdown_command: "sudo -n shutdown -h now".to_string(),
+        shutdown_state_file: "data/last_shutdown_state.json".to_string(),
+    });
+    let mut runtime_loop = RuntimeLoop::new(state);
+    let mut io = FakeLoopIo::with_messages([
+        (
+            WorkerDomain::Power,
+            event_envelope(
+                "power.snapshot",
+                json!({
+                    "available": true,
+                    "battery": {
+                        "level_percent": 15.0,
+                        "charging": false,
+                        "power_plugged": false
+                    }
+                }),
+            ),
+        ),
+        (
+            WorkerDomain::Power,
+            event_envelope(
+                "power.snapshot",
+                json!({
+                    "available": true,
+                    "battery": {
+                        "level_percent": 14.0,
+                        "charging": false,
+                        "power_plugged": false
+                    }
+                }),
+            ),
+        ),
+    ]);
+
+    let processed = runtime_loop.run_once(&mut io);
+
+    assert_eq!(processed, 2);
+    let warning_events = sent_messages(&io, WorkerDomain::Cloud, "cloud.publish_event")
+        .into_iter()
+        .filter(|envelope| envelope.payload["event_type"] == "power.low_battery_warning")
+        .collect::<Vec<_>>();
+    assert_eq!(warning_events.len(), 1);
+    assert_eq!(
+        warning_events[0].payload["payload"]["battery_percent"],
+        15.0
+    );
+    assert_eq!(
+        runtime_loop.state().status_payload()["power"]["low_battery_warning_active"],
+        true
+    );
+}
+
+#[test]
+fn critical_battery_snapshot_requests_shutdown_once_until_power_restored() {
+    let mut state = RuntimeState::default();
+    state.configure_power_safety(PowerSafetyConfig {
+        enabled: true,
+        low_battery_warning_percent: 20.0,
+        low_battery_warning_cooldown_seconds: 300.0,
+        auto_shutdown_enabled: true,
+        critical_shutdown_percent: 10.0,
+        shutdown_delay_seconds: 12.0,
+        shutdown_command: "sudo -n shutdown -h now".to_string(),
+        shutdown_state_file: "data/last_shutdown_state.json".to_string(),
+    });
+    let mut runtime_loop = RuntimeLoop::new(state);
+    let mut io = FakeLoopIo::with_messages([
+        (
+            WorkerDomain::Power,
+            event_envelope(
+                "power.snapshot",
+                json!({
+                    "available": true,
+                    "battery": {
+                        "level_percent": 8.0,
+                        "charging": false,
+                        "power_plugged": false
+                    }
+                }),
+            ),
+        ),
+        (
+            WorkerDomain::Power,
+            event_envelope(
+                "power.snapshot",
+                json!({
+                    "available": true,
+                    "battery": {
+                        "level_percent": 7.5,
+                        "charging": false,
+                        "power_plugged": false
+                    }
+                }),
+            ),
+        ),
+        (
+            WorkerDomain::Power,
+            event_envelope(
+                "power.snapshot",
+                json!({
+                    "available": true,
+                    "battery": {
+                        "level_percent": 7.5,
+                        "charging": true,
+                        "power_plugged": true
+                    }
+                }),
+            ),
+        ),
+    ]);
+
+    let processed = runtime_loop.run_once(&mut io);
+
+    assert_eq!(processed, 3);
+    let shutdown_events = sent_messages(&io, WorkerDomain::Cloud, "cloud.publish_event")
+        .into_iter()
+        .filter(|envelope| envelope.payload["event_type"] == "power.graceful_shutdown_requested")
+        .collect::<Vec<_>>();
+    assert_eq!(shutdown_events.len(), 1);
+    assert_eq!(
+        shutdown_events[0].payload["payload"]["reason"],
+        "critical_battery"
+    );
+    assert_eq!(shutdown_events[0].payload["payload"]["delay_seconds"], 12.0);
+
+    let cancel = sent_to_event(
+        &io,
+        WorkerDomain::Cloud,
+        "cloud.publish_event",
+        "power.graceful_shutdown_cancelled",
+    );
+    assert_eq!(
+        cancel.payload["payload"]["reason"],
+        "external_power_restored"
+    );
+    assert_eq!(
+        runtime_loop.state().status_payload()["power"]["shutdown_pending"],
+        false
+    );
+    assert!(!runtime_loop.shutdown_requested());
+}
+
+#[test]
+fn due_critical_battery_shutdown_persists_state_runs_configured_command_and_stops_loop() {
+    let root = temp_runtime_root("power-shutdown-exec");
+    let config_dir = root.join("config");
+    write_file(
+        &config_dir.join("power/backend.yaml"),
+        r#"
+power:
+  enabled: true
+  auto_shutdown_enabled: true
+  critical_shutdown_percent: 10.0
+  shutdown_delay_seconds: 0.0
+  shutdown_command: "test-poweroff --now"
+  shutdown_state_file: "data/poweroff-state.json"
+"#,
+    );
+    let config = RuntimeConfig::load(&config_dir).expect("load runtime config");
+
+    let mut state = RuntimeState {
+        current_screen: "setup".to_string(),
+        ..RuntimeState::default()
+    };
+    state.configure_power_safety(config.power.to_safety_config());
+    state.apply_media_snapshot(&json!({
+        "connected": true,
+        "playback_state": "playing",
+        "current_track": {
+            "name": "Last Track",
+            "artists": ["YoYo"]
+        }
+    }));
+    state.apply_voip_snapshot(&json!({
+        "registered": true,
+        "registration_state": "ok"
+    }));
+
+    let mut runtime_loop = RuntimeLoop::new(state);
+    let mut io = FakeLoopIo::with_messages([(
+        WorkerDomain::Power,
+        event_envelope(
+            "power.snapshot",
+            json!({
+                "available": true,
+                "battery": {
+                    "level_percent": 8.0,
+                    "charging": false,
+                    "power_plugged": false
+                }
+            }),
+        ),
+    )]);
+
+    let processed = runtime_loop.run_once(&mut io);
+
+    assert_eq!(processed, 1);
+    assert!(runtime_loop.shutdown_requested());
+    assert_eq!(io.shutdown_commands, vec!["test-poweroff --now"]);
+    let suppress = sent_to(&io, WorkerDomain::Power, "power.watchdog_suppress");
+    assert_eq!(suppress.payload["reason"], "pending_system_poweroff");
+    let saved_path = root.join("data/poweroff-state.json");
+    let saved: Value =
+        serde_json::from_str(&fs::read_to_string(&saved_path).expect("shutdown state file"))
+            .expect("shutdown state json");
+    assert_eq!(saved["shutdown"]["reason"], "critical_battery");
+    assert_eq!(saved["shutdown"]["command"], "test-poweroff --now");
+    assert_eq!(saved["screen"]["current"], "setup");
+    assert_eq!(saved["power"]["battery_percent"], 8);
+    assert_eq!(saved["power"]["external_power"], false);
+    assert_eq!(saved["media"]["playback_state"], "playing");
+    assert_eq!(saved["media"]["title"], "Last Track");
+    assert_eq!(saved["voip"]["registered"], true);
+}
+
 #[derive(Default)]
 struct FakeLoopIo {
     messages: VecDeque<(WorkerDomain, WorkerEnvelope)>,
     protocol_errors: VecDeque<(WorkerDomain, WorkerProtocolError)>,
     fail_sends: VecDeque<(WorkerDomain, String)>,
     failed_sends: Vec<(WorkerDomain, String)>,
+    shutdown_commands: Vec<String>,
     sent: Vec<(WorkerDomain, WorkerEnvelope)>,
 }
 
@@ -316,11 +547,36 @@ impl LoopIo for FakeLoopIo {
         self.sent.push((domain, envelope));
         true
     }
+
+    fn write_power_shutdown_state(&mut self, path: &str, payload: &Value) -> Result<(), String> {
+        let contents = serde_json::to_string_pretty(payload).map_err(|error| error.to_string())?;
+        write_file(Path::new(path), &contents);
+        Ok(())
+    }
+
+    fn request_system_shutdown(&mut self, command: &str) -> Result<(), String> {
+        self.shutdown_commands.push(command.to_string());
+        Ok(())
+    }
 }
 
 fn sent_to<'a>(io: &'a FakeLoopIo, domain: WorkerDomain, message_type: &str) -> &'a WorkerEnvelope {
     sent_optional(io, domain, message_type)
         .unwrap_or_else(|| panic!("missing sent envelope {message_type} to {domain:?}"))
+}
+
+fn sent_to_event<'a>(
+    io: &'a FakeLoopIo,
+    domain: WorkerDomain,
+    message_type: &str,
+    event_type: &str,
+) -> &'a WorkerEnvelope {
+    sent_messages(io, domain, message_type)
+        .into_iter()
+        .find(|envelope| envelope.payload["event_type"] == event_type)
+        .unwrap_or_else(|| {
+            panic!("missing sent envelope {message_type}/{event_type} to {domain:?}")
+        })
 }
 
 fn sent_optional<'a>(
@@ -334,6 +590,20 @@ fn sent_optional<'a>(
             *sent_domain == domain && envelope.message_type == message_type
         })
         .map(|(_, envelope)| envelope)
+}
+
+fn sent_messages<'a>(
+    io: &'a FakeLoopIo,
+    domain: WorkerDomain,
+    message_type: &str,
+) -> Vec<&'a WorkerEnvelope> {
+    io.sent
+        .iter()
+        .filter(|(sent_domain, envelope)| {
+            *sent_domain == domain && envelope.message_type == message_type
+        })
+        .map(|(_, envelope)| envelope)
+        .collect()
 }
 
 fn sent_index(io: &FakeLoopIo, domain: WorkerDomain, message_type: &str) -> usize {
@@ -366,4 +636,22 @@ fn ui_intent(domain: &str, action: &str, payload: Value) -> WorkerEnvelope {
             "payload": payload,
         }),
     )
+}
+
+fn temp_runtime_root(test_name: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time")
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "yoyopod-runtime-loop-{test_name}-{}-{unique}",
+        std::process::id()
+    ))
+}
+
+fn write_file(path: &Path, contents: &str) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("parent dir");
+    }
+    fs::write(path, contents).expect("write file");
 }
