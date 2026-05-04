@@ -1,7 +1,10 @@
 use std::collections::HashMap;
-use std::time::Instant;
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::event::{commands_for_event, runtime_event_from_worker, RuntimeCommand};
 use crate::protocol::WorkerEnvelope;
@@ -23,6 +26,8 @@ pub trait LoopIo {
     fn drain_worker_messages(&mut self) -> Vec<(WorkerDomain, WorkerEnvelope)>;
     fn drain_worker_protocol_errors(&mut self) -> Vec<(WorkerDomain, WorkerProtocolError)>;
     fn send_worker_envelope(&mut self, domain: WorkerDomain, envelope: WorkerEnvelope) -> bool;
+    fn write_power_shutdown_state(&mut self, path: &str, payload: &Value) -> Result<(), String>;
+    fn request_system_shutdown(&mut self, command: &str) -> Result<(), String>;
 }
 
 #[derive(Debug, Clone)]
@@ -84,9 +89,33 @@ impl RuntimeLoop {
 
         self.state.loop_iterations += 1;
         self.state.last_loop_duration_ms = started.elapsed().as_millis() as u64;
+        self.process_pending_power_shutdown(io);
         self.send_tick(io);
 
         processed
+    }
+
+    fn process_pending_power_shutdown(&mut self, io: &mut impl LoopIo) {
+        let now_seconds = current_epoch_seconds();
+        if !self.state.power_shutdown_due(now_seconds) {
+            return;
+        }
+
+        let state_file = self.state.power.safety.config.shutdown_state_file.clone();
+        let command = self.state.power.safety.config.shutdown_command.clone();
+        let payload = self.state.power_shutdown_state_payload(now_seconds);
+        let _ = io.send_worker_envelope(
+            WorkerDomain::Power,
+            WorkerEnvelope::command(
+                "power.watchdog_suppress",
+                None,
+                json!({"reason": "pending_system_poweroff"}),
+            ),
+        );
+        let _ = io.write_power_shutdown_state(&state_file, &payload);
+        let _ = io.request_system_shutdown(&command);
+        self.state.mark_power_shutdown_completed();
+        self.shutdown_requested = true;
     }
 
     fn dispatch_command(&mut self, io: &mut impl LoopIo, command: RuntimeCommand) {
@@ -154,6 +183,14 @@ impl LoopIo for WorkerSupervisor {
     fn send_worker_envelope(&mut self, domain: WorkerDomain, envelope: WorkerEnvelope) -> bool {
         self.send_envelope(domain, envelope)
     }
+
+    fn write_power_shutdown_state(&mut self, path: &str, payload: &Value) -> Result<(), String> {
+        write_shutdown_state_file(path, payload)
+    }
+
+    fn request_system_shutdown(&mut self, command: &str) -> Result<(), String> {
+        run_shutdown_command(command)
+    }
 }
 
 fn protocol_error_reason(error: &WorkerProtocolError) -> String {
@@ -162,4 +199,56 @@ fn protocol_error_reason(error: &WorkerProtocolError) -> String {
     } else {
         format!("protocol error: {} ({})", error.message, error.raw_line)
     }
+}
+
+fn write_shutdown_state_file(path: &str, payload: &Value) -> Result<(), String> {
+    let path = Path::new(path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let contents = serde_json::to_string_pretty(payload).map_err(|error| error.to_string())?;
+    fs::write(path, contents).map_err(|error| error.to_string())
+}
+
+fn run_shutdown_command(command: &str) -> Result<(), String> {
+    let command = command.trim();
+    if command.is_empty() {
+        return Err("shutdown command is empty".to_string());
+    }
+
+    let status = shutdown_process(command)
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "shutdown command exited with {}",
+            status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "signal".to_string())
+        ))
+    }
+}
+
+#[cfg(windows)]
+fn shutdown_process(command: &str) -> Command {
+    let mut process = Command::new("cmd");
+    process.args(["/C", command]);
+    process
+}
+
+#[cfg(not(windows))]
+fn shutdown_process(command: &str) -> Command {
+    let mut process = Command::new("sh");
+    process.args(["-c", command]);
+    process
+}
+
+fn current_epoch_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
 }

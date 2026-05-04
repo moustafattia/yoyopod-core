@@ -297,9 +297,57 @@ logging:
     assert!(normalized_cloud_args.contains(&yaml_path(&config_dir)));
     assert!(captured_cloud_stdin.contains(r#""type":"cloud.health""#));
     assert!(captured_cloud_stdin.contains(r#""type":"cloud.publish_heartbeat""#));
-    assert!(captured_cloud_stdin.contains(r#""type":"cloud.publish_battery""#));
+    assert!(!captured_cloud_stdin.contains(r#""type":"cloud.publish_battery""#));
     assert!(captured_ui.contains(r#""cloud""#));
     assert!(captured_ui.contains(r#""state":"running""#));
+}
+
+#[test]
+fn boot_starts_power_worker_and_projects_initial_power_snapshot() {
+    let _guard = env_lock();
+    let dir = temp_dir("power-worker");
+    let config_dir = dir.join("config");
+    let ui_stdin = dir.join("ui-stdin.ndjson");
+    let power_args = dir.join("power-args.txt");
+    let power_stdin = dir.join("power-stdin.ndjson");
+    let ui_worker = write_ui_worker_script(&dir, &ui_stdin);
+    let power_worker = write_power_worker_script(&dir, &power_args, &power_stdin);
+    write(
+        &config_dir.join("app/core.yaml"),
+        &format!(
+            r#"
+logging:
+  pid_file: "{}"
+  file: "{}"
+"#,
+            yaml_path(&dir.join("run/yoyopod.pid")),
+            yaml_path(&dir.join("logs/yoyopod.log"))
+        ),
+    );
+    std::env::set_var("YOYOPOD_RUST_UI_HOST_WORKER", &ui_worker);
+    std::env::set_var("YOYOPOD_RUST_POWER_HOST_WORKER", &power_worker);
+
+    let result = run(Args {
+        config_dir: config_dir.clone(),
+        dry_run: false,
+        hardware: "whisplay".to_string(),
+    });
+    std::env::remove_var("YOYOPOD_RUST_UI_HOST_WORKER");
+    std::env::remove_var("YOYOPOD_RUST_POWER_HOST_WORKER");
+    result.expect("runtime exits after UI shutdown intent");
+
+    let captured_ui = wait_for_file(&ui_stdin);
+    let captured_power_args = wait_for_file(&power_args);
+    let captured_power_stdin = wait_for_file(&power_stdin);
+    let normalized_power_args = captured_power_args.replace('\\', "/");
+
+    assert!(captured_power_args.contains("--config-dir"));
+    assert!(normalized_power_args.contains(&yaml_path(&config_dir)));
+    assert!(captured_power_stdin.contains(r#""type":"power.health""#));
+    assert!(captured_ui.contains(r#""battery_percent":58"#));
+    assert!(captured_ui.contains(r#""charging":true"#));
+    assert!(captured_ui.contains(r#""power_available":true"#));
+    assert!(captured_ui.contains(r#"Model: PiSugar 3"#));
 }
 
 fn temp_dir(test_name: &str) -> PathBuf {
@@ -527,6 +575,70 @@ Set-Content -LiteralPath '{}' -Value $lines
         ),
     );
     let command_path = dir.join("cloud-worker.cmd");
+    write(
+        &command_path,
+        &format!(
+            "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File \"{}\" %*\r\n",
+            script_path.to_string_lossy()
+        ),
+    );
+    command_path
+}
+
+fn write_power_worker_script(dir: &Path, args_path: &Path, stdin_path: &Path) -> PathBuf {
+    let ready = r#"{"schema_version":1,"kind":"event","type":"power.ready","payload":{"capabilities":["telemetry","battery"]}}"#;
+    let snapshot = r#"{"schema_version":1,"kind":"event","type":"power.snapshot","payload":{"available":true,"source":"pisugar","device":{"model":"PiSugar 3","firmware_version":"1.8.7"},"battery":{"level_percent":58.0,"voltage_volts":4.08,"charging":true,"power_plugged":true,"temperature_celsius":29.5},"rtc":{"time":"2026-05-04T12:30:00+00:00","alarm_enabled":false},"shutdown":{"safe_shutdown_level_percent":8.0,"safe_shutdown_delay_seconds":15},"error":""}}"#;
+
+    if !cfg!(windows) {
+        let script_path = dir.join("power-worker.sh");
+        write(
+            &script_path,
+            &format!(
+                r#"#!/bin/sh
+printf '%s\n' "$@" > {}
+printf '%s\n' '{}'
+printf '%s\n' '{}'
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> {}
+  case "$line" in
+    *'"type":"worker.stop"'*) break ;;
+  esac
+done
+"#,
+                shell_single_quote(args_path),
+                ready,
+                snapshot,
+                shell_single_quote(stdin_path)
+            ),
+        );
+        make_executable(&script_path);
+        return script_path;
+    }
+
+    let script_path = dir.join("power-worker.ps1");
+    write(
+        &script_path,
+        &format!(
+            r#"
+Set-Content -LiteralPath '{}' -Value ($args -join "`n")
+Write-Output '{}'
+Write-Output '{}'
+$lines = @()
+while (($line = [Console]::In.ReadLine()) -ne $null) {{
+  $lines += $line
+  if ($line -match '"type":"worker.stop"') {{
+    break
+  }}
+}}
+Set-Content -LiteralPath '{}' -Value $lines
+"#,
+            args_path.to_string_lossy().replace('\'', "''"),
+            ready.replace('\'', "''"),
+            snapshot.replace('\'', "''"),
+            stdin_path.to_string_lossy().replace('\'', "''")
+        ),
+    );
+    let command_path = dir.join("power-worker.cmd");
     write(
         &command_path,
         &format!(

@@ -295,6 +295,55 @@ fn network_snapshot_updates_status_bar_payload_and_power_row() {
 }
 
 #[test]
+fn power_snapshot_updates_status_bar_payload_and_setup_page() {
+    let mut state = RuntimeState::default();
+
+    state.apply_power_snapshot(&json!({
+        "available": true,
+        "source": "pisugar",
+        "device": {
+            "model": "PiSugar 3",
+            "firmware_version": "1.8.7"
+        },
+        "battery": {
+            "level_percent": 42.8,
+            "voltage_volts": 4.02,
+            "charging": false,
+            "power_plugged": true,
+            "temperature_celsius": 30.4
+        },
+        "rtc": {
+            "time": "2026-05-04T12:30:00+00:00",
+            "alarm_enabled": false
+        },
+        "shutdown": {
+            "safe_shutdown_level_percent": 8.0,
+            "safe_shutdown_delay_seconds": 15
+        }
+    }));
+
+    let ui = state.ui_snapshot_payload();
+
+    assert_eq!(ui["power"]["battery_percent"], 43);
+    assert_eq!(ui["power"]["charging"], false);
+    assert_eq!(ui["power"]["power_available"], true);
+    assert_eq!(ui["power"]["rows"][0], "Battery 43%");
+    assert_eq!(ui["power"]["rows"][1], "Plugged");
+
+    let pages = ui["power"]["pages"].as_array().expect("setup pages");
+    assert_eq!(pages[0]["title"], "Power");
+    assert_eq!(pages[0]["rows"][0], "Model: PiSugar 3");
+    assert_eq!(pages[0]["rows"][1], "Battery: 43%");
+    assert_eq!(pages[0]["rows"][2], "Charging: Idle");
+    assert_eq!(pages[0]["rows"][3], "External: Plugged");
+    assert_eq!(pages[0]["rows"][4], "Voltage: 4.02V 30C");
+
+    let status = state.status_payload();
+    assert_eq!(status["power"]["available"], true);
+    assert_eq!(status["power"]["battery_percent"], 43);
+}
+
+#[test]
 fn cloud_snapshot_updates_runtime_status_payload() {
     let mut state = RuntimeState::default();
 

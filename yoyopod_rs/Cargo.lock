@@ -2140,6 +2140,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "yoyopod-power-host"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror",
+]
+
+[[package]]
 name = "yoyopod-runtime"
 version = "0.1.0"
 dependencies = [

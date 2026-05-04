@@ -96,6 +96,7 @@ fn start_workers(
     let mut state = RuntimeState::default();
     state.seed_contacts(config.people.to_contact_items());
     state.configure_voice_note_store_dir(config.voip.voice_note_store_dir.clone());
+    state.configure_power_safety(config.power.to_safety_config());
     state.mark_worker(WorkerDomain::Ui, WorkerState::Starting, "starting");
 
     if !workers.start(WorkerSpec::new(
@@ -208,6 +209,32 @@ fn start_workers(
         );
     }
 
+    state.mark_worker(WorkerDomain::Power, WorkerState::Starting, "starting");
+    if workers.start(WorkerSpec::new(
+        WorkerDomain::Power,
+        config.worker_paths.power.clone(),
+        [
+            "--config-dir".to_string(),
+            config_dir.to_string_lossy().to_string(),
+        ],
+    )) {
+        if workers.wait_for_ready(WorkerDomain::Power, "power.ready", Duration::from_secs(3)) {
+            state.mark_worker(WorkerDomain::Power, WorkerState::Running, "ready");
+        } else {
+            state.mark_worker(
+                WorkerDomain::Power,
+                WorkerState::Degraded,
+                "timed out waiting for power.ready",
+            );
+        }
+    } else {
+        state.mark_worker(
+            WorkerDomain::Power,
+            WorkerState::Degraded,
+            "failed to start",
+        );
+    }
+
     Ok(state)
 }
 
@@ -241,13 +268,9 @@ fn send_startup_commands(workers: &mut WorkerSupervisor, config: &RuntimeConfig)
         "cloud.publish_heartbeat",
         json!({"firmware_version": env!("CARGO_PKG_VERSION")}),
     );
-    workers.send_command(
-        WorkerDomain::Cloud,
-        "cloud.publish_battery",
-        json!({"level": 100, "charging": false}),
-    );
     workers.send_command(WorkerDomain::Network, "network.health", json!({}));
     workers.send_command(WorkerDomain::Network, "network.query_gps", json!({}));
+    workers.send_command(WorkerDomain::Power, "power.health", json!({}));
     workers.send_command(
         WorkerDomain::Media,
         "media.configure",

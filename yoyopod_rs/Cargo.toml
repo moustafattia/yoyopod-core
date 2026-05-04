@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "cloud-host",
     "media-host",
+    "power-host",
     "ui-host",
     "voip-host",
     "network-host",

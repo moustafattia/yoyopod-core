@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use crate::protocol::{EnvelopeKind, WorkerEnvelope};
-use crate::state::{CallState, RuntimeState, WorkerDomain, WorkerState};
+use crate::state::{CallState, PowerSafetyAction, RuntimeState, WorkerDomain, WorkerState};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeEvent {
@@ -15,6 +15,7 @@ pub enum RuntimeEvent {
     MediaSnapshot(Value),
     VoipSnapshot(Value),
     NetworkSnapshot(Value),
+    PowerSnapshot(Value),
     UiInput(Value),
     UiIntent {
         domain: String,
@@ -37,6 +38,7 @@ pub enum RuntimeEvent {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum RuntimeCommand {
     WorkerCommand {
         domain: WorkerDomain,
@@ -62,6 +64,7 @@ impl RuntimeEvent {
             Self::MediaSnapshot(snapshot) => state.apply_media_snapshot(snapshot),
             Self::VoipSnapshot(snapshot) => state.apply_voip_snapshot(snapshot),
             Self::NetworkSnapshot(snapshot) => state.apply_network_snapshot(snapshot),
+            Self::PowerSnapshot(snapshot) => state.apply_power_snapshot(snapshot),
             Self::UiScreenChanged { screen } => {
                 state.current_screen = screen.clone();
             }
@@ -104,6 +107,12 @@ pub fn runtime_event_from_worker(
         {
             Some(RuntimeEvent::NetworkSnapshot(payload))
         }
+        EnvelopeKind::Result
+            if domain == WorkerDomain::Power
+                && matches!(message_type.as_str(), "power.snapshot" | "power.health") =>
+        {
+            Some(RuntimeEvent::PowerSnapshot(payload))
+        }
         EnvelopeKind::Command | EnvelopeKind::Result | EnvelopeKind::Heartbeat => {
             Some(RuntimeEvent::Ignored)
         }
@@ -122,6 +131,7 @@ pub fn commands_for_event(state: &RuntimeState, event: &RuntimeEvent) -> Vec<Run
         RuntimeEvent::MediaSnapshot(snapshot) => commands_for_media_snapshot(snapshot),
         RuntimeEvent::VoipSnapshot(snapshot) => commands_for_voip_snapshot(state, snapshot),
         RuntimeEvent::NetworkSnapshot(snapshot) => commands_for_network_snapshot(snapshot),
+        RuntimeEvent::PowerSnapshot(snapshot) => commands_for_power_snapshot(state, snapshot),
         RuntimeEvent::Shutdown => vec![RuntimeCommand::Shutdown],
         RuntimeEvent::WorkerReady { .. }
         | RuntimeEvent::CloudSnapshot(_)
@@ -150,13 +160,7 @@ fn runtime_event_from_message(
         WorkerDomain::Media => media_event_from_message(message_type, payload),
         WorkerDomain::Voip => voip_event_from_message(message_type, payload),
         WorkerDomain::Network => network_event_from_message(message_type, payload),
-        WorkerDomain::Power => health_only_event_from_message(
-            domain,
-            message_type,
-            &payload,
-            "power.ready",
-            "power.error",
-        ),
+        WorkerDomain::Power => power_event_from_message(message_type, payload),
         WorkerDomain::Voice => health_only_event_from_message(
             domain,
             message_type,
@@ -246,6 +250,20 @@ fn network_event_from_message(message_type: &str, payload: Value) -> RuntimeEven
     }
 }
 
+fn power_event_from_message(message_type: &str, payload: Value) -> RuntimeEvent {
+    match message_type {
+        "power.ready" => RuntimeEvent::WorkerReady {
+            domain: WorkerDomain::Power,
+        },
+        "power.snapshot" | "power.health" => RuntimeEvent::PowerSnapshot(payload),
+        "power.error" => RuntimeEvent::WorkerError {
+            domain: WorkerDomain::Power,
+            message: worker_error_message(message_type, &payload),
+        },
+        _ => RuntimeEvent::Ignored,
+    }
+}
+
 fn health_only_event_from_message(
     domain: WorkerDomain,
     message_type: &str,
@@ -301,6 +319,7 @@ fn commands_for_ui_intent(
         "music" => commands_for_music_intent(state, &action, payload),
         "call" => commands_for_call_intent(state, &action, payload),
         "voice" => commands_for_voice_intent(state, &action, payload),
+        "power" => commands_for_power_intent(&action, payload),
         _ => Vec::new(),
     }
 }
@@ -508,6 +527,52 @@ fn commands_for_voice_intent(
             })
             .unwrap_or_default(),
         "discard" | "again" | "reset" => Vec::new(),
+        _ => Vec::new(),
+    }
+}
+
+fn commands_for_power_intent(action: &str, payload: &Value) -> Vec<RuntimeCommand> {
+    match action {
+        "refresh" | "refresh_snapshot" => vec![worker_command(
+            WorkerDomain::Power,
+            "power.refresh",
+            empty_payload(),
+        )],
+        "sync_time_to_rtc" | "sync_to_rtc" => vec![worker_command(
+            WorkerDomain::Power,
+            "power.sync_time_to_rtc",
+            empty_payload(),
+        )],
+        "sync_time_from_rtc" | "sync_from_rtc" => vec![worker_command(
+            WorkerDomain::Power,
+            "power.sync_time_from_rtc",
+            empty_payload(),
+        )],
+        "set_rtc_alarm" | "set_alarm" => {
+            let Some(when) = string_field(payload, "when")
+                .or_else(|| string_field(payload, "alarm_time"))
+                .filter(|value| !value.trim().is_empty())
+            else {
+                return Vec::new();
+            };
+            let repeat_mask = payload
+                .get("repeat_mask")
+                .and_then(Value::as_i64)
+                .unwrap_or(127);
+            vec![worker_command(
+                WorkerDomain::Power,
+                "power.set_rtc_alarm",
+                json!({
+                    "when": when,
+                    "repeat_mask": repeat_mask,
+                }),
+            )]
+        }
+        "disable_rtc_alarm" | "disable_alarm" => vec![worker_command(
+            WorkerDomain::Power,
+            "power.disable_rtc_alarm",
+            empty_payload(),
+        )],
         _ => Vec::new(),
     }
 }
@@ -742,6 +807,84 @@ fn commands_for_network_snapshot(snapshot: &Value) -> Vec<RuntimeCommand> {
     commands
 }
 
+fn commands_for_power_snapshot(state: &RuntimeState, snapshot: &Value) -> Vec<RuntimeCommand> {
+    let snapshot = snapshot.get("snapshot").unwrap_or(snapshot);
+    let mut commands = Vec::new();
+    let Some(battery) = snapshot
+        .get("battery")
+        .filter(|battery| battery.is_object())
+    else {
+        return commands;
+    };
+    if let Some(level) = f64_field(battery, "level_percent").filter(|level| level.is_finite()) {
+        let charging = battery
+            .get("charging")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let level = (level.round() as i64).clamp(0, 100);
+
+        commands.push(worker_command(
+            WorkerDomain::Cloud,
+            "cloud.publish_battery",
+            json!({
+                "level": level,
+                "charging": charging,
+            }),
+        ));
+    }
+    for action in state.power_safety_actions(snapshot, current_epoch_seconds()) {
+        commands.push(power_safety_event_command(action));
+    }
+    commands
+}
+
+fn power_safety_event_command(action: PowerSafetyAction) -> RuntimeCommand {
+    match action {
+        PowerSafetyAction::LowBatteryWarning {
+            threshold_percent,
+            battery_percent,
+            ..
+        } => worker_command(
+            WorkerDomain::Cloud,
+            "cloud.publish_event",
+            json!({
+                "event_type": "power.low_battery_warning",
+                "payload": {
+                    "threshold_percent": threshold_percent,
+                    "battery_percent": battery_percent,
+                },
+            }),
+        ),
+        PowerSafetyAction::GracefulShutdownRequested {
+            reason,
+            delay_seconds,
+            battery_percent,
+            ..
+        } => worker_command(
+            WorkerDomain::Cloud,
+            "cloud.publish_event",
+            json!({
+                "event_type": "power.graceful_shutdown_requested",
+                "payload": {
+                    "reason": reason,
+                    "delay_seconds": delay_seconds,
+                    "battery_percent": battery_percent,
+                },
+            }),
+        ),
+        PowerSafetyAction::GracefulShutdownCancelled { reason } => worker_command(
+            WorkerDomain::Cloud,
+            "cloud.publish_event",
+            json!({
+                "event_type": "power.graceful_shutdown_cancelled",
+                "payload": {
+                    "reason": reason,
+                },
+            }),
+        ),
+    }
+}
+
 fn worker_command(
     domain: WorkerDomain,
     message_type: impl Into<String>,
@@ -789,6 +932,13 @@ fn string_field(value: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+fn f64_field(value: &Value, key: &str) -> Option<f64> {
+    let value = value.get(key)?;
+    value
+        .as_f64()
+        .or_else(|| value.as_str()?.trim().parse::<f64>().ok())
 }
 
 fn non_empty_string(value: &str) -> Option<String> {

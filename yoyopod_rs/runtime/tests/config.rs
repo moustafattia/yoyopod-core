@@ -45,8 +45,17 @@ const CONFIG_ENV_KEYS: &[&str] = &[
     "YOYOPOD_RUST_UI_WORKER",
     "YOYOPOD_RUST_CLOUD_HOST_WORKER",
     "YOYOPOD_RUST_MEDIA_HOST_WORKER",
+    "YOYOPOD_RUST_POWER_HOST_WORKER",
     "YOYOPOD_RUST_VOIP_HOST_WORKER",
     "YOYOPOD_RUST_NETWORK_HOST_WORKER",
+    "YOYOPOD_POWER_ENABLED",
+    "YOYOPOD_LOW_BATTERY_WARNING_PERCENT",
+    "YOYOPOD_LOW_BATTERY_WARNING_COOLDOWN_SECONDS",
+    "YOYOPOD_AUTO_SHUTDOWN_ENABLED",
+    "YOYOPOD_CRITICAL_BATTERY_SHUTDOWN_PERCENT",
+    "YOYOPOD_POWER_SHUTDOWN_DELAY_SECONDS",
+    "YOYOPOD_POWER_SHUTDOWN_COMMAND",
+    "YOYOPOD_POWER_SHUTDOWN_STATE_FILE",
 ];
 
 struct EnvSnapshot {
@@ -635,4 +644,73 @@ fn cloud_worker_path_can_be_overridden_by_env() {
     let config = RuntimeConfig::load(&dir).expect("load runtime config");
 
     assert_eq!(config.worker_paths.cloud, "/host/yoyopod-cloud-host");
+}
+
+#[test]
+fn power_worker_path_can_be_overridden_by_env() {
+    let _lock = lock_env();
+    let _env = clean_config_env();
+    let dir = temp_config_dir("power-worker-env");
+    fs::create_dir_all(&dir).expect("config dir");
+
+    std::env::set_var("YOYOPOD_RUST_POWER_HOST_WORKER", "/host/yoyopod-power-host");
+
+    let config = RuntimeConfig::load(&dir).expect("load runtime config");
+
+    assert_eq!(config.worker_paths.power, "/host/yoyopod-power-host");
+}
+
+#[test]
+fn power_policy_config_loads_from_yaml_and_env() {
+    let _lock = lock_env();
+    let _env = clean_config_env();
+    let dir = temp_config_dir("power-policy");
+    write(
+        &dir.join("power/backend.yaml"),
+        r#"
+power:
+  enabled: true
+  low_battery_warning_percent: 18.0
+  low_battery_warning_cooldown_seconds: 120.0
+  auto_shutdown_enabled: true
+  critical_shutdown_percent: 7.5
+  shutdown_delay_seconds: 20.0
+  shutdown_command: "test-poweroff --now"
+  shutdown_state_file: "data/custom_shutdown_state.json"
+"#,
+    );
+
+    let yaml_config = RuntimeConfig::load(&dir).expect("load yaml power policy");
+
+    assert!(yaml_config.power.enabled);
+    assert_eq!(yaml_config.power.low_battery_warning_percent, 18.0);
+    assert_eq!(
+        yaml_config.power.low_battery_warning_cooldown_seconds,
+        120.0
+    );
+    assert!(yaml_config.power.auto_shutdown_enabled);
+    assert_eq!(yaml_config.power.critical_shutdown_percent, 7.5);
+    assert_eq!(yaml_config.power.shutdown_delay_seconds, 20.0);
+    assert_eq!(
+        serde_json::to_value(&yaml_config.power).expect("power json")["shutdown_command"],
+        "test-poweroff --now"
+    );
+    assert!(Path::new(&yaml_config.power.shutdown_state_file)
+        .ends_with(Path::new("data/custom_shutdown_state.json")));
+    assert!(Path::new(&yaml_config.power.shutdown_state_file).is_absolute());
+
+    std::env::set_var("YOYOPOD_LOW_BATTERY_WARNING_PERCENT", "16.5");
+    std::env::set_var("YOYOPOD_AUTO_SHUTDOWN_ENABLED", "false");
+    std::env::set_var("YOYOPOD_POWER_SHUTDOWN_DELAY_SECONDS", "9.5");
+    std::env::set_var("YOYOPOD_POWER_SHUTDOWN_COMMAND", "test-poweroff --env");
+
+    let env_config = RuntimeConfig::load(&dir).expect("load env power policy");
+
+    assert_eq!(env_config.power.low_battery_warning_percent, 16.5);
+    assert!(!env_config.power.auto_shutdown_enabled);
+    assert_eq!(env_config.power.shutdown_delay_seconds, 9.5);
+    assert_eq!(
+        serde_json::to_value(&env_config.power).expect("power json")["shutdown_command"],
+        "test-poweroff --env"
+    );
 }

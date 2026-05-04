@@ -54,6 +54,33 @@ fn network_snapshot_event_updates_status_snapshot() {
 }
 
 #[test]
+fn power_snapshot_event_updates_status_snapshot() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Power,
+        event_envelope(
+            "power.snapshot",
+            json!({
+                "available": true,
+                "battery": {
+                    "level_percent": 88.0,
+                    "charging": true,
+                    "power_plugged": true
+                }
+            }),
+        ),
+    )
+    .expect("event");
+    let mut state = RuntimeState::default();
+
+    event.apply(&mut state);
+
+    let power = &state.ui_snapshot_payload()["power"];
+    assert_eq!(power["battery_percent"], 88);
+    assert_eq!(power["charging"], true);
+    assert_eq!(power["power_available"], true);
+}
+
+#[test]
 fn network_snapshot_result_updates_status_snapshot() {
     let event = runtime_event_from_worker(
         WorkerDomain::Network,
@@ -82,6 +109,87 @@ fn network_snapshot_result_updates_status_snapshot() {
     assert_eq!(network["connection_type"], "4g");
     assert_eq!(network["signal_strength"], 2);
     assert_eq!(network["gps_has_fix"], false);
+}
+
+#[test]
+fn power_snapshot_result_updates_status_snapshot() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Power,
+        envelope(
+            EnvelopeKind::Result,
+            "power.health",
+            json!({
+                "available": true,
+                "battery": {
+                    "level_percent": 67.0,
+                    "charging": false,
+                    "power_plugged": false
+                }
+            }),
+        ),
+    )
+    .expect("event");
+    let mut state = RuntimeState::default();
+
+    event.apply(&mut state);
+
+    let power = &state.ui_snapshot_payload()["power"];
+    assert_eq!(power["battery_percent"], 67);
+    assert_eq!(power["charging"], false);
+    assert_eq!(power["rows"][1], "On battery");
+}
+
+#[test]
+fn power_snapshot_routes_cloud_battery_publish() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Power,
+        event_envelope(
+            "power.snapshot",
+            json!({
+                "available": true,
+                "battery": {
+                    "level_percent": 42.0,
+                    "charging": true,
+                    "power_plugged": true
+                }
+            }),
+        ),
+    )
+    .expect("event");
+
+    let commands = commands_for_event(&RuntimeState::default(), &event);
+
+    assert!(commands.iter().any(|command| matches!(
+        command,
+        RuntimeCommand::WorkerCommand { domain: WorkerDomain::Cloud, envelope }
+            if envelope.message_type == "cloud.publish_battery"
+                && envelope.payload == json!({"level": 42, "charging": true})
+    )));
+}
+
+#[test]
+fn power_snapshot_without_battery_level_skips_cloud_battery_publish() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Power,
+        event_envelope(
+            "power.snapshot",
+            json!({
+                "available": true,
+                "battery": {
+                    "charging": true
+                }
+            }),
+        ),
+    )
+    .expect("event");
+
+    let commands = commands_for_event(&RuntimeState::default(), &event);
+
+    assert!(!commands.iter().any(|command| matches!(
+        command,
+        RuntimeCommand::WorkerCommand { domain: WorkerDomain::Cloud, envelope }
+            if envelope.message_type == "cloud.publish_battery"
+    )));
 }
 
 #[test]
@@ -592,6 +700,60 @@ fn ui_call_toggle_mute_routes_inverse_mute_state() {
             WorkerDomain::Voip,
             "voip.set_mute",
             json!({"muted": false})
+        )]
+    );
+}
+
+#[test]
+fn ui_power_control_intents_route_to_power_worker() {
+    let state = RuntimeState::default();
+    let cases = [
+        ("refresh", "power.refresh", json!({})),
+        ("sync_time_to_rtc", "power.sync_time_to_rtc", json!({})),
+        ("sync_time_from_rtc", "power.sync_time_from_rtc", json!({})),
+        ("disable_rtc_alarm", "power.disable_rtc_alarm", json!({})),
+    ];
+
+    for (action, message_type, payload) in cases {
+        let event = runtime_event_from_worker(
+            WorkerDomain::Ui,
+            ui_intent("power", action, payload.clone()),
+        )
+        .expect("event");
+
+        assert_eq!(
+            commands_for_event(&state, &event),
+            vec![worker_command(WorkerDomain::Power, message_type, payload)]
+        );
+    }
+}
+
+#[test]
+fn ui_power_set_alarm_intent_routes_alarm_payload_to_power_worker() {
+    let event = runtime_event_from_worker(
+        WorkerDomain::Ui,
+        ui_intent(
+            "power",
+            "set_rtc_alarm",
+            json!({
+                "when": "2026-05-05T07:30:00+00:00",
+                "repeat_mask": 31
+            }),
+        ),
+    )
+    .expect("event");
+
+    let commands = commands_for_event(&RuntimeState::default(), &event);
+
+    assert_eq!(
+        commands,
+        vec![worker_command(
+            WorkerDomain::Power,
+            "power.set_rtc_alarm",
+            json!({
+                "when": "2026-05-05T07:30:00+00:00",
+                "repeat_mask": 31
+            })
         )]
     );
 }
