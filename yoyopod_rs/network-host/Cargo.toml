@@ -21,3 +21,4 @@ yoyopod-protocol = { path = "../protocol" }
 
 [dev-dependencies]
 tempfile = "3.15"
+yoyopod-harness = { path = "../harness" }

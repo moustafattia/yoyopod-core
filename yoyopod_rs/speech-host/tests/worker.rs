@@ -5,6 +5,7 @@ use std::io::{self, Read, Write};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
+use yoyopod_harness::{decode_values, find_value};
 use yoyopod_speech_host::provider::{
     invalid_payload, AskRequest, AskResult, HealthResult, MockProvider, SpeakRequest, SpeakResult,
     SpeechProvider, SpeechRequestContext, TranscribeRequest, TranscribeResult,
@@ -37,16 +38,16 @@ fn mock_worker_handles_health_transcribe_ask_and_speak() {
     let mut output = Vec::new();
 
     run_with_io(transcribe_input.as_bytes(), &mut output).expect("run speech worker");
-    let envelopes = decode_lines(&output);
+    let envelopes = decode_values(&output);
 
     assert_eq!(envelopes[0]["kind"], "event");
     assert_eq!(envelopes[0]["type"], "voice.ready");
     assert_eq!(
-        find(&envelopes, "voice.health.result")["payload"]["provider"],
+        find_value(&envelopes, "voice.health.result")["payload"]["provider"],
         "mock"
     );
     assert_eq!(
-        find(&envelopes, "voice.transcribe.result")["payload"]["text"],
+        find_value(&envelopes, "voice.transcribe.result")["payload"]["text"],
         "ask what is saturn"
     );
     let ask_input = concat!(
@@ -56,9 +57,9 @@ fn mock_worker_handles_health_transcribe_ask_and_speak() {
     let mut output = Vec::new();
 
     run_with_io(ask_input.as_bytes(), &mut output).expect("run speech worker");
-    let envelopes = decode_lines(&output);
+    let envelopes = decode_values(&output);
     assert_eq!(
-        find(&envelopes, "voice.ask.result")["payload"]["answer"],
+        find_value(&envelopes, "voice.ask.result")["payload"]["answer"],
         "Saturn is the planet with bright rings."
     );
     let speak_input = concat!(
@@ -68,8 +69,8 @@ fn mock_worker_handles_health_transcribe_ask_and_speak() {
     let mut output = Vec::new();
 
     run_with_io(speak_input.as_bytes(), &mut output).expect("run speech worker");
-    let envelopes = decode_lines(&output);
-    let speak = find(&envelopes, "voice.speak.result");
+    let envelopes = decode_values(&output);
+    let speak = find_value(&envelopes, "voice.speak.result");
     assert_eq!(speak["payload"]["format"], "wav");
     assert_eq!(speak["payload"]["sample_rate_hz"], 16000);
     assert!(speak["payload"]["audio_path"]
@@ -91,8 +92,8 @@ fn worker_rejects_non_command_envelopes() {
     let mut output = Vec::new();
 
     run_with_io(&input[..], &mut output).expect("run speech worker");
-    let envelopes = decode_lines(&output);
-    let error = find(&envelopes, "voice.error");
+    let envelopes = decode_values(&output);
+    let error = find_value(&envelopes, "voice.error");
 
     assert_eq!(error["kind"], "error");
     assert_eq!(error["request_id"], "bad-1");
@@ -113,8 +114,8 @@ fn worker_selects_openai_provider_from_env() {
     let mut output = Vec::new();
 
     run_with_io(&input[..], &mut output).expect("run speech worker");
-    let envelopes = decode_lines(&output);
-    let error = find(&envelopes, "voice.error");
+    let envelopes = decode_values(&output);
+    let error = find_value(&envelopes, "voice.error");
 
     assert_eq!(error["request_id"], "health-1");
     assert!(error["payload"]["message"]
@@ -164,13 +165,13 @@ fn worker_rejects_concurrent_active_work_as_busy() {
         .expect("worker thread joins")
         .expect("worker succeeds");
     let output = output.lock().expect("output lock");
-    let envelopes = decode_lines(&output);
-    let busy = find(&envelopes, "voice.error");
+    let envelopes = decode_values(&output);
+    let busy = find_value(&envelopes, "voice.error");
 
     assert_eq!(busy["request_id"], "req-busy");
     assert_eq!(busy["payload"]["code"], "busy");
     assert_eq!(busy["payload"]["retryable"], true);
-    find(&envelopes, "voice.transcribe.result");
+    find_value(&envelopes, "voice.transcribe.result");
 }
 
 #[test]
@@ -196,8 +197,8 @@ fn worker_cancel_emits_cancelled_ack_for_active_request() {
         .expect("worker thread joins")
         .expect("worker succeeds");
     let output = output.lock().expect("output lock");
-    let envelopes = decode_lines(&output);
-    let cancelled = find(&envelopes, "voice.cancelled");
+    let envelopes = decode_values(&output);
+    let cancelled = find_value(&envelopes, "voice.cancelled");
 
     assert_eq!(cancelled["request_id"], "req-cancel");
     assert_eq!(cancelled["payload"]["cancelled"], true);
@@ -227,7 +228,7 @@ fn worker_cancel_ack_suppresses_late_provider_cancelled_result() {
         .expect("worker thread joins")
         .expect("worker succeeds");
     let output = output.lock().expect("output lock");
-    let envelopes = decode_lines(&output);
+    let envelopes = decode_values(&output);
     let cancelled: Vec<_> = envelopes
         .iter()
         .filter(|envelope| envelope["type"] == "voice.cancelled")
@@ -246,8 +247,8 @@ fn worker_cancel_uses_cancel_request_id_when_target_is_not_active() {
     let mut output = Vec::new();
 
     run_with_provider(&input[..], &mut output, BlockingProvider::new()).expect("worker succeeds");
-    let envelopes = decode_lines(&output);
-    let cancelled = find(&envelopes, "voice.cancelled");
+    let envelopes = decode_values(&output);
+    let cancelled = find_value(&envelopes, "voice.cancelled");
 
     assert_eq!(cancelled["request_id"], "req-cancel");
     assert_eq!(cancelled["payload"]["cancelled"], false);
@@ -264,8 +265,8 @@ fn worker_deadline_emits_cancelled_result() {
     let mut output = Vec::new();
 
     run_with_provider(&input[..], &mut output, provider).expect("worker succeeds");
-    let envelopes = decode_lines(&output);
-    let cancelled = find(&envelopes, "voice.cancelled");
+    let envelopes = decode_values(&output);
+    let cancelled = find_value(&envelopes, "voice.cancelled");
 
     assert_eq!(cancelled["request_id"], "req-expired");
     assert_eq!(cancelled["payload"]["reason"], "deadline_exceeded");
@@ -279,8 +280,8 @@ fn worker_maps_provider_invalid_payload_to_non_retryable_error() {
     let mut output = Vec::new();
 
     run_with_provider(&input[..], &mut output, InvalidPayloadProvider).expect("worker succeeds");
-    let envelopes = decode_lines(&output);
-    let error = find(&envelopes, "voice.error");
+    let envelopes = decode_values(&output);
+    let error = find_value(&envelopes, "voice.error");
 
     assert_eq!(error["request_id"], "req-invalid");
     assert_eq!(error["payload"]["code"], "invalid_payload");
@@ -319,27 +320,16 @@ fn env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-fn decode_lines(output: &[u8]) -> Vec<Value> {
-    String::from_utf8(output.to_vec())
-        .expect("worker output is utf8")
-        .lines()
-        .map(|line| serde_json::from_str(line).expect("worker line is JSON"))
-        .collect()
-}
-
-fn find<'a>(envelopes: &'a [Value], message_type: &str) -> &'a Value {
-    envelopes
-        .iter()
-        .find(|envelope| envelope["type"] == message_type)
-        .unwrap_or_else(|| panic!("missing envelope {message_type}: {envelopes:#?}"))
-}
-
 fn wait_for_envelope(output: &RecordingWriter, message_type: &str) -> Value {
     let deadline = Instant::now() + Duration::from_secs(1);
     let mut observed = Vec::new();
     while Instant::now() < deadline {
-        for line in output.drain_lines() {
-            let envelope: Value = serde_json::from_str(&line).expect("worker line is JSON");
+        for (line_number, line) in output.drain_lines() {
+            let envelope: Value = serde_json::from_str(&line).unwrap_or_else(|error| {
+                panic!(
+                    "decode streaming worker JSON line {line_number} failed: {error}; line: {line}"
+                )
+            });
             if envelope["type"] == message_type {
                 return envelope;
             }
@@ -352,29 +342,41 @@ fn wait_for_envelope(output: &RecordingWriter, message_type: &str) -> Value {
 
 #[derive(Clone)]
 struct RecordingWriter {
-    lines: Arc<Mutex<Vec<String>>>,
+    lines: Arc<Mutex<RecordedLines>>,
+}
+
+#[derive(Default)]
+struct RecordedLines {
+    next_line_number: usize,
+    lines: Vec<(usize, String)>,
 }
 
 impl RecordingWriter {
     fn new() -> Self {
         Self {
-            lines: Arc::new(Mutex::new(Vec::new())),
+            lines: Arc::new(Mutex::new(RecordedLines::default())),
         }
     }
 
-    fn drain_lines(&self) -> Vec<String> {
+    fn drain_lines(&self) -> Vec<(usize, String)> {
         let mut lines = self.lines.lock().expect("recording writer lock");
-        lines.drain(..).collect()
+        lines.lines.drain(..).collect()
     }
 }
 
 impl Write for RecordingWriter {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let mut lines = self.lines.lock().expect("recording writer lock");
-        for line in String::from_utf8_lossy(buffer).lines() {
-            if !line.trim().is_empty() {
-                lines.push(line.to_string());
-            }
+        let text = std::str::from_utf8(buffer).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("worker output should be utf8: {error}"),
+            )
+        })?;
+        for line in text.lines() {
+            lines.next_line_number += 1;
+            let line_number = lines.next_line_number;
+            lines.lines.push((line_number, line.to_string()));
         }
         Ok(buffer.len())
     }

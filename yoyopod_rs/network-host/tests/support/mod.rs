@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use yoyopod_harness::decode_envelopes;
 use yoyopod_network_host::config::NetworkHostConfig;
 use yoyopod_network_host::gps::GpsFix;
 use yoyopod_network_host::modem::{
@@ -301,11 +302,7 @@ pub fn encode_commands(commands: &[WorkerEnvelope]) -> Vec<u8> {
 }
 
 pub fn decode_output(output: &[u8]) -> Vec<WorkerEnvelope> {
-    String::from_utf8(output.to_vec())
-        .expect("worker output should be utf8")
-        .lines()
-        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode worker output"))
-        .collect()
+    decode_envelopes(output)
 }
 
 #[derive(Clone)]

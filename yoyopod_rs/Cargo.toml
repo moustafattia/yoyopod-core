@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "cloud-host",
+    "harness",
     "media-host",
     "protocol",
     "power-host",

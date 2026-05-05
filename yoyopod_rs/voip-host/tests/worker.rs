@@ -5,6 +5,7 @@ use std::io::{BufReader, Cursor, Read};
 use std::thread;
 use std::time::Duration;
 use support::{config, FakeBackend};
+use yoyopod_harness::decode_envelopes;
 use yoyopod_voip_host::config::VoipConfig;
 use yoyopod_voip_host::host::{BackendEvent, MessageRecord, VoipHost, VoipRuntimeBackend};
 use yoyopod_voip_host::protocol::{EnvelopeKind, WorkerEnvelope, SUPPORTED_SCHEMA_VERSION};
@@ -54,11 +55,7 @@ fn run_worker_uses_injected_io_and_backend() {
     )
     .expect("worker should run");
 
-    let output = String::from_utf8(output).expect("utf8 output");
-    let envelopes: Vec<WorkerEnvelope> = output
-        .lines()
-        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode output"))
-        .collect();
+    let envelopes = decode_envelopes(&output);
 
     assert_eq!(backend.calls, vec!["start", "stop"]);
     assert!(errors.is_empty());
@@ -105,11 +102,7 @@ fn run_worker_polls_backend_while_stdin_is_idle() {
     run_worker(reader, &mut output, &mut errors, &mut host, &mut backend)
         .expect("worker should run");
 
-    let envelopes: Vec<WorkerEnvelope> = String::from_utf8(output)
-        .expect("utf8 output")
-        .lines()
-        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode output"))
-        .collect();
+    let envelopes = decode_envelopes(&output);
 
     assert!(errors.is_empty());
     assert!(
@@ -299,11 +292,7 @@ fn run_worker_commands(
         .expect("worker should run commands");
 
     assert!(errors.is_empty());
-    String::from_utf8(output)
-        .expect("utf8 output")
-        .lines()
-        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode output"))
-        .collect()
+    decode_envelopes(&output)
 }
 
 fn command(message_type: &str, request_id: &str, payload: serde_json::Value) -> WorkerEnvelope {

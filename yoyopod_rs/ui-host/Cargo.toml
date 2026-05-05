@@ -30,3 +30,6 @@ whisplay-hardware = ["dep:rppal"]
 
 [build-dependencies]
 cmake = "0.1"
+
+[dev-dependencies]
+yoyopod-harness = { path = "../harness" }

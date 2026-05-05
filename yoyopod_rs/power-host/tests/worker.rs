@@ -3,11 +3,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use yoyopod_harness::{decode_envelopes, find_envelope};
 use yoyopod_power_host::config::PowerWatchdogConfig;
 use yoyopod_power_host::host::{
     PowerBackend, PowerControlCommand, PowerHost, PowerWatchdogCommand,
 };
-use yoyopod_power_host::protocol::WorkerEnvelope;
 use yoyopod_power_host::snapshot::{BatterySnapshot, PowerStatusSnapshot};
 use yoyopod_power_host::worker::{run_host_loop, run_host_loop_with_watchdog};
 
@@ -73,11 +73,7 @@ fn worker_emits_ready_and_initial_snapshot_then_stops() {
 
     run_host_loop(host, input, &mut output, Duration::from_millis(1)).expect("worker loop");
 
-    let lines = String::from_utf8(output).expect("utf8 output");
-    let envelopes = lines
-        .lines()
-        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode envelope"))
-        .collect::<Vec<_>>();
+    let envelopes = decode_envelopes(&output);
 
     assert_eq!(envelopes[0].message_type, "power.ready");
     assert_eq!(envelopes[1].message_type, "power.snapshot");
@@ -136,11 +132,7 @@ fn worker_routes_rtc_control_commands_and_emits_fresh_snapshots() {
     );
     assert_eq!(*refreshes.lock().expect("refresh lock"), 5);
 
-    let lines = String::from_utf8(output).expect("utf8 output");
-    let envelopes = lines
-        .lines()
-        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode envelope"))
-        .collect::<Vec<_>>();
+    let envelopes = decode_envelopes(&output);
 
     for message_type in [
         "power.sync_time_to_rtc",
@@ -148,10 +140,7 @@ fn worker_routes_rtc_control_commands_and_emits_fresh_snapshots() {
         "power.set_rtc_alarm",
         "power.disable_rtc_alarm",
     ] {
-        let result = envelopes
-            .iter()
-            .find(|envelope| envelope.message_type == message_type)
-            .unwrap_or_else(|| panic!("missing result for {message_type}"));
+        let result = find_envelope(&envelopes, message_type);
         assert_eq!(
             result.kind,
             yoyopod_power_host::protocol::EnvelopeKind::Result
@@ -194,12 +183,8 @@ fn worker_rejects_set_rtc_alarm_without_time() {
         .is_empty());
     assert_eq!(*refreshes.lock().expect("refresh lock"), 1);
 
-    let lines = String::from_utf8(output).expect("utf8 output");
-    let error = lines
-        .lines()
-        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode envelope"))
-        .find(|envelope| envelope.message_type == "power.error")
-        .expect("power.error");
+    let envelopes = decode_envelopes(&output);
+    let error = find_envelope(&envelopes, "power.error");
 
     assert_eq!(error.payload["code"], "invalid_payload");
     assert!(error.payload["message"]

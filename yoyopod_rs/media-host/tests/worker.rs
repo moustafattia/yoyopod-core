@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
+use yoyopod_harness::decode_envelopes;
 use yoyopod_media_host::host::MediaHost;
 use yoyopod_media_host::protocol::{EnvelopeKind, WorkerEnvelope, SUPPORTED_SCHEMA_VERSION};
 use yoyopod_media_host::worker::{handle_command, run_io, LoopAction};
@@ -42,11 +43,12 @@ fn command_failures_preserve_request_id() {
 
     run_io(input, &mut output, &mut errors).expect("worker run");
 
-    let stdout = String::from_utf8(output).expect("utf8");
-    let lines: Vec<&str> = stdout.lines().collect();
-    assert!(lines.len() >= 2, "expected ready event and command error");
-
-    let command_error = WorkerEnvelope::decode(lines[1].as_bytes()).expect("decode error envelope");
+    let envelopes = decode_envelopes(&output);
+    assert!(
+        envelopes.len() >= 2,
+        "expected ready event and command error"
+    );
+    let command_error = &envelopes[1];
     assert_eq!(command_error.kind, EnvelopeKind::Error);
     assert_eq!(command_error.request_id.as_deref(), Some("playlist-1"));
     assert_eq!(command_error.payload["code"], "command_failed");

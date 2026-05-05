@@ -20,3 +20,6 @@ filetime = "0.2"
 sha2 = "0.10"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
 yoyopod-protocol = { path = "../protocol" }
+
+[dev-dependencies]
+yoyopod-harness = { path = "../harness" }
