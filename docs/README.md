@@ -7,17 +7,19 @@ If you are new here, read these first:
 1. [`../README.md`](../README.md) for the repo overview and quick start
 2. [`operations/DEVELOPMENT_GUIDE.md`](operations/DEVELOPMENT_GUIDE.md) for setup, running, validation, and daily workflow
 3. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) for the current runtime shape
-4. [`architecture/CANONICAL_STRUCTURE.md`](architecture/CANONICAL_STRUCTURE.md) for config and package ownership
+4. [`architecture/WORK_AREAS.md`](architecture/WORK_AREAS.md) for where active Rust-first work belongs
+5. [`architecture/CANONICAL_STRUCTURE.md`](architecture/CANONICAL_STRUCTURE.md) for config and package ownership
 
 ## Source Of Truth
 
 When docs disagree, trust sources in this order:
 
-1. Current code in `yoyopod/`
-2. Current runtime, operations, hardware, feature, and design docs under the folders below
-3. Rules and agent guidance in `rules/`, `AGENTS.md`, and `skills/`
-4. Generated plans, checklists, and design specs
-5. Archived docs under [`archive/`](archive/)
+1. Current Rust runtime and host code in `yoyopod_rs/`
+2. Current deploy/runtime tooling in `deploy/`, `yoyopod_cli/`, and `yoyopod/`
+3. Current runtime, operations, hardware, feature, and design docs under the folders below
+4. Rules and agent guidance in `rules/`, `AGENTS.md`, and `skills/`
+5. Generated plans, checklists, and design specs
+6. Archived docs under [`archive/`](archive/)
 
 Plan docs are useful context, but they are not automatically the current implementation contract.
 
@@ -33,6 +35,8 @@ Plan docs are useful context, but they are not automatically the current impleme
 - [`superpowers/`](superpowers/README.md) - preserved agent-generated specs and plans.
 - [`archive/`](archive/README.md) - retired historical material.
 - [`assets/`](assets/) - images and media used by docs.
+- [`../apps/`](../apps/) - future web and mobile applications.
+- [`../packages/`](../packages/) - future shared contracts, SDKs, and app packages.
 
 ## Recommended Reading Paths
 
@@ -47,11 +51,12 @@ Plan docs are useful context, but they are not automatically the current impleme
 
 ### Working On Runtime Code
 
-1. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
-2. [`architecture/RUNTIME_EVENT_FLOW.md`](architecture/RUNTIME_EVENT_FLOW.md)
-3. The subsystem doc under [`architecture/`](architecture/README.md), [`features/`](features/README.md), or [`hardware/`](hardware/README.md)
-4. [`../AGENTS.md`](../AGENTS.md)
-5. Relevant files under `yoyopod/`
+1. [`architecture/WORK_AREAS.md`](architecture/WORK_AREAS.md)
+2. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
+3. [`architecture/RUNTIME_EVENT_FLOW.md`](architecture/RUNTIME_EVENT_FLOW.md)
+4. The subsystem doc under [`architecture/`](architecture/README.md), [`features/`](features/README.md), or [`hardware/`](hardware/README.md)
+5. [`../AGENTS.md`](../AGENTS.md)
+6. Relevant files under `yoyopod_rs/`
 
 ### Working On Raspberry Pi Deployment
 
@@ -84,6 +89,7 @@ Plan docs are useful context, but they are not automatically the current impleme
 These docs describe current implementation contracts:
 
 - [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
+- [`architecture/WORK_AREAS.md`](architecture/WORK_AREAS.md)
 - [`architecture/CANONICAL_STRUCTURE.md`](architecture/CANONICAL_STRUCTURE.md)
 - [`architecture/RUNTIME_EVENT_FLOW.md`](architecture/RUNTIME_EVENT_FLOW.md)
 - [`architecture/DISPLAY_HAL_ARCHITECTURE.md`](architecture/DISPLAY_HAL_ARCHITECTURE.md)

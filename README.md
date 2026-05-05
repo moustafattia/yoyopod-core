@@ -47,13 +47,21 @@ The current prototype runs on a Raspberry Pi Zero 2W and uses the Whisplay HAT b
 
 This repository contains the software that runs the current YoYoPod prototype:
 
+- `yoyopod_rs/runtime/` - Rust runtime owner for config, worker supervision, app state, event routing, and UI snapshots.
+- `yoyopod_rs/{ui,media,voip,network,cloud,power,speech}/` - Rust domain sidecar hosts for UI, media, VoIP, network, cloud, power, and speech/Ask.
+- `apps/` - future web and mobile applications.
+- `packages/` - future shared contracts, SDKs, and app packages.
 - `yoyopod/core/` - app lifecycle, scheduler, event bus, runtime loop, diagnostics, and shared state.
 - `yoyopod/integrations/` - higher-level product capabilities like calling, music, power, network, location, and cloud sync.
 - `yoyopod/backends/` - concrete hardware and service adapters such as Liblinphone, mpv, modem, and power backends.
 - `yoyopod/ui/` - the device UI, LVGL binding, screens, and input/display glue.
 - `yoyopod_cli/` - developer and device operations tooling for setup, deploy, validation, and diagnostics.
 
-If you want the architecture view instead of the product view, start with [docs/architecture/SYSTEM_ARCHITECTURE.md](docs/architecture/SYSTEM_ARCHITECTURE.md).
+New runtime work should start in `yoyopod_rs/`. Python remains important for
+CLI/deploy tooling, compatibility paths, and tests. If you want the architecture
+view instead of the product view, start with
+[docs/architecture/WORK_AREAS.md](docs/architecture/WORK_AREAS.md) and
+[docs/architecture/SYSTEM_ARCHITECTURE.md](docs/architecture/SYSTEM_ARCHITECTURE.md).
 
 ## Bring Up The Prototype
 

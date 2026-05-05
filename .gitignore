@@ -35,7 +35,16 @@ uv.lock
 # Rust
 target/
 Cargo.lock
+!yoyopod_rs/Cargo.lock
 !workers/ui/rust/Cargo.lock
+
+# Web/app packages
+node_modules/
+.next/
+.nuxt/
+.turbo/
+.svelte-kit/
+coverage/
 
 # Bazel
 bazel-*/
@@ -75,6 +84,10 @@ deploy/pi-deploy.local.yaml
 *.flac
 *.ttf
 *.otf
+*.wasm
+/models/
+docs/design-previews/**/preview-bin/
+/.entire/
 
 # Temporary files
 *.tmp
@@ -87,7 +100,7 @@ data/communication/
 data/cloud/
 data/media/
 data/people/
-yoyopod_rs/cloud-host/data/
+yoyopod_rs/cloud/data/
 
 # OS files
 .DS_Store

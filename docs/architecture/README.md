@@ -3,6 +3,7 @@
 Current runtime and package-ownership contracts live here.
 
 - [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md) - runtime topology, bootstrap flow, and subsystem boundaries
+- [`WORK_AREAS.md`](WORK_AREAS.md) - Rust-first work areas and generated-output policy
 - [`CANONICAL_STRUCTURE.md`](CANONICAL_STRUCTURE.md) - config topology, package ownership, and test layout
 - [`RUNTIME_EVENT_FLOW.md`](RUNTIME_EVENT_FLOW.md) - typed event pipeline and main-thread ownership
 - [`CROSS_SCREEN_OVERLAYS.md`](CROSS_SCREEN_OVERLAYS.md) - overlay ownership and ordering rules

@@ -12,6 +12,7 @@ yoyopod_rust_host_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "yoyopod_runtime",
+    deps = ["//yoyopod_rs/protocol:protocol_lib"],
 )
 
 yoyopod_rust_host_binary(

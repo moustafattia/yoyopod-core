@@ -8,7 +8,7 @@ fn decode_accepts_worker_command_without_explicit_schema_version() {
     let envelope = WorkerEnvelope::decode(
         br#"{"kind":"command","type":"media.health","request_id":"health-1","payload":{}}"#,
     )
-    .expect("decode");
+    .expect("decode with default schema version");
 
     assert_eq!(envelope.schema_version, SUPPORTED_SCHEMA_VERSION);
     assert_eq!(envelope.kind, EnvelopeKind::Command);

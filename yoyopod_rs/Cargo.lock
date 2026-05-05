@@ -2096,7 +2096,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yoyopod-cloud-host"
+name = "yoyopod-cloud"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2106,10 +2106,20 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "thiserror",
+ "yoyopod-harness",
+ "yoyopod-protocol",
 ]
 
 [[package]]
-name = "yoyopod-media-host"
+name = "yoyopod-harness"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "yoyopod-protocol",
+]
+
+[[package]]
+name = "yoyopod-media"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2122,10 +2132,12 @@ dependencies = [
  "thiserror",
  "time",
  "ureq",
+ "yoyopod-harness",
+ "yoyopod-protocol",
 ]
 
 [[package]]
-name = "yoyopod-network-host"
+name = "yoyopod-network"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2137,10 +2149,12 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
+ "yoyopod-harness",
+ "yoyopod-protocol",
 ]
 
 [[package]]
-name = "yoyopod-power-host"
+name = "yoyopod-power"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2148,6 +2162,18 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "thiserror",
+ "yoyopod-harness",
+ "yoyopod-protocol",
+ "yoyopod-worker",
+]
+
+[[package]]
+name = "yoyopod-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -2163,10 +2189,11 @@ dependencies = [
  "serde_yaml",
  "thiserror",
  "time",
+ "yoyopod-protocol",
 ]
 
 [[package]]
-name = "yoyopod-speech-host"
+name = "yoyopod-speech"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2174,10 +2201,12 @@ dependencies = [
  "serde_json",
  "thiserror",
  "ureq",
+ "yoyopod-harness",
+ "yoyopod-protocol",
 ]
 
 [[package]]
-name = "yoyopod-ui-host"
+name = "yoyopod-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2190,10 +2219,12 @@ dependencies = [
  "serde_json",
  "thiserror",
  "time",
+ "yoyopod-harness",
+ "yoyopod-protocol",
 ]
 
 [[package]]
-name = "yoyopod-voip-host"
+name = "yoyopod-voip"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2204,6 +2235,17 @@ dependencies = [
  "serde_json",
  "thiserror",
  "time",
+ "yoyopod-harness",
+ "yoyopod-protocol",
+]
+
+[[package]]
+name = "yoyopod-worker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "yoyopod-protocol",
 ]
 
 [[package]]
