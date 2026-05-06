@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-import yoyopod.backends.voice.output as voice_output
+import yoyopod_cli.pi.support.voice_output as voice_output
 import yoyopod.backends.voice as voice_backends
 from yoyopod.backends.voice import (
     AlsaOutputPlayer,
@@ -315,7 +315,7 @@ def test_match_voice_command_accepts_fuzzy_basic_phrases() -> None:
 def test_match_voice_command_accepts_injected_grammar() -> None:
     """Callers should be able to match against dictionary-derived grammar."""
 
-    from yoyopod.integrations.voice.commands import VoiceCommandTemplate
+    from yoyopod_cli.pi.support.voice_commands import VoiceCommandTemplate
 
     grammar = (
         VoiceCommandTemplate(
@@ -913,10 +913,10 @@ def test_alsa_output_player_prefers_usb_card_routes(monkeypatch, tmp_path) -> No
         return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="bad")
 
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.shutil.which",
+        "yoyopod_cli.pi.support.voice_output.shutil.which",
         lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
     )
-    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
+    monkeypatch.setattr("yoyopod_cli.pi.support.voice_output.subprocess.run", fake_run)
 
     player = AlsaOutputPlayer()
 
@@ -954,10 +954,10 @@ def test_alsa_output_player_respects_configured_card_before_playback_facade(
         return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="busy")
 
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.shutil.which",
+        "yoyopod_cli.pi.support.voice_output.shutil.which",
         lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
     )
-    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
+    monkeypatch.setattr("yoyopod_cli.pi.support.voice_output.subprocess.run", fake_run)
 
     player = AlsaOutputPlayer()
 
@@ -971,7 +971,7 @@ def test_alsa_output_player_can_skip_when_playback_lock_is_busy(monkeypatch, tmp
     audio_path = tmp_path / "tone.wav"
     audio_path.write_bytes(b"RIFF")
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.shutil.which",
+        "yoyopod_cli.pi.support.voice_output.shutil.which",
         lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
     )
 
@@ -1009,10 +1009,10 @@ def test_alsa_output_player_tries_next_route_after_playback_timeout(monkeypatch,
         return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="bad")
 
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.shutil.which",
+        "yoyopod_cli.pi.support.voice_output.shutil.which",
         lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
     )
-    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
+    monkeypatch.setattr("yoyopod_cli.pi.support.voice_output.subprocess.run", fake_run)
 
     player = AlsaOutputPlayer()
 
@@ -1075,11 +1075,11 @@ def test_alsa_output_player_cancel_event_terminates_active_aplay(
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="playback\n", stderr="")
 
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.shutil.which",
+        "yoyopod_cli.pi.support.voice_output.shutil.which",
         lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
     )
-    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
-    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("yoyopod_cli.pi.support.voice_output.subprocess.run", fake_run)
+    monkeypatch.setattr("yoyopod_cli.pi.support.voice_output.subprocess.Popen", fake_popen)
 
     player = AlsaOutputPlayer()
 
@@ -1099,7 +1099,7 @@ def test_alsa_output_player_pre_cancel_skips_device_scan(monkeypatch, tmp_path) 
     cancel_event.set()
 
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.shutil.which",
+        "yoyopod_cli.pi.support.voice_output.shutil.which",
         lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
     )
 
@@ -1109,7 +1109,7 @@ def test_alsa_output_player_pre_cancel_skips_device_scan(monkeypatch, tmp_path) 
         scan_calls.append(args)
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="playback\n", stderr="")
 
-    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_scan)
+    monkeypatch.setattr("yoyopod_cli.pi.support.voice_output.subprocess.run", fake_scan)
     player = AlsaOutputPlayer()
 
     assert player.play_wav(audio_path, cancel_event=cancel_event) is False

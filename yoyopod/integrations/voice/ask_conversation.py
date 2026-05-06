@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from yoyopod.integrations.voice.worker_contract import VoiceWorkerAskTurn
+from yoyopod_cli.pi.support.voice_worker_contract import VoiceWorkerAskTurn
 
 
 _EXIT_PHRASES = {

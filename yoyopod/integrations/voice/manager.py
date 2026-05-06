@@ -13,13 +13,13 @@ from yoyopod.backends.voice import (
     SubprocessAudioCaptureBackend,
     TextToSpeechBackend,
 )
-from yoyopod.integrations.voice.models import (
+from yoyopod_cli.pi.support.voice_models import (
     VoiceCaptureRequest,
     VoiceCaptureResult,
     VoiceSettings,
     VoiceTranscript,
 )
-from yoyopod.integrations.voice.commands import VoiceCommandMatch, match_voice_command
+from yoyopod_cli.pi.support.voice_commands import VoiceCommandMatch, match_voice_command
 
 
 class VoiceManager:

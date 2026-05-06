@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from yoyopod.integrations.voice.worker_contract import (
+from yoyopod_cli.pi.support.voice_worker_contract import (
     VoiceWorkerAskResult,
     VoiceWorkerAskTurn,
     VoiceWorkerError,

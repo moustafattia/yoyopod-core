@@ -10,7 +10,7 @@ from typing import Any
 from loguru import logger
 import yaml
 
-from yoyopod.integrations.voice.commands import (
+from yoyopod_cli.pi.support.voice_commands import (
     VOICE_COMMAND_GRAMMAR,
     VoiceCommandIntent,
     VoiceCommandTemplate,

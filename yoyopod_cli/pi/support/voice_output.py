@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Iterable
 
 from loguru import logger
 
@@ -246,7 +247,8 @@ class AlsaOutputPlayer:
                 ):
                     parsed.append(device)
 
-        return sorted(self._unique(parsed), key=self._device_sort_key)
+        unique_devices = [device for device in self._unique(parsed) if device is not None]
+        return sorted(unique_devices, key=self._device_sort_key)
 
     def _configured_device_candidates(
         self,
@@ -334,7 +336,7 @@ class AlsaOutputPlayer:
         return (12, device)
 
     @staticmethod
-    def _unique(devices: list[str | None]) -> list[str | None]:
+    def _unique(devices: Iterable[str | None]) -> list[str | None]:
         """Preserve device order while removing duplicates."""
 
         unique: list[str | None] = []

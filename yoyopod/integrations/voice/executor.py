@@ -8,9 +8,13 @@ from typing import TYPE_CHECKING, Callable
 
 from loguru import logger
 
-from yoyopod.integrations.voice import VoiceCommandIntent, VoiceCommandMatch, match_voice_command
+from yoyopod_cli.pi.support.voice_commands import (
+    VoiceCommandIntent,
+    VoiceCommandMatch,
+    match_voice_command,
+)
 
-from yoyopod.integrations.voice.settings import VoiceCommandOutcome
+from yoyopod_cli.pi.support.voice_settings import VoiceCommandOutcome
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext

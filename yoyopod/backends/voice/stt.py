@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 from typing import Protocol
 
-from yoyopod.integrations.voice.models import VoiceSettings, VoiceTranscript
+from yoyopod_cli.pi.support.voice_models import VoiceSettings, VoiceTranscript
 
 
 class SpeechToTextBackend(Protocol):

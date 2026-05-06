@@ -25,12 +25,12 @@ from yoyopod.integrations.voice import (
     VoiceWorkerAskTurn,
 )
 
-from yoyopod.integrations.voice.commands import match_voice_command
-from yoyopod.integrations.voice.dictionary import load_voice_command_dictionary
+from yoyopod_cli.pi.support.voice_commands import match_voice_command
+from yoyopod_cli.pi.support.voice_dictionary import load_voice_command_dictionary
 from yoyopod.integrations.voice.executor import VoiceCommandExecutor
 from yoyopod.integrations.voice.router import VoiceRouteKind, VoiceRouter
-from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
-from yoyopod.integrations.voice.trace import (
+from yoyopod_cli.pi.support.voice_settings import VoiceCommandOutcome, VoiceSettingsResolver
+from yoyopod_cli.pi.support.voice_trace import (
     VoiceTraceRecorder,
     VoiceTraceStore,
     new_turn_id,
@@ -40,7 +40,7 @@ from yoyopod.integrations.voice.trace import (
 if TYPE_CHECKING:
     from yoyopod.backends.music import MusicBackend
     from yoyopod.core import AppContext
-    from yoyopod.integrations.voice.commands import VoiceCommandMatch
+    from yoyopod_cli.pi.support.voice_commands import VoiceCommandMatch
 
 
 _ASK_OFFLINE_BODY = "I cannot reach Ask right now. I can still help with music, calls, and volume."

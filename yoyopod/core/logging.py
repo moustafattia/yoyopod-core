@@ -45,7 +45,7 @@ _SUBSYSTEM_OVERRIDES = {
     "yoyopod.integrations.music.runtime": "coord",
     "yoyopod.integrations.voice.runtime": "coord",
     "yoyopod.integrations.voice.executor": "coord",
-    "yoyopod.integrations.voice.settings": "coord",
+    "yoyopod_cli.pi.support.voice_settings": "coord",
     "yoyopod.ui": "ui",
     "yoyopod.integrations.power": "power",
     "yoyopod.backends.power": "power",

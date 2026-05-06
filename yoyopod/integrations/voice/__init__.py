@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from yoyopod.integrations.voice.worker_contract import (
+from yoyopod_cli.pi.support.voice_worker_contract import (
     VoiceWorkerAskResult,
     VoiceWorkerAskTurn,
     VoiceWorkerError,
@@ -28,14 +28,14 @@ if TYPE_CHECKING:
         normalize_voice_activation,
     )
     from yoyopod.integrations.voice.ask_conversation import AskConversationState
-    from yoyopod.integrations.voice.commands import (
+    from yoyopod_cli.pi.support.voice_commands import (
         VOICE_COMMAND_GRAMMAR,
         VoiceCommandIntent,
         VoiceCommandMatch,
         VoiceCommandTemplate,
         match_voice_command,
     )
-    from yoyopod.integrations.voice.dictionary import (
+    from yoyopod_cli.pi.support.voice_dictionary import (
         SAFE_VOICE_ROUTE_ACTIONS,
         VoiceCommandAction,
         VoiceCommandDictionary,
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     )
     from yoyopod.integrations.voice.executor import VoiceCommandExecutor
     from yoyopod.integrations.voice.manager import VoiceManager, VoiceService
-    from yoyopod.integrations.voice.models import (
+    from yoyopod_cli.pi.support.voice_models import (
         VoiceCaptureRequest,
         VoiceCaptureResult,
         VoiceSettings,
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
         VoiceRouteKind,
         VoiceRouter,
     )
-    from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
+    from yoyopod_cli.pi.support.voice_settings import VoiceCommandOutcome, VoiceSettingsResolver
     from yoyopod.integrations.voice.wake import (
         NoopWakeDetector,
         WakeDetectionResult,
@@ -75,12 +75,12 @@ _PUBLIC_EXPORTS = {
     ),
     "NoopWakeDetector": ("yoyopod.integrations.voice.wake", "NoopWakeDetector"),
     "SAFE_VOICE_ROUTE_ACTIONS": (
-        "yoyopod.integrations.voice.dictionary",
+        "yoyopod_cli.pi.support.voice_dictionary",
         "SAFE_VOICE_ROUTE_ACTIONS",
     ),
-    "VOICE_COMMAND_GRAMMAR": ("yoyopod.integrations.voice.commands", "VOICE_COMMAND_GRAMMAR"),
-    "VoiceCaptureRequest": ("yoyopod.integrations.voice.models", "VoiceCaptureRequest"),
-    "VoiceCaptureResult": ("yoyopod.integrations.voice.models", "VoiceCaptureResult"),
+    "VOICE_COMMAND_GRAMMAR": ("yoyopod_cli.pi.support.voice_commands", "VOICE_COMMAND_GRAMMAR"),
+    "VoiceCaptureRequest": ("yoyopod_cli.pi.support.voice_models", "VoiceCaptureRequest"),
+    "VoiceCaptureResult": ("yoyopod_cli.pi.support.voice_models", "VoiceCaptureResult"),
     "VoiceActivationNormalizer": (
         "yoyopod.integrations.voice.activation",
         "VoiceActivationNormalizer",
@@ -89,13 +89,13 @@ _PUBLIC_EXPORTS = {
         "yoyopod.integrations.voice.activation",
         "VoiceActivationResult",
     ),
-    "VoiceCommandIntent": ("yoyopod.integrations.voice.commands", "VoiceCommandIntent"),
-    "VoiceCommandMatch": ("yoyopod.integrations.voice.commands", "VoiceCommandMatch"),
-    "VoiceCommandOutcome": ("yoyopod.integrations.voice.settings", "VoiceCommandOutcome"),
-    "VoiceCommandTemplate": ("yoyopod.integrations.voice.commands", "VoiceCommandTemplate"),
-    "VoiceCommandAction": ("yoyopod.integrations.voice.dictionary", "VoiceCommandAction"),
+    "VoiceCommandIntent": ("yoyopod_cli.pi.support.voice_commands", "VoiceCommandIntent"),
+    "VoiceCommandMatch": ("yoyopod_cli.pi.support.voice_commands", "VoiceCommandMatch"),
+    "VoiceCommandOutcome": ("yoyopod_cli.pi.support.voice_settings", "VoiceCommandOutcome"),
+    "VoiceCommandTemplate": ("yoyopod_cli.pi.support.voice_commands", "VoiceCommandTemplate"),
+    "VoiceCommandAction": ("yoyopod_cli.pi.support.voice_dictionary", "VoiceCommandAction"),
     "VoiceCommandDictionary": (
-        "yoyopod.integrations.voice.dictionary",
+        "yoyopod_cli.pi.support.voice_dictionary",
         "VoiceCommandDictionary",
     ),
     "VoiceCommandExecutor": ("yoyopod.integrations.voice.executor", "VoiceCommandExecutor"),
@@ -105,61 +105,61 @@ _PUBLIC_EXPORTS = {
     "VoiceRouteKind": ("yoyopod.integrations.voice.router", "VoiceRouteKind"),
     "VoiceRouter": ("yoyopod.integrations.voice.router", "VoiceRouter"),
     "VoiceService": ("yoyopod.integrations.voice.manager", "VoiceService"),
-    "VoiceSettings": ("yoyopod.integrations.voice.models", "VoiceSettings"),
-    "VoiceSettingsResolver": ("yoyopod.integrations.voice.settings", "VoiceSettingsResolver"),
-    "VoiceTranscript": ("yoyopod.integrations.voice.models", "VoiceTranscript"),
+    "VoiceSettings": ("yoyopod_cli.pi.support.voice_models", "VoiceSettings"),
+    "VoiceSettingsResolver": ("yoyopod_cli.pi.support.voice_settings", "VoiceSettingsResolver"),
+    "VoiceTranscript": ("yoyopod_cli.pi.support.voice_models", "VoiceTranscript"),
     "WakeDetectionResult": ("yoyopod.integrations.voice.wake", "WakeDetectionResult"),
     "WakeDetector": ("yoyopod.integrations.voice.wake", "WakeDetector"),
     "VoiceWorkerAskResult": (
-        "yoyopod.integrations.voice.worker_contract",
+        "yoyopod_cli.pi.support.voice_worker_contract",
         "VoiceWorkerAskResult",
     ),
     "VoiceWorkerAskTurn": (
-        "yoyopod.integrations.voice.worker_contract",
+        "yoyopod_cli.pi.support.voice_worker_contract",
         "VoiceWorkerAskTurn",
     ),
-    "VoiceWorkerError": ("yoyopod.integrations.voice.worker_contract", "VoiceWorkerError"),
+    "VoiceWorkerError": ("yoyopod_cli.pi.support.voice_worker_contract", "VoiceWorkerError"),
     "VoiceWorkerHealthResult": (
-        "yoyopod.integrations.voice.worker_contract",
+        "yoyopod_cli.pi.support.voice_worker_contract",
         "VoiceWorkerHealthResult",
     ),
     "VoiceWorkerClient": ("yoyopod.integrations.voice.worker_client", "VoiceWorkerClient"),
     "VoiceWorkerSpeakResult": (
-        "yoyopod.integrations.voice.worker_contract",
+        "yoyopod_cli.pi.support.voice_worker_contract",
         "VoiceWorkerSpeakResult",
     ),
     "VoiceWorkerTimeout": ("yoyopod.integrations.voice.worker_client", "VoiceWorkerTimeout"),
     "VoiceWorkerTranscribeResult": (
-        "yoyopod.integrations.voice.worker_contract",
+        "yoyopod_cli.pi.support.voice_worker_contract",
         "VoiceWorkerTranscribeResult",
     ),
     "VoiceWorkerUnavailable": (
         "yoyopod.integrations.voice.worker_client",
         "VoiceWorkerUnavailable",
     ),
-    "build_ask_payload": ("yoyopod.integrations.voice.worker_contract", "build_ask_payload"),
-    "build_speak_payload": ("yoyopod.integrations.voice.worker_contract", "build_speak_payload"),
+    "build_ask_payload": ("yoyopod_cli.pi.support.voice_worker_contract", "build_ask_payload"),
+    "build_speak_payload": ("yoyopod_cli.pi.support.voice_worker_contract", "build_speak_payload"),
     "build_transcribe_payload": (
-        "yoyopod.integrations.voice.worker_contract",
+        "yoyopod_cli.pi.support.voice_worker_contract",
         "build_transcribe_payload",
     ),
     "load_voice_command_dictionary": (
-        "yoyopod.integrations.voice.dictionary",
+        "yoyopod_cli.pi.support.voice_dictionary",
         "load_voice_command_dictionary",
     ),
-    "match_voice_command": ("yoyopod.integrations.voice.commands", "match_voice_command"),
+    "match_voice_command": ("yoyopod_cli.pi.support.voice_commands", "match_voice_command"),
     "normalize_voice_activation": (
         "yoyopod.integrations.voice.activation",
         "normalize_voice_activation",
     ),
-    "parse_ask_result": ("yoyopod.integrations.voice.worker_contract", "parse_ask_result"),
-    "parse_speak_result": ("yoyopod.integrations.voice.worker_contract", "parse_speak_result"),
-    "parse_health_result": ("yoyopod.integrations.voice.worker_contract", "parse_health_result"),
+    "parse_ask_result": ("yoyopod_cli.pi.support.voice_worker_contract", "parse_ask_result"),
+    "parse_speak_result": ("yoyopod_cli.pi.support.voice_worker_contract", "parse_speak_result"),
+    "parse_health_result": ("yoyopod_cli.pi.support.voice_worker_contract", "parse_health_result"),
     "parse_transcribe_result": (
-        "yoyopod.integrations.voice.worker_contract",
+        "yoyopod_cli.pi.support.voice_worker_contract",
         "parse_transcribe_result",
     ),
-    "parse_worker_error": ("yoyopod.integrations.voice.worker_contract", "parse_worker_error"),
+    "parse_worker_error": ("yoyopod_cli.pi.support.voice_worker_contract", "parse_worker_error"),
 }
 
 

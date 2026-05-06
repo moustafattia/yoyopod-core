@@ -14,7 +14,7 @@ if TYPE_CHECKING:
         CloudWorkerSpeechToTextBackend,
         CloudWorkerTextToSpeechBackend,
     )
-    from yoyopod.backends.voice.output import AlsaOutputPlayer
+    from yoyopod_cli.pi.support.voice_output import AlsaOutputPlayer
     from yoyopod.backends.voice.stt import (
         NullSpeechToTextBackend,
         SpeechToTextBackend,
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 _EXPORTS = {
-    "AlsaOutputPlayer": ("yoyopod.backends.voice.output", "AlsaOutputPlayer"),
+    "AlsaOutputPlayer": ("yoyopod_cli.pi.support.voice_output", "AlsaOutputPlayer"),
     "AudioCaptureBackend": ("yoyopod.backends.voice.capture", "AudioCaptureBackend"),
     "CloudWorkerSpeechToTextBackend": (
         "yoyopod.backends.voice.cloud_worker",

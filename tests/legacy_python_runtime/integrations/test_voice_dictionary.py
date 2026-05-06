@@ -6,8 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from yoyopod.integrations.voice.commands import VoiceCommandIntent, match_voice_command
-from yoyopod.integrations.voice.dictionary import (
+from yoyopod_cli.pi.support.voice_commands import VoiceCommandIntent, match_voice_command
+from yoyopod_cli.pi.support.voice_dictionary import (
     SAFE_VOICE_ROUTE_ACTIONS,
     VoiceCommandDictionary,
     build_voice_command_transcription_prompt,

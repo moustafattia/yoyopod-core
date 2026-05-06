@@ -11,13 +11,13 @@ from typing import Protocol
 
 from loguru import logger
 
-from yoyopod.backends.voice.output import AlsaOutputPlayer
-from yoyopod.integrations.voice.dictionary import (
+from yoyopod_cli.pi.support.voice_dictionary import (
     build_voice_command_transcription_prompt,
     load_voice_command_dictionary,
 )
-from yoyopod.integrations.voice.models import VoiceSettings, VoiceTranscript
-from yoyopod.integrations.voice.worker_contract import (
+from yoyopod_cli.pi.support.voice_models import VoiceSettings, VoiceTranscript
+from yoyopod_cli.pi.support.voice_output import AlsaOutputPlayer
+from yoyopod_cli.pi.support.voice_worker_contract import (
     VoiceWorkerSpeakResult,
     VoiceWorkerTranscribeResult,
 )

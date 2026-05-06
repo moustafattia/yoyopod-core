@@ -15,8 +15,8 @@ from yoyopod.backends.voice import (
     CloudWorkerSpeechToTextBackend,
     CloudWorkerTextToSpeechBackend,
 )
-from yoyopod.integrations.voice.models import VoiceSettings, VoiceTranscript
-from yoyopod.integrations.voice.worker_contract import (
+from yoyopod_cli.pi.support.voice_models import VoiceSettings, VoiceTranscript
+from yoyopod_cli.pi.support.voice_worker_contract import (
     VoiceWorkerSpeakResult,
     VoiceWorkerTranscribeResult,
 )

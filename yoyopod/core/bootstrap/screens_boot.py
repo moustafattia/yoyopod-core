@@ -15,7 +15,7 @@ from yoyopod.integrations.voice import (
     VoiceSettings,
     VoiceSettingsResolver,
 )
-from yoyopod.integrations.voice.trace import VoiceTraceStore
+from yoyopod_cli.pi.support.voice_trace import VoiceTraceStore
 from yoyopod.ui.input import InteractionProfile
 
 if TYPE_CHECKING:

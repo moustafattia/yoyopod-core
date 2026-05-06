@@ -5,11 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Callable
 
-from yoyopod.integrations.voice import VoiceSettings
+from yoyopod_cli.pi.support.voice_models import VoiceSettings
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod_cli.config import ConfigManager
+
+_DEFAULT_VOICE_SETTINGS = VoiceSettings()
 
 
 @dataclass(slots=True, frozen=True)
@@ -126,20 +128,22 @@ class VoiceSettingsResolver:
         defaults = VoiceSettings(
             capture_device_id=capture_device_id,
             speaker_device_id=speaker_device_id or None,
-            voice_trace_enabled=getattr(trace_cfg, "enabled", VoiceSettings.voice_trace_enabled),
-            voice_trace_path=getattr(trace_cfg, "path", VoiceSettings.voice_trace_path),
+            voice_trace_enabled=getattr(
+                trace_cfg, "enabled", _DEFAULT_VOICE_SETTINGS.voice_trace_enabled
+            ),
+            voice_trace_path=getattr(trace_cfg, "path", _DEFAULT_VOICE_SETTINGS.voice_trace_path),
             voice_trace_max_turns=getattr(
-                trace_cfg, "max_turns", VoiceSettings.voice_trace_max_turns
+                trace_cfg, "max_turns", _DEFAULT_VOICE_SETTINGS.voice_trace_max_turns
             ),
             voice_trace_include_transcripts=getattr(
                 trace_cfg,
                 "include_transcripts",
-                VoiceSettings.voice_trace_include_transcripts,
+                _DEFAULT_VOICE_SETTINGS.voice_trace_include_transcripts,
             ),
             voice_trace_body_preview_chars=getattr(
                 trace_cfg,
                 "body_preview_chars",
-                VoiceSettings.voice_trace_body_preview_chars,
+                _DEFAULT_VOICE_SETTINGS.voice_trace_body_preview_chars,
             ),
         )
         if self._config_manager is None:

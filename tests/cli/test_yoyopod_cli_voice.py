@@ -9,7 +9,7 @@ import yaml
 from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
-from yoyopod.integrations.voice.trace import VoiceTraceEntry, VoiceTraceStore
+from yoyopod_cli.pi.support.voice_trace import VoiceTraceEntry, VoiceTraceStore
 from yoyopod_cli.main import app
 
 runner = CliRunner()

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from yoyopod.integrations.voice.dictionary_validator import (
+from yoyopod_cli.pi.support.voice_dictionary_validator import (
     validate_voice_command_dictionary,
 )
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from yoyopod.integrations.voice.dictionary import VoiceCommandDictionary
-from yoyopod.integrations.voice.dictionary import load_voice_command_dictionary
+from yoyopod_cli.pi.support.voice_dictionary import VoiceCommandDictionary
+from yoyopod_cli.pi.support.voice_dictionary import load_voice_command_dictionary
 from yoyopod.integrations.voice.router import (
     VoiceRouteKind,
     VoiceRouter,

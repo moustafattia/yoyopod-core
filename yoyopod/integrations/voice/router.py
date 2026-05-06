@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from yoyopod.integrations.voice.activation import VoiceActivationNormalizer
-from yoyopod.integrations.voice.commands import VoiceCommandMatch, match_voice_command
-from yoyopod.integrations.voice.dictionary import VoiceCommandDictionary
+from yoyopod_cli.pi.support.voice_commands import VoiceCommandMatch, match_voice_command
+from yoyopod_cli.pi.support.voice_dictionary import VoiceCommandDictionary
 
 
 class VoiceRouteKind(StrEnum):

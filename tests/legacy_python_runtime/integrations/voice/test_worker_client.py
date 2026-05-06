@@ -12,7 +12,7 @@ from yoyopod.integrations.voice.worker_client import (
     VoiceWorkerTimeout,
     VoiceWorkerUnavailable,
 )
-from yoyopod.integrations.voice.worker_contract import (
+from yoyopod_cli.pi.support.voice_worker_contract import (
     VoiceWorkerAskResult,
     VoiceWorkerAskTurn,
     VoiceWorkerHealthResult,

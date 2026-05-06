@@ -10,8 +10,11 @@ from typing import Any
 
 import yaml
 
-from yoyopod.integrations.voice.commands import VoiceCommandIntent, match_voice_command
-from yoyopod.integrations.voice.dictionary import SAFE_VOICE_ROUTE_ACTIONS, _merge_dictionary_payload
+from yoyopod_cli.pi.support.voice_commands import VoiceCommandIntent, match_voice_command
+from yoyopod_cli.pi.support.voice_dictionary import (
+    SAFE_VOICE_ROUTE_ACTIONS,
+    _merge_dictionary_payload,
+)
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
 _SHORT_PHRASE_ALLOWLIST = frozenset({"play", "louder", "quieter"})
@@ -151,9 +154,7 @@ def _validate_intents(
         )
         if intent_payload.get("enabled") is not False:
             for index, example in enumerate(examples):
-                example_location = _phrase_location(
-                    f"{intent_location}.examples", index, examples
-                )
+                example_location = _phrase_location(f"{intent_location}.examples", index, examples)
                 example_locations[(intent_name, example)] = example_location
 
         if "fuzzy_threshold" in intent_payload:
@@ -224,21 +225,19 @@ def _validate_phrase_field(
     if value is None:
         return ()
     if isinstance(value, str):
-        phrases = (value,)
+        phrases: tuple[str, ...] = (value,)
     elif isinstance(value, list | tuple):
-        phrases = []
+        phrase_items: list[str] = []
         for index, item in enumerate(value):
             if not isinstance(item, str):
                 errors.append(
                     DictionaryValidationIssue(f"{location}[{index}]", "phrase must be a string")
                 )
                 continue
-            phrases.append(item)
-        phrases = tuple(phrases)
+            phrase_items.append(item)
+        phrases = tuple(phrase_items)
     else:
-        errors.append(
-            DictionaryValidationIssue(location, "must be a string or list of strings")
-        )
+        errors.append(DictionaryValidationIssue(location, "must be a string or list of strings"))
         return ()
 
     stripped_phrases = tuple(phrase.strip() for phrase in phrases if phrase.strip())

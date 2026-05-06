@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from yoyopod.core.events import WorkerMessageReceivedEvent
-from yoyopod.integrations.voice.worker_contract import (
+from yoyopod_cli.pi.support.voice_worker_contract import (
     VoiceWorkerAskResult,
     VoiceWorkerAskTurn,
     VoiceWorkerHealthResult,

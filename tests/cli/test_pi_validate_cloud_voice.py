@@ -226,7 +226,7 @@ def test_cloud_voice_acoustic_loopback_records_and_transcribes_physical_route(
     monkeypatch.setattr(pi_validate_cv.shutil, "which", lambda binary: f"/usr/bin/{binary}")
     monkeypatch.setattr(pi_validate_cv.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.AlsaOutputPlayer.play_wav",
+        "yoyopod_cli.pi.support.voice_output.AlsaOutputPlayer.play_wav",
         lambda self, audio_path, **_kwargs: audio_path.exists(),
     )
 
@@ -296,7 +296,7 @@ def test_cloud_voice_acoustic_loopback_reports_empty_transcript_artifact(
     monkeypatch.setattr(pi_validate_cv.shutil, "which", lambda binary: f"/usr/bin/{binary}")
     monkeypatch.setattr(pi_validate_cv.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(
-        "yoyopod.backends.voice.output.AlsaOutputPlayer.play_wav",
+        "yoyopod_cli.pi.support.voice_output.AlsaOutputPlayer.play_wav",
         lambda self, audio_path, **_kwargs: audio_path.exists(),
     )
 

@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from yoyopod.integrations.voice.trace import (
+from yoyopod_cli.pi.support.voice_trace import (
     DEFAULT_VOICE_TRACE_PATH,
     VoiceTraceEntry,
     VoiceTraceStore,
     new_turn_id,
     utc_now_iso,
 )
-from yoyopod.integrations.voice.trace_analysis import analyze_voice_trace
+from yoyopod_cli.pi.support.voice_trace_analysis import analyze_voice_trace
 
 
 def _entry(

@@ -7,9 +7,9 @@ from typing import Any
 
 import typer
 
-from yoyopod.integrations.voice.dictionary_validator import validate_voice_command_dictionary
-from yoyopod.integrations.voice.trace import VoiceTraceStore
-from yoyopod.integrations.voice.trace_analysis import analyze_voice_trace
+from yoyopod_cli.pi.support.voice_dictionary_validator import validate_voice_command_dictionary
+from yoyopod_cli.pi.support.voice_trace import VoiceTraceStore
+from yoyopod_cli.pi.support.voice_trace_analysis import analyze_voice_trace
 
 app = typer.Typer(name="voice", help="Voice diagnostics and validation.", no_args_is_help=True)
 dictionary_app = typer.Typer(

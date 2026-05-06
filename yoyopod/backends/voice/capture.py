@@ -17,7 +17,7 @@ from typing import Protocol
 
 from loguru import logger
 
-from yoyopod.integrations.voice.models import (
+from yoyopod_cli.pi.support.voice_models import (
     VoiceCaptureRequest,
     VoiceCaptureResult,
     VoiceSettings,
