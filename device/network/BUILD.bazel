@@ -12,7 +12,7 @@ yoyopod_rust_host_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "yoyopod_network",
-    deps = ["//yoyopod_rs/protocol:protocol_lib"],
+    deps = ["//device/protocol:protocol_lib"],
 )
 
 yoyopod_rust_host_binary(
@@ -36,7 +36,7 @@ yoyopod_rust_host_integration_tests(
     tests = NETWORK_HOST_TESTS,
     deps = [
         ":network_host_lib",
-        "//yoyopod_rs/harness:harness_lib",
+        "//device/harness:harness_lib",
     ],
     extra_srcs_by_test = {
         "lifecycle": ["tests/support/mod.rs"],

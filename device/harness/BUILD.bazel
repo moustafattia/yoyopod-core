@@ -4,5 +4,5 @@ yoyopod_rust_host_library(
     name = "harness_lib",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "yoyopod_harness",
-    deps = ["//yoyopod_rs/protocol:protocol_lib"],
+    deps = ["//device/protocol:protocol_lib"],
 )

@@ -76,6 +76,6 @@ def test_dev_unit_defaults_to_python_with_rust_runtime_opt_in() -> None:
     exec_start = cfg["Service"]["ExecStart"]
 
     assert "$${YOYOPOD_DEV_RUNTIME:-python}" in exec_start
-    assert "yoyopod_rs/runtime/build/yoyopod-runtime" in exec_start
+    assert "device/runtime/build/yoyopod-runtime" in exec_start
     assert "--config-dir $$CHECKOUT/config --hardware whisplay" in exec_start
     assert '"$$VENV/bin/python" yoyopod.py' in exec_start

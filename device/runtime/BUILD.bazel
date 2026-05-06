@@ -6,31 +6,34 @@ load(
 )
 
 yoyopod_rust_host_library(
-    name = "cloud_host_lib",
+    name = "runtime_lib",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
-    crate_name = "yoyopod_cloud",
-    deps = ["//yoyopod_rs/protocol:protocol_lib"],
+    crate_name = "yoyopod_runtime",
+    deps = ["//device/protocol:protocol_lib"],
 )
 
 yoyopod_rust_host_binary(
-    name = "yoyopod-cloud-host",
+    name = "yoyopod-runtime",
     srcs = ["src/main.rs"],
-    deps = [":cloud_host_lib"],
+    deps = [":runtime_lib"],
 )
 
-CLOUD_HOST_TESTS = [
+RUNTIME_TESTS = [
+    "cli",
     "config",
+    "event",
+    "protocol",
+    "runtime_loop",
+    "smoke",
+    "state",
     "worker",
 ]
 
 yoyopod_rust_host_integration_tests(
     name = "tests",
-    tests = CLOUD_HOST_TESTS,
-    deps = [
-        ":cloud_host_lib",
-        "//yoyopod_rs/harness:harness_lib",
-    ],
+    tests = RUNTIME_TESTS,
+    deps = [":runtime_lib"],
 )

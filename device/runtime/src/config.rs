@@ -16,11 +16,11 @@ const LINPHONE_HOSTED_CONFERENCE_FACTORY_URI: &str = "sip:conference-factory@sip
 const LINPHONE_HOSTED_FILE_TRANSFER_SERVER_URL: &str = "https://files.linphone.org/lft.php";
 const LINPHONE_HOSTED_LIME_SERVER_URL: &str =
     "https://lime.linphone.org/lime-server/lime-server.php";
-const RUST_UI_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/ui/build/yoyopod-ui-host";
-const RUST_CLOUD_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/cloud/build/yoyopod-cloud-host";
-const RUST_NETWORK_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/network/build/yoyopod-network-host";
-const RUST_POWER_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/power/build/yoyopod-power-host";
-const VOICE_WORKER_DEFAULT: &str = "yoyopod_rs/speech/build/yoyopod-speech-host";
+const RUST_UI_HOST_DEFAULT_WORKER: &str = "device/ui/build/yoyopod-ui-host";
+const RUST_CLOUD_HOST_DEFAULT_WORKER: &str = "device/cloud/build/yoyopod-cloud-host";
+const RUST_NETWORK_HOST_DEFAULT_WORKER: &str = "device/network/build/yoyopod-network-host";
+const RUST_POWER_HOST_DEFAULT_WORKER: &str = "device/power/build/yoyopod-power-host";
+const VOICE_WORKER_DEFAULT: &str = "device/speech/build/yoyopod-speech-host";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RuntimeConfig {
@@ -500,11 +500,11 @@ impl RuntimeConfig {
                 ),
                 media: env_or_default(
                     "YOYOPOD_RUST_MEDIA_HOST_WORKER",
-                    "yoyopod_rs/media/build/yoyopod-media-host",
+                    "device/media/build/yoyopod-media-host",
                 ),
                 voip: env_or_default(
                     "YOYOPOD_RUST_VOIP_HOST_WORKER",
-                    "yoyopod_rs/voip/build/yoyopod-voip-host",
+                    "device/voip/build/yoyopod-voip-host",
                 ),
                 network: env_or_default(
                     "YOYOPOD_RUST_NETWORK_HOST_WORKER",

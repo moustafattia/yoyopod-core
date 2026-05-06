@@ -13,8 +13,8 @@ yoyopod_rust_host_library(
     ),
     crate_name = "yoyopod_power",
     deps = [
-        "//yoyopod_rs/protocol:protocol_lib",
-        "//yoyopod_rs/worker:worker_lib",
+        "//device/protocol:protocol_lib",
+        "//device/worker:worker_lib",
     ],
 )
 
@@ -35,6 +35,6 @@ yoyopod_rust_host_integration_tests(
     tests = POWER_HOST_TESTS,
     deps = [
         ":power_host_lib",
-        "//yoyopod_rs/harness:harness_lib",
+        "//device/harness:harness_lib",
     ],
 )

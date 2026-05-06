@@ -201,17 +201,14 @@ secrets:
     assert_eq!(config.pid_file, "/tmp/yoyopod-test.pid");
     assert!(Path::new(&config.log_file).ends_with(Path::new("logs/yoyopod.log")));
     assert!(Path::new(&config.log_file).is_absolute());
-    assert_eq!(
-        config.worker_paths.ui,
-        "yoyopod_rs/ui/build/yoyopod-ui-host"
-    );
+    assert_eq!(config.worker_paths.ui, "device/ui/build/yoyopod-ui-host");
     assert_eq!(
         config.worker_paths.cloud,
-        "yoyopod_rs/cloud/build/yoyopod-cloud-host"
+        "device/cloud/build/yoyopod-cloud-host"
     );
     assert_eq!(
         config.worker_paths.network,
-        "yoyopod_rs/network/build/yoyopod-network-host"
+        "device/network/build/yoyopod-network-host"
     );
 }
 
@@ -509,7 +506,7 @@ worker:
   enabled: true
   provider: "mock"
   argv:
-    - "yoyopod_rs/speech/build/yoyopod-speech-host"
+    - "device/speech/build/yoyopod-speech-host"
   request_timeout_seconds: 12.0
   max_audio_seconds: 30.0
   stt_model: "gpt-4o-mini-transcribe"
@@ -553,7 +550,7 @@ worker:
     assert_eq!(config.voice.ask_instructions, "Kid-safe answers.");
     assert_eq!(
         config.worker_paths.voice,
-        "yoyopod_rs/speech/build/yoyopod-speech-host"
+        "device/speech/build/yoyopod-speech-host"
     );
 }
 
@@ -735,7 +732,7 @@ fn legacy_ui_worker_env_is_used_when_host_worker_is_default_or_empty() {
 
     std::env::set_var(
         "YOYOPOD_RUST_UI_HOST_WORKER",
-        "yoyopod_rs/ui/build/yoyopod-ui-host",
+        "device/ui/build/yoyopod-ui-host",
     );
     let default_host_config = RuntimeConfig::load(&dir).expect("load runtime config");
     assert_eq!(

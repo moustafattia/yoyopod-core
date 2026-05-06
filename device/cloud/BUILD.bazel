@@ -6,31 +6,31 @@ load(
 )
 
 yoyopod_rust_host_library(
-    name = "speech_host_lib",
+    name = "cloud_host_lib",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
-    crate_name = "yoyopod_speech",
-    deps = ["//yoyopod_rs/protocol:protocol_lib"],
+    crate_name = "yoyopod_cloud",
+    deps = ["//device/protocol:protocol_lib"],
 )
 
 yoyopod_rust_host_binary(
-    name = "yoyopod-speech-host",
+    name = "yoyopod-cloud-host",
     srcs = ["src/main.rs"],
-    deps = [":speech_host_lib"],
+    deps = [":cloud_host_lib"],
 )
 
-SPEECH_HOST_TESTS = [
-    "protocol",
+CLOUD_HOST_TESTS = [
+    "config",
     "worker",
 ]
 
 yoyopod_rust_host_integration_tests(
     name = "tests",
-    tests = SPEECH_HOST_TESTS,
+    tests = CLOUD_HOST_TESTS,
     deps = [
-        ":speech_host_lib",
-        "//yoyopod_rs/harness:harness_lib",
+        ":cloud_host_lib",
+        "//device/harness:harness_lib",
     ],
 )

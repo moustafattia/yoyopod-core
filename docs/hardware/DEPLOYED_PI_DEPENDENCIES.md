@@ -67,7 +67,7 @@ No separate Mopidy process or music daemon is part of the stack anymore.
 
 ### Native VoIP bridge
 
-- `yoyopod_rs/voip/build/yoyopod-voip-host` - Rust VoIP Host worker with the Liblinphone runtime built in, installed from GitHub Actions artifact.
+- `device/voip/build/yoyopod-voip-host` - Rust VoIP Host worker with the Liblinphone runtime built in, installed from GitHub Actions artifact.
 
 ## Python-Level Dependencies Used By The App
 
