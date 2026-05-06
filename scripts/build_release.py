@@ -11,8 +11,8 @@ Produces:
 
 SELF-CONTAINED NOTE: venv bundling is ON by default. Build deployable Pi
 artifacts in a Linux/aarch64 environment, CI slot builder, or via
-`yoyopod remote release build-pi`. Use --skip-venv only for structure tests
-or legacy source-only compatibility flows.
+`yoyopod remote release build-pi`. Use --skip-venv only for source-only
+packaging checks or legacy source-only compatibility flows.
 """
 
 from __future__ import annotations
@@ -88,7 +88,6 @@ def _copy_sources(repo_root: Path, dest_app: Path) -> None:
                 "__pycache__",
                 "*.pyc",
                 "*.pyo",
-                ".pytest_cache",
                 ".mypy_cache",
                 ".ruff_cache",
                 "target",
@@ -444,7 +443,7 @@ def build(
     """Produce a slot directory at <output_root>/<version>/.
 
     Returns the slot directory path. Venv resolution is enabled by default;
-    pass skip_venv=True only for structure tests or legacy source-only slots.
+    pass skip_venv=True only for source-only packaging checks or legacy source-only slots.
     """
     valid_channels = ("dev", "beta", "stable")
     if channel not in valid_channels:

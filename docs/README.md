@@ -21,8 +21,8 @@ When docs disagree, trust sources in this order:
 5. Generated plans, checklists, and design specs
 6. Archived docs under [`archive/`](archive/)
 
-The retired Python app runtime lives under `legacy/python-runtime/` for
-temporary reference only. It is not a supported runtime owner.
+The retired Python app runtime has been deleted. Python remains only for
+operations CLI, deploy, release, and validation orchestration.
 
 Plan docs are useful context, but they are not automatically the current implementation contract.
 

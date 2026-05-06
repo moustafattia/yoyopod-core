@@ -155,29 +155,28 @@ yoyopod
 The installed `yoyopod` command is the operations CLI. It does not launch the
 app runtime.
 
-Legacy Python runtime demos were moved under `legacy/python-runtime/demos/`.
-They are retained only as historical reference and are not part of the active
-Rust runtime workflow.
+Legacy Python runtime demos have been deleted. The Rust runtime is the only
+supported app runtime workflow.
 
 ## Validation
 
 Local validation:
 
 ```bash
-cargo test --manifest-path device/Cargo.toml --workspace --locked
+cargo check --manifest-path device/Cargo.toml --workspace --locked
 ```
 
-Run targeted Python checks only when Python CLI/deploy/compatibility files
+Run Python lint/type checks only when Python CLI/deploy/compatibility files
 change:
 
 ```bash
-uv run pytest -q tests/cli tests/deploy
+uv run python scripts/quality.py gate
 ```
 
 Optional extra syntax/import smoke for broad Python tree changes:
 
 ```bash
-python -m compileall yoyopod_cli tests scripts
+python -m compileall yoyopod_cli scripts
 ```
 
 Full quality audit of the current repo debt:
@@ -206,8 +205,7 @@ Target-side validation suite:
 ```bash
 yoyopod pi validate deploy
 yoyopod pi validate smoke
-yoyopod pi validate smoke --with-power --with-rtc
-yoyopod pi validate music
+yoyopod pi validate smoke
 yoyopod pi validate voip
 yoyopod pi validate navigation
 yoyopod pi validate stability
@@ -226,9 +224,9 @@ yoyopod remote config show
 yoyopod remote status
 git branch --show-current
 git rev-parse HEAD
-yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip --with-lvgl-soak
-yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-navigation
-yoyopod remote preflight --branch <branch> --with-music --with-voip --with-navigation --with-lvgl-soak
+yoyopod remote validate --branch <branch> --sha <commit> --with-voip --with-lvgl-soak
+yoyopod remote validate --branch <branch> --sha <commit> --with-navigation
+yoyopod remote preflight --branch <branch>
 yoyopod remote service status
 yoyopod remote logs --lines 200
 ```

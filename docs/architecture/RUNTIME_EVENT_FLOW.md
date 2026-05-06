@@ -22,8 +22,8 @@ Hosts own domain integration:
 - `device/ui/`: screen model rendering and UI intents
 - `device/voip/`: Liblinphone/SIP calls, messages, and voice notes
 
-The retired Python runtime event loop is preserved only under
-`legacy/python-runtime/` for reference.
+The retired Python runtime event loop has been deleted. The Rust runtime and
+hosts under `device/` are the only supported app-runtime implementation.
 
 ## Protocol Rule
 

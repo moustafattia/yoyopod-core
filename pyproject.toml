@@ -41,9 +41,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-timeout>=2.4.0",
     "black>=24.0.0",
     "ruff>=0.3.0",
     "mypy>=1.8.0",
@@ -205,10 +202,6 @@ disable_error_code = ["misc"]
 [[tool.mypy.overrides]]
 module = "yoyopod_cli.pi.support.voip_backend.rust_host"
 disable_error_code = ["arg-type"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-norecursedirs = ["tests/legacy_python_runtime"]
 
 [tool.yoyopod_quality]
 gate_format_paths = [

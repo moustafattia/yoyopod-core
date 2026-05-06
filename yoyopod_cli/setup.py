@@ -41,7 +41,7 @@ NETWORK_PI_PACKAGES: tuple[str, ...] = ("ppp",)
 PISUGAR_PI_PACKAGES: tuple[str, ...] = ("pisugar-server",)
 HOST_REQUIRED_TOOLS: tuple[str, ...] = ("git", "uv")
 HOST_REMOTE_TOOLS: tuple[str, ...] = ("ssh", "rsync")
-HOST_DEV_MODULES: tuple[str, ...] = ("pytest", "black", "ruff", "mypy", "typer")
+HOST_DEV_MODULES: tuple[str, ...] = ("black", "ruff", "mypy", "typer")
 NATIVE_ARTIFACTS: tuple[Path, ...] = (
     REPO_ROOT
     / "yoyopod_cli"

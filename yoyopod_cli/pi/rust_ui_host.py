@@ -17,7 +17,9 @@ from yoyopod_cli.pi.support.rust_ui_host import (
 
 def _default_worker_path() -> Path:
     suffix = ".exe" if __import__("os").name == "nt" else ""
-    return Path("device") / "ui" / "build" / f"yoyopod-ui-host{suffix}"
+    relative = Path("device") / "ui" / "build" / f"yoyopod-ui-host{suffix}"
+    packaged = Path("app") / relative
+    return packaged if packaged.exists() else relative
 
 
 def rust_ui_host(
@@ -91,9 +93,19 @@ def _screen_name(value: str) -> ScreenName:
 
 def _native_lvgl_env() -> dict[str, str]:
     env = os.environ.copy()
-    native_build = Path("yoyopod_cli") / "pi" / "support" / "lvgl_binding" / "native" / "build"
-    native_lib = native_build / "lib"
-    entries = [native_build.as_posix(), native_lib.as_posix()]
+    native_builds = [
+        Path("app") / "yoyopod_cli" / "pi" / "support" / "lvgl_binding" / "native" / "build",
+        Path("yoyopod_cli") / "pi" / "support" / "lvgl_binding" / "native" / "build",
+    ]
+    entries: list[str] = []
+    for native_build in native_builds:
+        entries.extend(
+            [
+                native_build.as_posix(),
+                (native_build / "lib").as_posix(),
+                (native_build / "lvgl" / "lib").as_posix(),
+            ]
+        )
     existing = env.get("LD_LIBRARY_PATH", "")
     if existing:
         entries.append(existing)

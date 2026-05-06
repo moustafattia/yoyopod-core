@@ -18,7 +18,7 @@ Unsupported runtime launch surfaces:
 
 - the retired Python launcher
 - imports from the retired Python app package
-- code under `legacy/python-runtime/`
+- any `yoyopod.*` Python app-runtime package
 
 The installed `yoyopod` console entrypoint in `pyproject.toml` belongs to
 `yoyopod_cli`. It is the operations CLI, not the app runtime.
@@ -71,16 +71,15 @@ Python remains in the repo for:
 - `yoyopod_cli/` operations commands
 - deploy, release, slot, and Pi validation helpers
 - compatibility support modules that the CLI still uses
-- tests for CLI/deploy/support behavior
 
-The retired Python app runtime lives under `legacy/python-runtime/`. It is
-excluded from packaging and default tests, and active code must not import it.
+The retired Python app runtime has been deleted. Active code must not import a
+`yoyopod.*` Python app-runtime package.
 
 ## Packaging
 
 The Python package wheel contains `yoyopod_cli` only. Release slots copy the
 active application sources under `app/device` and `app/yoyopod_cli`; they do not
-package the retired Python runtime package.
+package a Python app-runtime package.
 
 ## Source Of Truth
 

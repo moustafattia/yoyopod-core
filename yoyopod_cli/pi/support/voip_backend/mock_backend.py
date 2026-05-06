@@ -1,4 +1,4 @@
-"""In-memory VoIP backend used for tests and offline services."""
+"""In-memory VoIP backend used for offline services."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from yoyopod_cli.pi.support.call_models import VoIPEvent
 
 
 class MockVoIPBackend:
-    """Simple in-memory backend used for unit tests."""
+    """Simple in-memory backend used for offline callers."""
 
     def __init__(self, start_result: bool = True) -> None:
         self.start_result = start_result

@@ -551,7 +551,7 @@ class MpvBackend:
 
 
 class MockMusicBackend:
-    """In-memory music backend for unit tests."""
+    """In-memory music backend for offline callers."""
 
     def __init__(self) -> None:
         self._connected = False
