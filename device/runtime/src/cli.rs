@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use serde_json::json;
 
-use crate::config::RuntimeConfig;
+use crate::config::{resolve_worker_program_for_config_dir, RuntimeConfig};
 use crate::logging::{
     log_marker, remove_pid_file, shutdown_marker, startup_marker, write_pid_file,
 };
@@ -105,7 +105,7 @@ fn start_workers(
 
     if !workers.start(WorkerSpec::new(
         WorkerDomain::Ui,
-        config.worker_paths.ui.clone(),
+        worker_program(config_dir, &config.worker_paths.ui),
         ["--hardware".to_string(), hardware.to_string()],
     )) {
         bail!("failed to start UI worker");
@@ -118,7 +118,7 @@ fn start_workers(
     state.mark_worker(WorkerDomain::Cloud, WorkerState::Starting, "starting");
     if workers.start(WorkerSpec::new(
         WorkerDomain::Cloud,
-        config.worker_paths.cloud.clone(),
+        worker_program(config_dir, &config.worker_paths.cloud),
         [
             "--config-dir".to_string(),
             config_dir.to_string_lossy().to_string(),
@@ -143,7 +143,7 @@ fn start_workers(
 
     if workers.start(WorkerSpec::new(
         WorkerDomain::Media,
-        config.worker_paths.media.clone(),
+        worker_program(config_dir, &config.worker_paths.media),
         Vec::<String>::new(),
     )) {
         state.mark_worker(WorkerDomain::Media, WorkerState::Starting, "starting");
@@ -166,7 +166,7 @@ fn start_workers(
 
     if workers.start(WorkerSpec::new(
         WorkerDomain::Voip,
-        config.worker_paths.voip.clone(),
+        worker_program(config_dir, &config.worker_paths.voip),
         Vec::<String>::new(),
     )) {
         state.mark_worker(WorkerDomain::Voip, WorkerState::Starting, "starting");
@@ -186,7 +186,7 @@ fn start_workers(
     state.mark_worker(WorkerDomain::Network, WorkerState::Starting, "starting");
     if workers.start(WorkerSpec::new(
         WorkerDomain::Network,
-        config.worker_paths.network.clone(),
+        worker_program(config_dir, &config.worker_paths.network),
         [
             "--config-dir".to_string(),
             config_dir.to_string_lossy().to_string(),
@@ -216,7 +216,7 @@ fn start_workers(
     state.mark_worker(WorkerDomain::Power, WorkerState::Starting, "starting");
     if workers.start(WorkerSpec::new(
         WorkerDomain::Power,
-        config.worker_paths.power.clone(),
+        worker_program(config_dir, &config.worker_paths.power),
         [
             "--config-dir".to_string(),
             config_dir.to_string_lossy().to_string(),
@@ -243,7 +243,7 @@ fn start_workers(
         state.mark_worker(WorkerDomain::Voice, WorkerState::Starting, "starting");
         if workers.start(WorkerSpec::new(
             WorkerDomain::Voice,
-            config.worker_paths.voice.clone(),
+            worker_program(config_dir, &config.worker_paths.voice),
             Vec::<String>::new(),
         )) {
             if workers.wait_for_ready(WorkerDomain::Voice, "voice.ready", Duration::from_secs(3)) {
@@ -267,6 +267,10 @@ fn start_workers(
     }
 
     Ok(state)
+}
+
+fn worker_program(config_dir: &Path, raw_program: &str) -> String {
+    resolve_worker_program_for_config_dir(config_dir, raw_program)
 }
 
 fn install_ctrlc_handler() -> Result<Arc<AtomicBool>> {

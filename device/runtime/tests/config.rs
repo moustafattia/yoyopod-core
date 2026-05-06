@@ -5,7 +5,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
-use yoyopod_runtime::config::RuntimeConfig;
+use yoyopod_runtime::config::{resolve_worker_program_for_config_dir, RuntimeConfig};
 use yoyopod_runtime::voice::{route_voice_transcript, VoiceCommandIntent, VoiceRouteKind};
 
 const CONFIG_ENV_KEYS: &[&str] = &[
@@ -228,6 +228,51 @@ fn missing_files_fall_back_to_dev_defaults() {
     assert_eq!(config.pid_file, "/tmp/yoyopod.pid");
     assert!(Path::new(&config.log_file).ends_with(Path::new("logs/yoyopod.log")));
     assert!(Path::new(&config.log_file).is_absolute());
+}
+
+#[test]
+fn relative_worker_programs_resolve_against_packaged_app_root() {
+    let root = temp_config_dir("slot-worker-root");
+    let config_dir = root.join("config");
+    fs::create_dir_all(root.join("app/device")).expect("packaged app dir");
+
+    let resolved =
+        resolve_worker_program_for_config_dir(&config_dir, "device/ui/build/yoyopod-ui-host");
+
+    assert_eq!(
+        PathBuf::from(resolved),
+        root.join("app/device/ui/build/yoyopod-ui-host")
+    );
+}
+
+#[test]
+fn relative_worker_programs_resolve_against_checkout_root_without_packaged_app() {
+    let root = temp_config_dir("checkout-worker-root");
+    let config_dir = root.join("config");
+
+    let resolved =
+        resolve_worker_program_for_config_dir(&config_dir, "device/ui/build/yoyopod-ui-host");
+
+    assert_eq!(
+        PathBuf::from(resolved),
+        root.join("device/ui/build/yoyopod-ui-host")
+    );
+}
+
+#[test]
+fn worker_program_resolution_preserves_absolute_paths_and_path_commands() {
+    let root = temp_config_dir("worker-path-command");
+    let config_dir = root.join("config");
+    fs::create_dir_all(root.join("app/device")).expect("packaged app dir");
+
+    assert_eq!(
+        resolve_worker_program_for_config_dir(&config_dir, "/opt/yoyopod/yoyopod-ui-host"),
+        "/opt/yoyopod/yoyopod-ui-host"
+    );
+    assert_eq!(
+        resolve_worker_program_for_config_dir(&config_dir, "yoyopod-ui-host"),
+        "yoyopod-ui-host"
+    );
 }
 
 #[test]

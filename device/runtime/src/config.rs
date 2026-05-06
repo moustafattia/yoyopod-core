@@ -1014,6 +1014,35 @@ fn env_or_default(name: &str, default: &str) -> String {
     env_string(name).unwrap_or_else(|| default.to_string())
 }
 
+pub fn resolve_worker_program_for_config_dir(config_dir: &Path, raw_program: &str) -> String {
+    let program = Path::new(raw_program);
+    if program.is_absolute()
+        || raw_program.starts_with('/')
+        || !is_path_like_worker_program(raw_program)
+    {
+        return raw_program.to_string();
+    }
+
+    app_root_for_config_dir(config_dir)
+        .join(program)
+        .to_string_lossy()
+        .to_string()
+}
+
+fn is_path_like_worker_program(raw_program: &str) -> bool {
+    raw_program.contains('/') || raw_program.contains('\\') || raw_program.starts_with('.')
+}
+
+fn app_root_for_config_dir(config_dir: &Path) -> PathBuf {
+    let runtime_root = runtime_root_for_config_dir(config_dir);
+    let packaged_app_root = runtime_root.join("app");
+    if packaged_app_root.join("device").exists() {
+        packaged_app_root
+    } else {
+        runtime_root
+    }
+}
+
 fn runtime_root_for_config_dir(config_dir: &Path) -> PathBuf {
     let config_dir = if config_dir.is_absolute() {
         config_dir.to_path_buf()
