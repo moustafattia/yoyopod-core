@@ -291,10 +291,6 @@ def _validate_shortcut(
 dev_app = typer.Typer(name="dev", help="Developer utilities.", no_args_is_help=True)
 app.add_typer(dev_app, name="dev")
 
-from yoyopod_cli import dev_profile as _dev_profile  # noqa: E402
-
-dev_app.add_typer(_dev_profile.app, name="profile")
-
 
 @dev_app.command()
 def docs() -> None:

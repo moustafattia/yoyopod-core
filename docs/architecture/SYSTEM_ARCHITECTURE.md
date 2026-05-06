@@ -48,7 +48,7 @@ mostly documentation and test-layout polish, not live runtime ownership.
 This is the startup sequence that exists on `main` today.
 
 1. Launch enters the `yoyopod.main:main` entrypoint implemented in `yoyopod/main.py`.
-   - `yoyopod.py` is only a thin launcher.
+   - `legacy/python-runtime/yoyopod.py` is only a thin launcher.
    - The installed `yoyopod` console script in `pyproject.toml` also targets `yoyopod.main:main`.
 2. `main()` configures process-level runtime plumbing before app setup starts.
    - `load_composed_app_settings()` reads `config/app/core.yaml` and `config/device/hardware.yaml` early enough to resolve logging settings.
@@ -123,7 +123,7 @@ This is the startup sequence that exists on `main` today.
 ## Runtime Topology
 
 ```text
-yoyopod.py / yoyopod.main
+legacy Python app entrypoint
   -> YoyoPodApp
      -> RuntimeBootService
      -> RuntimeLoopService

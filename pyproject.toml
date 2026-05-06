@@ -103,17 +103,14 @@ norecursedirs = ["tests/legacy_python_runtime"]
 [tool.yoyopod_quality]
 gate_format_paths = [
     "scripts/quality.py",
-    "yoyopod/main.py",
     "yoyopod_cli",
 ]
 gate_lint_paths = [
     "scripts/quality.py",
-    "yoyopod/main.py",
     "yoyopod_cli",
 ]
 gate_type_paths = [
     "scripts/quality.py",
-    "yoyopod/main.py",
     "yoyopod_cli",
 ]
 audit_format_paths = ["."]

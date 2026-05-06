@@ -24,7 +24,7 @@ The live process tree for YoYoPod was:
 
 ```text
 uv run device/runtime/build/yoyopod-runtime --config-dir config
-  -> python3 yoyopod.py
+  -> device/runtime/build/yoyopod-runtime --config-dir config
      -> mpv --idle --no-video --input-ipc-server=/tmp/yoyopod-mpv.sock --audio-device=alsa/default
 ```
 

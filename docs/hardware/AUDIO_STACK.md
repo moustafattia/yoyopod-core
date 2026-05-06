@@ -10,7 +10,7 @@ YoYoPod now uses an app-managed `mpv` process for music playback and Liblinphone
 For music playback, the runtime path is:
 
 ```text
-yoyopod.py
+legacy/python-runtime/yoyopod.py
   -> yoyopod.main
      -> YoyoPodApp
         -> LocalMusicService
