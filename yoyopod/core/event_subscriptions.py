@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from yoyopod.core import ScreenChangedEvent, UserActivityEvent, WorkerMessageReceivedEvent
-from yoyopod.integrations.power.events import (
+from yoyopod_cli.pi.support.power_integration.events import (
     GracefulShutdownCancelled,
     GracefulShutdownRequested,
     LowBatteryWarningRaised,

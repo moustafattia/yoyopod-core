@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from yoyopod.backends.music import PlaybackQueue, Track
+from yoyopod_cli.pi.support.music_backend import PlaybackQueue, Track
 from yoyopod.ui.input.hal import InteractionProfile
 
 if TYPE_CHECKING:
     from yoyopod.core.audio_volume import AudioVolumeController
-    from yoyopod.integrations.power.models import PowerSnapshot
+    from yoyopod_cli.pi.support.power_integration.models import PowerSnapshot
 
 __all__ = [
     "ActiveVoiceNoteState",

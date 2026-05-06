@@ -9,7 +9,7 @@ from enum import Enum, auto
 from typing import Callable, Optional, Dict, TYPE_CHECKING
 from loguru import logger
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.router import NavigationRequest, ScreenRouter
 

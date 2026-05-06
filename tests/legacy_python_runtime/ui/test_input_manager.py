@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import yoyopod.ui.input.manager as input_manager_module
-from yoyopod.ui.input import InputAction, InputManager
+from yoyopod_cli.pi.support.input import InputAction, InputManager
 
 
 class FakeActivityAdapter:

@@ -14,8 +14,8 @@ from pathlib import Path
 from loguru import logger
 
 from yoyopod.audio.manager import AudioManager
-from yoyopod.ui.display import Display
-from yoyopod.ui.input import InputAction, get_input_manager
+from yoyopod_cli.pi.support.display import Display
+from yoyopod_cli.pi.support.input import InputAction, get_input_manager
 
 ACTION_MAP = {
     "a": InputAction.SELECT,

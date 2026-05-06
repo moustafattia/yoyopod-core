@@ -13,10 +13,10 @@ from yoyopod.integrations.call import (
     CallInterruptionPolicy,
     CallSessionState,
 )
-from yoyopod.integrations.music import MusicFSM, MusicState
+from yoyopod_cli.pi.support.music_integration import MusicFSM, MusicState
 
 if TYPE_CHECKING:
-    from yoyopod.integrations.power.models import PowerSnapshot
+    from yoyopod_cli.pi.support.power_integration.models import PowerSnapshot
 
 
 class AppRuntimeState(Enum):

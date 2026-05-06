@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from yoyopod.integrations.call.models import RegistrationState
+from yoyopod_cli.pi.support.call_models import RegistrationState
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext

@@ -26,7 +26,7 @@ from yoyopod.integrations.call.commands import (
     UnmuteCommand,
 )
 from yoyopod.integrations.call.events import CallHistoryUpdatedEvent, VoiceNoteSummaryChangedEvent
-from yoyopod.integrations.call.models import (
+from yoyopod_cli.pi.support.call_models import (
     CallState,
     RegistrationState,
     VoIPCallSessionSnapshot,

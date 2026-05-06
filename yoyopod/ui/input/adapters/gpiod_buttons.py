@@ -23,7 +23,7 @@ from loguru import logger
 
 from yoyopod.ui.input.hal import InputAction, InputHAL
 
-from yoyopod.ui.input.gpiod_compat import (
+from yoyopod_cli.pi.support.gpiod_compat import (
     HAS_GPIOD,
     get_event_fd,
     open_chip,

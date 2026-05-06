@@ -8,14 +8,14 @@ import pytest
 
 from yoyopod.core import AppContext
 from yoyopod.integrations.call import VoiceNoteDraft
-from yoyopod.integrations.call.models import (
+from yoyopod_cli.pi.support.call_models import (
     MessageDeliveryState,
     MessageDirection,
     MessageKind,
     VoIPMessageRecord,
 )
-from yoyopod.integrations.contacts.models import Contact
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.contacts_integration.models import Contact
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.router import NavigationRequest
 from yoyopod.ui.screens.voip.quick_call import CallScreen
 from yoyopod.ui.screens.voip.talk_contact import TalkContactScreen

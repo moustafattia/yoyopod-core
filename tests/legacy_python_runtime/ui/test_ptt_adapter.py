@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import pytest
 
-from yoyopod.ui.input import InputAction
+from yoyopod_cli.pi.support.input import InputAction
 from yoyopod.ui.input.adapters.ptt_button import PTTInputAdapter
 
 

@@ -67,7 +67,7 @@ def test_dev_unit_references_checkout_and_venv_for_native_refresh() -> None:
     assert "/opt/yoyopod-dev/venv" in exec_start_pre
     assert "LD_LIBRARY_PATH" in exec_start_pre
     assert "LD_LIBRARY_PATH" in exec_start
-    assert "yoyopod/ui/lvgl_binding/native/build" in exec_start
+    assert "yoyopod_cli/pi/support/lvgl_binding/native/build" in exec_start
     assert "-m yoyopod_cli.main build ensure-native" in exec_start_pre
 
 

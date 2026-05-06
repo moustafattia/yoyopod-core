@@ -13,8 +13,8 @@ import pytest
 
 from yoyopod.core import AppContext
 from yoyopod.core.loop import RuntimeLoopService
-from yoyopod.ui.display import Display
-from yoyopod.ui.input import InputAction, InputManager
+from yoyopod_cli.pi.support.display import Display
+from yoyopod_cli.pi.support.input import InputAction, InputManager
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.manager import ScreenManager, VisibleTickRefreshResult
 from yoyopod.ui.screens.navigation.ask import AskScreen

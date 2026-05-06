@@ -262,7 +262,7 @@ class RustUiFacade:
         return data
 
     def _build_music_command(self, service: str, data: dict[str, Any]) -> object:
-        from yoyopod.integrations.music import (
+        from yoyopod_cli.pi.support.music_integration import (
             LoadPlaylistCommand,
             PauseCommand,
             PlayCommand,

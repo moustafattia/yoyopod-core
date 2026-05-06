@@ -4,8 +4,8 @@
 from typing import Any, Callable, Optional
 
 from yoyopod.core import AppContext
-from yoyopod.ui.display import Display
-from yoyopod.ui.input import InputAction, InputManager
+from yoyopod_cli.pi.support.display import Display
+from yoyopod_cli.pi.support.input import InputAction, InputManager
 from yoyopod.ui.input.hal import InputHAL
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.manager import ScreenManager

@@ -241,7 +241,7 @@ class ComponentsBoot:
 
     def _init_orchestration_models(self) -> None:
         from yoyopod.integrations.call import CallFSM, CallInterruptionPolicy
-        from yoyopod.integrations.music import MusicFSM
+        from yoyopod_cli.pi.support.music_integration import MusicFSM
 
         self.logger.info("  - Orchestration Models")
         self.app.music_fsm = MusicFSM()

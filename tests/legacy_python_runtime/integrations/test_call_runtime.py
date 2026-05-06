@@ -9,13 +9,13 @@ from yoyopod.integrations.call import (
     CallInterruptionPolicy,
 )
 from yoyopod.integrations.call.runtime import CallRuntime
-from yoyopod.integrations.call.models import CallState, RegistrationState
-from yoyopod.integrations.call.models import (
+from yoyopod_cli.pi.support.call_models import CallState, RegistrationState
+from yoyopod_cli.pi.support.call_models import (
     VoIPCallSessionSnapshot,
     VoIPLifecycleSnapshot,
     VoIPRuntimeSnapshot,
 )
-from yoyopod.integrations.music import MusicFSM
+from yoyopod_cli.pi.support.music_integration import MusicFSM
 
 
 class _ScreenManagerStub:

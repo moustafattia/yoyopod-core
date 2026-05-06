@@ -9,14 +9,14 @@ from types import SimpleNamespace
 
 from yoyopod.core import AppContext
 from yoyopod.core import VoiceState
-from yoyopod.integrations.power.models import (
+from yoyopod_cli.pi.support.power_integration.models import (
     BatteryState,
     PowerDeviceInfo,
     PowerSnapshot,
     RTCState,
     ShutdownState,
 )
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.system.power import (
     PowerScreen,

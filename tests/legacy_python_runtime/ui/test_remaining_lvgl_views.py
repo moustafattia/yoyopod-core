@@ -405,7 +405,7 @@ def test_call_screen_rebuilds_retained_lvgl_view_after_backend_reset() -> None:
 def test_remaining_retained_lvgl_screens_rebuild_after_exit_and_backend_reset() -> None:
     """Remaining retained LVGL controllers should rebuild after exit/reset/re-entry."""
 
-    from yoyopod.integrations.music import LocalMusicService
+    from yoyopod_cli.pi.support.music_integration import LocalMusicService
     from yoyopod.ui.screens.navigation.ask import AskScreen
 
     cases = [

@@ -172,7 +172,7 @@ def get_input_manager(
 
         if simulate:
             try:
-                from yoyopod.ui.display.adapters.simulation_web.server import get_server
+                from yoyopod_cli.pi.support.display.adapters.simulation_web.server import get_server
 
                 server = get_server()
 
@@ -220,7 +220,7 @@ def get_input_manager(
         logger.info("  -> Added keyboard input (Enter, Esc, Arrow keys)")
 
         try:
-            from yoyopod.ui.display.adapters.simulation_web.server import get_server
+            from yoyopod_cli.pi.support.display.adapters.simulation_web.server import get_server
 
             server = get_server()
 

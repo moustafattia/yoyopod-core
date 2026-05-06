@@ -5,9 +5,9 @@ from typing import Any
 
 from loguru import logger
 
-from yoyopod.backends.voip import rust_host
-from yoyopod.backends.voip.rust_host import RustHostBackend
-from yoyopod.integrations.call.models import (
+from yoyopod_cli.pi.support.voip_backend import rust_host
+from yoyopod_cli.pi.support.voip_backend.rust_host import RustHostBackend
+from yoyopod_cli.pi.support.call_models import (
     BackendRecovered,
     BackendStopped,
     CallState,

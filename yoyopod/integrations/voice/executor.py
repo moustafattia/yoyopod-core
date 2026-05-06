@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod_cli.config import ConfigManager
     from yoyopod.integrations.call import VoIPManager
-    from yoyopod.integrations.contacts.directory import PeopleManager
-    from yoyopod.integrations.contacts.models import Contact
+    from yoyopod_cli.pi.support.contacts_integration.directory import PeopleManager
+    from yoyopod_cli.pi.support.contacts_integration.models import Contact
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
 _CALL_HINT_TOKENS = frozenset({"call", "dial", "phone", "ring"})

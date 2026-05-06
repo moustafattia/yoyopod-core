@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, TypeVar
 
-from yoyopod.ui.lvgl_binding import LvglDisplayBackend
+from yoyopod_cli.pi.support.lvgl_binding import LvglDisplayBackend
 
 
 class RetainedLvglView(Protocol):

@@ -17,8 +17,8 @@ from loguru import logger
 from yoyopod.app_context import AppContext
 from yoyopod_cli.config import ConfigManager
 from yoyopod.voip import RegistrationState, VoIPConfig, VoIPManager
-from yoyopod.ui.display import Display
-from yoyopod.ui.input import InputAction, get_input_manager
+from yoyopod_cli.pi.support.display import Display
+from yoyopod_cli.pi.support.input import InputAction, get_input_manager
 from yoyopod.ui.screens.manager import ScreenManager
 from yoyopod.ui.screens.navigation.menu import MenuScreen
 from yoyopod.ui.screens.voip.contact_list import ContactListScreen

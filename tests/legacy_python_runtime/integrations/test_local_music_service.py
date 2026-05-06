@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-import yoyopod.integrations.music.library as library_module
-from yoyopod.backends.music import MockMusicBackend, Playlist, Track
-from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
-from yoyopod.integrations.music.history import RecentTrackEntry
-from yoyopod.integrations.music.library import LocalLibraryItem
-from yoyopod.integrations.music.runtime import MusicRuntime
+import yoyopod_cli.pi.support.music_integration.library as library_module
+from yoyopod_cli.pi.support.music_backend import MockMusicBackend, Playlist, Track
+from yoyopod_cli.pi.support.music_integration import LocalMusicService, RecentTrackHistoryStore
+from yoyopod_cli.pi.support.music_integration.history import RecentTrackEntry
+from yoyopod_cli.pi.support.music_integration.library import LocalLibraryItem
+from yoyopod_cli.pi.support.music_integration.runtime import MusicRuntime
 
 
 class StubRuntime:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from yoyopod.integrations.call.models import RegistrationState, VoIPRuntimeSnapshot
+from yoyopod_cli.pi.support.call_models import RegistrationState, VoIPRuntimeSnapshot
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from yoyopod.core import AppContext
-from yoyopod.backends.music import MockMusicBackend, Playlist
-from yoyopod.integrations.music import LocalMusicService
+from yoyopod_cli.pi.support.music_backend import MockMusicBackend, Playlist
+from yoyopod_cli.pi.support.music_integration import LocalMusicService
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.music.playlist import PlaylistScreen
 from yoyopod.ui.screens.manager import ScreenManager, VisibleTickRefreshResult

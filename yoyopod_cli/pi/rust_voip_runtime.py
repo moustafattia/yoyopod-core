@@ -81,7 +81,7 @@ class RustVoIPDiagnosticManager:
 
 
 def build_rust_voip_manager(config_dir: str) -> RustVoIPDiagnosticManager:
-    from yoyopod.backends.voip.rust_host import RustHostBackend
+    from yoyopod_cli.pi.support.voip_backend.rust_host import RustHostBackend
     from yoyopod_cli.config import ConfigManager
 
     assert_rust_voip_artifacts_present()

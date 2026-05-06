@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from yoyopod.backends.power import PiSugarBackend, PowerTransportError
+from yoyopod_cli.pi.support.power_backend import PiSugarBackend, PowerTransportError
 from yoyopod_cli.config import PowerConfig
 
 

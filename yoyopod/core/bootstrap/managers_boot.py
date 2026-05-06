@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
-from yoyopod.backends.music.rust_host import default_worker_path as _default_rust_media_host_worker
+from yoyopod_cli.pi.support.music_backend.rust_host import default_worker_path as _default_rust_media_host_worker
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp
@@ -78,7 +78,7 @@ class ManagersBoot:
             self.logger.info("  - VoIPManager")
             voip_config = self.voip_config_cls.from_config_manager(config_manager)
             self.logger.info("    using Rust VoIP Host backend")
-            from yoyopod.backends.voip.rust_host import RustHostBackend
+            from yoyopod_cli.pi.support.voip_backend.rust_host import RustHostBackend
 
             rust_backend = RustHostBackend(
                 voip_config,

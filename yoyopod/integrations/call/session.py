@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:
-    from yoyopod.integrations.music import MusicFSM
+    from yoyopod_cli.pi.support.music_integration import MusicFSM
 
 
 class CallSessionState(Enum):

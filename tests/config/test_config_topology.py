@@ -7,9 +7,9 @@ from pathlib import Path
 import yaml
 
 from yoyopod_cli.config import ConfigManager
-from yoyopod.backends.music import MusicConfig
-from yoyopod.integrations.contacts.directory import PeopleDirectory
-from yoyopod.integrations.power import PowerManager
+from yoyopod_cli.pi.support.music_backend import MusicConfig
+from yoyopod_cli.pi.support.contacts_integration.directory import PeopleDirectory
+from yoyopod_cli.pi.support.power_integration import PowerManager
 
 
 def _write_yaml(base_dir: Path, relative_path: str, payload: dict) -> Path:

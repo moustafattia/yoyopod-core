@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from yoyopod.core import AppContext
-from yoyopod.backends.music import PlaybackQueue, Track
+from yoyopod_cli.pi.support.music_backend import PlaybackQueue, Track
 
 
 def test_app_context_groups_runtime_state_by_concern() -> None:

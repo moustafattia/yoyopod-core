@@ -10,9 +10,9 @@ from typing import Callable
 
 import pytest
 
-from yoyopod.backends.voip import MockVoIPBackend
-from yoyopod.backends.voip.rust_host import _runtime_snapshot
-from yoyopod.integrations.call.models import (
+from yoyopod_cli.pi.support.voip_backend import MockVoIPBackend
+from yoyopod_cli.pi.support.voip_backend.rust_host import _runtime_snapshot
+from yoyopod_cli.pi.support.call_models import (
     BackendRecovered,
     BackendStopped,
     CallState,

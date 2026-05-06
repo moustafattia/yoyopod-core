@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from yoyopod.backends.music import Track
+from yoyopod_cli.pi.support.music_backend import Track
 from tests.fixtures.app import build_test_app, drain_all
 from yoyopod.core import AudioFocusLostEvent
 from yoyopod.core.focus import setup as setup_focus
-from yoyopod.integrations.music import (
+from yoyopod_cli.pi.support.music_integration import (
     LoadPlaylistCommand,
     MusicIntegration,
     NextTrackCommand,
@@ -253,9 +253,9 @@ def test_music_setup_defaults_to_rust_media_host_backend(monkeypatch) -> None:
         def on_connection_change(self, callback) -> None:
             self.connection_change_callback = callback
 
-    monkeypatch.setattr("yoyopod.backends.music.rust_host.RustHostBackend", _FakeRustBackend)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.rust_host.RustHostBackend", _FakeRustBackend)
     monkeypatch.setattr(
-        "yoyopod.backends.music.rust_host.default_worker_path",
+        "yoyopod_cli.pi.support.music_backend.rust_host.default_worker_path",
         lambda: "/bin/yoyopod-media-host",
     )
 

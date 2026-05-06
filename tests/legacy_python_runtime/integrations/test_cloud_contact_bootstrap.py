@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from yoyopod.integrations.cloud.manager import CloudManager
-from yoyopod.integrations.cloud.models import CloudAccessToken
-from yoyopod.integrations.contacts.models import Contact
+from yoyopod_cli.pi.support.cloud_integration.manager import CloudManager
+from yoyopod_cli.pi.support.cloud_integration.models import CloudAccessToken
+from yoyopod_cli.pi.support.contacts_integration.models import Contact
 
 
 class _FakePeopleDirectory:

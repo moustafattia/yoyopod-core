@@ -174,10 +174,10 @@ def test_display_check_prefers_lvgl_probe_when_ui_backend_is_available(
         def update(self) -> None:
             raise AssertionError("LVGL smoke path should not call immediate draw helpers")
 
-    fake_display_module = ModuleType("yoyopod.ui.display")
+    fake_display_module = ModuleType("yoyopod_cli.pi.support.display")
     fake_display_module.Display = FakeDisplay
     fake_display_module.detect_hardware = lambda: "whisplay"
-    monkeypatch.setitem(sys.modules, "yoyopod.ui.display", fake_display_module)
+    monkeypatch.setitem(sys.modules, "yoyopod_cli.pi.support.display", fake_display_module)
 
     result, _display = _system._display_check({"display": {"hardware": "auto"}}, 0.0)
 
@@ -227,10 +227,10 @@ def test_display_check_keeps_immediate_draw_path_without_ui_backend(monkeypatch)
         def update(self) -> None:
             draw_calls.append("update")
 
-    fake_display_module = ModuleType("yoyopod.ui.display")
+    fake_display_module = ModuleType("yoyopod_cli.pi.support.display")
     fake_display_module.Display = FakeDisplay
     fake_display_module.detect_hardware = lambda: "pimoroni"
-    monkeypatch.setitem(sys.modules, "yoyopod.ui.display", fake_display_module)
+    monkeypatch.setitem(sys.modules, "yoyopod_cli.pi.support.display", fake_display_module)
 
     result, _display = _system._display_check({"display": {"hardware": "auto"}}, 0.0)
 

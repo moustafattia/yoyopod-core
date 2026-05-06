@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from loguru import logger
 
 from yoyopod.integrations.call import DialCommand
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.theme import talk_monogram

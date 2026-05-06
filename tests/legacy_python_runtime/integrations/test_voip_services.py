@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from yoyopod.integrations.call.models import VoIPConfig
+from yoyopod_cli.pi.support.call_models import VoIPConfig
 
 
 def build_config(tmp_path: Path) -> VoIPConfig:

@@ -3,9 +3,9 @@
 
 from types import SimpleNamespace
 
-from yoyopod.backends.music import MockMusicBackend, Track
+from yoyopod_cli.pi.support.music_backend import MockMusicBackend, Track
 from yoyopod.core import AppContext
-from yoyopod.ui.display import Display, get_hardware_info
+from yoyopod_cli.pi.support.display import Display, get_hardware_info
 from yoyopod.ui.screens.music.now_playing import NowPlayingScreen
 from yoyopod.ui.screens.voip.in_call import InCallScreen
 
@@ -26,7 +26,7 @@ class FakeServer:
 
 def _patch_fake_server(monkeypatch) -> FakeServer:
     fake_server = FakeServer()
-    import yoyopod.ui.display.adapters.simulation_web.server as web_server
+    import yoyopod_cli.pi.support.display.adapters.simulation_web.server as web_server
 
     monkeypatch.setattr(web_server, "get_server", lambda *args, **kwargs: fake_server)
     return fake_server

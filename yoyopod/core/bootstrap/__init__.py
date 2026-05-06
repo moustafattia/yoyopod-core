@@ -7,25 +7,25 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from yoyopod.backends.music import MusicConfig
-from yoyopod.backends.music.rust_host import RustHostBackend
+from yoyopod_cli.pi.support.music_backend import MusicConfig
+from yoyopod_cli.pi.support.music_backend.rust_host import RustHostBackend
 from yoyopod_cli.config import ConfigManager
 from yoyopod.core.audio_volume import OutputVolumeController
 from yoyopod.core.events import WorkerMessageReceivedEvent
 from yoyopod.core.hardware import AudioDeviceCatalog
 from yoyopod.integrations.call import VoIPConfig, VoIPManager
-from yoyopod.integrations.cloud.manager import CloudManager
-from yoyopod.integrations.contacts.directory import PeopleManager
-from yoyopod.integrations.music import LocalMusicService
+from yoyopod_cli.pi.support.cloud_integration.manager import CloudManager
+from yoyopod_cli.pi.support.contacts_integration.directory import PeopleManager
+from yoyopod_cli.pi.support.music_integration import LocalMusicService
 from yoyopod.integrations.network import RustNetworkFacade
-from yoyopod.integrations.power import PowerManager
-from yoyopod.ui.display import Display
-from yoyopod.ui.display.contracts import (
+from yoyopod_cli.pi.support.power_integration import PowerManager
+from yoyopod_cli.pi.support.display import Display
+from yoyopod_cli.pi.support.display.contracts import (
     WhisplayProductionRenderContractError,
     build_whisplay_production_contract_message,
 )
 from yoyopod.ui.input import get_input_manager
-from yoyopod.ui.lvgl_binding import LvglInputBridge
+from yoyopod_cli.pi.support.lvgl_binding import LvglInputBridge
 from yoyopod.ui.screens.manager import ScreenManager
 
 from .callbacks_boot import CallbacksBoot

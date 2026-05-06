@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from yoyopod.ui.input import InputAction
-from yoyopod.ui.lvgl_binding import LvglDisplayBackend, LvglInputBridge
+from yoyopod_cli.pi.support.input import InputAction
+from yoyopod_cli.pi.support.lvgl_binding import LvglDisplayBackend, LvglInputBridge
 
 
 class FakeBinding:

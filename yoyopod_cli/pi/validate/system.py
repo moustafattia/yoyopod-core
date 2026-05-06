@@ -40,8 +40,8 @@ def _display_check(
     hold_seconds: float,
 ) -> tuple[_CheckResult, Any]:
     """Validate display initialization on target hardware."""
-    from yoyopod.ui.display import Display, detect_hardware
-    from yoyopod.ui.lvgl_binding.binding import LvglBinding
+    from yoyopod_cli.pi.support.display import Display, detect_hardware
+    from yoyopod_cli.pi.support.lvgl_binding.binding import LvglBinding
 
     def _render_lvgl_probe(display: Any, ui_backend: Any) -> None:
         if not ui_backend.initialize():
@@ -150,7 +150,7 @@ def _input_check(display: Any, app_config: dict[str, Any]) -> _CheckResult:
 def _power_check(config_dir: Path) -> _CheckResult:
     """Validate PiSugar reachability and report a live battery snapshot."""
     from yoyopod_cli.config import ConfigManager
-    from yoyopod.integrations.power import PowerManager
+    from yoyopod_cli.pi.support.power_integration import PowerManager
 
     config_manager = ConfigManager(config_dir=str(config_dir))
     manager = PowerManager.from_config_manager(config_manager)
@@ -185,7 +185,7 @@ def _power_check(config_dir: Path) -> _CheckResult:
 def _rtc_check(config_dir: Path) -> _CheckResult:
     """Validate PiSugar RTC reachability and report the current RTC state."""
     from yoyopod_cli.config import ConfigManager
-    from yoyopod.integrations.power import PowerManager
+    from yoyopod_cli.pi.support.power_integration import PowerManager
 
     config_manager = ConfigManager(config_dir=str(config_dir))
     manager = PowerManager.from_config_manager(config_manager)

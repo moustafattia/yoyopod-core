@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.theme_tokens import (
     BACKGROUND,
     ERROR,

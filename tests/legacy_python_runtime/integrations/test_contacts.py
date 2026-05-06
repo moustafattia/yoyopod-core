@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from tests.fixtures.app import build_test_app, drain_all
 from yoyopod.integrations.call import setup as setup_call
-from yoyopod.integrations.contacts import (
+from yoyopod_cli.pi.support.contacts_integration import (
     LookupByAddressCommand,
     MarkVoiceNotesSeenCommand,
     ReloadContactsCommand,

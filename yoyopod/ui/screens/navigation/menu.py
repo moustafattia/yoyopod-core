@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from loguru import logger
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.theme import (
     MUTED,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from yoyopod.backends.music import PlaybackQueue, Track
+from yoyopod_cli.pi.support.music_backend import PlaybackQueue, Track
 from yoyopod.core import AppContext
 from yoyopod.ui.input import InteractionProfile
 from yoyopod_cli.pi.support.rust_ui_host.snapshot import RustUiRuntimeSnapshot

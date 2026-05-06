@@ -83,7 +83,7 @@ def test_rust_ui_host_runs_supervisor(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "ready" in result.output.lower()
     assert "frames=1" in result.output
-    assert "yoyopod/ui/lvgl_binding/native/build" in _FakeSupervisor.instances[-1].env[
+    assert "yoyopod_cli/pi/support/lvgl_binding/native/build" in _FakeSupervisor.instances[-1].env[
         "LD_LIBRARY_PATH"
     ]
 

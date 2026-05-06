@@ -91,7 +91,7 @@ def _screen_name(value: str) -> ScreenName:
 
 def _native_lvgl_env() -> dict[str, str]:
     env = os.environ.copy()
-    native_build = Path("yoyopod") / "ui" / "lvgl_binding" / "native" / "build"
+    native_build = Path("yoyopod_cli") / "pi" / "support" / "lvgl_binding" / "native" / "build"
     native_lib = native_build / "lib"
     entries = [native_build.as_posix(), native_lib.as_posix()]
     existing = env.get("LD_LIBRARY_PATH", "")

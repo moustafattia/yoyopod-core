@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from yoyopod.backends.voip.protocol import VoIPIterateMetrics
+    from yoyopod_cli.pi.support.voip_backend.protocol import VoIPIterateMetrics
     from yoyopod.integrations.call.commands import (
         AnswerCommand,
         CancelVoiceNoteRecordingCommand,
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
         CallSessionState,
     )
     from yoyopod.integrations.call.status import is_voip_configured, sync_context_voip_status
-    from yoyopod.integrations.call.models import (
+    from yoyopod_cli.pi.support.call_models import (
         BackendRecovered,
         BackendStopped,
         CallState,
@@ -158,7 +158,7 @@ _PUBLIC_EXPORTS = {
     ),
     "MessageFailed": ("yoyopod.integrations.call.models", "MessageFailed"),
     "VoIPEvent": ("yoyopod.integrations.call.models", "VoIPEvent"),
-    "VoIPIterateMetrics": ("yoyopod.backends.voip.protocol", "VoIPIterateMetrics"),
+    "VoIPIterateMetrics": ("yoyopod_cli.pi.support.voip_backend.protocol", "VoIPIterateMetrics"),
     "VoIPManager": ("yoyopod.integrations.call.manager", "VoIPManager"),
     "VoIPAvailabilityChangedEvent": (
         "yoyopod.integrations.call.events",
@@ -399,11 +399,11 @@ def _resolve_voip_config(app: Any, *, explicit: object | None) -> Any:
         return explicit
 
     if getattr(app, "config_manager", None) is not None:
-        from yoyopod.integrations.call.models import VoIPConfig
+        from yoyopod_cli.pi.support.call_models import VoIPConfig
 
         return VoIPConfig.from_config_manager(app.config_manager)
 
-    from yoyopod.integrations.call.models import VoIPConfig
+    from yoyopod_cli.pi.support.call_models import VoIPConfig
 
     defaults = VoIPConfig()
     config = getattr(app, "config", None)

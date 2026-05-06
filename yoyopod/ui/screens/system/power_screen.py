@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from loguru import logger
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.system.lvgl import LvglPowerView
@@ -41,7 +41,7 @@ from yoyopod.ui.screens.theme import (
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.integrations.power.models import PowerSnapshot
+    from yoyopod_cli.pi.support.power_integration.models import PowerSnapshot
     from yoyopod.ui.screens.view import ScreenView
 
 

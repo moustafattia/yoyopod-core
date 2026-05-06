@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar
 
-from yoyopod.ui.lvgl_binding import LvglDisplayBackend
+from yoyopod_cli.pi.support.lvgl_binding import LvglDisplayBackend
 from yoyopod.ui.screens.lvgl_lifecycle import (
     ensure_retained_view_built,
     mark_retained_view_built,

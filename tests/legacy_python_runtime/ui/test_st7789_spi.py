@@ -9,8 +9,8 @@ import pytest
 def mock_spidev():
     """Provide a mock spidev.SpiDev instance."""
     with (
-        patch("yoyopod.ui.display.adapters.st7789_spi.spidev") as mock_mod,
-        patch("yoyopod.ui.display.adapters.st7789_spi.HAS_SPIDEV", True),
+        patch("yoyopod_cli.pi.support.display.adapters.st7789_spi.spidev") as mock_mod,
+        patch("yoyopod_cli.pi.support.display.adapters.st7789_spi.HAS_SPIDEV", True),
     ):
         device = MagicMock()
         mock_mod.SpiDev.return_value = device
@@ -34,15 +34,15 @@ def mock_gpiod():
         return line
 
     with (
-        patch("yoyopod.ui.display.adapters.st7789_spi.HAS_GPIOD", True),
-        patch("yoyopod.ui.display.adapters.st7789_spi.open_chip", side_effect=make_chip),
-        patch("yoyopod.ui.display.adapters.st7789_spi.request_output", side_effect=make_output),
+        patch("yoyopod_cli.pi.support.display.adapters.st7789_spi.HAS_GPIOD", True),
+        patch("yoyopod_cli.pi.support.display.adapters.st7789_spi.open_chip", side_effect=make_chip),
+        patch("yoyopod_cli.pi.support.display.adapters.st7789_spi.request_output", side_effect=make_output),
     ):
         yield None, chip_instances
 
 
 def test_driver_opens_spi_device(mock_spidev, mock_gpiod):
-    from yoyopod.ui.display.adapters.st7789_spi import ST7789SpiDriver
+    from yoyopod_cli.pi.support.display.adapters.st7789_spi import ST7789SpiDriver
 
     driver = ST7789SpiDriver(
         spi_bus=1,
@@ -64,7 +64,7 @@ def test_driver_opens_spi_device(mock_spidev, mock_gpiod):
 
 def test_driver_requests_gpio_lines(mock_spidev, mock_gpiod):
     mock_mod, chips = mock_gpiod
-    from yoyopod.ui.display.adapters.st7789_spi import ST7789SpiDriver
+    from yoyopod_cli.pi.support.display.adapters.st7789_spi import ST7789SpiDriver
 
     driver = ST7789SpiDriver(
         spi_bus=1,
@@ -84,7 +84,7 @@ def test_driver_requests_gpio_lines(mock_spidev, mock_gpiod):
 
 
 def test_command_toggles_dc_low(mock_spidev, mock_gpiod):
-    from yoyopod.ui.display.adapters.st7789_spi import ST7789SpiDriver
+    from yoyopod_cli.pi.support.display.adapters.st7789_spi import ST7789SpiDriver
 
     driver = ST7789SpiDriver(
         spi_bus=1,
@@ -107,7 +107,7 @@ def test_command_toggles_dc_low(mock_spidev, mock_gpiod):
 
 
 def test_draw_image_sends_spi_data(mock_spidev, mock_gpiod):
-    from yoyopod.ui.display.adapters.st7789_spi import ST7789SpiDriver
+    from yoyopod_cli.pi.support.display.adapters.st7789_spi import ST7789SpiDriver
 
     driver = ST7789SpiDriver(
         spi_bus=1,
@@ -128,7 +128,7 @@ def test_draw_image_sends_spi_data(mock_spidev, mock_gpiod):
 
 
 def test_set_backlight(mock_spidev, mock_gpiod):
-    from yoyopod.ui.display.adapters.st7789_spi import ST7789SpiDriver
+    from yoyopod_cli.pi.support.display.adapters.st7789_spi import ST7789SpiDriver
 
     driver = ST7789SpiDriver(
         spi_bus=1,

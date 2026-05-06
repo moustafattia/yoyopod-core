@@ -24,7 +24,7 @@ def battery(
     from loguru import logger
 
     from yoyopod_cli.config import ConfigManager
-    from yoyopod.integrations.power import PowerManager
+    from yoyopod_cli.pi.support.power_integration import PowerManager
 
     configure_logging(verbose)
 
@@ -87,7 +87,7 @@ def _build_power_manager(config_dir: str) -> Any:
     from loguru import logger
 
     from yoyopod_cli.config import ConfigManager
-    from yoyopod.integrations.power import PowerManager
+    from yoyopod_cli.pi.support.power_integration import PowerManager
 
     config_path = resolve_config_dir(config_dir)
     config_manager = ConfigManager(config_dir=str(config_path))

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from yoyopod.core import AppContext
-from yoyopod.integrations.music import LocalMusicService
+from yoyopod_cli.pi.support.music_integration import LocalMusicService
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.navigation.listen import ListenScreen
 

@@ -6,10 +6,10 @@ from datetime import datetime
 
 from yoyopod_cli.config.models import PowerConfig
 from tests.fixtures.app import build_test_app, drain_all
-from yoyopod.integrations.power import BatteryState, PowerSnapshot, setup, teardown
-from yoyopod.integrations.power.commands import SetRtcAlarmCommand
-from yoyopod.integrations.power.handlers import snapshot_to_state_rows
-from yoyopod.integrations.power.poller import PowerPoller
+from yoyopod_cli.pi.support.power_integration import BatteryState, PowerSnapshot, setup, teardown
+from yoyopod_cli.pi.support.power_integration.commands import SetRtcAlarmCommand
+from yoyopod_cli.pi.support.power_integration.handlers import snapshot_to_state_rows
+from yoyopod_cli.pi.support.power_integration.poller import PowerPoller
 
 
 class FakePowerBackend:

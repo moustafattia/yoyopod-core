@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from yoyopod.core import AppContext
-from yoyopod.backends.music import MusicConfig, PlaybackQueue, Playlist, Track
+from yoyopod_cli.pi.support.music_backend import MusicConfig, PlaybackQueue, Playlist, Track
 
 
 def test_track_get_artist_string_with_artists() -> None:

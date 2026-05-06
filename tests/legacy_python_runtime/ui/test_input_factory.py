@@ -98,11 +98,11 @@ def test_simulation_factory_uses_standard_profile_keyboard_and_browser_buttons(
 
     server = FakeServer()
 
-    fake_web_server = types.ModuleType("yoyopod.ui.display.adapters.simulation_web.server")
+    fake_web_server = types.ModuleType("yoyopod_cli.pi.support.display.adapters.simulation_web.server")
     fake_web_server.get_server = lambda *args, **kwargs: server
     monkeypatch.setitem(
         sys.modules,
-        "yoyopod.ui.display.adapters.simulation_web.server",
+        "yoyopod_cli.pi.support.display.adapters.simulation_web.server",
         fake_web_server,
     )
 

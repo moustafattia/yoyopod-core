@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from yoyopod.core import ScreenChangedEvent
 from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.call.runtime import CallRuntime
-from yoyopod.integrations.music.runtime import MusicRuntime
+from yoyopod_cli.pi.support.music_integration.runtime import MusicRuntime
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp

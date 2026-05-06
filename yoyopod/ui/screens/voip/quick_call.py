@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.theme import (
@@ -21,8 +21,8 @@ from yoyopod.ui.screens.voip.lvgl import LvglCallView
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.integrations.call import VoIPManager
-    from yoyopod.integrations.contacts.directory import PeopleManager
-    from yoyopod.integrations.contacts.models import Contact
+    from yoyopod_cli.pi.support.contacts_integration.directory import PeopleManager
+    from yoyopod_cli.pi.support.contacts_integration.models import Contact
     from yoyopod.ui.screens.view import ScreenView
 
 

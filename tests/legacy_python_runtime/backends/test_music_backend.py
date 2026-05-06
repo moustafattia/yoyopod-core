@@ -1,8 +1,8 @@
-﻿"""Tests for MusicBackend protocol and MockMusicBackend."""
+"""Tests for MusicBackend protocol and MockMusicBackend."""
 
 from __future__ import annotations
 
-from yoyopod.backends.music import MockMusicBackend, MpvBackend, MusicBackend, MusicConfig, Track
+from yoyopod_cli.pi.support.music_backend import MockMusicBackend, MpvBackend, MusicBackend, MusicConfig, Track
 
 
 def _monotonic_stub(*values: float):
@@ -188,7 +188,7 @@ def test_mpv_backend_waits_for_delayed_ipc_ready(monkeypatch) -> None:
     fake_ipc = FakeIpc()
     backend._process = FakeProcess()
     backend._ipc = fake_ipc
-    monkeypatch.setattr("yoyopod.backends.music.mpv.time.sleep", lambda _: None)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.mpv.time.sleep", lambda _: None)
 
     assert backend.start() is True
     assert fake_ipc.connect_calls == 13
@@ -236,7 +236,7 @@ def test_mpv_backend_play_load_starts_backend_on_demand(monkeypatch) -> None:
     fake_ipc = FakeIpc()
     backend._process = FakeProcess()
     backend._ipc = fake_ipc
-    monkeypatch.setattr("yoyopod.backends.music.mpv.time.sleep", lambda _: None)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.mpv.time.sleep", lambda _: None)
 
     assert backend.load_tracks(["/music/a.mp3"]) is True
 
@@ -263,7 +263,7 @@ def test_mpv_backend_warm_start_only_spawns_one_background_thread(monkeypatch) -
             self._alive = True
 
     backend = MpvBackend(MusicConfig())
-    monkeypatch.setattr("yoyopod.backends.music.mpv.threading.Thread", FakeThread)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.mpv.threading.Thread", FakeThread)
 
     backend.warm_start()
     backend.warm_start()
@@ -287,7 +287,7 @@ def test_mpv_backend_reports_startup_in_progress_while_warm_start_thread_is_aliv
             self._alive = True
 
     backend = MpvBackend(MusicConfig())
-    monkeypatch.setattr("yoyopod.backends.music.mpv.threading.Thread", FakeThread)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.mpv.threading.Thread", FakeThread)
 
     backend.warm_start()
 
@@ -340,7 +340,7 @@ def test_mpv_backend_retries_spawn_when_early_launches_never_open_ipc(
     fake_process = FakeProcess()
     backend._process = fake_process
     backend._ipc = FakeIpc(fake_process)
-    monkeypatch.setattr("yoyopod.backends.music.mpv.time.sleep", lambda _: None)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.mpv.time.sleep", lambda _: None)
 
     assert backend.start() is True
     assert fake_process.spawn_calls == 4
@@ -395,7 +395,7 @@ def test_mpv_backend_primes_track_cache_from_ipc_before_property_events(
     backend = MpvBackend(MusicConfig())
     backend._process = FakeProcess()
     backend._ipc = FakeIpc()
-    monkeypatch.setattr("yoyopod.backends.music.mpv.time.sleep", lambda _: None)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.mpv.time.sleep", lambda _: None)
 
     assert backend.start() is True
 
@@ -455,7 +455,7 @@ def test_mpv_backend_primes_track_cache_even_if_property_observe_fails(
     backend = MpvBackend(MusicConfig())
     backend._process = FakeProcess()
     backend._ipc = FakeIpc()
-    monkeypatch.setattr("yoyopod.backends.music.mpv.time.sleep", lambda _: None)
+    monkeypatch.setattr("yoyopod_cli.pi.support.music_backend.mpv.time.sleep", lambda _: None)
 
     assert backend.start() is True
 
@@ -708,7 +708,7 @@ def test_mpv_backend_get_time_position_uses_observed_cache(monkeypatch) -> None:
     backend._ipc = FakeIpc()
     backend._process = FakeProcess()
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(100.0),
     )
 
@@ -734,7 +734,7 @@ def test_mpv_backend_get_time_position_throttles_small_observed_updates(
             return True
 
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(100.0, 100.1, 100.2),
     )
 
@@ -779,7 +779,7 @@ def test_mpv_backend_get_time_position_returns_zero_for_non_numeric_observed_val
             return True
 
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(100.0),
     )
 
@@ -885,7 +885,7 @@ def test_mpv_backend_get_time_position_skips_process_liveness_probe(
     backend._cached_time_position_ms = 12500
     backend._last_time_position_cache_update = 100.0
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(100.0),
     )
 
@@ -910,7 +910,7 @@ def test_mpv_backend_get_time_position_returns_zero_when_cache_is_stale(
     backend._cached_time_position_ms = 12500
     backend._last_time_position_cache_update = 100.0
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.0),
     )
 
@@ -935,7 +935,7 @@ def test_mpv_backend_get_time_position_logs_stale_playback_once(monkeypatch) -> 
     backend._cached_time_position_ms = 12500
     backend._last_time_position_cache_update = 100.0
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(
             100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.0,
             100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.0,
@@ -944,7 +944,7 @@ def test_mpv_backend_get_time_position_logs_stale_playback_once(monkeypatch) -> 
         ),
     )
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.logger.warning",
+        "yoyopod_cli.pi.support.music_backend.mpv.logger.warning",
         lambda *args, **kwargs: warnings.append((args, kwargs)),
     )
 
@@ -971,14 +971,14 @@ def test_mpv_backend_unpause_refreshes_time_position_staleness(monkeypatch) -> N
     backend._cached_time_position_ms = 12500
     backend._last_time_position_cache_update = 100.0
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(
             100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.0,
             100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.1,
         ),
     )
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.logger.warning",
+        "yoyopod_cli.pi.support.music_backend.mpv.logger.warning",
         lambda *args, **kwargs: warnings.append((args, kwargs)),
     )
 
@@ -1008,14 +1008,14 @@ def test_mpv_backend_playback_restart_refreshes_time_position_staleness(
     backend._cached_time_position_ms = 12500
     backend._last_time_position_cache_update = 100.0
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(
             100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.0,
             100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.1,
         ),
     )
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.logger.warning",
+        "yoyopod_cli.pi.support.music_backend.mpv.logger.warning",
         lambda *args, **kwargs: warnings.append((args, kwargs)),
     )
 
@@ -1043,7 +1043,7 @@ def test_mpv_backend_get_time_position_keeps_cached_value_when_paused_and_stale(
     backend._cached_time_position_ms = 12500
     backend._last_time_position_cache_update = 100.0
     monkeypatch.setattr(
-        "yoyopod.backends.music.mpv.time.monotonic",
+        "yoyopod_cli.pi.support.music_backend.mpv.time.monotonic",
         _monotonic_stub(100.0 + backend._TIME_POSITION_STALE_SECONDS + 1.0),
     )
 

@@ -9,7 +9,7 @@ from yoyopod.integrations.call import (
     StartVoiceNoteRecordingCommand,
     StopVoiceNoteRecordingCommand,
 )
-from yoyopod.integrations.music import LoadPlaylistCommand, PlayRecentTrackCommand
+from yoyopod_cli.pi.support.music_integration import LoadPlaylistCommand, PlayRecentTrackCommand
 from yoyopod.ui.rust_host.facade import RustUiFacade
 
 

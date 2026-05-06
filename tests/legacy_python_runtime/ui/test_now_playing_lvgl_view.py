@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from yoyopod.core import AppContext
-from yoyopod.backends.music import MockMusicBackend, Track
+from yoyopod_cli.pi.support.music_backend import MockMusicBackend, Track
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.music.now_playing import (
     NowPlayingSnapshot,

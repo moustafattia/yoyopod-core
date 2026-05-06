@@ -6,11 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from yoyopod.backends.music.models import MusicConfig, Playlist, Track
-from yoyopod.backends.music.rust_host import RustHostBackend
+from yoyopod_cli.pi.support.music_backend.models import MusicConfig, Playlist, Track
+from yoyopod_cli.pi.support.music_backend.rust_host import RustHostBackend
 from yoyopod.core.scheduler import MainThreadScheduler
-from yoyopod.integrations.music.history import RecentTrackEntry
-from yoyopod.integrations.music.library import LocalLibraryItem
+from yoyopod_cli.pi.support.music_integration.history import RecentTrackEntry
+from yoyopod_cli.pi.support.music_integration.library import LocalLibraryItem
 
 
 class _FakeSupervisor:

@@ -36,19 +36,19 @@ FILE_FORMAT = (
 )
 _SUBSYSTEM_OVERRIDES = {
     "yoyopod.integrations.call": "comm",
-    "yoyopod.backends.voip": "comm",
-    "yoyopod.integrations.music": "music",
-    "yoyopod.backends.music": "music",
+    "yoyopod_cli.pi.support.voip_backend": "comm",
+    "yoyopod_cli.pi.support.music_integration": "music",
+    "yoyopod_cli.pi.support.music_backend": "music",
     "yoyopod.core.audio_volume": "music",
     "yoyopod.core.app_state": "coord",
     "yoyopod.integrations.call.runtime": "coord",
-    "yoyopod.integrations.music.runtime": "coord",
+    "yoyopod_cli.pi.support.music_integration.runtime": "coord",
     "yoyopod.integrations.voice.runtime": "coord",
     "yoyopod.integrations.voice.executor": "coord",
     "yoyopod_cli.pi.support.voice_settings": "coord",
     "yoyopod.ui": "ui",
-    "yoyopod.integrations.power": "power",
-    "yoyopod.backends.power": "power",
+    "yoyopod_cli.pi.support.power_integration": "power",
+    "yoyopod_cli.pi.support.power_backend": "power",
     "yoyopod_cli.config": "config",
 }
 

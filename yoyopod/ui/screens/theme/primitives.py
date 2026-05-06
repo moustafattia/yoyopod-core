@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.theme_tokens import Color
 
 

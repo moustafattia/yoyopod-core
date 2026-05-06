@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.navigation.lvgl import LvglHubView
@@ -19,8 +19,8 @@ from yoyopod.ui.screens.theme import (
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.backends.music import MusicBackend
-    from yoyopod.integrations.music import LocalMusicService
+    from yoyopod_cli.pi.support.music_backend import MusicBackend
+    from yoyopod_cli.pi.support.music_integration import LocalMusicService
     from yoyopod.integrations.call import VoIPManager
     from yoyopod.ui.screens.view import ScreenView
 

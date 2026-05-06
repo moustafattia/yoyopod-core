@@ -79,7 +79,10 @@ def test_voice_worker_build_command_invokes_builder(monkeypatch: pytest.MonkeyPa
 def test_resolve_lvgl_native_dir_points_at_package_root() -> None:
     native_dir = build_cli._resolve_lvgl_native_dir()
 
-    assert native_dir == build_cli._REPO_ROOT / "yoyopod" / "ui" / "lvgl_binding" / "native"
+    assert (
+        native_dir
+        == build_cli._REPO_ROOT / "yoyopod_cli" / "pi" / "support" / "lvgl_binding" / "native"
+    )
     assert (native_dir / "CMakeLists.txt").exists()
 
 
@@ -124,7 +127,12 @@ def test_build_lvgl_uses_resolved_native_dir(
     build_cli.build_lvgl(source_dir=source_dir, build_dir=build_dir, skip_fetch=True)
 
     assert captured == {
-        "native_dir": build_cli._REPO_ROOT / "yoyopod" / "ui" / "lvgl_binding" / "native",
+        "native_dir": build_cli._REPO_ROOT
+        / "yoyopod_cli"
+        / "pi"
+        / "support"
+        / "lvgl_binding"
+        / "native",
         "source_dir": source_dir,
         "build_dir": build_dir,
     }
@@ -149,9 +157,20 @@ def test_build_simulation_builds_lvgl_shim(
     build_cli.build_simulation(skip_fetch=True)
 
     assert captured == {
-        "native_dir": build_cli._REPO_ROOT / "yoyopod" / "ui" / "lvgl_binding" / "native",
+        "native_dir": build_cli._REPO_ROOT
+        / "yoyopod_cli"
+        / "pi"
+        / "support"
+        / "lvgl_binding"
+        / "native",
         "source_dir": tmp_path / "lvgl-source",
-        "build_dir": build_cli._REPO_ROOT / "yoyopod" / "ui" / "lvgl_binding" / "native" / "build",
+        "build_dir": build_cli._REPO_ROOT
+        / "yoyopod_cli"
+        / "pi"
+        / "support"
+        / "lvgl_binding"
+        / "native"
+        / "build",
     }
 
 

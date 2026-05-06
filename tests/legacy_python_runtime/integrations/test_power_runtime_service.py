@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from yoyopod.integrations.power import BatteryState, PowerRuntimeService, PowerSnapshot
+from yoyopod_cli.pi.support.power_integration import BatteryState, PowerRuntimeService, PowerSnapshot
 
 
 def test_publish_snapshot_calls_power_handlers_directly() -> None:

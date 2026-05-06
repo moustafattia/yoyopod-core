@@ -7,11 +7,11 @@ from pathlib import Path
 from struct import unpack
 from types import SimpleNamespace
 
-from yoyopod.ui.display.contracts import WhisplayProductionRenderContractError
-from yoyopod.ui.display.adapters.whisplay import (
+from yoyopod_cli.pi.support.display.contracts import WhisplayProductionRenderContractError
+from yoyopod_cli.pi.support.display.adapters.whisplay import (
     WhisplayDisplayAdapter,
 )
-from yoyopod.ui.display.adapters.whisplay_gpiod_shim import _patch_vendor_gpiod_compat
+from yoyopod_cli.pi.support.display.adapters.whisplay_gpiod_shim import _patch_vendor_gpiod_compat
 
 
 class FakeDevice:
@@ -122,7 +122,7 @@ def test_production_whisplay_rejects_non_lvgl_renderer() -> None:
 def test_production_whisplay_refuses_missing_driver(monkeypatch) -> None:
     """Real Whisplay runs should fail loudly when the driver is unavailable."""
 
-    import yoyopod.ui.display.adapters.whisplay as whisplay_module
+    import yoyopod_cli.pi.support.display.adapters.whisplay as whisplay_module
 
     monkeypatch.setattr(whisplay_module, "HAS_HARDWARE", False)
 

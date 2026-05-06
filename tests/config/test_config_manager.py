@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from yoyopod_cli.config.manager import ConfigManager
-from yoyopod.ui.display.adapters.whisplay_paths import find_whisplay_driver
+from yoyopod_cli.pi.support.display.adapters.whisplay_paths import find_whisplay_driver
 
 
 def _write_yaml(base_dir: Path, relative_path: str, payload: dict) -> Path:

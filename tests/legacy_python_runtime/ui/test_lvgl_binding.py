@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
-from yoyopod.ui.lvgl_binding.binding import LvglBinding
+from yoyopod_cli.pi.support.lvgl_binding.binding import LvglBinding
 
 
 class FakeCharArray:

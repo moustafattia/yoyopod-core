@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 if TYPE_CHECKING:
-    from yoyopod.backends.music import MusicBackend
+    from yoyopod_cli.pi.support.music_backend import MusicBackend
     from yoyopod.core import AppContext
 
 

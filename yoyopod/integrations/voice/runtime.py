@@ -38,7 +38,7 @@ from yoyopod_cli.pi.support.voice_trace import (
 )
 
 if TYPE_CHECKING:
-    from yoyopod.backends.music import MusicBackend
+    from yoyopod_cli.pi.support.music_backend import MusicBackend
     from yoyopod.core import AppContext
     from yoyopod_cli.pi.support.voice_commands import VoiceCommandMatch
 

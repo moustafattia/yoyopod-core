@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import yoyopod.integrations.music.fsm as fsm_module
+import yoyopod_cli.pi.support.music_integration.fsm as fsm_module
 from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
     CallSessionState,
 )
-from yoyopod.integrations.music import MusicFSM, MusicState
+from yoyopod_cli.pi.support.music_integration import MusicFSM, MusicState
 
 
 def _build_runtime() -> AppStateRuntime:

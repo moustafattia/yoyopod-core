@@ -14,7 +14,7 @@ import pytest
 from loguru import logger
 
 from yoyopod.app import YoyoPodApp
-from yoyopod.backends.music import MockMusicBackend
+from yoyopod_cli.pi.support.music_backend import MockMusicBackend
 from yoyopod.core import AppContext
 from yoyopod.core.audio_volume import AudioVolumeController
 from yoyopod.integrations.call.events import (
@@ -22,7 +22,7 @@ from yoyopod.integrations.call.events import (
     RegistrationChangedEvent,
     VoIPAvailabilityChangedEvent,
 )
-from yoyopod.integrations.call.models import (
+from yoyopod_cli.pi.support.call_models import (
     CallState,
     RegistrationState,
     VoIPCallSessionSnapshot,
@@ -30,7 +30,7 @@ from yoyopod.integrations.call.models import (
     VoIPLifecycleSnapshot,
     VoIPRuntimeSnapshot,
 )
-from yoyopod.integrations.music.events import (
+from yoyopod_cli.pi.support.music_integration.events import (
     MusicAvailabilityChangedEvent,
     PlaybackStateChangedEvent,
     TrackChangedEvent,
@@ -42,11 +42,11 @@ from yoyopod.integrations.call import (
     CallInterruptionPolicy,
     CallSessionState,
 )
-from yoyopod.integrations.music import MusicFSM, MusicState
-from yoyopod.integrations.power.models import BatteryState, PowerSnapshot
+from yoyopod_cli.pi.support.music_integration import MusicFSM, MusicState
+from yoyopod_cli.pi.support.power_integration.models import BatteryState, PowerSnapshot
 from yoyopod.core.loop import RuntimeLoopService
 from yoyopod.core import UserActivityEvent
-from yoyopod.integrations.power import PowerAlert
+from yoyopod_cli.pi.support.power_integration import PowerAlert
 from yoyopod.ui.input import InputManager, InteractionProfile
 from yoyopod.ui.rust_host.facade import RustUiFacade
 from yoyopod.ui.screens.manager import VisibleTickRefreshResult

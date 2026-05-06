@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from tests.fixtures.app import build_test_app, drain_all
-from yoyopod.integrations.cloud import (
+from yoyopod_cli.pi.support.cloud_integration import (
     PublishTelemetryCommand,
     SyncNowCommand,
     setup,

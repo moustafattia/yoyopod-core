@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from loguru import logger
 
 from yoyopod.core.audio_volume import AudioVolumeController
-from yoyopod.backends.music import MusicBackend
+from yoyopod_cli.pi.support.music_backend import MusicBackend
 from yoyopod_cli.config import ConfigManager, MediaConfig, YoyoPodConfig
 from yoyopod.core.app_context import AppContext
 from yoyopod.core.background import BackgroundExecutor
@@ -32,12 +32,12 @@ from yoyopod.integrations.call import (
     VoIPManager,
 )
 from yoyopod.integrations.call.runtime import CallRuntime
-from yoyopod.integrations.cloud.manager import CloudManager
-from yoyopod.integrations.contacts.directory import PeopleManager
-from yoyopod.integrations.music import LocalMusicService, MusicFSM, RecentTrackHistoryStore
-from yoyopod.integrations.music.runtime import MusicRuntime
+from yoyopod_cli.pi.support.cloud_integration.manager import CloudManager
+from yoyopod_cli.pi.support.contacts_integration.directory import PeopleManager
+from yoyopod_cli.pi.support.music_integration import LocalMusicService, MusicFSM, RecentTrackHistoryStore
+from yoyopod_cli.pi.support.music_integration.runtime import MusicRuntime
 from yoyopod.integrations.network import RustNetworkFacade
-from yoyopod.integrations.power import (
+from yoyopod_cli.pi.support.power_integration import (
     PendingShutdown,
     PowerAlert,
     PowerManager,
@@ -57,9 +57,9 @@ from yoyopod.core.shutdown import ShutdownLifecycleService
 from yoyopod.core.status import RuntimeStatusService
 
 if TYPE_CHECKING:
-    from yoyopod.ui.display import Display
+    from yoyopod_cli.pi.support.display import Display
     from yoyopod.ui.input import InputManager
-    from yoyopod.ui.lvgl_binding import LvglDisplayBackend, LvglInputBridge
+    from yoyopod_cli.pi.support.lvgl_binding import LvglDisplayBackend, LvglInputBridge
     from yoyopod.ui.screens.manager import ScreenManager
     from yoyopod.ui.screens.music.now_playing import NowPlayingScreen
     from yoyopod.ui.screens.music.playlist import PlaylistScreen

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from yoyopod.ui.input import InputAction
+from yoyopod_cli.pi.support.input import InputAction
 from yoyopod.ui.input.adapters.four_button import Button, FourButtonInputAdapter
 
 

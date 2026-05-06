@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Callable, cast
 
 from loguru import logger
 
-from yoyopod.backends.voip.protocol import VoIPBackend
-from yoyopod.integrations.call.models import (
+from yoyopod_cli.pi.support.voip_backend.protocol import VoIPBackend
+from yoyopod_cli.pi.support.call_models import (
     BackendRecovered,
     BackendStopped,
     CallState,
@@ -32,7 +32,7 @@ from yoyopod.integrations.call.history import CallHistoryEntry
 from yoyopod.integrations.call.voice_note_draft import VoiceNoteDraft
 
 if TYPE_CHECKING:
-    from yoyopod.integrations.contacts.directory import PeopleManager
+    from yoyopod_cli.pi.support.contacts_integration.directory import PeopleManager
 
 VOICE_NOTE_CONTAINER_GAIN_DB = 12.0
 

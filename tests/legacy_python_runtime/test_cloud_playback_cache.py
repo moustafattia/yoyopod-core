@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
-from yoyopod.integrations.cloud.playback_cache import RemotePlaybackCache
+from yoyopod_cli.pi.support.cloud_integration.playback_cache import RemotePlaybackCache
 
 
 def test_prepare_sanitizes_track_id_and_stays_within_cache_root(tmp_path: Path) -> None:

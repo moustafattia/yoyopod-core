@@ -15,8 +15,8 @@ import time
 from loguru import logger
 
 from yoyopod.app_context import AppContext
-from yoyopod.ui.display import Display
-from yoyopod.ui.input import InputAction, get_input_manager
+from yoyopod_cli.pi.support.display import Display
+from yoyopod_cli.pi.support.input import InputAction, get_input_manager
 from yoyopod.ui.screens.manager import ScreenManager
 from yoyopod.ui.screens.music.now_playing import NowPlayingScreen
 from yoyopod.ui.screens.navigation.home import HomeScreen

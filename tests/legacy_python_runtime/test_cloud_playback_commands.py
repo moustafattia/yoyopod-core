@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from yoyopod.integrations.cloud.manager import CloudManager
+from yoyopod_cli.pi.support.cloud_integration.manager import CloudManager
 
 
 class _FakeMqttClient:

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from yoyopod.core import ScreenChangedEvent, UserActivityEvent, WorkerMessageReceivedEvent
 from yoyopod.core.event_subscriptions import RuntimeEventSubscriptions
-from yoyopod.integrations.power.events import (
+from yoyopod_cli.pi.support.power_integration.events import (
     GracefulShutdownCancelled,
     GracefulShutdownRequested,
     LowBatteryWarningRaised,

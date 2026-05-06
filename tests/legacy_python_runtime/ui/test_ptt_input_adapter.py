@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from yoyopod.ui.input import InputAction
+from yoyopod_cli.pi.support.input import InputAction
 from yoyopod.ui.input.adapters import ptt_button
 from yoyopod.ui.input.adapters.ptt_button import PTTInputAdapter
 

@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Any, TYPE_CHECKING
 from loguru import logger
 
-from yoyopod.ui.display import Display
+from yoyopod_cli.pi.support.display import Display
 from yoyopod.ui.input.hal import InteractionProfile
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.router import NavigationRequest
@@ -17,7 +17,7 @@ from yoyopod.ui.screens.router import NavigationRequest
 if TYPE_CHECKING:
     from yoyopod.ui.screens.manager import ScreenManager
     from yoyopod.core import AppContext
-    from yoyopod.ui.input import InputAction
+    from yoyopod_cli.pi.support.input import InputAction
     from yoyopod.ui.screens.view import ScreenView
 
 

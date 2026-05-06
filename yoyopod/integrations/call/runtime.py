@@ -14,11 +14,11 @@ from yoyopod.integrations.call import (
     RegistrationState,
     sync_context_voip_status,
 )
-from yoyopod.integrations.call.models import VoIPRuntimeSnapshot
+from yoyopod_cli.pi.support.call_models import VoIPRuntimeSnapshot
 from yoyopod.ui.screens.manager import ScreenManager
 
 if TYPE_CHECKING:
-    from yoyopod.backends.music import MusicBackend
+    from yoyopod_cli.pi.support.music_backend import MusicBackend
     from yoyopod_cli.config import ConfigManager
     from yoyopod.core import AppContext
 

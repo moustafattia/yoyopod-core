@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import yaml
 
 from yoyopod.core import AppContext
-from yoyopod.integrations.contacts.models import contacts_from_mapping
+from yoyopod_cli.pi.support.contacts_integration.models import contacts_from_mapping
 from yoyopod.integrations.voice import (
     AskConversationState,
     VoiceCommandExecutor,

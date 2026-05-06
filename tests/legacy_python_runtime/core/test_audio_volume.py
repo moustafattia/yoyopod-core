@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from yoyopod.backends.music import MockMusicBackend
+from yoyopod_cli.pi.support.music_backend import MockMusicBackend
 from yoyopod.core import AppContext
 from yoyopod.core.audio_volume import AudioVolumeController, OutputVolumeController
 
