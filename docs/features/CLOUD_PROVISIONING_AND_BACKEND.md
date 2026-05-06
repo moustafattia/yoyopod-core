@@ -15,8 +15,6 @@ When this file and older plans disagree, trust the current code in:
 - `device/cloud/`
 - `device/runtime/`
 - `device/protocol/`
-- `yoyopod_cli/pi/support/cloud_integration/` for CLI-owned compatibility helpers
-- `yoyopod_cli/pi/support/cloud_backend/` for CLI-owned compatibility helpers
 
 ## Device-Side Concept
 
@@ -49,8 +47,8 @@ Current Rust components:
 - `device/runtime/src/config.rs`: default cloud host worker path
 - `device/runtime/src/worker.rs`: worker supervision and event routing
 
-Current compatibility helpers used by CLI validation live under
-`yoyopod_cli/pi/support/cloud_*`.
+CLI validation talks to the Rust speech/cloud worker protocols directly; the
+old Python cloud compatibility helpers were removed.
 
 ## Provisioning Inputs
 

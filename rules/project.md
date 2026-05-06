@@ -17,13 +17,13 @@ device/runtime/build/yoyopod-runtime --config-dir config
 yoyopod build simulation
 
 # Local CI mirror
-uv run python scripts/quality.py ci
+uv run --extra dev python scripts/quality.py ci
 
 # Repo-owned code quality gate
-uv run python scripts/quality.py gate
+uv run --extra dev python scripts/quality.py gate
 
 # Full quality debt audit
-uv run python scripts/quality.py audit
+uv run --extra dev python scripts/quality.py audit
 
 # Baseline Pi setup contract
 uv run yoyopod setup pi

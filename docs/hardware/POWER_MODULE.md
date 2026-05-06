@@ -25,29 +25,19 @@ This module is responsible for:
 ## Architecture
 
 Main files:
-- `yoyopod/integrations/power/models.py`
-- `yoyopod/integrations/power/manager.py`
-- `yoyopod/integrations/power/events.py`
-- `yoyopod/integrations/power/policies.py`
-- `yoyopod/integrations/power/service.py`
-- `yoyopod/integrations/power/__init__.py`
-- `yoyopod/backends/power/pisugar.py`
-- `yoyopod/backends/power/watchdog.py`
-- `yoyopod/ui/screens/system/power_screen.py`
-- `yoyopod_cli/pi_power.py` (`yoyopod pi power battery`, `yoyopod pi power rtc`)
+- `device/power/`
+- `device/runtime/`
+- `device/ui/`
+- `yoyopod_cli/pi/power.py` (`yoyopod pi power battery`, `yoyopod pi power rtc`)
 
 Runtime flow:
 
 ```text
-YoyoPodApp
-  -> integrations.power.PowerRuntimeService
-     -> PowerManager
-     -> PiSugarBackend
-        -> Unix socket or TCP PiSugar server transport
-     -> PiSugarWatchdog
-        -> i2cget / i2cset
-     -> Bus
-     -> PowerSafetyPolicy
+yoyopod-runtime
+  -> power-host
+     -> PiSugar server transport
+     -> PiSugar watchdog helpers
+     -> power snapshots/events
      -> AppContext / AppStateRuntime
      -> current screen refresh
 ```
@@ -258,7 +248,7 @@ Current production unit:
 There is now a dedicated `Power Status` screen in the standard menu flow.
 
 Implementation:
-- `yoyopod/ui/screens/system/power.py`
+- `device/ui/`
 
 Current screen design:
 - page 1: battery / charging / external power / voltage / RTC / alarm

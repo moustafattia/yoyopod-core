@@ -4,7 +4,7 @@
 **Source:** Figma YoYoPod-Design, node `43:4677` (Ask section)
 **Extracted:** 2026-04-10
 **Target:** 240x280 Whisplay portrait display
-**Rendering path:** LVGL-driven Ask scene in `yoyopod/ui/screens/navigation/ask/__init__.py`
+**Rendering path:** LVGL-driven Ask scene in `device/ui/`
 
 > Current note: use this file for intended interaction and visual design. For what actually exists on `main`, trust `docs/architecture/SYSTEM_ARCHITECTURE.md`, the current `AskScreen` implementation, and the current router/screen registration code.
 
@@ -392,7 +392,7 @@ The business logic doesn't change — only the visual presentation and screen ar
 
 ## Existing Theme Helpers To Reuse
 
-From `yoyopod/ui/screens/theme.py`:
+From the Rust UI theme and scene modules:
 - `render_header()` — status bar with time, battery, mode chip
 - `render_footer()` — hint bar with help text
 - `draw_icon()` — icon rendering

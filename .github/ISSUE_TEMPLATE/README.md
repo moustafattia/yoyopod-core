@@ -75,4 +75,4 @@ in the body must match the corresponding `.yml` file's `body:` entries.
 
 ## See also
 
-- Spec: [docs/superpowers/specs/2026-04-23-review-issue-templates-design.md](../../docs/superpowers/specs/2026-04-23-review-issue-templates-design.md)
+- Review issue templates should reference current code and current operation docs.

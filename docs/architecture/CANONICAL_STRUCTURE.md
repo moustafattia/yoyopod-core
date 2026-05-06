@@ -138,7 +138,7 @@ Frozen canonical package homes:
   - canonical display awake/sleep/brightness/timeout seam
 - `yoyopod/backends/`
   - concrete adapters only: `voip/`, `music/`, `power/`, `network/`, `location/`, `voice/`
-- `yoyopod/ui/`
+- `device/ui/`
   - display adapters, input adapters, and screens
   - `ui/input/` owns input adapters including GPIO compatibility helpers
 

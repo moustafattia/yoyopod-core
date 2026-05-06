@@ -1,6 +1,6 @@
 # LVGL Display Pipeline
 
-Applies to: `yoyopod/ui/lvgl_binding/**`, `yoyopod/ui/display/adapters/whisplay.py`
+Applies to: `device/ui/**` and `yoyopod_cli/pi/support/lvgl_binding/native/**`
 
 ## Overview
 
@@ -22,26 +22,19 @@ For the Figma-to-Whisplay implementation workflow, screen extraction order, and 
 LVGL object tree
   -> partial render (40-line draw buffer)
   -> flush callback (RGB565_SWAPPED)
-  -> LvglDisplayBackend._flush_callback() [Python]
-  -> Rgb565FlushTarget.draw_rgb565_region() [adapter]
+  -> Rust display bridge in `device/ui/src/lvgl/`
+  -> native shim flush target
   -> hardware SPI + RGB565 framebuffer/browser preview
 ```
 
 ## C Shim (`native/lvgl_shim.c`)
 
-The C shim bridges Python (via cffi) and the LVGL C library:
+The C shim bridges Rust and the LVGL C library:
 - `yoyopod_lvgl_init/shutdown` -- lifecycle
 - `yoyopod_lvgl_register_display` -- sets up flush callback, RGB565_SWAPPED format
 - Scene functions (`hub_build/sync/destroy`, `listen_*`, `playlist_*`, etc.) -- each screen type
 - `yoyopod_lvgl_snapshot` -- captures active screen via `lv_snapshot_take()`
 - `yoyopod_lvgl_force_refresh` -- invalidates and redraws immediately
-
-## Python Binding (`binding.py`)
-
-cffi ABI-mode wrapper. Mirrors the C shim API 1:1. Key patterns:
-- Strings encoded to `char[]` via `ffi.new()`
-- Colors packed as `(r, g, b)` tuples -> 24-bit RGB via `_pack_rgb()`
-- `to_bytes()` converts cffi pixel buffers to Python bytes
 
 ## lv_conf.h
 

@@ -18,8 +18,7 @@ When docs disagree, trust sources in this order:
 2. Current deploy/runtime tooling in `deploy/` and `yoyopod_cli/`
 3. Current runtime, operations, hardware, feature, and design docs under the folders below
 4. Rules and agent guidance in `rules/`, `AGENTS.md`, and `skills/`
-5. Generated plans, checklists, and design specs
-6. Archived docs under [`archive/`](archive/)
+5. Current rules and agent guidance in `rules/`, `AGENTS.md`, and `skills/`
 
 The retired Python app runtime has been deleted. Python remains only for
 operations CLI, deploy, release, and validation orchestration.
@@ -33,10 +32,7 @@ Plan docs are useful context, but they are not automatically the current impleme
 - [`hardware/`](hardware/README.md) - audio, power, deployed Pi dependencies, and board bringup notes.
 - [`features/`](features/README.md) - cloud provisioning, cloud voice, local music, mpv, and remote playback contracts.
 - [`design/`](design/README.md) - active screen/UI design targets, parity contracts, and visual previews.
-- [`history/`](history/README.md) - transitional plans and milestone records that are useful context but not source of truth.
 - [`product/`](product/README.md) - product definition, V1 scope, positioning, technical priorities, and research material.
-- [`superpowers/`](superpowers/README.md) - preserved agent-generated specs and plans.
-- [`archive/`](archive/README.md) - retired historical material.
 - [`assets/`](assets/) - images and media used by docs.
 - [`../apps/`](../apps/) - future web and mobile applications.
 - [`../packages/`](../packages/) - future shared contracts, SDKs, and app packages.
@@ -73,11 +69,10 @@ Plan docs are useful context, but they are not automatically the current impleme
 ### Working On UI Or Design
 
 1. [`design/README.md`](design/README.md)
-2. [`superpowers/specs/2026-04-27-cautious-unified-voice-design.md`](superpowers/specs/2026-04-27-cautious-unified-voice-design.md)
-3. [`architecture/DISPLAY_HAL_ARCHITECTURE.md`](architecture/DISPLAY_HAL_ARCHITECTURE.md)
-4. [`architecture/INPUT_HAL_ARCHITECTURE.md`](architecture/INPUT_HAL_ARCHITECTURE.md)
-5. [`architecture/CROSS_SCREEN_OVERLAYS.md`](architecture/CROSS_SCREEN_OVERLAYS.md)
-6. [`../rules/design-fidelity.md`](../rules/design-fidelity.md)
+2. [`architecture/DISPLAY_HAL_ARCHITECTURE.md`](architecture/DISPLAY_HAL_ARCHITECTURE.md)
+3. [`architecture/INPUT_HAL_ARCHITECTURE.md`](architecture/INPUT_HAL_ARCHITECTURE.md)
+4. [`architecture/CROSS_SCREEN_OVERLAYS.md`](architecture/CROSS_SCREEN_OVERLAYS.md)
+5. [`../rules/design-fidelity.md`](../rules/design-fidelity.md)
 
 ### Working On Music, Voice, Or Cloud Features
 
@@ -109,4 +104,5 @@ These docs describe current implementation contracts:
 
 ## Historical Context
 
-Use [`history/`](history/README.md), [`archive/`](archive/README.md), and [`superpowers/`](superpowers/README.md) when you need rationale or old implementation context. If they conflict with current code or current contracts, trust the current code and current contracts.
+Historical planning archives were removed from the tracked repo. Use merged PRs
+and current docs for rationale; when docs disagree, trust current code.

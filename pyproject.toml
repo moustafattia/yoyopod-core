@@ -20,23 +20,10 @@ classifiers = [
 urls = { Repository = "https://github.com/moustafattia/yoyopod-core", Issues = "https://github.com/moustafattia/yoyopod-core/issues" }
 
 dependencies = [
-    "cffi>=1.17.0",
-    "displayhatmini>=0.0.2; platform_system == 'Linux'",
-    "pygame>=2.5.0",
-    "requests>=2.31.0",
     "loguru>=0.7.0",
     "gpiod<2; platform_system == 'Linux'",
     "pyyaml>=6.0.3",
-    "flask>=3.0.0",
-    "flask-socketio>=5.3.0",
-    "flask-cors>=4.0.0",
-    "python-socketio>=5.11.0",
-    "pynput>=1.7.0",
-    "tinytag>=2.2.1",
-    "pyserial>=3.5",
     "typer>=0.12.0",
-    "paho-mqtt>=2.0.0",
-    "msgpack>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -90,26 +77,6 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.cloud_backend.http"
-disable_error_code = ["import-untyped"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.cloud_backend.mqtt"
-disable_error_code = ["arg-type"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.cloud_integration"
-disable_error_code = ["return-value"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.cloud_integration.handlers"
-disable_error_code = ["arg-type"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.cloud_integration.manager"
-disable_error_code = ["misc", "no-any-return", "union-attr"]
-
-[[tool.mypy.overrides]]
 module = "yoyopod_cli.pi.support.contacts_integration"
 disable_error_code = ["no-any-return"]
 
@@ -122,64 +89,8 @@ module = "yoyopod_cli.pi.support.contacts_integration.handlers"
 disable_error_code = ["call-overload", "no-any-return"]
 
 [[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.adapters"
-disable_error_code = ["no-untyped-def"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.adapters.pimoroni"
-disable_error_code = ["no-untyped-def"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.adapters.simulation_web.server"
-disable_error_code = ["import-untyped", "no-any-return", "no-untyped-def"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.adapters.st7789_spi"
-disable_error_code = ["attr-defined", "import-not-found", "union-attr"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.adapters.whisplay"
-disable_error_code = ["no-untyped-def"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.adapters.whisplay_gpiod_shim"
-disable_error_code = ["attr-defined", "no-untyped-def"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.factory"
-disable_error_code = ["attr-defined"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.display.manager"
-disable_error_code = ["attr-defined"]
-
-[[tool.mypy.overrides]]
 module = "yoyopod_cli.pi.support.gpiod_compat"
 disable_error_code = ["import-not-found", "no-any-return", "no-redef"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.lvgl_binding.binding"
-disable_error_code = ["import-untyped", "no-any-return", "no-untyped-def"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.music_backend.ipc"
-disable_error_code = ["attr-defined"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.music_backend.models"
-disable_error_code = ["arg-type"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.music_backend.mpv"
-disable_error_code = ["arg-type", "assignment", "call-overload"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.music_backend.rust_host"
-disable_error_code = ["arg-type", "assignment", "call-overload", "no-any-return"]
-
-[[tool.mypy.overrides]]
-module = "yoyopod_cli.pi.support.music_integration.runtime"
-disable_error_code = ["attr-defined"]
 
 [[tool.mypy.overrides]]
 module = "yoyopod_cli.pi.support.power_backend.pisugar"

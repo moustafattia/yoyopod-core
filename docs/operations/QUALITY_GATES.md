@@ -47,7 +47,7 @@ Python remains for CLI, deployment, and compatibility tooling. Use the repo
 quality gate for that surface:
 
 ```bash
-uv run python scripts/quality.py gate
+uv run --extra dev python scripts/quality.py gate
 python -m compileall yoyopod_cli scripts
 ```
 

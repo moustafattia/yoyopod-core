@@ -24,22 +24,15 @@ mpv currently provides:
 - playback state and progress
 - push events for track and property changes
 
-YoYoPod adds on top of that:
+The Rust media host adds on top of that:
 
-- filesystem library scanning through `LocalMusicService`
+- filesystem library scanning
 - `.m3u` playlist discovery
 - local-first `Listen` UX
 - recent-track history
 - one-button navigation
-- metadata fallback via `tinytag`
 
 ## Recommended Dependencies
-
-### Python Packages
-
-| Package | Purpose |
-|---|---|
-| `tinytag` | Local file-tag fallback when mpv metadata is sparse |
 
 ### System Packages
 
@@ -98,4 +91,3 @@ Expected checks:
 ## References
 
 - mpv manual: https://mpv.io/manual/stable/
-- TinyTag: https://github.com/tinytag/tinytag

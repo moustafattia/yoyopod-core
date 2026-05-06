@@ -58,7 +58,7 @@ cargo check --manifest-path device/Cargo.toml --workspace --locked
 Legacy Python quality debt audit:
 
 ```bash
-uv run python scripts/quality.py audit
+uv run --extra dev python scripts/quality.py audit
 ```
 
 Use `scripts/quality.py` when changing Python CLI/deploy surfaces or fixing

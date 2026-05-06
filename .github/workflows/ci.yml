@@ -74,7 +74,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run staged quality gate
-        run: uv run python scripts/quality.py gate
+        run: uv run --extra dev python scripts/quality.py gate
 
   rust-device-arm64:
     runs-on: ubuntu-24.04-arm

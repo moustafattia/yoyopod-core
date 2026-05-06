@@ -23,27 +23,22 @@ yoyopod-runtime
 For calls and voice notes, the audio runtime is separate and Rust-owned:
 
 ```text
-YoyoPodApp
-  -> VoIPManager
-     -> RustHostBackend
-        -> device/voip
-           -> internal Rust Liblinphone runtime
-              -> Liblinphone
-              -> ALSA: wm8960-soundcard
-              -> same WM8960 codec / physical output path
+yoyopod-runtime
+  -> voip-host
+     -> Liblinphone
+     -> ALSA: wm8960-soundcard
+     -> same WM8960 codec / physical output path
 ```
 
 So music and VoIP use different software stacks, but they converge on the same Raspberry Pi audio hardware.
 
 ## Application Layer
 
-`YoyoPodApp` owns the audio stack startup in production.
+`yoyopod-runtime` owns worker startup in production.
 
 - `config/audio/music.yaml` owns `audio.music_dir`, `audio.recent_tracks_file`, `audio.mpv_socket`, `audio.mpv_binary`, and `audio.default_volume`.
 - `config/device/hardware.yaml` owns `media_audio.alsa_device`.
-- `ConfigManager.get_media_settings()` composes those layers into `MediaConfig.music` and `MediaConfig.audio`.
-- `MusicConfig.from_config_manager()` is the app-facing seam that turns the composed media config into mpv runtime settings.
-- startup output volume is applied through the shared output-volume controller.
+- The Rust media host loads the composed config and owns mpv process startup.
 
 Current production config shape:
 
@@ -61,23 +56,11 @@ media_audio:
   alsa_device: default
 ```
 
-## Music Domain Models
-
-`yoyopod/backends/music/models.py` is the canonical ownership point for shared music-domain data.
-
-- `Track` is the shared track model used by mpv metadata, recent-history persistence, and UI playback reads.
-- `Playlist` is the discovered local-playlist summary returned by library scans.
-- `PlaybackQueue` is the runtime ordered track queue used when the app needs selected-track state.
-
-`AppContext` and demo helpers should reference these models instead of defining parallel `Track` or `Playlist` dataclasses.
-
 ## Music Control Path
 
 ### 1. Local library selection
 
-`LocalMusicService` is the app-facing music layer.
-
-It owns:
+The Rust media host owns:
 
 - scanning `audio.music_dir`
 - finding `.m3u` playlists
@@ -88,9 +71,7 @@ It does **not** decode or play audio itself. It hands filesystem paths to the ba
 
 ### 2. Playback backend
 
-`MpvBackend` is the production music backend.
-
-It owns:
+The Rust mpv backend owns:
 
 - starting and stopping the `mpv` process
 - loading tracks or playlist files
@@ -114,7 +95,7 @@ This was verified live on `rpi-zero` on 2026-04-08.
 
 ### 4. mpv IPC
 
-`MpvIpcClient` talks to mpv over `/tmp/yoyopod-mpv.sock`.
+The Rust mpv IPC client talks to mpv over `/tmp/yoyopod-mpv.sock`.
 
 It is used for:
 
@@ -212,22 +193,12 @@ They are separate software paths that meet at the same codec/hardware.
 - If music works but is quiet, check both:
   - YoYoPod shared volume
   - ALSA `Speaker` / `Headphone` mixer levels
-- If `Now Playing` is wrong, the most relevant layers are:
-  - `LocalMusicService`
-  - `MpvBackend`
-  - `MpvIpcClient`
-  - file tag fallback in `Track.from_mpv_metadata()`
+- If `Now Playing` is wrong, inspect the Rust media host snapshot and mpv IPC logs.
 
 ## Source Files
 
-- `yoyopod/app.py`
-- `yoyopod/integrations/music/library.py`
-- `yoyopod/integrations/music/history.py`
-- `yoyopod/backends/music/mpv.py`
-- `yoyopod/backends/music/process.py`
-- `yoyopod/backends/music/ipc.py`
-- `yoyopod/backends/music/models.py`
-- `yoyopod/core/audio_volume.py`
+- `device/media/`
+- `device/runtime/`
 - `config/audio/music.yaml`
 - `config/device/hardware.yaml`
 - `config/communication/calling.yaml`

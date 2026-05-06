@@ -25,15 +25,12 @@ renderer. The supported fix is to build the shim first with
 
 ## Implemented Direction
 
-Simulation now reuses the same render contract as hardware:
+The Rust UI preview path reuses the same render contract as hardware:
 
 1. LVGL scenes still own the object tree and layout behavior.
-2. The Whisplay adapter mirrors RGB565 flushes into a framebuffer.
-3. Browser preview reuses that mirrored framebuffer instead of maintaining a
-   second simulation-specific renderer.
-
-This means simulation is its own adapter surface backed by the same LVGL output
-contract, not a second renderer.
+2. The native LVGL shim provides the shared scene/backend path.
+3. Mock hardware mode exercises the worker protocol without reviving a second
+   Python renderer.
 
 ## Goals
 
@@ -84,20 +81,10 @@ Small anti-aliasing or color differences can be tolerated. Geometry drift should
 
 ## File Ownership
 
-- `yoyopod/ui/display/factory.py`
-  - owns adapter selection and preview startup
-- `yoyopod/ui/display/adapters/whisplay.py`
-  - owns Whisplay output behavior
-- `yoyopod/ui/display/adapters/simulation.py`
-  - owns the simulation adapter surface while reusing the shared LVGL contract
-- `yoyopod/ui/display/rgb565.py`
-  - owns the framebuffer and PNG encoding helpers used by the adapter
-- `yoyopod/ui/display/adapters/simulation_web/server.py`
-  - owns browser preview transport only
-- `yoyopod/ui/lvgl_binding/`
-  - owns the LVGL scene/backend path
-- `tests/ui/test_display.py`
-- `tests/ui/test_whisplay_adapter.py`
+- `device/ui/`
+  - owns Rust UI state, scene selection, rendering, and worker protocol
+- `yoyopod_cli/pi/support/lvgl_binding/native/`
+  - owns the native C LVGL shim used by the Rust UI build
 
 ## Acceptance Criteria
 

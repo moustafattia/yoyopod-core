@@ -48,6 +48,7 @@ coverage/
 
 # Bazel
 bazel-*/
+MODULE.bazel.lock
 
 # IDEs
 .vscode/

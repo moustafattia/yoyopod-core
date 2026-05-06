@@ -90,7 +90,7 @@ Source Of Truth
 - `docs/operations/SLOT_DEPLOY.md`
 - `docs/architecture/DISPLAY_HAL_ARCHITECTURE.md`
 - `docs/design/WHISPLAY_SIMULATION_PARITY_CONTRACT.md`
-- `docs/superpowers/specs/2026-04-30-rust-runtime-host-design.md`
+- `docs/architecture/SYSTEM_ARCHITECTURE.md`
 
 High-Value Commands
 - Rust workspace check: `cargo check --manifest-path device/Cargo.toml --workspace --locked`
@@ -125,6 +125,5 @@ Guardrails
 - Prefer narrow, reviewable changes.
 - Keep raw LVGL confined to display/LVGL binding layers.
 - Prefer `yoyopod remote` over ad-hoc SSH sequences.
-- Use current Rust code and hardware evidence as truth. `docs/history/`,
-  `docs/archive/`, and older Python runtime docs are historical unless proven
-  current.
+- Use current Rust code and hardware evidence as truth. Old planning archives
+  were removed from the repo; current docs must point at live code paths.

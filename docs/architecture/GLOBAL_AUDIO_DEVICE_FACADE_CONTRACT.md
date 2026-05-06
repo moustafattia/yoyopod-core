@@ -140,7 +140,7 @@ These should be typed models, not loose dicts.
 
 `YoyoPodApp` should build the facade once and hand resolved audio information to the feature layers:
 
-- `MpvBackend`
+- Rust media host
   - receives resolved playback device
 - `OutputVolumeController`
   - becomes an implementation detail under the facade or is owned by it

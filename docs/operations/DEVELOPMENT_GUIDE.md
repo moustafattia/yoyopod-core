@@ -170,7 +170,7 @@ Run Python lint/type checks only when Python CLI/deploy/compatibility files
 change:
 
 ```bash
-uv run python scripts/quality.py gate
+uv run --extra dev python scripts/quality.py gate
 ```
 
 Optional extra syntax/import smoke for broad Python tree changes:
@@ -182,7 +182,7 @@ python -m compileall yoyopod_cli scripts
 Full quality audit of the current repo debt:
 
 ```bash
-uv run python scripts/quality.py audit
+uv run --extra dev python scripts/quality.py audit
 ```
 
 The staged gate contract and exact target set live in [`QUALITY_GATES.md`](QUALITY_GATES.md).
@@ -307,6 +307,5 @@ Current contributor, runtime, and setup docs:
 - `docs/operations/PI_DEV_WORKFLOW.md`
 - `docs/operations/RPI_SMOKE_VALIDATION.md`
 
-Plan and migration docs can still be useful, but they are not automatically the source of truth.
-
-Historical milestone notes are archived under `docs/archive/`.
+Old plan and migration archives were removed from the tracked repo. Current code
+and current operation docs are the source of truth.

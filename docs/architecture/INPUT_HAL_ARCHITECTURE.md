@@ -14,12 +14,8 @@ This document describes the input abstraction layer that now exists in the UI pa
 
 ## Current Files
 
-- `yoyopod/ui/input/hal.py`: `InputAction` and `InputHAL`
-- `yoyopod/ui/input/manager.py`: action dispatcher
-- `yoyopod/ui/input/factory.py`: adapter selection
-- `yoyopod/ui/input/adapters/four_button.py`
-- `yoyopod/ui/input/adapters/ptt_button.py`
-- `yoyopod/ui/input/adapters/keyboard.py`
+- `device/ui/src/input/`: Rust input model and hardware event normalization
+- `device/ui/src/worker.rs`: input events emitted through the worker protocol
 
 ## Core Semantic Actions
 
