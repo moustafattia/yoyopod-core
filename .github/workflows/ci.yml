@@ -89,11 +89,27 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: device -> target
+          shared-key: rust-device-arm64
+          cache-on-failure: true
+
       - name: Set up Bazelisk
         uses: bazelbuild/setup-bazelisk@v3
 
+      - name: Cache pinned LVGL source
+        id: lvgl-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/lvgl/lvgl-9.5.0
+          key: lvgl-source-9.5.0
+
       - name: Fetch pinned LVGL source
+        if: steps.lvgl-cache.outputs.cache-hit != 'true'
         run: |
+          mkdir -p .cache/lvgl
           git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git .cache/lvgl/lvgl-9.5.0
 
       - name: Install native Rust host dependencies
