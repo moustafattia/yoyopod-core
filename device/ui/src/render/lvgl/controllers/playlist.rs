@@ -2,7 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::listen::sync_rows;
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
+use super::TypedScreenController;
+use crate::lvgl::{roles, LvglFacade, WidgetId};
 use crate::runtime::UiScreen;
 use crate::screens::{ListScreenModel, ScreenModel};
 

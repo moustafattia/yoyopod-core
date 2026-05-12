@@ -1,8 +1,9 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
+use super::TypedScreenController;
 use crate::lvgl::roles;
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, WidgetId};
 use crate::screens::{OverlayViewModel, ScreenModel};
 
 #[derive(Default)]

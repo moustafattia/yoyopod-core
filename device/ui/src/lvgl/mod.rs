@@ -1,4 +1,3 @@
-pub mod controllers;
 pub mod primitives;
 pub(crate) mod roles;
 pub mod scene_backend;
@@ -18,6 +17,7 @@ use crate::screens::ScreenModel;
 
 #[cfg(feature = "native-lvgl")]
 pub use crate::render::lvgl::backend::NativeLvglFacade;
+pub use crate::render::lvgl::controllers;
 pub use controllers::{
     typed_controller, AskController, CallController, HubController, ListController,
     ListenController, NowPlayingController, OverlayController, PlaylistController, PowerController,

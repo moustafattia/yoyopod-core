@@ -4,6 +4,7 @@ use anyhow::Result;
 
 #[cfg(feature = "native-lvgl")]
 pub mod backend;
+pub mod controllers;
 #[cfg(feature = "native-lvgl")]
 pub(crate) mod ffi;
 #[cfg(feature = "native-lvgl")]
