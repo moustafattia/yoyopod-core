@@ -91,4 +91,19 @@ impl Framebuffer {
         }
         bytes
     }
+
+    pub fn as_be_bytes_region(&self, x: usize, y: usize, width: usize, height: usize) -> Vec<u8> {
+        let max_x = x.saturating_add(width).min(self.width);
+        let max_y = y.saturating_add(height).min(self.height);
+        let region_width = max_x.saturating_sub(x);
+        let region_height = max_y.saturating_sub(y);
+        let mut bytes = Vec::with_capacity(region_width * region_height * 2);
+        for row in y..max_y {
+            let row_start = row * self.width;
+            for col in x..max_x {
+                bytes.extend_from_slice(&self.pixels[row_start + col].to_be_bytes());
+            }
+        }
+        bytes
+    }
 }

@@ -6,12 +6,14 @@ pub mod whisplay;
 
 use anyhow::Result;
 
+use crate::presentation::registry::DirtyRegion;
 use crate::render::Framebuffer;
 
 pub trait DisplayDevice {
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     fn flush_full_frame(&mut self, framebuffer: &Framebuffer) -> Result<()>;
+    fn flush_region(&mut self, framebuffer: &Framebuffer, region: DirtyRegion) -> Result<()>;
     fn set_backlight(&mut self, brightness: f32) -> Result<()>;
 }
 

@@ -1,4 +1,7 @@
+use crate::presentation::registry::{self, DirtyRegion};
 use crate::presentation::transitions::Transition;
+use std::collections::BTreeMap;
+
 use yoyopod_protocol::ui::{
     ListItemSnapshot, RuntimeSnapshot, RuntimeSnapshotDomain, UiIntent, UiScreen, VoiceFileAction,
     VoiceNoteSummarySnapshot, VoiceRecipientAction,
@@ -26,6 +29,8 @@ pub struct UiRuntime {
     pub(crate) dirty: DirtyState,
     pub(crate) selected_contact: Option<ListItemSnapshot>,
     pub(crate) transitions: Vec<Transition>,
+    pub(crate) full_snapshots: u64,
+    pub(crate) patches_per_domain: BTreeMap<RuntimeSnapshotDomain, u64>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -92,6 +97,39 @@ impl DirtyState {
             RuntimeSnapshotDomain::Overlay => self.overlay = true,
         }
     }
+
+    pub(crate) fn render_region(self, screen: UiScreen) -> Option<DirtyRegion> {
+        if self.full
+            || self.app_state
+            || self.navigation
+            || self.focus
+            || self.input
+            || self.animation
+            || self.hub
+            || self.music
+            || self.call
+            || self.voice
+            || self.overlay
+        {
+            return None;
+        }
+
+        let mut region: Option<DirtyRegion> = None;
+        for domain in [
+            (self.power, RuntimeSnapshotDomain::Power),
+            (self.network, RuntimeSnapshotDomain::Network),
+        ] {
+            if !domain.0 {
+                continue;
+            }
+            let domain_region = registry::dirty_region_for(screen, domain.1)?;
+            region = Some(match region {
+                Some(existing) => existing.union(domain_region),
+                None => domain_region,
+            });
+        }
+        region
+    }
 }
 
 impl Default for UiRuntime {
@@ -109,6 +147,8 @@ impl Default for UiRuntime {
             },
             selected_contact: None,
             transitions: Vec::new(),
+            full_snapshots: 0,
+            patches_per_domain: BTreeMap::new(),
         }
     }
 }

@@ -8,6 +8,7 @@ use super::whisplay_panel::{
     DEFAULT_BUTTON_GPIO, DEFAULT_DC_GPIO, DEFAULT_RESET_GPIO, DEFAULT_SPI_HZ, HEIGHT, WIDTH,
 };
 use crate::hardware::{ButtonDevice, DisplayDevice};
+use crate::presentation::registry::DirtyRegion;
 use crate::render::Framebuffer;
 
 const SPI_CHUNK_BYTES: usize = 4096;
@@ -140,6 +141,30 @@ impl DisplayDevice for WhisplayDisplay {
         self.set_address_window(0, 0, (WIDTH - 1) as u16, (HEIGHT - 1) as u16)?;
         self.dc.set_high();
         self.write_data(&framebuffer.as_be_bytes())?;
+        Ok(())
+    }
+
+    fn flush_region(&mut self, framebuffer: &Framebuffer, region: DirtyRegion) -> Result<()> {
+        if region.w == 0 || region.h == 0 {
+            return Ok(());
+        }
+        let x0 = usize::from(region.x).min(WIDTH.saturating_sub(1));
+        let y0 = usize::from(region.y).min(HEIGHT.saturating_sub(1));
+        let x1 = x0
+            .saturating_add(usize::from(region.w))
+            .saturating_sub(1)
+            .min(WIDTH.saturating_sub(1));
+        let y1 = y0
+            .saturating_add(usize::from(region.h))
+            .saturating_sub(1)
+            .min(HEIGHT.saturating_sub(1));
+        if x1 < x0 || y1 < y0 {
+            return Ok(());
+        }
+
+        self.set_address_window(x0 as u16, y0 as u16, x1 as u16, y1 as u16)?;
+        self.dc.set_high();
+        self.write_data(&framebuffer.as_be_bytes_region(x0, y0, x1 - x0 + 1, y1 - y0 + 1))?;
         Ok(())
     }
 

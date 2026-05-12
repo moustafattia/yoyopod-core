@@ -6,7 +6,7 @@ mod outbound;
 
 use std::io::{Read, Write};
 use std::sync::mpsc::RecvTimeoutError;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use yoyopod_protocol::ui::{UiError, UiErrorCode, UiEvent};
@@ -16,6 +16,8 @@ use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
 
 const MANAGER_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
+const RUNTIME_TICK_TIMEOUT: Duration = Duration::from_secs(5);
+const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 pub fn run_worker<R, W, E, D, B>(
     input: R,
@@ -36,16 +38,30 @@ where
     let mut ui_runtime = UiRuntime::default();
     let mut render_state = RenderState::open(display.width(), display.height())?;
     let mut shutdown_complete_emitted = false;
+    let mut watchdog = RuntimeWatchdog::new();
 
     handshake::emit_ready(output, display.width(), display.height())?;
 
     let lines = codec::spawn_line_reader(input);
     loop {
-        let line = match lines.recv_timeout(MANAGER_HEARTBEAT_TIMEOUT) {
-            Ok(line) => line?,
+        let line = match lines.recv_timeout(INPUT_POLL_INTERVAL) {
+            Ok(line) => {
+                watchdog.note_manager_message();
+                line?
+            }
             Err(RecvTimeoutError::Timeout) => {
-                handshake::emit_manager_timeout(output, errors, MANAGER_HEARTBEAT_TIMEOUT)?;
-                break;
+                if watchdog.manager_timed_out() {
+                    handshake::emit_manager_timeout(output, errors, MANAGER_HEARTBEAT_TIMEOUT)?;
+                    break;
+                }
+                emit_runtime_stalled_if_needed(
+                    output,
+                    &mut display,
+                    &mut ui_runtime,
+                    &mut render_state,
+                    &mut watchdog,
+                )?;
+                continue;
             }
             Err(RecvTimeoutError::Disconnected) => break,
         };
@@ -78,6 +94,9 @@ where
         };
 
         let outcome = dispatcher::dispatch_command(command);
+        if matches!(outcome.event, dispatcher::AppEvent::Tick) {
+            watchdog.note_tick();
+        }
         if handle_app_event(
             outcome.event,
             output,
@@ -91,12 +110,84 @@ where
             shutdown_complete_emitted = true;
             break;
         }
+        emit_runtime_stalled_if_needed(
+            output,
+            &mut display,
+            &mut ui_runtime,
+            &mut render_state,
+            &mut watchdog,
+        )?;
     }
 
     if !shutdown_complete_emitted {
         handshake::emit_shutdown_complete(output)?;
     }
 
+    Ok(())
+}
+
+struct RuntimeWatchdog {
+    last_manager_message: Instant,
+    last_tick: Instant,
+    runtime_stalled_emitted: bool,
+}
+
+impl RuntimeWatchdog {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            last_manager_message: now,
+            last_tick: now,
+            runtime_stalled_emitted: false,
+        }
+    }
+
+    fn note_manager_message(&mut self) {
+        self.last_manager_message = Instant::now();
+    }
+
+    fn note_tick(&mut self) {
+        self.last_tick = Instant::now();
+        self.runtime_stalled_emitted = false;
+    }
+
+    fn manager_timed_out(&self) -> bool {
+        self.last_manager_message.elapsed() >= MANAGER_HEARTBEAT_TIMEOUT
+    }
+
+    fn runtime_stalled(&self) -> bool {
+        self.last_tick.elapsed() >= RUNTIME_TICK_TIMEOUT && !self.runtime_stalled_emitted
+    }
+}
+
+fn emit_runtime_stalled_if_needed<W, D>(
+    output: &mut W,
+    display: &mut D,
+    ui_runtime: &mut UiRuntime,
+    render_state: &mut RenderState,
+    watchdog: &mut RuntimeWatchdog,
+) -> Result<()>
+where
+    W: Write,
+    D: DisplayDevice,
+{
+    if !watchdog.runtime_stalled() {
+        return Ok(());
+    }
+    watchdog.runtime_stalled_emitted = true;
+    ui_runtime.mark_runtime_stalled();
+    outbound::emit_event(
+        output,
+        UiEvent::Error(UiError::new(
+            UiErrorCode::RuntimeStalled,
+            "runtime tick stalled",
+        )),
+    )?;
+    if let Some(event) =
+        ui_runtime.render_if_dirty(display, render_state, outbound::monotonic_millis())?
+    {
+        outbound::emit_event(output, event)?;
+    }
     Ok(())
 }
 

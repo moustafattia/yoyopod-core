@@ -2,7 +2,11 @@ use std::io::Write;
 use std::time::Duration;
 
 use anyhow::Result;
-use yoyopod_protocol::ui::{DisplayInfo, UiError, UiErrorCode, UiEvent, UiReady};
+use yoyopod_protocol::ui::{
+    DisplayInfo, UiError, UiErrorCode, UiEvent, UiReady, UI_SCHEMA_VERSION,
+};
+
+use crate::presentation::registry;
 
 use super::outbound::emit_event;
 
@@ -11,6 +15,8 @@ pub(super) fn emit_ready<W: Write>(output: &mut W, width: usize, height: usize) 
         output,
         UiEvent::Ready(UiReady {
             display: DisplayInfo { width, height },
+            schema_version: UI_SCHEMA_VERSION,
+            screens: registry::screen_capabilities(),
         }),
     )
 }

@@ -1,5 +1,49 @@
 use crate::app::UiScreen;
-use yoyopod_protocol::ui::{InputAction, UiIntent};
+use yoyopod_protocol::ui::{
+    InputAction, IntentKind, RuntimeSnapshotDomain, ScreenCapabilities, UiIntent,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DirtyRegion {
+    pub x: u16,
+    pub y: u16,
+    pub w: u16,
+    pub h: u16,
+}
+
+impl DirtyRegion {
+    pub const fn union(self, other: Self) -> Self {
+        let x0 = if self.x < other.x { self.x } else { other.x };
+        let y0 = if self.y < other.y { self.y } else { other.y };
+        let self_x1 = self.x.saturating_add(self.w);
+        let self_y1 = self.y.saturating_add(self.h);
+        let other_x1 = other.x.saturating_add(other.w);
+        let other_y1 = other.y.saturating_add(other.h);
+        let x1 = if self_x1 > other_x1 {
+            self_x1
+        } else {
+            other_x1
+        };
+        let y1 = if self_y1 > other_y1 {
+            self_y1
+        } else {
+            other_y1
+        };
+        Self {
+            x: x0,
+            y: y0,
+            w: x1.saturating_sub(x0),
+            h: y1.saturating_sub(y0),
+        }
+    }
+}
+
+const STATUS_BAR_REGION: DirtyRegion = DirtyRegion {
+    x: 0,
+    y: 0,
+    w: 240,
+    h: 32,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderScene {
@@ -190,6 +234,155 @@ pub const fn screen_entry(screen: UiScreen) -> ScreenRegistryEntry {
         select_targets: select_targets(screen),
         passthrough_policies: passthrough_policies(screen),
         back_policies: back_policies(screen),
+    }
+}
+
+pub const fn dirty_region_for(
+    screen: UiScreen,
+    domain: RuntimeSnapshotDomain,
+) -> Option<DirtyRegion> {
+    match (screen, domain) {
+        (UiScreen::Power, RuntimeSnapshotDomain::Power) => None,
+        (_, RuntimeSnapshotDomain::Power | RuntimeSnapshotDomain::Network) => {
+            Some(STATUS_BAR_REGION)
+        }
+        _ => None,
+    }
+}
+
+pub fn screen_capabilities() -> Vec<ScreenCapabilities> {
+    UiScreen::ALL
+        .iter()
+        .copied()
+        .map(|screen| {
+            let entry = screen_entry(screen);
+            let mut supported_intents = Vec::new();
+            for target in entry.select_targets {
+                add_selection_intent(*target, &mut supported_intents);
+            }
+            for passthrough in entry.passthrough_policies {
+                add_intent_kind(
+                    template_intent_kind(passthrough.intent),
+                    &mut supported_intents,
+                );
+            }
+            for back in entry.back_policies {
+                add_intent_kind(template_intent_kind(back.intent), &mut supported_intents);
+            }
+            ScreenCapabilities {
+                screen,
+                supported_intents,
+                passthrough: entry
+                    .passthrough_policies
+                    .first()
+                    .map(|policy| policy.trigger),
+            }
+        })
+        .collect()
+}
+
+fn add_selection_intent(target: SelectionTarget, supported_intents: &mut Vec<IntentKind>) {
+    match target {
+        SelectionTarget::EmitIntent(template)
+        | SelectionTarget::PushWithIntent {
+            intent: template, ..
+        } => add_intent_kind(template_intent_kind(template), supported_intents),
+        SelectionTarget::DynamicListItem { kind } => {
+            add_intent_kind(dynamic_list_intent_kind(kind), supported_intents);
+        }
+        SelectionTarget::DynamicAction { kind } => {
+            for intent in dynamic_action_intent_kinds(kind) {
+                add_intent_kind((*intent).into(), supported_intents);
+            }
+        }
+        SelectionTarget::PushScreen(_) | SelectionTarget::AdvanceFocus | SelectionTarget::Noop => {}
+    }
+}
+
+fn add_intent_kind(intent: IntentKind, supported_intents: &mut Vec<IntentKind>) {
+    if !supported_intents.contains(&intent) {
+        supported_intents.push(intent);
+    }
+}
+
+fn template_intent_kind(template: IntentTemplate) -> IntentKind {
+    let (domain, action) = match template {
+        IntentTemplate::MusicShuffleAll => ("music", "shuffle_all"),
+        IntentTemplate::MusicPlayPause => ("music", "play_pause"),
+        IntentTemplate::VoiceAskStart => ("voice", "ask_start"),
+        IntentTemplate::VoiceAskStop => ("voice", "ask_stop"),
+        IntentTemplate::VoiceCaptureStartRecipient => ("voice", "capture_start"),
+        IntentTemplate::VoiceCaptureStop => ("voice", "capture_stop"),
+        IntentTemplate::VoiceCaptureCancel => ("voice", "capture_cancel"),
+        IntentTemplate::VoiceDiscard => ("voice", "discard"),
+        IntentTemplate::CallAnswer => ("call", "answer"),
+        IntentTemplate::CallReject => ("call", "reject"),
+        IntentTemplate::CallHangup => ("call", "hangup"),
+        IntentTemplate::CallToggleMute => ("call", "toggle_mute"),
+    };
+    IntentKind {
+        domain: domain.to_string(),
+        action: action.to_string(),
+    }
+}
+
+fn dynamic_list_intent_kind(kind: ListKind) -> IntentKind {
+    match kind {
+        ListKind::Playlists => IntentKind {
+            domain: "music".to_string(),
+            action: "load_playlist".to_string(),
+        },
+        ListKind::RecentTracks => IntentKind {
+            domain: "music".to_string(),
+            action: "play_recent_track".to_string(),
+        },
+        ListKind::Contacts | ListKind::CallHistory => IntentKind {
+            domain: "call".to_string(),
+            action: "start".to_string(),
+        },
+    }
+}
+
+fn dynamic_action_intent_kinds(kind: DynamicActionKind) -> &'static [IntentKindLiteral] {
+    const TALK_CONTACT_INTENTS: &[IntentKindLiteral] = &[
+        IntentKindLiteral::new("call", "start"),
+        IntentKindLiteral::new("voice", "capture_start"),
+        IntentKindLiteral::new("voice", "play_latest"),
+        IntentKindLiteral::new("voice", "mark_seen"),
+    ];
+    const VOICE_NOTE_INTENTS: &[IntentKindLiteral] = &[
+        IntentKindLiteral::new("voice", "capture_start"),
+        IntentKindLiteral::new("voice", "capture_stop"),
+        IntentKindLiteral::new("voice", "capture_cancel"),
+        IntentKindLiteral::new("voice", "send"),
+        IntentKindLiteral::new("voice", "play"),
+        IntentKindLiteral::new("voice", "discard"),
+    ];
+
+    match kind {
+        DynamicActionKind::TalkContact => TALK_CONTACT_INTENTS,
+        DynamicActionKind::VoiceNote => VOICE_NOTE_INTENTS,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct IntentKindLiteral {
+    domain: &'static str,
+    action: &'static str,
+}
+
+impl IntentKindLiteral {
+    const fn new(domain: &'static str, action: &'static str) -> Self {
+        Self { domain, action }
+    }
+}
+
+impl From<IntentKindLiteral> for IntentKind {
+    fn from(value: IntentKindLiteral) -> Self {
+        Self {
+            domain: value.domain.to_string(),
+            action: value.action.to_string(),
+        }
     }
 }
 

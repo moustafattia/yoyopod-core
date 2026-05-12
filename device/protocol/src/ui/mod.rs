@@ -2,6 +2,7 @@ mod snapshot;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 
 pub use snapshot::{
     CallRuntimeSnapshot, HubCardSnapshot, HubRuntimeSnapshot, ListItemSnapshot,
@@ -211,12 +212,37 @@ pub struct UiInputEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UiReady {
     pub display: DisplayInfo,
+    #[serde(default = "default_ui_schema_version")]
+    pub schema_version: u16,
+    #[serde(default)]
+    pub screens: Vec<ScreenCapabilities>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DisplayInfo {
     pub width: usize,
     pub height: usize,
+}
+
+pub const UI_SCHEMA_VERSION: u16 = 2;
+
+fn default_ui_schema_version() -> u16 {
+    UI_SCHEMA_VERSION
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScreenCapabilities {
+    pub screen: UiScreen,
+    #[serde(default)]
+    pub supported_intents: Vec<IntentKind>,
+    #[serde(default)]
+    pub passthrough: Option<InputAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntentKind {
+    pub domain: String,
+    pub action: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,6 +260,10 @@ pub struct UiHealth {
     pub last_ui_renderer: String,
     #[serde(default)]
     pub active_screen: UiScreen,
+    #[serde(default)]
+    pub full_snapshots: u64,
+    #[serde(default)]
+    pub patches_per_domain: BTreeMap<RuntimeSnapshotDomain, u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -256,6 +286,7 @@ pub enum UiErrorCode {
     DecodeError,
     InvalidCommand,
     ManagerTimeout,
+    RuntimeStalled,
     WorkerError,
 }
 
@@ -265,6 +296,7 @@ impl UiErrorCode {
             Self::DecodeError => "decode_error",
             Self::InvalidCommand => "invalid_command",
             Self::ManagerTimeout => "manager_timeout",
+            Self::RuntimeStalled => "runtime_stalled",
             Self::WorkerError => "worker_error",
         }
     }
@@ -844,6 +876,8 @@ mod tests {
                     width: 240,
                     height: 280,
                 },
+                schema_version: UI_SCHEMA_VERSION,
+                screens: Vec::new(),
             }),
             UiEvent::Input(UiInputEvent {
                 action: InputAction::Advance,
@@ -861,6 +895,8 @@ mod tests {
                 button_events: 2,
                 last_ui_renderer: "lvgl".to_string(),
                 active_screen: UiScreen::Hub,
+                full_snapshots: 1,
+                patches_per_domain: BTreeMap::new(),
             }),
             UiEvent::Error(UiError::new(UiErrorCode::InvalidCommand, "bad command")),
             UiEvent::ShutdownComplete,

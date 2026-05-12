@@ -8,14 +8,14 @@ use crate::hardware::DisplayDevice;
 use crate::presentation;
 use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::TransitionSampler;
-use crate::render::{Framebuffer, LvglRenderer};
+use crate::render::{Framebuffer, LvglRenderer, Renderer};
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen, UiView};
 
 pub struct RenderState {
     framebuffer: Framebuffer,
-    renderer: LvglRenderer,
+    renderer: Box<dyn Renderer>,
     frames: usize,
     last_active_screen: Option<UiScreen>,
     last_ui_renderer: String,
@@ -25,11 +25,21 @@ impl RenderState {
     pub fn open(width: usize, height: usize) -> Result<Self> {
         Ok(Self {
             framebuffer: Framebuffer::new(width, height),
-            renderer: LvglRenderer::open(None)?,
+            renderer: Box::new(LvglRenderer::open(None)?),
             frames: 0,
             last_active_screen: None,
             last_ui_renderer: String::new(),
         })
+    }
+
+    pub fn with_renderer(width: usize, height: usize, renderer: Box<dyn Renderer>) -> Self {
+        Self {
+            framebuffer: Framebuffer::new(width, height),
+            renderer,
+            frames: 0,
+            last_active_screen: None,
+            last_ui_renderer: String::new(),
+        }
     }
 
     pub fn frames(&self) -> usize {
@@ -44,6 +54,7 @@ impl RenderState {
 impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
         let change = snapshot::replace_full(&mut self.snapshot, snapshot);
+        self.full_snapshots += 1;
         navigator::apply_app_state_route(self, &change.previous_app_state, &change.app_state);
         navigator::apply_runtime_preemption(self);
         navigator::clamp_focus(self);
@@ -51,10 +62,12 @@ impl UiRuntime {
     }
 
     pub fn apply_patch(&mut self, patch: RuntimeSnapshotPatch) {
+        let domain = patch.domain();
         let previous_screen = self.active_screen;
         let previous_focus = self.focus_index;
         let previous_stack_len = self.screen_stack.len();
         let change = snapshot::apply_patch(&mut self.snapshot, patch);
+        *self.patches_per_domain.entry(domain).or_insert(0) += 1;
         navigator::apply_app_state_route(self, &change.previous_app_state, &change.app_state);
         navigator::apply_runtime_preemption(self);
         navigator::clamp_focus(self);
@@ -109,6 +122,15 @@ impl UiRuntime {
 
     pub fn active_screen(&self) -> UiScreen {
         self.active_screen
+    }
+
+    pub fn mark_runtime_stalled(&mut self) {
+        self.snapshot.overlay.loading = false;
+        self.snapshot.overlay.error = "Lost runtime link".to_string();
+        self.snapshot.overlay.message.clear();
+        navigator::apply_runtime_preemption(self);
+        self.dirty.overlay = true;
+        self.dirty.navigation = true;
     }
 
     pub fn snapshot(&self) -> &RuntimeSnapshot {
@@ -171,6 +193,8 @@ impl UiRuntime {
             button_events,
             last_ui_renderer: render.last_ui_renderer().to_string(),
             active_screen: self.active_screen_model().screen(),
+            full_snapshots: self.full_snapshots,
+            patches_per_domain: self.patches_per_domain.clone(),
         })
     }
 
@@ -189,11 +213,19 @@ impl UiRuntime {
 
         let screen_model = self.active_screen_model();
         let sampler = TransitionSampler::new(&self.transitions, now_ms);
-        render
-            .renderer
-            .render_screen_model(&mut render.framebuffer, &screen_model, &sampler)?;
-        render.last_ui_renderer = "lvgl".to_string();
-        display.flush_full_frame(&mut render.framebuffer)?;
+        let dirty_region = self.dirty.render_region(screen_model.screen());
+        let report = render.renderer.render(
+            &mut render.framebuffer,
+            &screen_model,
+            &sampler,
+            dirty_region,
+        )?;
+        render.last_ui_renderer = report.renderer.to_string();
+        if let Some(region) = report.dirty_region {
+            display.flush_region(&render.framebuffer, region)?;
+        } else {
+            display.flush_full_frame(&render.framebuffer)?;
+        }
         let screen_changed =
             screen_changed_if_needed(&mut render.last_active_screen, &screen_model);
         self.mark_clean();

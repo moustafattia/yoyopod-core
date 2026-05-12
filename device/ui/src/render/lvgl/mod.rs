@@ -9,8 +9,12 @@ pub mod facade;
 #[cfg(feature = "native-lvgl")]
 pub(crate) mod ffi;
 #[cfg(feature = "native-lvgl")]
+pub(crate) mod flush;
+#[cfg(feature = "native-lvgl")]
 pub(crate) mod icons;
 pub mod layout;
+#[cfg(feature = "native-lvgl")]
+pub(crate) mod lifecycle;
 pub mod primitives;
 pub(crate) mod roles;
 pub mod scene;
@@ -25,7 +29,7 @@ pub(crate) mod widget_registry;
 
 use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::TransitionSampler;
-use crate::render::Framebuffer;
+use crate::render::{Framebuffer, RenderReport, Renderer};
 #[cfg(feature = "native-lvgl")]
 use backend::NativeLvglFacade;
 #[cfg(feature = "native-lvgl")]
@@ -57,6 +61,24 @@ impl LvglRenderer {
     ) -> Result<()> {
         self.renderer
             .render_screen_model(framebuffer, model, transitions)
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+impl Renderer for LvglRenderer {
+    fn render(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        model: &ScreenModel,
+        transitions: &TransitionSampler<'_>,
+        dirty_region: Option<crate::presentation::registry::DirtyRegion>,
+    ) -> Result<RenderReport> {
+        self.render_screen_model(framebuffer, model, transitions)?;
+        Ok(RenderReport {
+            renderer: "lvgl",
+            screen: model.screen(),
+            dirty_region,
+        })
     }
 }
 
@@ -127,6 +149,19 @@ impl LvglRenderer {
         _model: &ScreenModel,
         _transitions: &TransitionSampler<'_>,
     ) -> Result<()> {
+        anyhow::bail!("native-lvgl feature is disabled for this build")
+    }
+}
+
+#[cfg(not(feature = "native-lvgl"))]
+impl Renderer for LvglRenderer {
+    fn render(
+        &mut self,
+        _framebuffer: &mut Framebuffer,
+        _model: &ScreenModel,
+        _transitions: &TransitionSampler<'_>,
+        _dirty_region: Option<crate::presentation::registry::DirtyRegion>,
+    ) -> Result<RenderReport> {
         anyhow::bail!("native-lvgl feature is disabled for this build")
     }
 }

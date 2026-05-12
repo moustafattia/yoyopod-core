@@ -62,7 +62,8 @@ pub enum RuntimeSnapshotPatch {
     Overlay(OverlayRuntimeSnapshot),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RuntimeSnapshotDomain {
     Full,
     AppState,

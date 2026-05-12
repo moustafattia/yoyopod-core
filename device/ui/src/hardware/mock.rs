@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::hardware::{ButtonDevice, DisplayDevice};
+use crate::presentation::registry::DirtyRegion;
 use crate::render::Framebuffer;
 
 #[derive(Debug)]
@@ -8,6 +9,7 @@ pub struct MockDisplay {
     width: usize,
     height: usize,
     pub frames: usize,
+    pub regional_frames: usize,
 }
 
 impl MockDisplay {
@@ -16,6 +18,7 @@ impl MockDisplay {
             width,
             height,
             frames: 0,
+            regional_frames: 0,
         }
     }
 }
@@ -31,6 +34,11 @@ impl DisplayDevice for MockDisplay {
 
     fn flush_full_frame(&mut self, _framebuffer: &Framebuffer) -> Result<()> {
         self.frames += 1;
+        Ok(())
+    }
+
+    fn flush_region(&mut self, _framebuffer: &Framebuffer, _region: DirtyRegion) -> Result<()> {
+        self.regional_frames += 1;
         Ok(())
     }
 
