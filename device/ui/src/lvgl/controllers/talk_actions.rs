@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{ScreenModel, TalkActionsViewModel};
 
 const ACCENT: u32 = 0x00D4FF;
@@ -36,31 +36,33 @@ impl TalkActionsController {
             .ok_or_else(|| anyhow!("talk-actions controller missing root widget"))?;
 
         if self.header_box.is_none() {
-            self.header_box = Some(facade.create_container(root, "talk_actions_header_box")?);
+            self.header_box = Some(facade.create_container(root, roles::TALK_ACTIONS_HEADER_BOX)?);
         }
         let header_box = self
             .header_box
             .ok_or_else(|| anyhow!("talk-actions controller missing header"))?;
         if self.header_label.is_none() {
-            self.header_label = Some(facade.create_label(header_box, "talk_actions_header_label")?);
+            self.header_label =
+                Some(facade.create_label(header_box, roles::TALK_ACTIONS_HEADER_LABEL)?);
         }
         if self.header_name.is_none() {
-            self.header_name = Some(facade.create_label(root, "talk_actions_header_name")?);
+            self.header_name = Some(facade.create_label(root, roles::TALK_ACTIONS_HEADER_NAME)?);
         }
         while self.buttons.len() < 3 {
-            let button = facade.create_container(root, "talk_actions_primary_button")?;
+            let button = facade.create_container(root, roles::TALK_ACTIONS_PRIMARY_BUTTON)?;
             self.buttons.push(button);
             self.button_labels
-                .push(facade.create_label(button, "talk_actions_button_label")?);
+                .push(facade.create_label(button, roles::TALK_ACTIONS_BUTTON_LABEL)?);
         }
         if self.title_label.is_none() {
-            self.title_label = Some(facade.create_label(root, "talk_actions_title_label")?);
+            self.title_label = Some(facade.create_label(root, roles::TALK_ACTIONS_TITLE_LABEL)?);
         }
         if self.status_label.is_none() {
-            self.status_label = Some(facade.create_label(root, "talk_actions_status_label")?);
+            self.status_label = Some(facade.create_label(root, roles::TALK_ACTIONS_STATUS_LABEL)?);
         }
         while self.dots.len() < 3 {
-            self.dots.push(facade.create_container(root, "talk_dot")?);
+            self.dots
+                .push(facade.create_container(root, roles::TALK_DOT)?);
         }
         Ok(())
     }
@@ -78,8 +80,12 @@ impl TypedScreenController for TalkActionsController {
         if let Some(root) = self.root {
             self.status
                 .sync(facade, root, &actions.chrome.status, true)?;
-            self.footer
-                .sync(facade, root, "talk_actions_footer", &actions.chrome.footer)?;
+            self.footer.sync(
+                facade,
+                root,
+                roles::TALK_ACTIONS_FOOTER,
+                &actions.chrome.footer,
+            )?;
         }
         if let Some(header_box) = self.header_box {
             facade.set_accent(header_box, ACCENT)?;

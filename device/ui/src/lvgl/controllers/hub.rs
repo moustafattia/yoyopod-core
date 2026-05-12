@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::presentation::screens::hub;
 use crate::screens::{HubViewModel, ScreenModel};
 
@@ -28,25 +28,26 @@ impl HubController {
             .ok_or_else(|| anyhow!("hub controller missing root widget"))?;
 
         if self.icon_glow.is_none() {
-            self.icon_glow = Some(facade.create_container(root, "hub_icon_glow")?);
+            self.icon_glow = Some(facade.create_container(root, roles::HUB_ICON_GLOW)?);
         }
         if self.card_panel.is_none() {
-            self.card_panel = Some(facade.create_container(root, "hub_card_panel")?);
+            self.card_panel = Some(facade.create_container(root, roles::HUB_CARD_PANEL)?);
         }
         let card_panel = self
             .card_panel
             .ok_or_else(|| anyhow!("hub controller missing card panel"))?;
         if self.icon.is_none() {
-            self.icon = Some(facade.create_label(card_panel, "hub_icon")?);
+            self.icon = Some(facade.create_label(card_panel, roles::HUB_ICON)?);
         }
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "hub_title")?);
+            self.title = Some(facade.create_label(root, roles::HUB_TITLE)?);
         }
         if self.subtitle.is_none() {
-            self.subtitle = Some(facade.create_label(root, "hub_subtitle")?);
+            self.subtitle = Some(facade.create_label(root, roles::HUB_SUBTITLE)?);
         }
         while self.dots.len() < 4 {
-            self.dots.push(facade.create_container(root, "hub_dot")?);
+            self.dots
+                .push(facade.create_container(root, roles::HUB_DOT)?);
         }
         Ok(())
     }
@@ -74,7 +75,7 @@ impl TypedScreenController for HubController {
         if let Some(root) = self.root {
             self.status.sync(facade, root, &model.chrome.status, true)?;
             self.footer
-                .sync(facade, root, "hub_footer", &model.chrome.footer)?;
+                .sync(facade, root, roles::HUB_FOOTER, &model.chrome.footer)?;
         }
         if let Some(icon_glow) = self.icon_glow {
             facade.set_accent(icon_glow, accent)?;

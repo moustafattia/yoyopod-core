@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::runtime::UiScreen;
 use crate::screens::{CallViewModel, ScreenModel};
 
@@ -37,37 +37,37 @@ impl CallController {
             .ok_or_else(|| anyhow!("call controller missing root widget"))?;
 
         if self.icon_halo.is_none() {
-            self.icon_halo = Some(facade.create_container(root, "call_icon_halo")?);
+            self.icon_halo = Some(facade.create_container(root, roles::CALL_ICON_HALO)?);
         }
         if self.panel.is_none() {
-            self.panel = Some(facade.create_container(root, "call_panel")?);
+            self.panel = Some(facade.create_container(root, roles::CALL_PANEL)?);
         }
         let panel = self
             .panel
             .ok_or_else(|| anyhow!("call controller missing panel widget"))?;
         if self.icon_label.is_none() {
-            self.icon_label = Some(facade.create_label(panel, "call_state_icon")?);
+            self.icon_label = Some(facade.create_label(panel, roles::CALL_STATE_ICON)?);
         }
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "call_title")?);
+            self.title = Some(facade.create_label(root, roles::CALL_TITLE)?);
         }
         if self.state_chip.is_none() {
-            self.state_chip = Some(facade.create_container(root, "call_state_chip")?);
+            self.state_chip = Some(facade.create_container(root, roles::CALL_STATE_CHIP)?);
         }
         let state_chip = self
             .state_chip
             .ok_or_else(|| anyhow!("call controller missing state chip"))?;
         if self.state_label.is_none() {
-            self.state_label = Some(facade.create_label(state_chip, "call_state_label")?);
+            self.state_label = Some(facade.create_label(state_chip, roles::CALL_STATE_LABEL)?);
         }
         if self.mute_badge.is_none() {
-            self.mute_badge = Some(facade.create_container(root, "call_mute_badge")?);
+            self.mute_badge = Some(facade.create_container(root, roles::CALL_MUTE_BADGE)?);
         }
         let mute_badge = self
             .mute_badge
             .ok_or_else(|| anyhow!("call controller missing mute badge"))?;
         if self.mute_label.is_none() {
-            self.mute_label = Some(facade.create_label(mute_badge, "call_mute_label")?);
+            self.mute_label = Some(facade.create_label(mute_badge, roles::CALL_MUTE_LABEL)?);
         }
 
         Ok(())
@@ -89,7 +89,7 @@ impl TypedScreenController for CallController {
         if let Some(root) = self.root {
             self.status.sync(facade, root, &call.chrome.status, true)?;
             self.footer
-                .sync(facade, root, "call_footer", &call.chrome.footer)?;
+                .sync(facade, root, roles::CALL_FOOTER, &call.chrome.footer)?;
         }
         if let Some(icon_halo) = self.icon_halo {
             facade.set_variant(icon_halo, "call_halo", accent)?;

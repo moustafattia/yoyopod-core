@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{PowerViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -28,16 +28,16 @@ impl PowerController {
             .ok_or_else(|| anyhow!("power controller missing root widget"))?;
 
         if self.icon_halo.is_none() {
-            self.icon_halo = Some(facade.create_container(root, "power_icon_halo")?);
+            self.icon_halo = Some(facade.create_container(root, roles::POWER_ICON_HALO)?);
         }
         let icon_halo = self
             .icon_halo
             .ok_or_else(|| anyhow!("power controller missing icon halo"))?;
         if self.icon.is_none() {
-            self.icon = Some(facade.create_label(icon_halo, "power_icon")?);
+            self.icon = Some(facade.create_label(icon_halo, roles::POWER_ICON)?);
         }
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "power_title")?);
+            self.title = Some(facade.create_label(root, roles::POWER_TITLE)?);
         }
 
         Ok(())
@@ -49,13 +49,14 @@ impl PowerController {
             .ok_or_else(|| anyhow!("power controller missing root widget"))?;
 
         while self.row_titles.len() < row_count {
-            let row = facade.create_container(root, "power_row")?;
+            let row = facade.create_container(root, roles::POWER_ROW)?;
             self.row_containers.push(row);
             self.row_titles
-                .push(facade.create_label(row, "power_row_title")?);
+                .push(facade.create_label(row, roles::POWER_ROW_TITLE)?);
         }
         while self.dots.len() < 8 {
-            self.dots.push(facade.create_container(root, "power_dot")?);
+            self.dots
+                .push(facade.create_container(root, roles::POWER_DOT)?);
         }
 
         Ok(())
@@ -80,7 +81,7 @@ impl TypedScreenController for PowerController {
             self.footer.sync_with_accent(
                 facade,
                 root,
-                "power_footer",
+                roles::POWER_FOOTER,
                 &power.chrome.footer,
                 accent,
             )?;

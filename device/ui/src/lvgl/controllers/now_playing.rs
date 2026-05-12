@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{NowPlayingViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -31,45 +31,46 @@ impl NowPlayingController {
             .ok_or_else(|| anyhow!("now-playing controller missing root widget"))?;
 
         if self.panel.is_none() {
-            self.panel = Some(facade.create_container(root, "now_playing_panel")?);
+            self.panel = Some(facade.create_container(root, roles::NOW_PLAYING_PANEL)?);
         }
         let panel = self
             .panel
             .ok_or_else(|| anyhow!("now-playing controller missing panel"))?;
         if self.icon_halo.is_none() {
-            self.icon_halo = Some(facade.create_container(panel, "now_playing_icon_halo")?);
+            self.icon_halo = Some(facade.create_container(panel, roles::NOW_PLAYING_ICON_HALO)?);
         }
         let icon_halo = self
             .icon_halo
             .ok_or_else(|| anyhow!("now-playing controller missing icon halo"))?;
         if self.icon_label.is_none() {
-            self.icon_label = Some(facade.create_label(icon_halo, "now_playing_icon_label")?);
+            self.icon_label = Some(facade.create_label(icon_halo, roles::NOW_PLAYING_ICON_LABEL)?);
         }
         if self.state_chip.is_none() {
-            self.state_chip = Some(facade.create_container(panel, "now_playing_state_chip")?);
+            self.state_chip = Some(facade.create_container(panel, roles::NOW_PLAYING_STATE_CHIP)?);
         }
         let state_chip = self
             .state_chip
             .ok_or_else(|| anyhow!("now-playing controller missing state chip"))?;
         if self.state_label.is_none() {
-            self.state_label = Some(facade.create_label(state_chip, "now_playing_state_label")?);
+            self.state_label =
+                Some(facade.create_label(state_chip, roles::NOW_PLAYING_STATE_LABEL)?);
         }
         if self.title.is_none() {
-            self.title = Some(facade.create_label(panel, "now_playing_title")?);
+            self.title = Some(facade.create_label(panel, roles::NOW_PLAYING_TITLE)?);
         }
         if self.artist.is_none() {
-            self.artist = Some(facade.create_label(panel, "now_playing_artist")?);
+            self.artist = Some(facade.create_label(panel, roles::NOW_PLAYING_ARTIST)?);
         }
         if self.progress_track.is_none() {
             self.progress_track =
-                Some(facade.create_container(panel, "now_playing_progress_track")?);
+                Some(facade.create_container(panel, roles::NOW_PLAYING_PROGRESS_TRACK)?);
         }
         let progress_track = self
             .progress_track
             .ok_or_else(|| anyhow!("now-playing controller missing progress track"))?;
         if self.progress_fill.is_none() {
             self.progress_fill =
-                Some(facade.create_container(progress_track, "now_playing_progress_fill")?);
+                Some(facade.create_container(progress_track, roles::NOW_PLAYING_PROGRESS_FILL)?);
         }
 
         Ok(())
@@ -100,7 +101,7 @@ impl TypedScreenController for NowPlayingController {
             self.footer.sync_with_variant(
                 facade,
                 root,
-                "now_playing_footer",
+                roles::NOW_PLAYING_FOOTER,
                 &now_playing.chrome.footer,
                 state_variant,
                 accent,

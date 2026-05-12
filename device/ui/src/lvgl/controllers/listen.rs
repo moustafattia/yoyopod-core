@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
@@ -32,42 +32,43 @@ impl ListenController {
             .ok_or_else(|| anyhow!("listen controller missing root widget"))?;
 
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "listen_title")?);
+            self.title = Some(facade.create_label(root, roles::LISTEN_TITLE)?);
         }
         if self.subtitle.is_none() {
-            self.subtitle = Some(facade.create_label(root, "listen_subtitle")?);
+            self.subtitle = Some(facade.create_label(root, roles::LISTEN_SUBTITLE)?);
         }
         if self.panel.is_none() {
-            self.panel = Some(facade.create_container(root, "listen_panel")?);
+            self.panel = Some(facade.create_container(root, roles::LISTEN_PANEL)?);
         }
         let panel = self
             .panel
             .ok_or_else(|| anyhow!("listen controller missing panel"))?;
 
         while self.row_titles.len() < row_count {
-            let row = facade.create_container(panel, "listen_row")?;
+            let row = facade.create_container(panel, roles::LISTEN_ROW)?;
             self.row_containers.push(row);
             self.row_icons
-                .push(facade.create_label(row, "listen_row_icon")?);
+                .push(facade.create_label(row, roles::LISTEN_ROW_ICON)?);
             self.row_titles
-                .push(facade.create_label(row, "listen_row_title")?);
+                .push(facade.create_label(row, roles::LISTEN_ROW_TITLE)?);
             self.row_subtitles
-                .push(facade.create_label(row, "listen_row_subtitle")?);
+                .push(facade.create_label(row, roles::LISTEN_ROW_SUBTITLE)?);
         }
         if self.empty_panel.is_none() {
-            self.empty_panel = Some(facade.create_container(root, "listen_empty_panel")?);
+            self.empty_panel = Some(facade.create_container(root, roles::LISTEN_EMPTY_PANEL)?);
         }
         let empty_panel = self
             .empty_panel
             .ok_or_else(|| anyhow!("listen controller missing empty panel"))?;
         if self.empty_icon.is_none() {
-            self.empty_icon = Some(facade.create_label(empty_panel, "listen_empty_icon")?);
+            self.empty_icon = Some(facade.create_label(empty_panel, roles::LISTEN_EMPTY_ICON)?);
         }
         if self.empty_title.is_none() {
-            self.empty_title = Some(facade.create_label(empty_panel, "listen_empty_title")?);
+            self.empty_title = Some(facade.create_label(empty_panel, roles::LISTEN_EMPTY_TITLE)?);
         }
         if self.empty_subtitle.is_none() {
-            self.empty_subtitle = Some(facade.create_label(empty_panel, "listen_empty_subtitle")?);
+            self.empty_subtitle =
+                Some(facade.create_label(empty_panel, roles::LISTEN_EMPTY_SUBTITLE)?);
         }
 
         Ok(())
@@ -96,7 +97,7 @@ impl TypedScreenController for ListenController {
             self.footer.sync_with_accent(
                 facade,
                 root,
-                "listen_footer",
+                roles::LISTEN_FOOTER,
                 &list.chrome.footer,
                 accent,
             )?;

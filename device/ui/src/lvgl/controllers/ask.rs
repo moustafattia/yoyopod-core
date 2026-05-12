@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{AskViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -27,22 +27,22 @@ impl AskController {
             .ok_or_else(|| anyhow!("ask controller missing root widget"))?;
 
         if self.icon_glow.is_none() {
-            self.icon_glow = Some(facade.create_container(root, "ask_icon_glow")?);
+            self.icon_glow = Some(facade.create_container(root, roles::ASK_ICON_GLOW)?);
         }
         if self.icon_halo.is_none() {
-            self.icon_halo = Some(facade.create_container(root, "ask_icon_halo")?);
+            self.icon_halo = Some(facade.create_container(root, roles::ASK_ICON_HALO)?);
         }
         let icon_halo = self
             .icon_halo
             .ok_or_else(|| anyhow!("ask controller missing icon halo"))?;
         if self.icon.is_none() {
-            self.icon = Some(facade.create_label(icon_halo, "ask_icon")?);
+            self.icon = Some(facade.create_label(icon_halo, roles::ASK_ICON)?);
         }
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "ask_title")?);
+            self.title = Some(facade.create_label(root, roles::ASK_TITLE)?);
         }
         if self.subtitle.is_none() {
-            self.subtitle = Some(facade.create_label(root, "ask_subtitle")?);
+            self.subtitle = Some(facade.create_label(root, roles::ASK_SUBTITLE)?);
         }
 
         Ok(())
@@ -65,7 +65,7 @@ impl TypedScreenController for AskController {
         if let Some(root) = self.root {
             self.status.sync(facade, root, &ask.chrome.status, true)?;
             self.footer
-                .sync(facade, root, "ask_footer", &ask.chrome.footer)?;
+                .sync(facade, root, roles::ASK_FOOTER, &ask.chrome.footer)?;
         }
         if let Some(icon_halo) = self.icon_halo {
             facade.set_visible(icon_halo, !is_reply)?;

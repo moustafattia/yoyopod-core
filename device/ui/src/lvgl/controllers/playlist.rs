@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail, Result};
 
 use super::listen::sync_rows;
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::runtime::UiScreen;
 use crate::screens::{ListScreenModel, ScreenModel};
 
@@ -40,43 +40,43 @@ impl PlaylistController {
             .ok_or_else(|| anyhow!("playlist controller missing root widget"))?;
 
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "playlist_title")?);
+            self.title = Some(facade.create_label(root, roles::PLAYLIST_TITLE)?);
         }
         if self.underline.is_none() {
-            self.underline = Some(facade.create_container(root, "playlist_underline")?);
+            self.underline = Some(facade.create_container(root, roles::PLAYLIST_UNDERLINE)?);
         }
         if self.panel.is_none() {
-            self.panel = Some(facade.create_container(root, "playlist_panel")?);
+            self.panel = Some(facade.create_container(root, roles::PLAYLIST_PANEL)?);
         }
         let panel = self
             .panel
             .ok_or_else(|| anyhow!("playlist controller missing panel"))?;
 
         while self.row_titles.len() < row_count {
-            let row = facade.create_container(panel, "playlist_row")?;
+            let row = facade.create_container(panel, roles::PLAYLIST_ROW)?;
             self.row_containers.push(row);
             self.row_icons
-                .push(facade.create_label(row, "playlist_row_icon")?);
+                .push(facade.create_label(row, roles::PLAYLIST_ROW_ICON)?);
             self.row_titles
-                .push(facade.create_label(row, "playlist_row_title")?);
+                .push(facade.create_label(row, roles::PLAYLIST_ROW_TITLE)?);
             self.row_subtitles
-                .push(facade.create_label(row, "playlist_row_subtitle")?);
+                .push(facade.create_label(row, roles::PLAYLIST_ROW_SUBTITLE)?);
         }
         if self.empty_panel.is_none() {
-            self.empty_panel = Some(facade.create_container(root, "playlist_empty_panel")?);
+            self.empty_panel = Some(facade.create_container(root, roles::PLAYLIST_EMPTY_PANEL)?);
         }
         let empty_panel = self
             .empty_panel
             .ok_or_else(|| anyhow!("playlist controller missing empty panel"))?;
         if self.empty_icon.is_none() {
-            self.empty_icon = Some(facade.create_label(empty_panel, "playlist_empty_icon")?);
+            self.empty_icon = Some(facade.create_label(empty_panel, roles::PLAYLIST_EMPTY_ICON)?);
         }
         if self.empty_title.is_none() {
-            self.empty_title = Some(facade.create_label(empty_panel, "playlist_empty_title")?);
+            self.empty_title = Some(facade.create_label(empty_panel, roles::PLAYLIST_EMPTY_TITLE)?);
         }
         if self.empty_subtitle.is_none() {
             self.empty_subtitle =
-                Some(facade.create_label(empty_panel, "playlist_empty_subtitle")?);
+                Some(facade.create_label(empty_panel, roles::PLAYLIST_EMPTY_SUBTITLE)?);
         }
 
         Ok(())
@@ -98,7 +98,7 @@ impl TypedScreenController for PlaylistController {
         if let Some(root) = self.root {
             self.status.sync(facade, root, &list.chrome.status, false)?;
             self.footer
-                .sync(facade, root, "playlist_footer", &list.chrome.footer)?;
+                .sync(facade, root, roles::PLAYLIST_FOOTER, &list.chrome.footer)?;
         }
         if let Some(title) = self.title {
             facade.set_text(title, &list.title)?;

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::lvgl::{roles, LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
@@ -28,10 +28,10 @@ impl ListController {
             .ok_or_else(|| anyhow!("list controller missing root widget"))?;
 
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "list_title")?);
+            self.title = Some(facade.create_label(root, roles::LIST_TITLE)?);
         }
         if self.subtitle.is_none() {
-            self.subtitle = Some(facade.create_label(root, "list_subtitle")?);
+            self.subtitle = Some(facade.create_label(root, roles::LIST_SUBTITLE)?);
         }
 
         Ok(())
@@ -43,14 +43,14 @@ impl ListController {
             .ok_or_else(|| anyhow!("list controller missing root widget"))?;
 
         while self.row_titles.len() < row_count {
-            let row = facade.create_container(root, "list_row")?;
+            let row = facade.create_container(root, roles::LIST_ROW)?;
             self.row_containers.push(row);
             self.row_icons
-                .push(facade.create_label(row, "list_row_icon")?);
+                .push(facade.create_label(row, roles::LIST_ROW_ICON)?);
             self.row_titles
-                .push(facade.create_label(row, "list_row_title")?);
+                .push(facade.create_label(row, roles::LIST_ROW_TITLE)?);
             self.row_subtitles
-                .push(facade.create_label(row, "list_row_subtitle")?);
+                .push(facade.create_label(row, roles::LIST_ROW_SUBTITLE)?);
         }
 
         Ok(())
@@ -77,7 +77,7 @@ impl TypedScreenController for ListController {
         if let Some(root) = self.root {
             self.status.sync(facade, root, &list.chrome.status, false)?;
             self.footer
-                .sync(facade, root, "list_footer", &list.chrome.footer)?;
+                .sync(facade, root, roles::LIST_FOOTER, &list.chrome.footer)?;
         }
 
         let accent = accent_for_list(list);
