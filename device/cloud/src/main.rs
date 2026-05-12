@@ -10,6 +10,8 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let args = Args::parse();
     yoyopod_cloud::worker::run(&args.config_dir)
 }
