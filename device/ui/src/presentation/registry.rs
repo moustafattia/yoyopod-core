@@ -75,6 +75,7 @@ pub struct ScreenRegistryEntry {
     pub screen: UiScreen,
     pub model_kind: ScreenModelKind,
     pub controller_kind: ControllerKind,
+    pub native_controller_kind: ControllerKind,
     pub focus_policy: FocusPolicy,
     pub navigation_policy: NavigationPolicy,
     pub render_scene: RenderScene,
@@ -86,6 +87,7 @@ pub const fn screen_entry(screen: UiScreen) -> ScreenRegistryEntry {
         screen,
         model_kind: model_kind(screen),
         controller_kind: controller_kind(screen),
+        native_controller_kind: native_controller_kind(screen),
         focus_policy: focus_policy(screen),
         navigation_policy: navigation_policy(screen),
         render_scene: render_scene(screen),
@@ -114,6 +116,24 @@ const fn model_kind(screen: UiScreen) -> ScreenModelKind {
 const fn controller_kind(screen: UiScreen) -> ControllerKind {
     match screen {
         UiScreen::Hub => ControllerKind::Hub,
+        UiScreen::Listen
+        | UiScreen::Playlists
+        | UiScreen::RecentTracks
+        | UiScreen::Talk
+        | UiScreen::Contacts
+        | UiScreen::CallHistory => ControllerKind::List,
+        UiScreen::NowPlaying => ControllerKind::NowPlaying,
+        UiScreen::Ask => ControllerKind::Ask,
+        UiScreen::TalkContact | UiScreen::VoiceNote => ControllerKind::TalkActions,
+        UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall => ControllerKind::Call,
+        UiScreen::Power => ControllerKind::Power,
+        UiScreen::Loading | UiScreen::Error => ControllerKind::Overlay,
+    }
+}
+
+const fn native_controller_kind(screen: UiScreen) -> ControllerKind {
+    match screen {
+        UiScreen::Hub => ControllerKind::Hub,
         UiScreen::Listen => ControllerKind::Listen,
         UiScreen::Playlists
         | UiScreen::RecentTracks
@@ -126,6 +146,23 @@ const fn controller_kind(screen: UiScreen) -> ControllerKind {
         UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall => ControllerKind::Call,
         UiScreen::Power => ControllerKind::Power,
         UiScreen::Loading | UiScreen::Error => ControllerKind::Overlay,
+    }
+}
+
+pub const fn controller_kind_for_native_scene(scene: NativeRenderScene) -> ControllerKind {
+    match scene {
+        NativeRenderScene::Hub => ControllerKind::Hub,
+        NativeRenderScene::Listen => ControllerKind::Listen,
+        NativeRenderScene::Playlist => ControllerKind::Playlist,
+        NativeRenderScene::NowPlaying => ControllerKind::NowPlaying,
+        NativeRenderScene::Talk => ControllerKind::Talk,
+        NativeRenderScene::TalkActions => ControllerKind::TalkActions,
+        NativeRenderScene::IncomingCall
+        | NativeRenderScene::OutgoingCall
+        | NativeRenderScene::InCall => ControllerKind::Call,
+        NativeRenderScene::Ask => ControllerKind::Ask,
+        NativeRenderScene::Power => ControllerKind::Power,
+        NativeRenderScene::Overlay => ControllerKind::Overlay,
     }
 }
 
@@ -218,6 +255,7 @@ mod tests {
             let entry = screen_entry(screen);
             assert_eq!(entry.model_kind, ScreenModelKind::Overlay);
             assert_eq!(entry.controller_kind, ControllerKind::Overlay);
+            assert_eq!(entry.native_controller_kind, ControllerKind::Overlay);
             assert_eq!(entry.render_scene, RenderScene::Overlay);
             assert_eq!(entry.native_scene, NativeRenderScene::Overlay);
         }
@@ -230,6 +268,32 @@ mod tests {
             match entry.focus_policy {
                 FocusPolicy::Wrap | FocusPolicy::Clamp | FocusPolicy::None => {}
             }
+        }
+    }
+
+    #[test]
+    fn registry_distinguishes_generic_and_native_list_controllers() {
+        let listen = screen_entry(UiScreen::Listen);
+        assert_eq!(listen.controller_kind, ControllerKind::List);
+        assert_eq!(listen.native_controller_kind, ControllerKind::Listen);
+
+        let playlists = screen_entry(UiScreen::Playlists);
+        assert_eq!(playlists.controller_kind, ControllerKind::List);
+        assert_eq!(playlists.native_controller_kind, ControllerKind::Playlist);
+
+        let talk = screen_entry(UiScreen::Talk);
+        assert_eq!(talk.controller_kind, ControllerKind::List);
+        assert_eq!(talk.native_controller_kind, ControllerKind::Talk);
+    }
+
+    #[test]
+    fn native_scene_controller_mapping_matches_screen_entries() {
+        for screen in UiScreen::ALL {
+            let entry = screen_entry(screen);
+            assert_eq!(
+                controller_kind_for_native_scene(entry.native_scene),
+                entry.native_controller_kind
+            );
         }
     }
 }

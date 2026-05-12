@@ -17,7 +17,9 @@ use std::path::Path;
 use anyhow::bail;
 use anyhow::{anyhow, Result};
 
-use crate::presentation::registry::{self, NativeRenderScene, RenderScene};
+use crate::presentation::registry::{
+    self, ControllerKind, NativeRenderScene, RenderScene, ScreenRegistryEntry,
+};
 use crate::runtime::UiScreen;
 use crate::screens::ScreenModel;
 
@@ -102,6 +104,23 @@ impl NativeSceneKey {
             NativeRenderScene::Ask => Self::Ask,
             NativeRenderScene::Power => Self::Power,
             NativeRenderScene::Overlay => Self::Overlay,
+        }
+    }
+
+    pub const fn registry_scene(self) -> NativeRenderScene {
+        match self {
+            Self::Hub => NativeRenderScene::Hub,
+            Self::Listen => NativeRenderScene::Listen,
+            Self::Playlist => NativeRenderScene::Playlist,
+            Self::NowPlaying => NativeRenderScene::NowPlaying,
+            Self::Talk => NativeRenderScene::Talk,
+            Self::TalkActions => NativeRenderScene::TalkActions,
+            Self::IncomingCall => NativeRenderScene::IncomingCall,
+            Self::OutgoingCall => NativeRenderScene::OutgoingCall,
+            Self::InCall => NativeRenderScene::InCall,
+            Self::Ask => NativeRenderScene::Ask,
+            Self::Power => NativeRenderScene::Power,
+            Self::Overlay => NativeRenderScene::Overlay,
         }
     }
 
@@ -266,10 +285,11 @@ where
 
     pub fn render(&mut self, model: &ScreenModel) -> Result<()> {
         let screen = model.screen();
+        let entry = registry::screen_entry(screen);
         let scene = SceneKey::for_screen(screen);
 
         if self.active_scene != Some(scene) {
-            let next = controller_for_scene(scene, screen)?;
+            let next = controller_for_entry(entry)?;
             self.clear()?;
             self.controller = Some(next);
             self.active_scene = Some(scene);
@@ -311,16 +331,23 @@ where
     }
 }
 
-fn controller_for_scene(scene: SceneKey, _screen: UiScreen) -> Result<Box<dyn ScreenController>> {
-    match scene {
-        SceneKey::Hub => Ok(Box::new(HubController::default())),
-        SceneKey::List => Ok(Box::new(ListController::default())),
-        SceneKey::Ask => Ok(Box::new(AskController::default())),
-        SceneKey::TalkActions => Ok(Box::new(TalkActionsController::default())),
-        SceneKey::NowPlaying => Ok(Box::new(NowPlayingController::default())),
-        SceneKey::Call => Ok(Box::new(CallController::default())),
-        SceneKey::Power => Ok(Box::new(PowerController::default())),
-        SceneKey::Overlay => Ok(Box::new(OverlayController::default())),
+fn controller_for_entry(entry: ScreenRegistryEntry) -> Result<Box<dyn ScreenController>> {
+    match entry.controller_kind {
+        ControllerKind::Hub => Ok(Box::new(HubController::default())),
+        ControllerKind::List => Ok(Box::new(ListController::default())),
+        ControllerKind::Ask => Ok(Box::new(AskController::default())),
+        ControllerKind::TalkActions => Ok(Box::new(TalkActionsController::default())),
+        ControllerKind::NowPlaying => Ok(Box::new(NowPlayingController::default())),
+        ControllerKind::Call => Ok(Box::new(CallController::default())),
+        ControllerKind::Power => Ok(Box::new(PowerController::default())),
+        ControllerKind::Overlay => Ok(Box::new(OverlayController::default())),
+        ControllerKind::Listen | ControllerKind::Playlist | ControllerKind::Talk => {
+            anyhow::bail!(
+                "generic LVGL renderer cannot use native-only {:?} controller for {}",
+                entry.controller_kind,
+                entry.screen.as_str()
+            )
+        }
     }
 }
 
