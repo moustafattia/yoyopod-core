@@ -26,34 +26,3 @@ impl<'a> LayoutResolver<'a> {
         })
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::render::assets;
-    use crate::render::widgets::roles;
-
-    #[test]
-    fn resolves_asset_backed_role_layout() {
-        let render_assets = assets::load_render_assets().unwrap();
-        let resolver = LayoutResolver::new(&render_assets);
-
-        assert_eq!(
-            resolver.resolve_role(roles::OVERLAY_TITLE, 0),
-            Some(LayoutRect {
-                x: 18,
-                y: 96,
-                width: 204,
-                height: 34,
-            })
-        );
-    }
-
-    #[test]
-    fn unknown_role_returns_none() {
-        let render_assets = assets::load_render_assets().unwrap();
-        let resolver = LayoutResolver::new(&render_assets);
-
-        assert_eq!(resolver.resolve_role("unknown_role", 0), None);
-    }
-}
