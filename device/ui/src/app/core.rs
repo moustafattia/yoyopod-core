@@ -1,11 +1,12 @@
 use crate::input::InputAction;
 use crate::presentation;
+use crate::presentation::transitions::Transition;
 use crate::screens;
 use crate::screens::ScreenModel;
 use yoyopod_protocol::ui::{
-    CallIntent, ContactAction, ListItemAction, ListItemSnapshot, MusicIntent, RuntimeSnapshot,
-    RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiIntent, VoiceFileAction, VoiceIntent,
-    VoiceRecipientAction,
+    AnimationRequest, CallIntent, ContactAction, ListItemAction, ListItemSnapshot, MusicIntent,
+    RuntimeSnapshot, RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiIntent, VoiceFileAction,
+    VoiceIntent, VoiceRecipientAction,
 };
 
 use super::{focus, navigator, UiScreen, UiView};
@@ -19,6 +20,7 @@ pub struct UiRuntime {
     intents: Vec<UiIntent>,
     dirty: DirtyState,
     selected_contact: Option<ListItemSnapshot>,
+    transitions: Vec<Transition>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -35,6 +37,7 @@ pub struct DirtyState {
     pub navigation: bool,
     pub focus: bool,
     pub input: bool,
+    pub animation: bool,
 }
 
 impl DirtyState {
@@ -51,6 +54,7 @@ impl DirtyState {
             || self.navigation
             || self.focus
             || self.input
+            || self.animation
     }
 
     fn mark_full(&mut self) {
@@ -99,6 +103,7 @@ impl Default for UiRuntime {
                 dirty
             },
             selected_contact: None,
+            transitions: Vec::new(),
         }
     }
 }
@@ -147,6 +152,26 @@ impl UiRuntime {
         self.dirty.focus = true;
     }
 
+    pub fn start_animation(&mut self, request: AnimationRequest, started_at_ms: u64) {
+        let transition =
+            Transition::from_request(request, self.active_screen, self.focus_index, started_at_ms);
+        self.transitions
+            .retain(|active| active.id != transition.id || active.target != transition.target);
+        self.transitions.push(transition);
+        self.dirty.animation = true;
+    }
+
+    pub fn advance_animations(&mut self, now_ms: u64) -> bool {
+        let had_transitions = !self.transitions.is_empty();
+        self.transitions
+            .retain(|transition| !transition.is_complete(now_ms));
+        let changed = had_transitions;
+        if changed {
+            self.dirty.animation = true;
+        }
+        changed
+    }
+
     pub fn active_screen(&self) -> UiScreen {
         self.active_screen
     }
@@ -173,6 +198,10 @@ impl UiRuntime {
 
     pub fn mark_clean(&mut self) {
         self.dirty = DirtyState::default();
+    }
+
+    pub fn active_transitions(&self) -> &[Transition] {
+        &self.transitions
     }
 
     pub fn take_intents(&mut self) -> Vec<UiIntent> {
@@ -563,5 +592,36 @@ mod tests {
         assert!(dirty.call);
         assert!(dirty.navigation);
         assert_eq!(runtime.active_screen(), UiScreen::IncomingCall);
+    }
+
+    #[test]
+    fn animation_request_marks_runtime_dirty_until_complete() {
+        let mut runtime = UiRuntime::default();
+        runtime.mark_clean();
+
+        runtime.start_animation(
+            AnimationRequest {
+                transition_id: "selection_move".to_string(),
+                duration_ms: 200,
+            },
+            1000,
+        );
+
+        assert_eq!(runtime.active_transitions().len(), 1);
+        assert!(runtime.dirty_state().animation);
+        runtime.mark_clean();
+
+        assert!(runtime.advance_animations(1100));
+        assert_eq!(runtime.active_transitions().len(), 1);
+        assert!(runtime.dirty_state().animation);
+        runtime.mark_clean();
+
+        assert!(runtime.advance_animations(1200));
+        assert!(runtime.active_transitions().is_empty());
+        assert!(runtime.dirty_state().animation);
+        runtime.mark_clean();
+
+        assert!(!runtime.advance_animations(1300));
+        assert!(!runtime.is_dirty());
     }
 }

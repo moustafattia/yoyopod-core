@@ -123,6 +123,7 @@ where
                     UiCommand::Tick => {
                         let pressed = button.pressed()?;
                         let now_ms = monotonic_millis();
+                        ui_runtime.advance_animations(now_ms);
                         let button_events = if ui_runtime.wants_ptt_passthrough() {
                             button_machine.observe_ptt_passthrough(pressed, now_ms)
                         } else {
@@ -183,7 +184,20 @@ where
                             }),
                         )?;
                     }
-                    UiCommand::Animate(_) => {}
+                    UiCommand::Animate(request) => {
+                        ui_runtime.start_animation(request, monotonic_millis());
+                        if render_runtime_if_dirty(
+                            output,
+                            &mut display,
+                            &mut framebuffer,
+                            &mut ui_runtime,
+                            &mut last_active_screen,
+                            &mut last_ui_renderer,
+                            &mut lvgl_renderer,
+                        )? {
+                            frames += 1;
+                        }
+                    }
                     UiCommand::Shutdown | UiCommand::WorkerStop => {
                         emit_event(output, UiEvent::ShutdownComplete)?;
                         shutdown_complete_emitted = true;

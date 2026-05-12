@@ -1,5 +1,6 @@
 pub mod registry;
 pub mod screens;
+pub mod transitions;
 
 use crate::app::{UiScreen, UiView};
 use crate::runtime::{ListItemSnapshot, RuntimeSnapshot};
