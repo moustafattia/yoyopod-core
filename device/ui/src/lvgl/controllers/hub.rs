@@ -2,8 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use crate::lvgl::chrome;
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
-use crate::screens::ScreenModel;
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::screens::{HubViewModel, ScreenModel};
 
 #[derive(Default)]
 pub struct HubController {
@@ -52,15 +52,20 @@ impl HubController {
     }
 }
 
-impl ScreenController for HubController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
+impl TypedScreenController for HubController {
+    type Model<'a> = &'a HubViewModel;
+
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
         let ScreenModel::Hub(model) = model else {
             bail!(
                 "hub controller received non-hub screen model: {}",
                 model.screen().as_str()
             );
         };
+        Ok(model)
+    }
 
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()> {
         self.ensure_widgets(facade)?;
         let selected = chrome::focused_hub_card(model);
         let accent = selected.map(|card| card.accent).unwrap_or(0x00FF88);

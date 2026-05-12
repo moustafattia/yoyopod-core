@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{PowerViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -62,10 +62,14 @@ impl PowerController {
     }
 }
 
-impl ScreenController for PowerController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let power = power_model(model)?;
+impl TypedScreenController for PowerController {
+    type Model<'a> = &'a PowerViewModel;
 
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        power_model(model)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, power: Self::Model<'_>) -> Result<()> {
         self.ensure_base_widgets(facade)?;
         self.ensure_row_widgets(facade, 5)?;
         let accent = 0x9CA3AF;

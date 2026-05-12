@@ -1,7 +1,8 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::runtime::UiScreen;
 use crate::screens::{CallViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -17,6 +18,12 @@ pub struct CallController {
     footer: FooterBar,
     mute_badge: Option<WidgetId>,
     mute_label: Option<WidgetId>,
+}
+
+#[derive(Clone, Copy)]
+pub struct CallControllerModel<'a> {
+    screen: UiScreen,
+    call: &'a CallViewModel,
 }
 
 impl CallController {
@@ -67,10 +74,15 @@ impl CallController {
     }
 }
 
-impl ScreenController for CallController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let call = call_model(model)?;
+impl TypedScreenController for CallController {
+    type Model<'a> = CallControllerModel<'a>;
 
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        call_model(model)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()> {
+        let call = model.call;
         self.ensure_widgets(facade)?;
         let accent = 0x00D4FF;
 
@@ -83,7 +95,7 @@ impl ScreenController for CallController {
             facade.set_variant(icon_halo, "call_halo", accent)?;
         }
         if let Some(panel) = self.panel {
-            facade.set_variant(panel, call_panel_variant(model), accent)?;
+            facade.set_variant(panel, call_panel_variant(model.screen), accent)?;
         }
 
         if let Some(title) = self.title {
@@ -91,19 +103,19 @@ impl ScreenController for CallController {
         }
         if let Some(icon_label) = self.icon_label {
             facade.set_text(icon_label, &monogram(&call.title))?;
-            facade.set_accent(icon_label, call_icon_accent(model))?;
+            facade.set_accent(icon_label, call_icon_accent(model.screen))?;
         }
         if let Some(state_chip) = self.state_chip {
-            let (x, y, width) = call_state_chip_geometry(model);
+            let (x, y, width) = call_state_chip_geometry(model.screen);
             facade.set_geometry(state_chip, x, y, width, 24)?;
-            facade.set_accent(state_chip, call_state_accent(model))?;
+            facade.set_accent(state_chip, call_state_accent(model.screen))?;
         }
         if let Some(state_label) = self.state_label {
-            let state_text = call_state_text(model, call);
-            let (_, _, width) = call_state_chip_geometry(model);
+            let state_text = call_state_text(model.screen, call);
+            let (_, _, width) = call_state_chip_geometry(model.screen);
             facade.set_geometry(state_label, 0, 6, width, 12)?;
             facade.set_text(state_label, &state_text)?;
-            facade.set_accent(state_label, call_state_accent(model))?;
+            facade.set_accent(state_label, call_state_accent(model.screen))?;
         }
         if let Some(mute_badge) = self.mute_badge {
             facade.set_visible(mute_badge, call.muted)?;
@@ -135,11 +147,14 @@ impl ScreenController for CallController {
     }
 }
 
-fn call_model(model: &ScreenModel) -> Result<&CallViewModel> {
+fn call_model(model: &ScreenModel) -> Result<CallControllerModel<'_>> {
     match model {
         ScreenModel::IncomingCall(call)
         | ScreenModel::OutgoingCall(call)
-        | ScreenModel::InCall(call) => Ok(call),
+        | ScreenModel::InCall(call) => Ok(CallControllerModel {
+            screen: model.screen(),
+            call,
+        }),
         _ => bail!(
             "call controller received non-call screen model: {}",
             model.screen().as_str()
@@ -147,11 +162,11 @@ fn call_model(model: &ScreenModel) -> Result<&CallViewModel> {
     }
 }
 
-fn call_state_text(model: &ScreenModel, call: &CallViewModel) -> String {
-    match model {
-        ScreenModel::IncomingCall(_) => "INCOMING CALL".to_string(),
-        ScreenModel::OutgoingCall(_) => "CALLING...".to_string(),
-        ScreenModel::InCall(_) => {
+fn call_state_text(screen: UiScreen, call: &CallViewModel) -> String {
+    match screen {
+        UiScreen::IncomingCall => "INCOMING CALL".to_string(),
+        UiScreen::OutgoingCall => "CALLING...".to_string(),
+        UiScreen::InCall => {
             if call.subtitle.contains("IN CALL") {
                 call.subtitle.clone()
             } else if call.subtitle.trim().is_empty() {
@@ -164,31 +179,31 @@ fn call_state_text(model: &ScreenModel, call: &CallViewModel) -> String {
     }
 }
 
-fn call_state_accent(model: &ScreenModel) -> u32 {
-    match model {
-        ScreenModel::InCall(_) => 0x3DDD53,
+fn call_state_accent(screen: UiScreen) -> u32 {
+    match screen {
+        UiScreen::InCall => 0x3DDD53,
         _ => 0x00D4FF,
     }
 }
 
-fn call_panel_variant(model: &ScreenModel) -> &'static str {
-    match model {
-        ScreenModel::OutgoingCall(_) => "call_panel_outlined",
+fn call_panel_variant(screen: UiScreen) -> &'static str {
+    match screen {
+        UiScreen::OutgoingCall => "call_panel_outlined",
         _ => "call_panel_filled",
     }
 }
 
-fn call_icon_accent(model: &ScreenModel) -> u32 {
-    match model {
-        ScreenModel::OutgoingCall(_) => 0x00D4FF,
+fn call_icon_accent(screen: UiScreen) -> u32 {
+    match screen {
+        UiScreen::OutgoingCall => 0x00D4FF,
         _ => 0xFFFFFF,
     }
 }
 
-fn call_state_chip_geometry(model: &ScreenModel) -> (i32, i32, i32) {
-    match model {
-        ScreenModel::OutgoingCall(_) => (62, 208, 116),
-        ScreenModel::InCall(_) => (48, 206, 144),
+fn call_state_chip_geometry(screen: UiScreen) -> (i32, i32, i32) {
+    match screen {
+        UiScreen::OutgoingCall => (62, 208, 116),
+        UiScreen::InCall => (48, 206, 144),
         _ => (54, 208, 132),
     }
 }

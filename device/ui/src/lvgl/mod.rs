@@ -24,9 +24,9 @@ use crate::runtime::UiScreen;
 use crate::screens::ScreenModel;
 
 pub use controllers::{
-    AskController, CallController, HubController, ListController, ListenController,
-    NowPlayingController, OverlayController, PlaylistController, PowerController, ScreenController,
-    TalkActionsController, TalkController,
+    typed_controller, AskController, CallController, HubController, ListController,
+    ListenController, NowPlayingController, OverlayController, PlaylistController, PowerController,
+    ScreenController, TalkActionsController, TalkController, TypedScreenController,
 };
 #[cfg(feature = "native-lvgl")]
 pub use native_backend::NativeLvglFacade;
@@ -333,14 +333,14 @@ where
 
 fn controller_for_entry(entry: ScreenRegistryEntry) -> Result<Box<dyn ScreenController>> {
     match entry.controller_kind {
-        ControllerKind::Hub => Ok(Box::new(HubController::default())),
-        ControllerKind::List => Ok(Box::new(ListController::default())),
-        ControllerKind::Ask => Ok(Box::new(AskController::default())),
-        ControllerKind::TalkActions => Ok(Box::new(TalkActionsController::default())),
-        ControllerKind::NowPlaying => Ok(Box::new(NowPlayingController::default())),
-        ControllerKind::Call => Ok(Box::new(CallController::default())),
-        ControllerKind::Power => Ok(Box::new(PowerController::default())),
-        ControllerKind::Overlay => Ok(Box::new(OverlayController::default())),
+        ControllerKind::Hub => Ok(typed_controller(HubController::default())),
+        ControllerKind::List => Ok(typed_controller(ListController::default())),
+        ControllerKind::Ask => Ok(typed_controller(AskController::default())),
+        ControllerKind::TalkActions => Ok(typed_controller(TalkActionsController::default())),
+        ControllerKind::NowPlaying => Ok(typed_controller(NowPlayingController::default())),
+        ControllerKind::Call => Ok(typed_controller(CallController::default())),
+        ControllerKind::Power => Ok(typed_controller(PowerController::default())),
+        ControllerKind::Overlay => Ok(typed_controller(OverlayController::default())),
         ControllerKind::Listen | ControllerKind::Playlist | ControllerKind::Talk => {
             anyhow::bail!(
                 "generic LVGL renderer cannot use native-only {:?} controller for {}",

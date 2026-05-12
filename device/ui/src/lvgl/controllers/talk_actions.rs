@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{ScreenModel, TalkActionsViewModel};
 
 const ACCENT: u32 = 0x00D4FF;
@@ -66,10 +66,14 @@ impl TalkActionsController {
     }
 }
 
-impl ScreenController for TalkActionsController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let actions = talk_actions_model(model)?;
+impl TypedScreenController for TalkActionsController {
+    type Model<'a> = &'a TalkActionsViewModel;
 
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        talk_actions_model(model)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, actions: Self::Model<'_>) -> Result<()> {
         self.ensure_widgets(facade)?;
         if let Some(root) = self.root {
             self.status

@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use crate::lvgl::roles;
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{OverlayViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -35,10 +35,14 @@ impl OverlayController {
     }
 }
 
-impl ScreenController for OverlayController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let overlay = overlay_model(model)?;
+impl TypedScreenController for OverlayController {
+    type Model<'a> = &'a OverlayViewModel;
 
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        overlay_model(model)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, overlay: Self::Model<'_>) -> Result<()> {
         self.ensure_widgets(facade)?;
         if let Some(root) = self.root {
             self.status

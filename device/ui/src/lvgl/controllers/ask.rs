@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{AskViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -49,17 +49,17 @@ impl AskController {
     }
 }
 
-impl ScreenController for AskController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let ask = ask_model(model)?;
+impl TypedScreenController for AskController {
+    type Model<'a> = &'a AskViewModel;
 
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        ask_model(model)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, ask: Self::Model<'_>) -> Result<()> {
         self.ensure_widgets(facade)?;
 
-        let accent = if matches!(model, ScreenModel::VoiceNote(_)) {
-            0x00D4FF
-        } else {
-            0xFFD000
-        };
+        let accent = 0xFFD000;
         let state_variant = ask_state_variant(&ask.title);
         let is_reply = state_variant == "ask_reply";
         if let Some(root) = self.root {

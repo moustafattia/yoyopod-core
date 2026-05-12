@@ -8,9 +8,9 @@ use crate::runtime::UiScreen;
 use crate::screens::{ListScreenModel, ScreenModel, StatusBarModel};
 
 use super::{
-    AskController, CallController, HubController, ListenController, LvglFacade, NativeSceneKey,
-    NowPlayingController, OverlayController, PlaylistController, PowerController, ScreenController,
-    TalkActionsController, TalkController,
+    typed_controller, AskController, CallController, HubController, ListenController, LvglFacade,
+    NativeSceneKey, NowPlayingController, OverlayController, PlaylistController, PowerController,
+    ScreenController, TalkActionsController, TalkController,
 };
 
 pub trait SceneBridge {
@@ -189,16 +189,16 @@ where
 fn controller_for_native_scene(scene: NativeSceneKey) -> Result<Box<dyn ScreenController>> {
     let kind = registry::controller_kind_for_native_scene(scene.registry_scene());
     match kind {
-        ControllerKind::Hub => Ok(Box::new(HubController::default())),
-        ControllerKind::Listen => Ok(Box::new(ListenController::default())),
-        ControllerKind::Playlist => Ok(Box::new(PlaylistController::default())),
-        ControllerKind::NowPlaying => Ok(Box::new(NowPlayingController::default())),
-        ControllerKind::Talk => Ok(Box::new(TalkController::default())),
-        ControllerKind::TalkActions => Ok(Box::new(TalkActionsController::default())),
-        ControllerKind::Call => Ok(Box::new(CallController::default())),
-        ControllerKind::Ask => Ok(Box::new(AskController::default())),
-        ControllerKind::Power => Ok(Box::new(PowerController::default())),
-        ControllerKind::Overlay => Ok(Box::new(OverlayController::default())),
+        ControllerKind::Hub => Ok(typed_controller(HubController::default())),
+        ControllerKind::Listen => Ok(typed_controller(ListenController::default())),
+        ControllerKind::Playlist => Ok(typed_controller(PlaylistController::default())),
+        ControllerKind::NowPlaying => Ok(typed_controller(NowPlayingController::default())),
+        ControllerKind::Talk => Ok(typed_controller(TalkController::default())),
+        ControllerKind::TalkActions => Ok(typed_controller(TalkActionsController::default())),
+        ControllerKind::Call => Ok(typed_controller(CallController::default())),
+        ControllerKind::Ask => Ok(typed_controller(AskController::default())),
+        ControllerKind::Power => Ok(typed_controller(PowerController::default())),
+        ControllerKind::Overlay => Ok(typed_controller(OverlayController::default())),
         ControllerKind::List => bail!(
             "native LVGL scene {} resolved unsupported generic List controller",
             scene.as_str()

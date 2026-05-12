@@ -2,7 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::listen::sync_rows;
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::runtime::UiScreen;
 use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
@@ -21,6 +22,12 @@ pub struct PlaylistController {
     empty_icon: Option<WidgetId>,
     empty_title: Option<WidgetId>,
     empty_subtitle: Option<WidgetId>,
+}
+
+#[derive(Clone, Copy)]
+pub struct PlaylistControllerModel<'a> {
+    screen: UiScreen,
+    list: &'a ListScreenModel,
 }
 
 impl PlaylistController {
@@ -76,9 +83,15 @@ impl PlaylistController {
     }
 }
 
-impl ScreenController for PlaylistController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let list = playlist_model(model)?;
+impl TypedScreenController for PlaylistController {
+    type Model<'a> = PlaylistControllerModel<'a>;
+
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        playlist_model(model)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()> {
+        let list = model.list;
         let accent = accent_for_playlist(list);
 
         self.ensure_widgets(facade, 4)?;
@@ -101,14 +114,14 @@ impl ScreenController for PlaylistController {
             facade.set_visible(empty_panel, empty)?;
         }
         if let Some(empty_icon) = self.empty_icon {
-            facade.set_icon(empty_icon, playlist_empty_icon(model))?;
+            facade.set_icon(empty_icon, playlist_empty_icon(model.screen))?;
             facade.set_accent(empty_icon, accent)?;
         }
         if let Some(empty_title) = self.empty_title {
-            facade.set_text(empty_title, playlist_empty_title(model))?;
+            facade.set_text(empty_title, playlist_empty_title(model.screen))?;
         }
         if let Some(empty_subtitle) = self.empty_subtitle {
-            facade.set_text(empty_subtitle, playlist_empty_subtitle(model, list))?;
+            facade.set_text(empty_subtitle, playlist_empty_subtitle(model.screen, list))?;
         }
         sync_rows(
             facade,
@@ -143,12 +156,15 @@ impl ScreenController for PlaylistController {
     }
 }
 
-fn playlist_model(model: &ScreenModel) -> Result<&ListScreenModel> {
+fn playlist_model(model: &ScreenModel) -> Result<PlaylistControllerModel<'_>> {
     match model {
         ScreenModel::Playlists(list)
         | ScreenModel::RecentTracks(list)
         | ScreenModel::Contacts(list)
-        | ScreenModel::CallHistory(list) => Ok(list),
+        | ScreenModel::CallHistory(list) => Ok(PlaylistControllerModel {
+            screen: model.screen(),
+            list,
+        }),
         _ => bail!(
             "playlist controller received non-playlist screen model: {}",
             model.screen().as_str()
@@ -163,29 +179,29 @@ fn accent_for_playlist(model: &ListScreenModel) -> u32 {
     }
 }
 
-fn playlist_empty_title(model: &ScreenModel) -> &'static str {
-    match model {
-        ScreenModel::Contacts(_) => "No contacts",
-        ScreenModel::CallHistory(_) => "No recent calls",
-        ScreenModel::Playlists(_) => "No playlists",
-        ScreenModel::RecentTracks(_) => "No recent tracks",
+fn playlist_empty_title(screen: UiScreen) -> &'static str {
+    match screen {
+        UiScreen::Contacts => "No contacts",
+        UiScreen::CallHistory => "No recent calls",
+        UiScreen::Playlists => "No playlists",
+        UiScreen::RecentTracks => "No recent tracks",
         _ => "No items",
     }
 }
 
-fn playlist_empty_subtitle<'a>(model: &ScreenModel, list: &'a ListScreenModel) -> &'a str {
-    match model {
-        ScreenModel::Contacts(_) | ScreenModel::CallHistory(_) => &list.subtitle,
-        ScreenModel::Playlists(_) => "Saved mixes will appear here.",
-        ScreenModel::RecentTracks(_) => "Recent songs will appear here.",
+fn playlist_empty_subtitle(screen: UiScreen, list: &ListScreenModel) -> &str {
+    match screen {
+        UiScreen::Contacts | UiScreen::CallHistory => &list.subtitle,
+        UiScreen::Playlists => "Saved mixes will appear here.",
+        UiScreen::RecentTracks => "Recent songs will appear here.",
         _ => &list.subtitle,
     }
 }
 
-fn playlist_empty_icon(model: &ScreenModel) -> &'static str {
-    match model {
-        ScreenModel::Contacts(_) | ScreenModel::CallHistory(_) => "talk",
-        ScreenModel::RecentTracks(_) => "recent",
+fn playlist_empty_icon(screen: UiScreen) -> &'static str {
+    match screen {
+        UiScreen::Contacts | UiScreen::CallHistory => "talk",
+        UiScreen::RecentTracks => "recent",
         _ => "playlist",
     }
 }

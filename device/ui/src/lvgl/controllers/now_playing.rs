@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{NowPlayingViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -76,9 +76,18 @@ impl NowPlayingController {
     }
 }
 
-impl ScreenController for NowPlayingController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let now_playing = now_playing_model(model)?;
+impl TypedScreenController for NowPlayingController {
+    type Model<'a> = &'a NowPlayingViewModel;
+
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        now_playing_model(model)
+    }
+
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        now_playing: Self::Model<'_>,
+    ) -> Result<()> {
         let progress_value = now_playing.progress_permille.clamp(0, 1000);
 
         self.ensure_widgets(facade)?;

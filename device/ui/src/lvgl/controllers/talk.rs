@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
@@ -47,14 +47,20 @@ impl TalkController {
     }
 }
 
-impl ScreenController for TalkController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
+impl TypedScreenController for TalkController {
+    type Model<'a> = &'a ListScreenModel;
+
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
         let ScreenModel::Talk(list) = model else {
             bail!(
                 "talk controller received non-talk screen model: {}",
                 model.screen().as_str()
             );
         };
+        Ok(list)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, list: Self::Model<'_>) -> Result<()> {
         let selected = selected_row(list);
         let title = selected
             .map(|row| row.title.as_str())

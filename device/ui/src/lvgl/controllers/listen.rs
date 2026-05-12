@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
@@ -74,15 +74,20 @@ impl ListenController {
     }
 }
 
-impl ScreenController for ListenController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
+impl TypedScreenController for ListenController {
+    type Model<'a> = &'a ListScreenModel;
+
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
         let ScreenModel::Listen(list) = model else {
             bail!(
                 "listen controller received non-listen screen model: {}",
                 model.screen().as_str()
             );
         };
+        Ok(list)
+    }
 
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, list: Self::Model<'_>) -> Result<()> {
         let accent = 0x00FF88;
 
         self.ensure_widgets(facade, 4)?;

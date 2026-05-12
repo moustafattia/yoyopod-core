@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
+use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
 use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
@@ -57,10 +57,14 @@ impl ListController {
     }
 }
 
-impl ScreenController for ListController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let list = list_model(model)?;
+impl TypedScreenController for ListController {
+    type Model<'a> = &'a ListScreenModel;
 
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        list_model(model)
+    }
+
+    fn sync_model(&mut self, facade: &mut dyn LvglFacade, list: Self::Model<'_>) -> Result<()> {
         self.ensure_base_widgets(facade)?;
         self.ensure_row_widgets(facade, list.rows.len())?;
 
