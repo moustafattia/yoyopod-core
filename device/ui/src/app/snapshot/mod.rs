@@ -1,10 +1,12 @@
-use yoyopod_protocol::ui::{RuntimeSnapshot, RuntimeSnapshotDomain, RuntimeSnapshotPatch};
+use yoyopod_protocol::ui::{
+    RuntimeSnapshot, RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiScreen,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnapshotChange {
     pub domain: RuntimeSnapshotDomain,
-    pub previous_app_state: String,
-    pub app_state: String,
+    pub previous_app_state: UiScreen,
+    pub app_state: UiScreen,
 }
 
 pub fn replace_full(current: &mut RuntimeSnapshot, snapshot: RuntimeSnapshot) -> SnapshotChange {
@@ -49,22 +51,22 @@ mod tests {
     #[test]
     fn full_snapshot_replaces_current_snapshot_and_reports_app_state_change() {
         let mut current = RuntimeSnapshot::default();
-        current.app_state = "listen".to_string();
+        current.app_state = UiScreen::Listen;
         let mut next = RuntimeSnapshot::default();
-        next.app_state = "talk".to_string();
+        next.app_state = UiScreen::Talk;
 
         let change = replace_full(&mut current, next);
 
         assert_eq!(change.domain, RuntimeSnapshotDomain::Full);
-        assert_eq!(change.previous_app_state, "listen");
-        assert_eq!(change.app_state, "talk");
-        assert_eq!(current.app_state, "talk");
+        assert_eq!(change.previous_app_state, UiScreen::Listen);
+        assert_eq!(change.app_state, UiScreen::Talk);
+        assert_eq!(current.app_state, UiScreen::Talk);
     }
 
     #[test]
     fn domain_patch_updates_only_that_snapshot_domain() {
         let mut current = RuntimeSnapshot::default();
-        current.app_state = "listen".to_string();
+        current.app_state = UiScreen::Listen;
         current.music.title = "Before".to_string();
 
         let change = apply_patch(
@@ -76,23 +78,23 @@ mod tests {
         );
 
         assert_eq!(change.domain, RuntimeSnapshotDomain::Music);
-        assert_eq!(change.previous_app_state, "listen");
-        assert_eq!(change.app_state, "listen");
+        assert_eq!(change.previous_app_state, UiScreen::Listen);
+        assert_eq!(change.app_state, UiScreen::Listen);
         assert_eq!(current.music.title, "After");
     }
 
     #[test]
     fn app_state_patch_reports_old_and_new_app_state() {
         let mut current = RuntimeSnapshot::default();
-        current.app_state = "listen".to_string();
+        current.app_state = UiScreen::Listen;
 
         let change = apply_patch(
             &mut current,
-            RuntimeSnapshotPatch::AppState("power".to_string()),
+            RuntimeSnapshotPatch::AppState(UiScreen::Power),
         );
 
         assert_eq!(change.domain, RuntimeSnapshotDomain::AppState);
-        assert_eq!(change.previous_app_state, "listen");
-        assert_eq!(change.app_state, "power");
+        assert_eq!(change.previous_app_state, UiScreen::Listen);
+        assert_eq!(change.app_state, UiScreen::Power);
     }
 }

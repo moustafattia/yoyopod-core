@@ -17,8 +17,8 @@ pub mod scene;
 pub mod style;
 pub mod theme;
 
-use crate::framebuffer::Framebuffer;
 use crate::presentation::screens::ScreenModel;
+use crate::render::Framebuffer;
 #[cfg(feature = "native-lvgl")]
 use backend::NativeLvglFacade;
 #[cfg(feature = "native-lvgl")]
@@ -26,7 +26,6 @@ use scene::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
 
 pub use facade::LvglFacade;
 pub use primitives::WidgetId;
-pub use scene::NativeSceneKey;
 
 #[cfg(not(feature = "native-lvgl"))]
 pub struct LvglRenderer;

@@ -6,7 +6,7 @@ pub mod whisplay;
 
 use anyhow::Result;
 
-use crate::framebuffer::Framebuffer;
+use crate::render::Framebuffer;
 
 pub trait DisplayDevice {
     fn width(&self) -> usize;

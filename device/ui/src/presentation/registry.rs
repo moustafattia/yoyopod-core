@@ -28,6 +28,25 @@ pub enum NativeRenderScene {
     Overlay,
 }
 
+impl NativeRenderScene {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hub => "hub",
+            Self::Listen => "listen",
+            Self::Playlist => "playlist",
+            Self::NowPlaying => "now_playing",
+            Self::Talk => "talk",
+            Self::TalkActions => "talk_actions",
+            Self::IncomingCall => "incoming_call",
+            Self::OutgoingCall => "outgoing_call",
+            Self::InCall => "in_call",
+            Self::Ask => "ask",
+            Self::Power => "power",
+            Self::Overlay => "overlay",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScreenModelKind {
     Hub,

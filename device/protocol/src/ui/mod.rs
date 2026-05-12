@@ -14,6 +14,78 @@ use crate::{EnvelopeKind, ProtocolError, WorkerEnvelope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum UiScreen {
+    Hub,
+    Listen,
+    Playlists,
+    RecentTracks,
+    NowPlaying,
+    Ask,
+    Talk,
+    Contacts,
+    CallHistory,
+    TalkContact,
+    VoiceNote,
+    IncomingCall,
+    OutgoingCall,
+    InCall,
+    Power,
+    Loading,
+    Error,
+}
+
+impl UiScreen {
+    pub const ALL: [Self; 17] = [
+        Self::Hub,
+        Self::Listen,
+        Self::Playlists,
+        Self::RecentTracks,
+        Self::NowPlaying,
+        Self::Ask,
+        Self::Talk,
+        Self::Contacts,
+        Self::CallHistory,
+        Self::TalkContact,
+        Self::VoiceNote,
+        Self::IncomingCall,
+        Self::OutgoingCall,
+        Self::InCall,
+        Self::Power,
+        Self::Loading,
+        Self::Error,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hub => "hub",
+            Self::Listen => "listen",
+            Self::Playlists => "playlists",
+            Self::RecentTracks => "recent_tracks",
+            Self::NowPlaying => "now_playing",
+            Self::Ask => "ask",
+            Self::Talk => "talk",
+            Self::Contacts => "contacts",
+            Self::CallHistory => "call_history",
+            Self::TalkContact => "talk_contact",
+            Self::VoiceNote => "voice_note",
+            Self::IncomingCall => "incoming_call",
+            Self::OutgoingCall => "outgoing_call",
+            Self::InCall => "in_call",
+            Self::Power => "power",
+            Self::Loading => "loading",
+            Self::Error => "error",
+        }
+    }
+}
+
+impl Default for UiScreen {
+    fn default() -> Self {
+        Self::Hub
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InputAction {
     Advance,
     Select,
@@ -149,7 +221,7 @@ pub struct DisplayInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UiScreenChanged {
-    pub screen: String,
+    pub screen: UiScreen,
     #[serde(default)]
     pub title: String,
 }
@@ -161,7 +233,7 @@ pub struct UiHealth {
     #[serde(default)]
     pub last_ui_renderer: String,
     #[serde(default)]
-    pub active_screen: String,
+    pub active_screen: UiScreen,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -781,14 +853,14 @@ mod tests {
             }),
             UiEvent::Intent(UiIntent::Runtime(RuntimeIntent::Shutdown)),
             UiEvent::ScreenChanged(UiScreenChanged {
-                screen: "hub".to_string(),
+                screen: UiScreen::Hub,
                 title: "Hub".to_string(),
             }),
             UiEvent::Health(UiHealth {
                 frames: 3,
                 button_events: 2,
                 last_ui_renderer: "lvgl".to_string(),
-                active_screen: "hub".to_string(),
+                active_screen: UiScreen::Hub,
             }),
             UiEvent::Error(UiError::new(UiErrorCode::InvalidCommand, "bad command")),
             UiEvent::ShutdownComplete,
@@ -843,6 +915,23 @@ mod tests {
         let envelope = WorkerEnvelope::event("ui.intent", json!({"domain": "music"}));
         assert!(matches!(
             UiEvent::from_envelope(envelope),
+            Err(ProtocolError::InvalidEnvelope(_))
+        ));
+    }
+
+    #[test]
+    fn runtime_snapshot_uses_typed_screen_identity() {
+        let snapshot = RuntimeSnapshot {
+            app_state: UiScreen::Power,
+            ..RuntimeSnapshot::default()
+        };
+        let payload = serde_json::to_value(&snapshot).unwrap();
+        assert_eq!(payload["app_state"], "power");
+
+        let decoded = RuntimeSnapshot::from_payload(&payload).unwrap();
+        assert_eq!(decoded.app_state, UiScreen::Power);
+        assert!(matches!(
+            RuntimeSnapshot::from_payload(&json!({ "app_state": "setup" })),
             Err(ProtocolError::InvalidEnvelope(_))
         ));
     }

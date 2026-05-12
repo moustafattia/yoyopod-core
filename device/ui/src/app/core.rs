@@ -243,16 +243,13 @@ impl UiRuntime {
         }
     }
 
-    fn apply_app_state_route(&mut self, previous_app_state: &str, app_state: &str) {
+    fn apply_app_state_route(&mut self, previous_app_state: &UiScreen, app_state: &UiScreen) {
         if app_state == previous_app_state {
             return;
         }
-        let Some(screen) = navigator::screen_for_app_state(app_state) else {
-            return;
-        };
-        if self.active_screen != screen {
+        if self.active_screen != *app_state {
             self.screen_stack.clear();
-            self.active_screen = screen;
+            self.active_screen = *app_state;
             self.focus_index = 0;
         }
     }
@@ -621,7 +618,7 @@ mod tests {
     fn clamp_focus_policy_stops_at_last_item() {
         let mut runtime = UiRuntime::default();
         runtime.apply_snapshot(RuntimeSnapshot {
-            app_state: "playlists".to_string(),
+            app_state: UiScreen::Playlists,
             music: MusicRuntimeSnapshot {
                 playlists: vec![
                     ListItemSnapshot::new("one", "One", "", "playlist"),
@@ -642,7 +639,7 @@ mod tests {
     fn none_focus_policy_does_not_advance_focus() {
         let mut runtime = UiRuntime::default();
         runtime.apply_snapshot(RuntimeSnapshot {
-            app_state: "now_playing".to_string(),
+            app_state: UiScreen::NowPlaying,
             ..RuntimeSnapshot::default()
         });
 

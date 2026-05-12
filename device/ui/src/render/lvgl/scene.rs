@@ -8,92 +8,27 @@ use crate::presentation::registry::{self, ControllerKind, NativeRenderScene};
 use crate::presentation::screens::{ListScreenModel, ScreenModel, StatusBarModel};
 
 use crate::render::lvgl::controllers::{
-    typed_controller, AskController, CallController, HubController, ListenController,
-    NowPlayingController, OverlayController, PlaylistController, PowerController, ScreenController,
-    TalkActionsController, TalkController,
+    AskController, CallController, CallControllerModel, HubController, ListenController,
+    NowPlayingController, OverlayController, PlaylistController, PlaylistControllerModel,
+    PowerController, TalkActionsController, TalkController, TypedScreenController,
 };
 use crate::render::lvgl::LvglFacade;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NativeSceneKey {
-    Hub,
-    Listen,
-    Playlist,
-    NowPlaying,
-    Talk,
-    TalkActions,
-    IncomingCall,
-    OutgoingCall,
-    InCall,
-    Ask,
-    Power,
-    Overlay,
-}
-
-impl NativeSceneKey {
-    pub const fn for_screen(screen: UiScreen) -> Self {
-        match registry::screen_entry(screen).native_scene {
-            NativeRenderScene::Hub => Self::Hub,
-            NativeRenderScene::Listen => Self::Listen,
-            NativeRenderScene::Playlist => Self::Playlist,
-            NativeRenderScene::NowPlaying => Self::NowPlaying,
-            NativeRenderScene::Talk => Self::Talk,
-            NativeRenderScene::TalkActions => Self::TalkActions,
-            NativeRenderScene::IncomingCall => Self::IncomingCall,
-            NativeRenderScene::OutgoingCall => Self::OutgoingCall,
-            NativeRenderScene::InCall => Self::InCall,
-            NativeRenderScene::Ask => Self::Ask,
-            NativeRenderScene::Power => Self::Power,
-            NativeRenderScene::Overlay => Self::Overlay,
-        }
-    }
-
-    pub const fn registry_scene(self) -> NativeRenderScene {
-        match self {
-            Self::Hub => NativeRenderScene::Hub,
-            Self::Listen => NativeRenderScene::Listen,
-            Self::Playlist => NativeRenderScene::Playlist,
-            Self::NowPlaying => NativeRenderScene::NowPlaying,
-            Self::Talk => NativeRenderScene::Talk,
-            Self::TalkActions => NativeRenderScene::TalkActions,
-            Self::IncomingCall => NativeRenderScene::IncomingCall,
-            Self::OutgoingCall => NativeRenderScene::OutgoingCall,
-            Self::InCall => NativeRenderScene::InCall,
-            Self::Ask => NativeRenderScene::Ask,
-            Self::Power => NativeRenderScene::Power,
-            Self::Overlay => NativeRenderScene::Overlay,
-        }
-    }
-
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Hub => "hub",
-            Self::Listen => "listen",
-            Self::Playlist => "playlist",
-            Self::NowPlaying => "now_playing",
-            Self::Talk => "talk",
-            Self::TalkActions => "talk_actions",
-            Self::IncomingCall => "incoming_call",
-            Self::OutgoingCall => "outgoing_call",
-            Self::InCall => "in_call",
-            Self::Ask => "ask",
-            Self::Power => "power",
-            Self::Overlay => "overlay",
-        }
-    }
+const fn native_scene_for_screen(screen: UiScreen) -> NativeRenderScene {
+    registry::screen_entry(screen).native_scene
 }
 
 pub trait SceneBridge {
-    fn build_scene(&mut self, scene: NativeSceneKey) -> Result<()>;
+    fn build_scene(&mut self, scene: NativeRenderScene) -> Result<()>;
     fn sync_status(&mut self, status: &StatusBarModel) -> Result<()>;
     fn sync_scene(&mut self, model: &ScreenModel) -> Result<()>;
-    fn destroy_scene(&mut self, scene: NativeSceneKey);
+    fn destroy_scene(&mut self, scene: NativeRenderScene);
     fn clear_screen(&mut self) -> Result<()>;
 }
 
 pub struct NativeSceneRenderer<B> {
     bridge: B,
-    active_scene: Option<NativeSceneKey>,
+    active_scene: Option<NativeRenderScene>,
     active_screen: Option<UiScreen>,
 }
 
@@ -111,7 +46,7 @@ where
 
     pub fn render(&mut self, model: &ScreenModel) -> Result<()> {
         let screen = model.screen();
-        let scene = NativeSceneKey::for_screen(screen);
+        let scene = native_scene_for_screen(screen);
 
         if self.active_scene != Some(scene) {
             if let Some(active_scene) = self.active_scene.take() {
@@ -136,7 +71,7 @@ where
         Ok(())
     }
 
-    pub fn active_scene(&self) -> Option<NativeSceneKey> {
+    pub fn active_scene(&self) -> Option<NativeRenderScene> {
         self.active_scene
     }
 
@@ -155,8 +90,8 @@ where
 
 pub struct RustSceneBridge<F> {
     facade: F,
-    controller: Option<Box<dyn ScreenController>>,
-    active_scene: Option<NativeSceneKey>,
+    controller: Option<NativeSceneController>,
+    active_scene: Option<NativeRenderScene>,
     last_status: Option<StatusBarModel>,
 }
 
@@ -173,7 +108,7 @@ where
         }
     }
 
-    pub fn active_scene(&self) -> Option<NativeSceneKey> {
+    pub fn active_scene(&self) -> Option<NativeRenderScene> {
         self.active_scene
     }
 
@@ -194,7 +129,7 @@ impl<F> SceneBridge for RustSceneBridge<F>
 where
     F: LvglFacade,
 {
-    fn build_scene(&mut self, scene: NativeSceneKey) -> Result<()> {
+    fn build_scene(&mut self, scene: NativeRenderScene) -> Result<()> {
         if self.active_scene == Some(scene) {
             return Ok(());
         }
@@ -214,7 +149,7 @@ where
     }
 
     fn sync_scene(&mut self, model: &ScreenModel) -> Result<()> {
-        let expected_scene = NativeSceneKey::for_screen(model.screen());
+        let expected_scene = native_scene_for_screen(model.screen());
         let Some(active_scene) = self.active_scene else {
             bail!(
                 "{} scene must be built before sync",
@@ -236,7 +171,7 @@ where
         controller.sync(&mut self.facade, &model)
     }
 
-    fn destroy_scene(&mut self, scene: NativeSceneKey) {
+    fn destroy_scene(&mut self, scene: NativeRenderScene) {
         if self.active_scene == Some(scene) {
             if let Some(controller) = self.controller.as_mut() {
                 let _ = controller.teardown(&mut self.facade);
@@ -256,19 +191,156 @@ where
     }
 }
 
-fn controller_for_native_scene(scene: NativeSceneKey) -> Result<Box<dyn ScreenController>> {
-    let kind = registry::controller_kind_for_native_scene(scene.registry_scene());
+enum NativeSceneController {
+    Hub(HubController),
+    Listen(ListenController),
+    Playlist(PlaylistController),
+    NowPlaying(NowPlayingController),
+    Talk(TalkController),
+    TalkActions(TalkActionsController),
+    Call(CallController),
+    Ask(AskController),
+    Power(PowerController),
+    Overlay(OverlayController),
+}
+
+impl NativeSceneController {
+    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
+        match (self, model) {
+            (Self::Hub(controller), ScreenModel::Hub(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (Self::Listen(controller), ScreenModel::Listen(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (Self::Playlist(controller), ScreenModel::Playlists(model)) => controller.sync_model(
+                facade,
+                PlaylistControllerModel {
+                    screen: UiScreen::Playlists,
+                    list: model,
+                },
+            ),
+            (Self::Playlist(controller), ScreenModel::RecentTracks(model)) => controller
+                .sync_model(
+                    facade,
+                    PlaylistControllerModel {
+                        screen: UiScreen::RecentTracks,
+                        list: model,
+                    },
+                ),
+            (Self::Playlist(controller), ScreenModel::Contacts(model)) => controller.sync_model(
+                facade,
+                PlaylistControllerModel {
+                    screen: UiScreen::Contacts,
+                    list: model,
+                },
+            ),
+            (Self::Playlist(controller), ScreenModel::CallHistory(model)) => controller.sync_model(
+                facade,
+                PlaylistControllerModel {
+                    screen: UiScreen::CallHistory,
+                    list: model,
+                },
+            ),
+            (Self::NowPlaying(controller), ScreenModel::NowPlaying(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (Self::Talk(controller), ScreenModel::Talk(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (Self::TalkActions(controller), ScreenModel::TalkContact(model))
+            | (Self::TalkActions(controller), ScreenModel::VoiceNote(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (Self::Call(controller), ScreenModel::IncomingCall(model)) => controller.sync_model(
+                facade,
+                CallControllerModel {
+                    screen: UiScreen::IncomingCall,
+                    call: model,
+                },
+            ),
+            (Self::Call(controller), ScreenModel::OutgoingCall(model)) => controller.sync_model(
+                facade,
+                CallControllerModel {
+                    screen: UiScreen::OutgoingCall,
+                    call: model,
+                },
+            ),
+            (Self::Call(controller), ScreenModel::InCall(model)) => controller.sync_model(
+                facade,
+                CallControllerModel {
+                    screen: UiScreen::InCall,
+                    call: model,
+                },
+            ),
+            (Self::Ask(controller), ScreenModel::Ask(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (Self::Power(controller), ScreenModel::Power(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (Self::Overlay(controller), ScreenModel::Loading(model))
+            | (Self::Overlay(controller), ScreenModel::Error(model)) => {
+                controller.sync_model(facade, model)
+            }
+            (controller, model) => bail!(
+                "native LVGL controller {} received {} model",
+                controller.kind_name(),
+                model.screen().as_str()
+            ),
+        }
+    }
+
+    fn teardown(&mut self, facade: &mut dyn LvglFacade) -> Result<()> {
+        match self {
+            Self::Hub(controller) => TypedScreenController::teardown(controller, facade),
+            Self::Listen(controller) => TypedScreenController::teardown(controller, facade),
+            Self::Playlist(controller) => TypedScreenController::teardown(controller, facade),
+            Self::NowPlaying(controller) => TypedScreenController::teardown(controller, facade),
+            Self::Talk(controller) => TypedScreenController::teardown(controller, facade),
+            Self::TalkActions(controller) => TypedScreenController::teardown(controller, facade),
+            Self::Call(controller) => TypedScreenController::teardown(controller, facade),
+            Self::Ask(controller) => TypedScreenController::teardown(controller, facade),
+            Self::Power(controller) => TypedScreenController::teardown(controller, facade),
+            Self::Overlay(controller) => TypedScreenController::teardown(controller, facade),
+        }
+    }
+
+    const fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Hub(_) => "hub",
+            Self::Listen(_) => "listen",
+            Self::Playlist(_) => "playlist",
+            Self::NowPlaying(_) => "now_playing",
+            Self::Talk(_) => "talk",
+            Self::TalkActions(_) => "talk_actions",
+            Self::Call(_) => "call",
+            Self::Ask(_) => "ask",
+            Self::Power(_) => "power",
+            Self::Overlay(_) => "overlay",
+        }
+    }
+}
+
+fn controller_for_native_scene(scene: NativeRenderScene) -> Result<NativeSceneController> {
+    let kind = registry::controller_kind_for_native_scene(scene);
     match kind {
-        ControllerKind::Hub => Ok(typed_controller(HubController::default())),
-        ControllerKind::Listen => Ok(typed_controller(ListenController::default())),
-        ControllerKind::Playlist => Ok(typed_controller(PlaylistController::default())),
-        ControllerKind::NowPlaying => Ok(typed_controller(NowPlayingController::default())),
-        ControllerKind::Talk => Ok(typed_controller(TalkController::default())),
-        ControllerKind::TalkActions => Ok(typed_controller(TalkActionsController::default())),
-        ControllerKind::Call => Ok(typed_controller(CallController::default())),
-        ControllerKind::Ask => Ok(typed_controller(AskController::default())),
-        ControllerKind::Power => Ok(typed_controller(PowerController::default())),
-        ControllerKind::Overlay => Ok(typed_controller(OverlayController::default())),
+        ControllerKind::Hub => Ok(NativeSceneController::Hub(HubController::default())),
+        ControllerKind::Listen => Ok(NativeSceneController::Listen(ListenController::default())),
+        ControllerKind::Playlist => Ok(NativeSceneController::Playlist(
+            PlaylistController::default(),
+        )),
+        ControllerKind::NowPlaying => Ok(NativeSceneController::NowPlaying(
+            NowPlayingController::default(),
+        )),
+        ControllerKind::Talk => Ok(NativeSceneController::Talk(TalkController::default())),
+        ControllerKind::TalkActions => Ok(NativeSceneController::TalkActions(
+            TalkActionsController::default(),
+        )),
+        ControllerKind::Call => Ok(NativeSceneController::Call(CallController::default())),
+        ControllerKind::Ask => Ok(NativeSceneController::Ask(AskController::default())),
+        ControllerKind::Power => Ok(NativeSceneController::Power(PowerController::default())),
+        ControllerKind::Overlay => Ok(NativeSceneController::Overlay(OverlayController::default())),
         ControllerKind::List => bail!(
             "native LVGL scene {} resolved unsupported generic List controller",
             scene.as_str()
@@ -284,21 +356,18 @@ impl RustSceneBridge<crate::render::lvgl::backend::NativeLvglFacade> {
         ))
     }
 
-    pub fn display_needs_reset(&self, framebuffer: &crate::framebuffer::Framebuffer) -> bool {
+    pub fn display_needs_reset(&self, framebuffer: &crate::render::Framebuffer) -> bool {
         self.facade().display_needs_reset(framebuffer)
     }
 
     pub fn ensure_display_registered(
         &mut self,
-        framebuffer: &crate::framebuffer::Framebuffer,
+        framebuffer: &crate::render::Framebuffer,
     ) -> Result<()> {
         self.facade_mut().ensure_display_registered(framebuffer)
     }
 
-    pub fn render_frame(
-        &mut self,
-        framebuffer: &mut crate::framebuffer::Framebuffer,
-    ) -> Result<()> {
+    pub fn render_frame(&mut self, framebuffer: &mut crate::render::Framebuffer) -> Result<()> {
         self.facade_mut().render_frame(framebuffer)
     }
 }
@@ -311,21 +380,21 @@ enum NativeListSelection {
     Clamp,
 }
 
-fn rust_owned_scene_model(model: &ScreenModel, scene: NativeSceneKey) -> ScreenModel {
+fn rust_owned_scene_model(model: &ScreenModel, scene: NativeRenderScene) -> ScreenModel {
     match (scene, model) {
-        (NativeSceneKey::Listen, ScreenModel::Listen(list)) => {
+        (NativeRenderScene::Listen, ScreenModel::Listen(list)) => {
             ScreenModel::Listen(capped_list_model(list, NativeListSelection::Wrap))
         }
-        (NativeSceneKey::Playlist, ScreenModel::Playlists(list)) => {
+        (NativeRenderScene::Playlist, ScreenModel::Playlists(list)) => {
             ScreenModel::Playlists(capped_list_model(list, NativeListSelection::Clamp))
         }
-        (NativeSceneKey::Playlist, ScreenModel::RecentTracks(list)) => {
+        (NativeRenderScene::Playlist, ScreenModel::RecentTracks(list)) => {
             ScreenModel::RecentTracks(capped_list_model(list, NativeListSelection::Clamp))
         }
-        (NativeSceneKey::Playlist, ScreenModel::Contacts(list)) => {
+        (NativeRenderScene::Playlist, ScreenModel::Contacts(list)) => {
             ScreenModel::Contacts(capped_list_model(list, NativeListSelection::Clamp))
         }
-        (NativeSceneKey::Playlist, ScreenModel::CallHistory(list)) => {
+        (NativeRenderScene::Playlist, ScreenModel::CallHistory(list)) => {
             ScreenModel::CallHistory(capped_list_model(list, NativeListSelection::Clamp))
         }
         _ => model.clone(),

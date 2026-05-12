@@ -3,7 +3,9 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
-use yoyopod_protocol::ui::{RuntimeSnapshot, RuntimeSnapshotPatch, UiIntent, VoiceIntent};
+use yoyopod_protocol::ui::{
+    RuntimeSnapshot, RuntimeSnapshotPatch, UiIntent, UiScreen, VoiceIntent,
+};
 
 use crate::voice::{
     match_voice_confirmation_response, normalize_voice_activation, route_voice_transcript,
@@ -590,7 +592,7 @@ impl SetupRow {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeState {
-    pub current_screen: String,
+    pub current_screen: UiScreen,
     pub media: MediaState,
     pub call: CallRuntimeState,
     pub voice: VoiceRuntimeState,
@@ -611,7 +613,7 @@ pub struct RuntimeState {
 impl Default for RuntimeState {
     fn default() -> Self {
         Self {
-            current_screen: "hub".to_string(),
+            current_screen: UiScreen::Hub,
             media: MediaState::default(),
             call: CallRuntimeState::default(),
             voice: VoiceRuntimeState::default(),
@@ -1137,7 +1139,7 @@ impl RuntimeState {
                 self.voice.pending_ask_question.clear();
                 self.voice.set_interaction("reply", "Command", "");
                 if let Some(screen) = screen_for_voice_route(&decision.route_name) {
-                    self.current_screen = screen.to_string();
+                    self.current_screen = screen;
                 }
             }
             VoiceRouteKind::LocalHelp => {
@@ -1568,7 +1570,7 @@ impl RuntimeState {
         let mut patches = Vec::new();
 
         if before.app_state != after.app_state {
-            patches.push(RuntimeSnapshotPatch::AppState(after.app_state.clone()));
+            patches.push(RuntimeSnapshotPatch::AppState(after.app_state));
         }
         if before.hub != after.hub {
             patches.push(RuntimeSnapshotPatch::Hub(after.hub.clone()));
@@ -2153,12 +2155,12 @@ fn trim_ask_history_text(text: &str, limit: usize) -> String {
         .collect()
 }
 
-fn screen_for_voice_route(route_name: &str) -> Option<&'static str> {
+fn screen_for_voice_route(route_name: &str) -> Option<UiScreen> {
     match normalized(route_name).as_str() {
-        "open_talk" => Some("talk"),
-        "open_listen" => Some("listen"),
-        "open_setup" => Some("power"),
-        "go_home" => Some("hub"),
+        "open_talk" => Some(UiScreen::Talk),
+        "open_listen" => Some(UiScreen::Listen),
+        "open_setup" => Some(UiScreen::Power),
+        "go_home" => Some(UiScreen::Hub),
         _ => None,
     }
 }

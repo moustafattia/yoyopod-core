@@ -11,11 +11,10 @@ use yoyopod_protocol::ui::{
 use yoyopod_protocol::WorkerEnvelope;
 
 use crate::app::{UiRuntime, UiScreen};
-use crate::framebuffer::Framebuffer;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
 use crate::presentation::screens::ScreenModel;
-use crate::render::LvglRenderer;
+use crate::render::{Framebuffer, LvglRenderer};
 
 const MANAGER_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -214,7 +213,7 @@ where
                                 frames,
                                 button_events: input_events,
                                 last_ui_renderer: last_ui_renderer.clone(),
-                                active_screen: active_screen.as_str().to_string(),
+                                active_screen,
                             }),
                         )?;
                     }
@@ -348,7 +347,7 @@ fn emit_screen_changed_if_needed<W: Write>(
         emit_event(
             output,
             UiEvent::ScreenChanged(UiScreenChanged {
-                screen: screen_model.screen().as_str().to_string(),
+                screen: screen_model.screen(),
                 title: screen_model_title(screen_model).to_string(),
             }),
         )?;

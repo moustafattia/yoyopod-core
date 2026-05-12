@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use crate::framebuffer::Framebuffer;
 use crate::hardware::{ButtonDevice, DisplayDevice};
+use crate::render::Framebuffer;
 
 #[derive(Debug)]
 pub struct MockDisplay {

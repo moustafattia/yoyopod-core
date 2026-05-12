@@ -7,4 +7,5 @@ pub mod snapshot;
 pub mod state;
 
 pub use core::UiRuntime;
-pub use state::{UiScreen, UiView};
+pub use state::UiView;
+pub use yoyopod_protocol::ui::UiScreen;

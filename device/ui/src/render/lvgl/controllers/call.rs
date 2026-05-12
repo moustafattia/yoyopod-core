@@ -23,8 +23,8 @@ pub struct CallController {
 
 #[derive(Clone, Copy)]
 pub struct CallControllerModel<'a> {
-    screen: UiScreen,
-    call: &'a CallViewModel,
+    pub(crate) screen: UiScreen,
+    pub(crate) call: &'a CallViewModel,
 }
 
 impl CallController {

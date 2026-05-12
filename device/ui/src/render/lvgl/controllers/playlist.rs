@@ -27,8 +27,8 @@ pub struct PlaylistController {
 
 #[derive(Clone, Copy)]
 pub struct PlaylistControllerModel<'a> {
-    screen: UiScreen,
-    list: &'a ListScreenModel,
+    pub(crate) screen: UiScreen,
+    pub(crate) list: &'a ListScreenModel,
 }
 
 impl PlaylistController {

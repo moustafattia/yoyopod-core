@@ -45,17 +45,19 @@ The UI host communicates over line-delimited JSON worker envelopes:
 - stderr is log-owned.
 - the outer `WorkerEnvelope` stays the shared transport container.
 - UI command/event payloads are decoded through `yoyopod_protocol::ui`
-  (`UiCommand`, `UiEvent`, `UiIntent`, and `RuntimeSnapshot`).
+  (`UiCommand`, `UiEvent`, `UiIntent`, `UiScreen`, and `RuntimeSnapshot`).
 - accepted commands are `ui.runtime_snapshot`, `ui.input_action`, `ui.tick`,
   `ui.poll_input`, `ui.set_backlight`, `ui.health`, `ui.animate`,
   `ui.runtime_patch`, `ui.shutdown`, and `worker.stop`.
 - emitted events are `ui.ready`, `ui.input`, `ui.intent`, `ui.screen_changed`,
   `ui.health`, `ui.error`, and `ui.shutdown_complete`.
 
-Runtime snapshots are shared protocol DTOs, not UI-local copies. Local button
-or command input is interpreted as typed `InputAction`. Domain actions leave
-the UI worker as typed `UiIntent` variants for the runtime to route. Unknown or
-malformed UI commands produce a typed `ui.error` event instead of being ignored.
+Runtime snapshots are shared protocol DTOs, not UI-local copies. Snapshot
+`app_state`, screen-changed events, and health active-screen fields use the
+shared `UiScreen` enum instead of raw screen strings. Local button or command
+input is interpreted as typed `InputAction`. Domain actions leave the UI worker
+as typed `UiIntent` variants for the runtime to route. Unknown or malformed UI
+commands produce a typed `ui.error` event instead of being ignored.
 Explicit `ui.input_action` commands are echoed as typed `ui.input` events with
 method `command`. Polled hardware input is also routed through `UiRuntime`, so
 button events and PTT events always surface as typed input and typed intents
@@ -93,9 +95,10 @@ app layout engine.
 
 `presentation::registry` is the canonical screen metadata table for model kind,
 generic controller kind, native controller kind, focus policy, navigation
-policy, and render/native scene identity. LVGL controllers are selected through
-that registry and wrapped by typed controller adapters so each controller
-declares the exact view model it accepts.
+policy, and render/native scene identity. LVGL scene identity uses registry
+`NativeRenderScene` directly. LVGL controllers are selected through that
+registry and held as concrete native-controller enum variants, so each sync path
+passes the exact typed view model required by that controller.
 
 `presentation::transitions` owns typed transition state. `ui.animate` starts a
 transition in `UiRuntime`, ticks advance it, and active transitions mark the UI

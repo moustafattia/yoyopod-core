@@ -2,12 +2,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+use super::UiScreen;
 use crate::ProtocolError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeSnapshot {
     #[serde(default = "default_app_state")]
-    pub app_state: String,
+    pub app_state: UiScreen,
     #[serde(default)]
     pub hub: HubRuntimeSnapshot,
     #[serde(default)]
@@ -45,27 +46,13 @@ impl RuntimeSnapshot {
             ProtocolError::InvalidEnvelope(format!("invalid UI runtime snapshot: {error}"))
         })
     }
-
-    pub fn apply_patch(&mut self, patch: RuntimeSnapshotPatch) {
-        match patch {
-            RuntimeSnapshotPatch::Full(snapshot) => *self = snapshot,
-            RuntimeSnapshotPatch::AppState(app_state) => self.app_state = app_state,
-            RuntimeSnapshotPatch::Hub(hub) => self.hub = hub,
-            RuntimeSnapshotPatch::Music(music) => self.music = music,
-            RuntimeSnapshotPatch::Call(call) => self.call = call,
-            RuntimeSnapshotPatch::Voice(voice) => self.voice = voice,
-            RuntimeSnapshotPatch::Power(power) => self.power = power,
-            RuntimeSnapshotPatch::Network(network) => self.network = network,
-            RuntimeSnapshotPatch::Overlay(overlay) => self.overlay = overlay,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "domain", content = "snapshot", rename_all = "snake_case")]
 pub enum RuntimeSnapshotPatch {
     Full(RuntimeSnapshot),
-    AppState(String),
+    AppState(UiScreen),
     Hub(HubRuntimeSnapshot),
     Music(MusicRuntimeSnapshot),
     Call(CallRuntimeSnapshot),
@@ -345,8 +332,8 @@ impl ListItemSnapshot {
     }
 }
 
-fn default_app_state() -> String {
-    "hub".to_string()
+fn default_app_state() -> UiScreen {
+    UiScreen::Hub
 }
 
 fn default_call_state() -> String {

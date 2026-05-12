@@ -6,7 +6,6 @@ use std::time::Instant;
 
 use anyhow::{anyhow, bail, Context, Result};
 
-use crate::framebuffer::Framebuffer;
 use crate::render::assets::{self, RenderAssets};
 use crate::render::lvgl::ffi;
 use crate::render::lvgl::icons;
@@ -15,6 +14,7 @@ use crate::render::lvgl::roles;
 use crate::render::lvgl::style::{self as theme, WidgetStyle};
 use crate::render::lvgl::theme::ThemeResolver;
 use crate::render::lvgl::{LvglFacade, WidgetId};
+use crate::render::Framebuffer;
 
 const DEFAULT_WIDTH: i32 = 240;
 const DEFAULT_HEIGHT: i32 = 280;

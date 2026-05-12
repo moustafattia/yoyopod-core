@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 use yoyopod_protocol::ui::{
     CallIntent, ContactAction, InputAction, ListItemAction, MusicIntent, PowerIntent,
-    RuntimeIntent, UiCommand, UiEvent, UiInputEvent, UiIntent, VoiceFileAction, VoiceIntent,
-    VoiceRecipientAction,
+    RuntimeIntent, UiCommand, UiEvent, UiInputEvent, UiIntent, UiScreen, VoiceFileAction,
+    VoiceIntent, VoiceRecipientAction,
 };
 
 use crate::protocol::{EnvelopeKind, WorkerEnvelope};
@@ -30,7 +30,7 @@ pub enum RuntimeEvent {
     UiInput(UiInputEvent),
     UiIntent(UiIntent),
     UiScreenChanged {
-        screen: String,
+        screen: UiScreen,
     },
     WorkerError {
         domain: WorkerDomain,
@@ -76,7 +76,7 @@ impl RuntimeEvent {
             Self::VoiceAskResult(snapshot) => state.apply_voice_ask_result(snapshot),
             Self::VoiceSpeakResult(_) => {}
             Self::UiScreenChanged { screen } => {
-                state.current_screen = screen.clone();
+                state.current_screen = *screen;
             }
             Self::WorkerError { domain, message } => {
                 state.mark_worker(*domain, WorkerState::Degraded, message.clone());

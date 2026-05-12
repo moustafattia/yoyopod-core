@@ -17,22 +17,16 @@ use crate::presentation::screens::ScreenModel;
 use crate::render::lvgl::LvglFacade;
 
 pub use ask::AskController;
-pub use call::CallController;
+pub use call::{CallController, CallControllerModel};
 pub use hub::HubController;
 pub use list::ListController;
 pub use listen::ListenController;
 pub use now_playing::NowPlayingController;
 pub use overlay::OverlayController;
-pub use playlist::PlaylistController;
+pub use playlist::{PlaylistController, PlaylistControllerModel};
 pub use power::PowerController;
 pub use talk::TalkController;
 pub use talk_actions::TalkActionsController;
-
-pub trait ScreenController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()>;
-
-    fn teardown(&mut self, facade: &mut dyn LvglFacade) -> Result<()>;
-}
 
 pub trait TypedScreenController {
     type Model<'a>
@@ -44,37 +38,6 @@ pub trait TypedScreenController {
     fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()>;
 
     fn teardown(&mut self, facade: &mut dyn LvglFacade) -> Result<()>;
-}
-
-pub struct ControllerAdapter<C> {
-    controller: C,
-}
-
-impl<C> ControllerAdapter<C> {
-    pub fn new(controller: C) -> Self {
-        Self { controller }
-    }
-}
-
-impl<C> ScreenController for ControllerAdapter<C>
-where
-    C: TypedScreenController,
-{
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
-        let model = C::model(model)?;
-        self.controller.sync_model(facade, model)
-    }
-
-    fn teardown(&mut self, facade: &mut dyn LvglFacade) -> Result<()> {
-        self.controller.teardown(facade)
-    }
-}
-
-pub fn typed_controller<C>(controller: C) -> Box<dyn ScreenController>
-where
-    C: TypedScreenController + 'static,
-{
-    Box::new(ControllerAdapter::new(controller))
 }
 
 #[cfg(test)]

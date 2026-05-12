@@ -1,5 +1,4 @@
 pub mod app;
-pub mod framebuffer;
 pub mod hardware;
 pub mod input;
 pub mod presentation;
@@ -67,13 +66,44 @@ mod architecture_tests {
     #[test]
     fn removed_root_modules_do_not_return() {
         let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        for filename in ["worker.rs", "input.rs", "whisplay_panel.rs"] {
+        for filename in [
+            "worker.rs",
+            "input.rs",
+            "whisplay_panel.rs",
+            "framebuffer.rs",
+        ] {
             let path = src_dir.join(filename);
             assert!(
                 !path.exists(),
                 "{filename} must stay in its audit-aligned module directory"
             );
         }
+    }
+
+    #[test]
+    fn native_scene_identity_and_controller_dispatch_stay_registry_owned() {
+        let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut violations = Vec::new();
+        let forbidden = [
+            ["Native", "Scene", "Key"].join(""),
+            ["pub trait ", "Screen", "Controller"].join(""),
+            ["Box<dyn ", "Screen", "Controller"].join(""),
+            ["Controller", "Adapter"].join(""),
+        ];
+        for path in rust_files(&src_dir) {
+            let relative = path.strip_prefix(&src_dir).unwrap_or(&path);
+            let contents = fs::read_to_string(&path).expect("reading Rust source");
+            for forbidden in &forbidden {
+                if contents.contains(forbidden) {
+                    violations.push(format!("{} contains {forbidden}", relative.display()));
+                }
+            }
+        }
+
+        assert!(
+            violations.is_empty(),
+            "legacy scene/controller dispatch names returned: {violations:?}"
+        );
     }
 
     fn rust_files(root: &Path) -> Vec<PathBuf> {
