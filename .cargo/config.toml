@@ -1,2 +1,0 @@
-[env]
-PKG_CONFIG_PATH = { value = ".cache/native-devel/systemd-devel-root/usr/lib64/pkgconfig", relative = true }
