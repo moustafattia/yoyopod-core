@@ -1,0 +1,148 @@
+use std::collections::BTreeSet;
+
+use serde::Deserialize;
+use thiserror::Error;
+
+use crate::lvgl::roles;
+
+const LAYOUTS_RON: &str = include_str!("../../assets/layouts.ron");
+const THEME_RON: &str = include_str!("../../assets/theme.ron");
+
+#[derive(Debug, Error)]
+pub enum RenderAssetError {
+    #[error("failed to parse {asset}: {source}")]
+    Parse {
+        asset: &'static str,
+        #[source]
+        source: ron::error::SpannedError,
+    },
+    #[error("{asset} missing role coverage: {roles:?}")]
+    MissingRoles {
+        asset: &'static str,
+        roles: Vec<&'static str>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct LayoutAsset {
+    pub roles: Vec<LayoutRole>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct LayoutRole {
+    pub role: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ThemeAsset {
+    pub roles: Vec<ThemeRole>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ThemeRole {
+    pub role: String,
+    pub fill_rgb: Option<u32>,
+    pub text_rgb: Option<u32>,
+    pub opacity: Option<u8>,
+}
+
+pub fn parse_layout_asset() -> Result<LayoutAsset, RenderAssetError> {
+    let asset = ron::from_str(LAYOUTS_RON).map_err(|source| RenderAssetError::Parse {
+        asset: "layouts.ron",
+        source,
+    })?;
+    validate_layout_asset(&asset)?;
+    Ok(asset)
+}
+
+pub fn parse_theme_asset() -> Result<ThemeAsset, RenderAssetError> {
+    let asset = ron::from_str(THEME_RON).map_err(|source| RenderAssetError::Parse {
+        asset: "theme.ron",
+        source,
+    })?;
+    validate_theme_asset(&asset)?;
+    Ok(asset)
+}
+
+pub fn validate_layout_asset(asset: &LayoutAsset) -> Result<(), RenderAssetError> {
+    validate_role_coverage(
+        "layouts.ron",
+        asset.roles.iter().map(|role| role.role.as_str()),
+    )
+}
+
+pub fn validate_theme_asset(asset: &ThemeAsset) -> Result<(), RenderAssetError> {
+    validate_role_coverage(
+        "theme.ron",
+        asset.roles.iter().map(|role| role.role.as_str()),
+    )
+}
+
+fn validate_role_coverage<'a>(
+    asset: &'static str,
+    roles: impl IntoIterator<Item = &'a str>,
+) -> Result<(), RenderAssetError> {
+    let roles = roles.into_iter().collect::<BTreeSet<_>>();
+    let missing = required_roles()
+        .into_iter()
+        .filter(|role| !roles.contains(role))
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(RenderAssetError::MissingRoles {
+            asset,
+            roles: missing,
+        })
+    }
+}
+
+fn required_roles() -> Vec<&'static str> {
+    let mut roles = vec![
+        roles::FOOTER_BAR,
+        roles::OVERLAY_TITLE,
+        roles::OVERLAY_SUBTITLE,
+        roles::OVERLAY_FOOTER,
+        roles::STATUS_BAR,
+        roles::STATUS_WIFI,
+        roles::STATUS_GPS_RING,
+        roles::STATUS_GPS_CENTER,
+        roles::STATUS_GPS_TAIL,
+        roles::STATUS_VOIP_DOT_LEFT,
+        roles::STATUS_VOIP_DOT_AFTER_GPS,
+        roles::STATUS_TIME,
+        roles::STATUS_BATTERY_OUTLINE,
+        roles::STATUS_BATTERY_FILL,
+        roles::STATUS_BATTERY_TIP,
+        roles::STATUS_BATTERY_LABEL,
+    ];
+    roles.extend(roles::STATUS_SIGNAL_BARS);
+    roles
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layout_asset_parses_and_covers_initial_roles() {
+        let asset = parse_layout_asset().unwrap();
+        assert!(asset
+            .roles
+            .iter()
+            .any(|role| role.role == roles::OVERLAY_TITLE));
+    }
+
+    #[test]
+    fn theme_asset_parses_and_covers_initial_roles() {
+        let asset = parse_theme_asset().unwrap();
+        assert!(asset
+            .roles
+            .iter()
+            .any(|role| role.role == roles::OVERLAY_TITLE));
+    }
+}
