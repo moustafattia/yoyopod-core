@@ -5,9 +5,9 @@ use std::time::Instant;
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::render::assets;
-use crate::render::lvgl::backend::NativeLvglFacade;
 use crate::render::lvgl::ffi;
 use crate::render::lvgl::flush::lvgl_flush_callback;
+use crate::render::lvgl::NativeLvglFacade;
 use crate::render::Framebuffer;
 
 const DRAW_BUFFER_ROWS: usize = 40;

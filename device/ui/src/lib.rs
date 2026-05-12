@@ -11,7 +11,7 @@ mod architecture_tests {
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn raw_lvgl_ffi_imports_stay_inside_render_lvgl_module() {
+    fn raw_lvgl_ffi_imports_stay_inside_render_implementation_modules() {
         let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut violations = Vec::new();
         for path in rust_files(&src_dir) {
@@ -20,13 +20,13 @@ mod architecture_tests {
                 .components()
                 .map(|component| component.as_os_str().to_string_lossy().into_owned())
                 .collect::<Vec<_>>();
-            let inside_render_lvgl = components
+            let inside_render_impl = components
                 .first()
                 .is_some_and(|component| component == "render")
-                && components
-                    .get(1)
-                    .is_some_and(|component| component == "lvgl");
-            if inside_render_lvgl {
+                && components.get(1).is_some_and(|component| {
+                    matches!(component.as_str(), "lvgl" | "widgets" | "styling")
+                });
+            if inside_render_impl {
                 continue;
             }
 
@@ -50,7 +50,7 @@ mod architecture_tests {
 
         assert!(
             violations.is_empty(),
-            "raw LVGL FFI imports outside src/render/lvgl: {violations:?}"
+            "raw LVGL FFI imports outside render implementation modules: {violations:?}"
         );
     }
 
@@ -77,6 +77,40 @@ mod architecture_tests {
         assert!(
             violations.is_empty(),
             "transport must not import render-layer APIs: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn presentation_does_not_import_render() {
+        let presentation_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/presentation");
+        let mut violations = Vec::new();
+        for path in rust_files(&presentation_dir) {
+            let contents = fs::read_to_string(&path).expect("reading Rust source");
+            if contents.contains("crate::render") {
+                violations.push(path.display().to_string());
+            }
+        }
+
+        assert!(
+            violations.is_empty(),
+            "presentation must not import render-layer APIs: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn render_does_not_import_app_or_transport() {
+        let render_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/render");
+        let mut violations = Vec::new();
+        for path in rust_files(&render_dir) {
+            let contents = fs::read_to_string(&path).expect("reading Rust source");
+            if contents.contains("crate::app") || contents.contains("crate::transport") {
+                violations.push(path.display().to_string());
+            }
+        }
+
+        assert!(
+            violations.is_empty(),
+            "render must not import app or transport APIs: {violations:?}"
         );
     }
 

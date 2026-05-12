@@ -1,167 +1,386 @@
-use std::path::Path;
-
-use anyhow::Result;
-
-#[cfg(feature = "native-lvgl")]
-pub mod backend;
-pub mod controllers;
-pub mod facade;
-#[cfg(feature = "native-lvgl")]
 pub(crate) mod ffi;
-#[cfg(feature = "native-lvgl")]
 pub(crate) mod flush;
-#[cfg(feature = "native-lvgl")]
 pub(crate) mod icons;
-pub mod layout;
-#[cfg(feature = "native-lvgl")]
 pub(crate) mod lifecycle;
-pub mod primitives;
-pub(crate) mod roles;
-pub mod scene;
-pub mod style;
-#[cfg(feature = "native-lvgl")]
-pub(crate) mod style_apply;
-pub mod theme;
-#[cfg(feature = "native-lvgl")]
-pub(crate) mod widget_factory;
-#[cfg(feature = "native-lvgl")]
-pub(crate) mod widget_registry;
 
-use crate::presentation::screens::ScreenModel;
-use crate::presentation::transitions::TransitionSampler;
-use crate::render::{Framebuffer, RenderReport, Renderer};
-#[cfg(feature = "native-lvgl")]
-use backend::NativeLvglFacade;
-#[cfg(feature = "native-lvgl")]
-use scene::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
+use std::ffi::CString;
+use std::ptr::{self, NonNull};
+use std::time::Instant;
 
-pub use facade::LvglFacade;
-pub use primitives::WidgetId;
+use anyhow::{anyhow, Context, Result};
 
-#[cfg(not(feature = "native-lvgl"))]
-pub struct LvglRenderer;
+use crate::render::assets::RenderAssets;
+use crate::render::lvgl::flush::FlushTarget;
+use crate::render::styling;
+use crate::render::styling::layout::LayoutResolver;
+use crate::render::styling::style::WidgetStyle;
+use crate::render::styling::theme::ThemeResolver;
+use crate::render::widgets::factory;
+use crate::render::widgets::registry::{Layout, WidgetKind, WidgetNode, WidgetRegistry};
+use crate::render::widgets::{roles, LvglFacade, WidgetId};
 
-#[cfg(feature = "native-lvgl")]
-pub struct LvglRenderer {
-    renderer: RuntimeSceneLvglRenderer<RustSceneBridge<NativeLvglFacade>>,
+const DEFAULT_WIDTH: i32 = 240;
+const DEFAULT_HEIGHT: i32 = 280;
+
+pub struct NativeLvglFacade {
+    pub(crate) display: Option<NonNull<ffi::lv_display_t>>,
+    pub(crate) blank_screen: Option<NonNull<ffi::lv_obj_t>>,
+    pub(crate) draw_buffer: Vec<u8>,
+    pub(crate) flush_target: FlushTarget,
+    pub(crate) display_size: Option<(usize, usize)>,
+    pub(crate) last_tick: Instant,
+    pub(crate) widgets: WidgetRegistry,
+    pub(crate) active_root: Option<WidgetId>,
+    pub(crate) role_occurrences: std::collections::HashMap<&'static str, usize>,
+    pub(crate) render_assets: RenderAssets,
 }
 
-#[cfg(feature = "native-lvgl")]
-impl LvglRenderer {
-    pub fn open(explicit_source: Option<&Path>) -> Result<Self> {
-        let renderer = RuntimeSceneLvglRenderer::new(RustSceneBridge::open(explicit_source)?);
-        Ok(Self { renderer })
+impl NativeLvglFacade {
+    pub(super) fn widget_obj(&self, widget: WidgetId) -> Result<NonNull<ffi::lv_obj_t>> {
+        self.widgets.obj(widget)
     }
 
-    pub fn render_screen_model(
+    pub(super) fn widget_node_mut(&mut self, widget: WidgetId) -> Result<&mut WidgetNode> {
+        self.widgets.node_mut(widget)
+    }
+
+    pub(super) fn register_widget(
         &mut self,
-        framebuffer: &mut Framebuffer,
-        model: &ScreenModel,
-        transitions: &TransitionSampler<'_>,
-    ) -> Result<()> {
-        self.renderer
-            .render_screen_model(framebuffer, model, transitions)
-    }
-}
-
-#[cfg(feature = "native-lvgl")]
-impl Renderer for LvglRenderer {
-    fn render(
-        &mut self,
-        framebuffer: &mut Framebuffer,
-        model: &ScreenModel,
-        transitions: &TransitionSampler<'_>,
-        dirty_region: Option<crate::presentation::registry::DirtyRegion>,
-    ) -> Result<RenderReport> {
-        self.render_screen_model(framebuffer, model, transitions)?;
-        Ok(RenderReport {
-            renderer: "lvgl",
-            screen: model.screen(),
-            dirty_region,
-        })
-    }
-}
-
-#[cfg(feature = "native-lvgl")]
-trait RuntimeSceneBridge: SceneBridge {
-    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool;
-    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()>;
-    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()>;
-}
-
-#[cfg(feature = "native-lvgl")]
-impl RuntimeSceneBridge for RustSceneBridge<NativeLvglFacade> {
-    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
-        RustSceneBridge::<NativeLvglFacade>::display_needs_reset(self, framebuffer)
+        obj: NonNull<ffi::lv_obj_t>,
+        kind: WidgetKind,
+        role: &'static str,
+        parent: Option<WidgetId>,
+        layout: Layout,
+    ) -> WidgetId {
+        self.widgets.register(obj, kind, role, parent, layout)
     }
 
-    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
-        RustSceneBridge::<NativeLvglFacade>::ensure_display_registered(self, framebuffer)
+    pub(super) fn ensure_blank_screen(&mut self) -> Result<NonNull<ffi::lv_obj_t>> {
+        if let Some(blank) = self.blank_screen {
+            return Ok(blank);
+        }
+
+        let blank = unsafe { ffi::lv_obj_create(ptr::null_mut()) };
+        let blank =
+            NonNull::new(blank).ok_or_else(|| anyhow!("LVGL blank screen creation failed"))?;
+        let size = self
+            .display_size
+            .map(|(width, height)| (width as i32, height as i32))
+            .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
+        styling::reset_style_raw(blank);
+        styling::apply_style_raw(blank, self.style_for_role(roles::ROOT)?);
+        Self::apply_layout_raw(
+            blank,
+            Layout {
+                x: 0,
+                y: 0,
+                width: size.0,
+                height: size.1,
+            },
+        );
+        self.blank_screen = Some(blank);
+        Ok(blank)
     }
 
-    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
-        RustSceneBridge::<NativeLvglFacade>::render_frame(self, framebuffer)
+    pub(crate) fn invalidate_widget_registry(&mut self) {
+        self.blank_screen = None;
+        self.widgets.clear();
+        self.active_root = None;
+        self.role_occurrences.clear();
+        self.flush_target.framebuffer = ptr::null_mut();
     }
-}
 
-#[cfg(feature = "native-lvgl")]
-struct RuntimeSceneLvglRenderer<B> {
-    renderer: NativeSceneRenderer<B>,
-}
-
-#[cfg(feature = "native-lvgl")]
-impl<B> RuntimeSceneLvglRenderer<B>
-where
-    B: RuntimeSceneBridge,
-{
-    fn new(bridge: B) -> Self {
-        Self {
-            renderer: NativeSceneRenderer::new(bridge),
+    pub(super) fn apply_layout_raw(obj: NonNull<ffi::lv_obj_t>, layout: Layout) {
+        unsafe {
+            ffi::lv_obj_set_pos(obj.as_ptr(), layout.x, layout.y);
+            ffi::lv_obj_set_size(obj.as_ptr(), layout.width.max(1), layout.height.max(1));
         }
     }
 
-    fn render_screen_model(
-        &mut self,
-        framebuffer: &mut Framebuffer,
-        model: &ScreenModel,
-        transitions: &TransitionSampler<'_>,
-    ) -> Result<()> {
-        if self.renderer.bridge().display_needs_reset(framebuffer) {
-            self.renderer.clear()?;
+    pub(super) fn apply_node_layout_raw(
+        obj: NonNull<ffi::lv_obj_t>,
+        layout: Layout,
+        y_offset: i32,
+    ) {
+        Self::apply_layout_raw(
+            obj,
+            Layout {
+                y: layout.y + y_offset,
+                ..layout
+            },
+        );
+    }
+
+    fn layout_for_role_asset(&self, role: &'static str, occurrence: usize) -> Option<Layout> {
+        LayoutResolver::new(&self.render_assets)
+            .resolve_role(role, occurrence)
+            .map(|layout| Layout {
+                x: layout.x,
+                y: layout.y,
+                width: layout.width,
+                height: layout.height,
+            })
+    }
+
+    fn layout_for_root(&self) -> Layout {
+        let (width, height) = self
+            .display_size
+            .map(|(width, height)| (width as i32, height as i32))
+            .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
+        Layout {
+            x: 0,
+            y: 0,
+            width,
+            height,
         }
-        self.renderer
-            .bridge_mut()
-            .ensure_display_registered(framebuffer)?;
-        self.renderer.render(model, transitions)?;
-        self.renderer.bridge_mut().render_frame(framebuffer)
+    }
+
+    pub(super) fn next_role_layout(
+        &mut self,
+        _parent: Option<WidgetId>,
+        role: &'static str,
+    ) -> Result<Layout> {
+        let occurrence = *self.role_occurrences.entry(role).or_insert(0);
+        if let Some(layout) = self.layout_for_role_asset(role, occurrence) {
+            self.role_occurrences.insert(role, occurrence + 1);
+            return Ok(layout);
+        }
+
+        anyhow::bail!("missing LVGL layout asset for role {role}")
+    }
+
+    pub(super) fn style_for_role(&self, role: &'static str) -> Result<WidgetStyle> {
+        ThemeResolver::new(&self.render_assets).style_for_role(role)
+    }
+
+    pub(super) fn style_for_selected_role(
+        &self,
+        role: &'static str,
+        selected: bool,
+    ) -> Result<WidgetStyle> {
+        ThemeResolver::new(&self.render_assets).style_for_selected_role(role, selected)
     }
 }
 
-#[cfg(not(feature = "native-lvgl"))]
-impl LvglRenderer {
-    pub fn open(_explicit_source: Option<&Path>) -> Result<Self> {
-        anyhow::bail!("native-lvgl feature is disabled for this build")
+impl LvglFacade for NativeLvglFacade {
+    fn create_root(&mut self) -> Result<WidgetId> {
+        let obj = factory::create_root_object()?;
+        let layout = self.layout_for_root();
+        styling::reset_style_raw(obj);
+        styling::apply_style_raw(obj, self.style_for_role(roles::ROOT)?);
+        Self::apply_layout_raw(obj, layout);
+        unsafe {
+            ffi::lv_screen_load(obj.as_ptr());
+        }
+        self.role_occurrences.clear();
+        let id = self.register_widget(obj, WidgetKind::Root, roles::ROOT, None, layout);
+        self.active_root = Some(id);
+        Ok(id)
     }
 
-    pub fn render_screen_model(
+    fn create_container(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+        let parent_obj = self.widget_obj(parent)?;
+        let obj = factory::create_container_object(parent_obj, role)?;
+        let layout = self.next_role_layout(Some(parent), role)?;
+        styling::reset_style_raw(obj);
+        styling::apply_style_raw(obj, self.style_for_role(role)?);
+        Self::apply_layout_raw(obj, layout);
+        styling::apply_role_tuning_raw(obj, role);
+        Ok(self.register_widget(obj, WidgetKind::Container, role, Some(parent), layout))
+    }
+
+    fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+        let parent_obj = self.widget_obj(parent)?;
+        let (obj, kind) = factory::create_label_object(parent_obj, role)?;
+        let layout = self.next_role_layout(Some(parent), role)?;
+        styling::reset_style_raw(obj);
+        styling::apply_style_raw(obj, self.style_for_role(role)?);
+        Self::apply_layout_raw(obj, layout);
+        styling::apply_role_tuning_raw(obj, role);
+        Ok(self.register_widget(obj, kind, role, Some(parent), layout))
+    }
+
+    fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        let text = CString::new(text).with_context(|| {
+            format!(
+                "LVGL text for widget {} contains an interior NUL byte",
+                widget.raw()
+            )
+        })?;
+        unsafe {
+            ffi::lv_label_set_text(node.obj.as_ptr(), text.as_ptr());
+            if matches!(
+                node.role,
+                "now_playing_icon_label"
+                    | "now_playing_state_label"
+                    | "talk_actions_header_label"
+                    | "talk_actions_button_label"
+                    | "call_state_icon"
+                    | "call_state_label"
+                    | "call_mute_label"
+            ) {
+                ffi::lv_obj_center(node.obj.as_ptr());
+            }
+        }
+        Ok(())
+    }
+
+    fn set_selected(&mut self, _widget: WidgetId, _selected: bool) -> Result<()> {
+        let (obj, role, layout, y_offset) = {
+            let node = self.widget_node_mut(_widget)?;
+            (node.obj, node.role, node.layout, node.y_offset)
+        };
+        styling::apply_style_raw(obj, self.style_for_selected_role(role, _selected)?);
+        Self::apply_node_layout_raw(obj, layout, y_offset);
+        Ok(())
+    }
+
+    fn set_icon(&mut self, widget: WidgetId, icon_key: &str) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        if node.kind == WidgetKind::Image {
+            let descriptor = icons::descriptor_for_key(icon_key);
+            unsafe {
+                ffi::lv_image_set_src(
+                    node.obj.as_ptr(),
+                    descriptor as *const _ as *const std::ffi::c_void,
+                );
+                ffi::lv_obj_center(node.obj.as_ptr());
+            }
+            return Ok(());
+        }
+        self.set_text(widget, &styling::icon_label(icon_key))
+    }
+
+    fn set_progress(&mut self, widget: WidgetId, value: i32) -> Result<()> {
+        let value = value.clamp(0, 1000);
+        let node = self.widget_node_mut(widget)?;
+        if node.role == "now_playing_progress_fill" {
+            let fill_width = (168 * value) / 1000;
+            if fill_width <= 0 {
+                styling::hide_widget_raw(node.obj);
+            } else {
+                Self::apply_layout_raw(
+                    node.obj,
+                    Layout {
+                        width: fill_width,
+                        ..node.layout
+                    },
+                );
+            }
+            return Ok(());
+        }
+        if node.role == "status_battery_fill" {
+            let fill_width = (12 * value) / 100;
+            if fill_width <= 0 {
+                styling::hide_widget_raw(node.obj);
+            } else {
+                Self::apply_layout_raw(
+                    node.obj,
+                    Layout {
+                        width: fill_width,
+                        ..node.layout
+                    },
+                );
+            }
+            return Ok(());
+        }
+
+        let filled = ((value as usize) * 10) / 1000;
+        let empty = 10usize.saturating_sub(filled);
+        let bar = format!(
+            "[{}{}] {}%",
+            "#".repeat(filled),
+            "-".repeat(empty),
+            value / 10
+        );
+        self.set_text(widget, &bar)
+    }
+
+    fn set_visible(&mut self, widget: WidgetId, visible: bool) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        if visible {
+            Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+        } else {
+            styling::hide_widget_raw(node.obj);
+        }
+        Ok(())
+    }
+
+    fn set_opacity(&mut self, widget: WidgetId, opacity: u8) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        unsafe {
+            ffi::lv_obj_set_style_opa(node.obj.as_ptr(), opacity, 0);
+        }
+        Ok(())
+    }
+
+    fn set_y_offset(&mut self, widget: WidgetId, offset: i32) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        node.y_offset = offset;
+        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+        Ok(())
+    }
+
+    fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        node.layout.y = y;
+        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+        Ok(())
+    }
+
+    fn set_geometry(
         &mut self,
-        _framebuffer: &mut Framebuffer,
-        _model: &ScreenModel,
-        _transitions: &TransitionSampler<'_>,
+        widget: WidgetId,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
     ) -> Result<()> {
-        anyhow::bail!("native-lvgl feature is disabled for this build")
+        let node = self.widget_node_mut(widget)?;
+        node.layout = Layout {
+            x,
+            y,
+            width,
+            height,
+        };
+        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+        Ok(())
     }
-}
 
-#[cfg(not(feature = "native-lvgl"))]
-impl Renderer for LvglRenderer {
-    fn render(
+    fn set_variant(
         &mut self,
-        _framebuffer: &mut Framebuffer,
-        _model: &ScreenModel,
-        _transitions: &TransitionSampler<'_>,
-        _dirty_region: Option<crate::presentation::registry::DirtyRegion>,
-    ) -> Result<RenderReport> {
-        anyhow::bail!("native-lvgl feature is disabled for this build")
+        widget: WidgetId,
+        variant: &'static str,
+        accent_rgb: u32,
+    ) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        styling::apply_variant_raw(node.obj, node.role, variant, accent_rgb);
+        Ok(())
+    }
+
+    fn set_accent(&mut self, widget: WidgetId, rgb: u32) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        styling::apply_accent_raw(node.obj, node.role, rgb);
+        Ok(())
+    }
+
+    fn destroy(&mut self, widget: WidgetId) -> Result<()> {
+        let obj = self.widget_obj(widget)?;
+        if self.active_root == Some(widget) {
+            let blank = self.ensure_blank_screen()?;
+            unsafe {
+                ffi::lv_screen_load(blank.as_ptr());
+            }
+        }
+        unsafe {
+            ffi::lv_obj_delete(obj.as_ptr());
+        }
+        self.widgets.remove_subtree(widget);
+        if self.active_root == Some(widget) {
+            self.active_root = None;
+            self.role_occurrences.clear();
+        }
+        Ok(())
     }
 }

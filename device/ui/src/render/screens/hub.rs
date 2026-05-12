@@ -1,0 +1,145 @@
+use anyhow::{anyhow, bail, Result};
+
+use super::shared::{FooterBar, StatusBarWidgets};
+use super::TypedScreenController;
+use crate::presentation::screens::hub;
+use crate::presentation::transitions::{TransitionProperty, TransitionSampler};
+use crate::presentation::view_models::{HubViewModel, ScreenModel};
+use crate::render::widgets::roles;
+use crate::render::widgets::{LvglFacade, WidgetId};
+
+#[derive(Default)]
+pub struct HubController {
+    root: Option<WidgetId>,
+    status: StatusBarWidgets,
+    icon_glow: Option<WidgetId>,
+    card_panel: Option<WidgetId>,
+    icon: Option<WidgetId>,
+    title: Option<WidgetId>,
+    subtitle: Option<WidgetId>,
+    dots: Vec<WidgetId>,
+    footer: FooterBar,
+}
+
+impl HubController {
+    fn ensure_widgets(&mut self, facade: &mut dyn LvglFacade) -> Result<()> {
+        if self.root.is_none() {
+            self.root = Some(facade.create_root()?);
+        }
+        let root = self
+            .root
+            .ok_or_else(|| anyhow!("hub controller missing root widget"))?;
+
+        if self.icon_glow.is_none() {
+            self.icon_glow = Some(facade.create_container(root, roles::HUB_ICON_GLOW)?);
+        }
+        if self.card_panel.is_none() {
+            self.card_panel = Some(facade.create_container(root, roles::HUB_CARD_PANEL)?);
+        }
+        let card_panel = self
+            .card_panel
+            .ok_or_else(|| anyhow!("hub controller missing card panel"))?;
+        if self.icon.is_none() {
+            self.icon = Some(facade.create_label(card_panel, roles::HUB_ICON)?);
+        }
+        if self.title.is_none() {
+            self.title = Some(facade.create_label(root, roles::HUB_TITLE)?);
+        }
+        if self.subtitle.is_none() {
+            self.subtitle = Some(facade.create_label(root, roles::HUB_SUBTITLE)?);
+        }
+        while self.dots.len() < 4 {
+            self.dots
+                .push(facade.create_container(root, roles::HUB_DOT)?);
+        }
+        Ok(())
+    }
+}
+
+impl TypedScreenController for HubController {
+    const SUPPORTS_TRANSITIONS: bool = true;
+
+    type Model<'a> = &'a HubViewModel;
+
+    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
+        let ScreenModel::Hub(model) = model else {
+            bail!(
+                "hub controller received non-hub screen model: {}",
+                model.screen().as_str()
+            );
+        };
+        Ok(model)
+    }
+
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        model: Self::Model<'_>,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
+        self.ensure_widgets(facade)?;
+        let selected = hub::focused_card(model);
+        let accent = selected.map(|card| card.accent).unwrap_or(0x00FF88);
+        let icon_key = selected.map(|card| card.key.as_str()).unwrap_or("listen");
+        let opacity = transitions
+            .screen_any(TransitionProperty::Opacity)
+            .map(|value| value.clamp(0, 255) as u8);
+
+        if let Some(root) = self.root {
+            self.status.sync(facade, root, &model.chrome.status, true)?;
+            self.footer
+                .sync(facade, root, roles::HUB_FOOTER, &model.chrome.footer)?;
+        }
+        if let Some(icon_glow) = self.icon_glow {
+            facade.set_accent(icon_glow, accent)?;
+        }
+        if let Some(card_panel) = self.card_panel {
+            facade.set_accent(card_panel, accent)?;
+            if let Some(opacity) = opacity {
+                facade.set_opacity(card_panel, opacity)?;
+            }
+        }
+        if let Some(icon) = self.icon {
+            facade.set_icon(icon, icon_key)?;
+            facade.set_accent(icon, accent)?;
+        }
+
+        if let Some(title) = self.title {
+            facade.set_text(title, hub::focused_title(model))?;
+        }
+        if let Some(subtitle) = self.subtitle {
+            facade.set_text(
+                subtitle,
+                selected
+                    .map(|card| card.subtitle.as_str())
+                    .unwrap_or("Music and calls"),
+            )?;
+        }
+        let total_cards = model.cards.len().clamp(1, 4);
+        let selected_index = model.selected_index % total_cards;
+        for index in 0..4 {
+            if let Some(dot) = self.dots.get(index).copied() {
+                facade.set_selected(dot, index == selected_index)?;
+                facade.set_visible(dot, index < total_cards)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn teardown(&mut self, facade: &mut dyn LvglFacade) -> Result<()> {
+        let root = self.root.take();
+        self.status.clear();
+        self.icon_glow = None;
+        self.card_panel = None;
+        self.icon = None;
+        self.title = None;
+        self.subtitle = None;
+        self.dots.clear();
+        self.footer.clear();
+        if let Some(root) = root {
+            facade.destroy(root)?;
+        }
+        Ok(())
+    }
+}

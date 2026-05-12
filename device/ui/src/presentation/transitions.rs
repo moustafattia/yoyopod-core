@@ -1,6 +1,6 @@
 use yoyopod_protocol::ui::AnimationRequest;
 
-use crate::app::UiScreen;
+use yoyopod_protocol::ui::UiScreen;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransitionTarget {

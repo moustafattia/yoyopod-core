@@ -1,17 +1,22 @@
 pub mod assets;
 pub mod framebuffer;
+#[cfg(feature = "native-lvgl")]
 pub mod lvgl;
 pub mod null;
+pub mod pipeline;
+pub mod screens;
+pub mod styling;
+pub mod widgets;
 
 use anyhow::Result;
 use yoyopod_protocol::ui::UiScreen;
 
 use crate::presentation::registry::DirtyRegion;
-use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::TransitionSampler;
+use crate::presentation::view_models::ScreenModel;
 
 pub use framebuffer::Framebuffer;
-pub use lvgl::LvglRenderer;
+pub use pipeline::LvglRenderer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderReport {

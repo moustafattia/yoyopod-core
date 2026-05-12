@@ -1,5 +1,6 @@
-use crate::app::{UiScreen, UiView};
+use crate::app::UiView;
 use crate::presentation::screens::{chrome, ListScreenModel};
+use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn model(snapshot: &RuntimeSnapshot, focus_index: usize) -> ListScreenModel {

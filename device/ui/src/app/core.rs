@@ -6,8 +6,8 @@ use yoyopod_protocol::ui::{
 
 use crate::hardware::DisplayDevice;
 use crate::presentation;
-use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::TransitionSampler;
+use crate::presentation::view_models::ScreenModel;
 use crate::render::{Framebuffer, LvglRenderer, Renderer};
 
 use super::state::{DirtyState, UiRuntime};

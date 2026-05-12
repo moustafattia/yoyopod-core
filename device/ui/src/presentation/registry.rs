@@ -1,4 +1,4 @@
-use crate::app::UiScreen;
+pub use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{
     InputAction, IntentKind, RuntimeSnapshotDomain, ScreenCapabilities, UiIntent,
 };

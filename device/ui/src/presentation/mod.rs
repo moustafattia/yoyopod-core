@@ -1,9 +1,11 @@
 pub mod registry;
 pub mod screens;
 pub mod transitions;
+pub mod view_models;
 
-use crate::app::{UiScreen, UiView};
-use screens::ScreenModel;
+use crate::app::UiView;
+use view_models::ScreenModel;
+use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn view_for_screen(

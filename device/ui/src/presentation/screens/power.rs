@@ -1,5 +1,6 @@
-use crate::app::{UiScreen, UiView};
+use crate::app::UiView;
 use crate::presentation::screens::{chrome, ListRowModel, PowerViewModel};
+use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

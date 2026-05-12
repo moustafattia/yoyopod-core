@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::render::lvgl::roles;
+use crate::render::widgets::roles;
 
 const LAYOUTS_RON: &str = include_str!("../../assets/layouts.ron");
 const THEME_RON: &str = include_str!("../../assets/theme.ron");
@@ -378,7 +378,7 @@ mod tests {
             assets
                 .theme_role(roles::OVERLAY_SUBTITLE)
                 .and_then(|role| role.text_rgb),
-            Some(crate::render::lvgl::style::MUTED_RGB)
+            Some(crate::render::styling::style::MUTED_RGB)
         );
     }
 

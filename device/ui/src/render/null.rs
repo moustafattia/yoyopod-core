@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::presentation::registry::DirtyRegion;
-use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::TransitionSampler;
+use crate::presentation::view_models::ScreenModel;
 use crate::render::{Framebuffer, RenderReport, Renderer};
 
 #[derive(Debug, Default)]
