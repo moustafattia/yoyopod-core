@@ -71,7 +71,12 @@ impl TypedScreenController for PowerController {
         power_model(model)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, power: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        power: Self::Model<'_>,
+        _transitions: &crate::presentation::transitions::TransitionSampler<'_>,
+    ) -> Result<()> {
         self.ensure_base_widgets(facade)?;
         self.ensure_row_widgets(facade, 5)?;
         let accent = 0x9CA3AF;

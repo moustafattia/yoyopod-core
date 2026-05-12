@@ -15,9 +15,16 @@ pub mod primitives;
 pub(crate) mod roles;
 pub mod scene;
 pub mod style;
+#[cfg(feature = "native-lvgl")]
+pub(crate) mod style_apply;
 pub mod theme;
+#[cfg(feature = "native-lvgl")]
+pub(crate) mod widget_factory;
+#[cfg(feature = "native-lvgl")]
+pub(crate) mod widget_registry;
 
 use crate::presentation::screens::ScreenModel;
+use crate::presentation::transitions::TransitionSampler;
 use crate::render::Framebuffer;
 #[cfg(feature = "native-lvgl")]
 use backend::NativeLvglFacade;
@@ -46,8 +53,10 @@ impl LvglRenderer {
         &mut self,
         framebuffer: &mut Framebuffer,
         model: &ScreenModel,
+        transitions: &TransitionSampler<'_>,
     ) -> Result<()> {
-        self.renderer.render_screen_model(framebuffer, model)
+        self.renderer
+            .render_screen_model(framebuffer, model, transitions)
     }
 }
 
@@ -93,6 +102,7 @@ where
         &mut self,
         framebuffer: &mut Framebuffer,
         model: &ScreenModel,
+        transitions: &TransitionSampler<'_>,
     ) -> Result<()> {
         if self.renderer.bridge().display_needs_reset(framebuffer) {
             self.renderer.clear()?;
@@ -100,7 +110,7 @@ where
         self.renderer
             .bridge_mut()
             .ensure_display_registered(framebuffer)?;
-        self.renderer.render(model)?;
+        self.renderer.render(model, transitions)?;
         self.renderer.bridge_mut().render_frame(framebuffer)
     }
 }
@@ -115,6 +125,7 @@ impl LvglRenderer {
         &mut self,
         _framebuffer: &mut Framebuffer,
         _model: &ScreenModel,
+        _transitions: &TransitionSampler<'_>,
     ) -> Result<()> {
         anyhow::bail!("native-lvgl feature is disabled for this build")
     }

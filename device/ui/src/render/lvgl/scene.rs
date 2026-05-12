@@ -6,6 +6,7 @@ use anyhow::{bail, Result};
 use crate::app::UiScreen;
 use crate::presentation::registry::{self, ControllerKind, NativeRenderScene};
 use crate::presentation::screens::{ListScreenModel, ScreenModel, StatusBarModel};
+use crate::presentation::transitions::TransitionSampler;
 
 use crate::render::lvgl::controllers::{
     AskController, CallController, CallControllerModel, HubController, ListenController,
@@ -21,7 +22,11 @@ const fn native_scene_for_screen(screen: UiScreen) -> NativeRenderScene {
 pub trait SceneBridge {
     fn build_scene(&mut self, scene: NativeRenderScene) -> Result<()>;
     fn sync_status(&mut self, status: &StatusBarModel) -> Result<()>;
-    fn sync_scene(&mut self, model: &ScreenModel) -> Result<()>;
+    fn sync_scene(
+        &mut self,
+        model: &ScreenModel,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()>;
     fn destroy_scene(&mut self, scene: NativeRenderScene);
     fn clear_screen(&mut self) -> Result<()>;
 }
@@ -44,7 +49,11 @@ where
         }
     }
 
-    pub fn render(&mut self, model: &ScreenModel) -> Result<()> {
+    pub fn render(
+        &mut self,
+        model: &ScreenModel,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
         let screen = model.screen();
         let scene = native_scene_for_screen(screen);
 
@@ -57,7 +66,7 @@ where
         }
 
         self.bridge.sync_status(&model.chrome().status)?;
-        self.bridge.sync_scene(model)?;
+        self.bridge.sync_scene(model, transitions)?;
         self.active_screen = Some(screen);
         Ok(())
     }
@@ -148,7 +157,11 @@ where
         Ok(())
     }
 
-    fn sync_scene(&mut self, model: &ScreenModel) -> Result<()> {
+    fn sync_scene(
+        &mut self,
+        model: &ScreenModel,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
         let expected_scene = native_scene_for_screen(model.screen());
         let Some(active_scene) = self.active_scene else {
             bail!(
@@ -168,7 +181,7 @@ where
             .controller
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Rust LVGL scene bridge has no active controller"))?;
-        controller.sync(&mut self.facade, &model)
+        controller.sync(&mut self.facade, &model, transitions)
     }
 
     fn destroy_scene(&mut self, scene: NativeRenderScene) {
@@ -205,13 +218,18 @@ enum NativeSceneController {
 }
 
 impl NativeSceneController {
-    fn sync(&mut self, facade: &mut dyn LvglFacade, model: &ScreenModel) -> Result<()> {
+    fn sync(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        model: &ScreenModel,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
         match (self, model) {
             (Self::Hub(controller), ScreenModel::Hub(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (Self::Listen(controller), ScreenModel::Listen(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (Self::Playlist(controller), ScreenModel::Playlists(model)) => controller.sync_model(
                 facade,
@@ -219,6 +237,7 @@ impl NativeSceneController {
                     screen: UiScreen::Playlists,
                     list: model,
                 },
+                transitions,
             ),
             (Self::Playlist(controller), ScreenModel::RecentTracks(model)) => controller
                 .sync_model(
@@ -227,6 +246,7 @@ impl NativeSceneController {
                         screen: UiScreen::RecentTracks,
                         list: model,
                     },
+                    transitions,
                 ),
             (Self::Playlist(controller), ScreenModel::Contacts(model)) => controller.sync_model(
                 facade,
@@ -234,6 +254,7 @@ impl NativeSceneController {
                     screen: UiScreen::Contacts,
                     list: model,
                 },
+                transitions,
             ),
             (Self::Playlist(controller), ScreenModel::CallHistory(model)) => controller.sync_model(
                 facade,
@@ -241,16 +262,17 @@ impl NativeSceneController {
                     screen: UiScreen::CallHistory,
                     list: model,
                 },
+                transitions,
             ),
             (Self::NowPlaying(controller), ScreenModel::NowPlaying(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (Self::Talk(controller), ScreenModel::Talk(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (Self::TalkActions(controller), ScreenModel::TalkContact(model))
             | (Self::TalkActions(controller), ScreenModel::VoiceNote(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (Self::Call(controller), ScreenModel::IncomingCall(model)) => controller.sync_model(
                 facade,
@@ -258,6 +280,7 @@ impl NativeSceneController {
                     screen: UiScreen::IncomingCall,
                     call: model,
                 },
+                transitions,
             ),
             (Self::Call(controller), ScreenModel::OutgoingCall(model)) => controller.sync_model(
                 facade,
@@ -265,6 +288,7 @@ impl NativeSceneController {
                     screen: UiScreen::OutgoingCall,
                     call: model,
                 },
+                transitions,
             ),
             (Self::Call(controller), ScreenModel::InCall(model)) => controller.sync_model(
                 facade,
@@ -272,16 +296,17 @@ impl NativeSceneController {
                     screen: UiScreen::InCall,
                     call: model,
                 },
+                transitions,
             ),
             (Self::Ask(controller), ScreenModel::Ask(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (Self::Power(controller), ScreenModel::Power(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (Self::Overlay(controller), ScreenModel::Loading(model))
             | (Self::Overlay(controller), ScreenModel::Error(model)) => {
-                controller.sync_model(facade, model)
+                controller.sync_model(facade, model, transitions)
             }
             (controller, model) => bail!(
                 "native LVGL controller {} received {} model",

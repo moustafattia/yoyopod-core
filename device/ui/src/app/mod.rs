@@ -6,6 +6,6 @@ pub mod navigator;
 pub mod snapshot;
 pub mod state;
 
-pub use core::UiRuntime;
-pub use state::UiView;
+pub use core::RenderState;
+pub use state::{UiRuntime, UiView};
 pub use yoyopod_protocol::ui::UiScreen;

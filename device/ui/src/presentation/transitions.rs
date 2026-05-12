@@ -36,6 +36,93 @@ pub struct Transition {
     pub started_at_ms: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TransitionSampler<'a> {
+    transitions: &'a [Transition],
+    now_ms: u64,
+}
+
+impl<'a> TransitionSampler<'a> {
+    pub const fn empty() -> Self {
+        Self {
+            transitions: &[],
+            now_ms: 0,
+        }
+    }
+
+    pub const fn new(transitions: &'a [Transition], now_ms: u64) -> Self {
+        Self {
+            transitions,
+            now_ms,
+        }
+    }
+
+    pub fn screen(&self, screen: UiScreen, property: TransitionProperty) -> Option<i32> {
+        self.transitions.iter().find_map(|transition| {
+            if transition.property == property
+                && matches!(transition.target, TransitionTarget::Screen(target) if target == screen)
+            {
+                Some(transition.interpolated_value(self.now_ms))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn screen_any(&self, property: TransitionProperty) -> Option<i32> {
+        self.transitions.iter().find_map(|transition| {
+            if transition.property == property
+                && matches!(transition.target, TransitionTarget::Screen(_))
+            {
+                Some(transition.interpolated_value(self.now_ms))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn selection(
+        &self,
+        screen: UiScreen,
+        index: usize,
+        property: TransitionProperty,
+    ) -> Option<i32> {
+        self.transitions.iter().find_map(|transition| {
+            if transition.property == property
+                && matches!(
+                    transition.target,
+                    TransitionTarget::Selection {
+                        screen: target_screen,
+                        index: target_index,
+                    } if target_screen == screen && target_index == index
+                )
+            {
+                Some(transition.interpolated_value(self.now_ms))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn selection_any(&self, index: usize, property: TransitionProperty) -> Option<i32> {
+        self.transitions.iter().find_map(|transition| {
+            if transition.property == property
+                && matches!(
+                    transition.target,
+                    TransitionTarget::Selection {
+                        screen: _,
+                        index: target_index,
+                    } if target_index == index
+                )
+            {
+                Some(transition.interpolated_value(self.now_ms))
+            } else {
+                None
+            }
+        })
+    }
+}
+
 impl Transition {
     pub fn from_request(
         request: AnimationRequest,

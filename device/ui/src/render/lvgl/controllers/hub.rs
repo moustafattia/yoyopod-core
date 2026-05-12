@@ -4,6 +4,7 @@ use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::presentation::screens::hub;
 use crate::presentation::screens::{HubViewModel, ScreenModel};
+use crate::presentation::transitions::{TransitionProperty, TransitionSampler};
 use crate::render::lvgl::roles;
 use crate::render::lvgl::{LvglFacade, WidgetId};
 
@@ -68,11 +69,19 @@ impl TypedScreenController for HubController {
         Ok(model)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        model: Self::Model<'_>,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
         self.ensure_widgets(facade)?;
         let selected = hub::focused_card(model);
         let accent = selected.map(|card| card.accent).unwrap_or(0x00FF88);
         let icon_key = selected.map(|card| card.key.as_str()).unwrap_or("listen");
+        let opacity = transitions
+            .screen_any(TransitionProperty::Opacity)
+            .map(|value| value.clamp(0, 255) as u8);
 
         if let Some(root) = self.root {
             self.status.sync(facade, root, &model.chrome.status, true)?;
@@ -84,6 +93,9 @@ impl TypedScreenController for HubController {
         }
         if let Some(card_panel) = self.card_panel {
             facade.set_accent(card_panel, accent)?;
+            if let Some(opacity) = opacity {
+                facade.set_opacity(card_panel, opacity)?;
+            }
         }
         if let Some(icon) = self.icon {
             facade.set_icon(icon, icon_key)?;

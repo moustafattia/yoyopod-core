@@ -89,6 +89,7 @@ impl TypedScreenController for NowPlayingController {
         &mut self,
         facade: &mut dyn LvglFacade,
         now_playing: Self::Model<'_>,
+        _transitions: &crate::presentation::transitions::TransitionSampler<'_>,
     ) -> Result<()> {
         let progress_value = now_playing.progress_permille.clamp(0, 1000);
 

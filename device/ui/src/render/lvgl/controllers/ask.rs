@@ -57,7 +57,12 @@ impl TypedScreenController for AskController {
         ask_model(model)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, ask: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        ask: Self::Model<'_>,
+        _transitions: &crate::presentation::transitions::TransitionSampler<'_>,
+    ) -> Result<()> {
         self.ensure_widgets(facade)?;
 
         let accent = 0xFFD000;

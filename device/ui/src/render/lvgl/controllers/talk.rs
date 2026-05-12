@@ -62,7 +62,12 @@ impl TypedScreenController for TalkController {
         Ok(list)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, list: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        list: Self::Model<'_>,
+        _transitions: &crate::presentation::transitions::TransitionSampler<'_>,
+    ) -> Result<()> {
         let selected = selected_row(list);
         let title = selected
             .map(|row| row.title.as_str())

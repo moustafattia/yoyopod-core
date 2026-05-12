@@ -87,6 +87,7 @@ unsafe extern "C" {
         selector: LvStyleSelector,
     );
     pub fn lv_obj_set_style_bg_opa(obj: *mut lv_obj_t, value: u8, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_opa(obj: *mut lv_obj_t, value: u8, selector: LvStyleSelector);
     pub fn lv_obj_set_style_text_color(
         obj: *mut lv_obj_t,
         value: lv_color_t,

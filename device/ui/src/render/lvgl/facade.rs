@@ -19,6 +19,16 @@ pub trait LvglFacade {
 
     fn set_visible(&mut self, widget: WidgetId, visible: bool) -> Result<()>;
 
+    fn set_opacity(&mut self, widget: WidgetId, opacity: u8) -> Result<()> {
+        let _ = (widget, opacity);
+        Ok(())
+    }
+
+    fn set_y_offset(&mut self, widget: WidgetId, offset: i32) -> Result<()> {
+        let _ = (widget, offset);
+        Ok(())
+    }
+
     fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {
         let _ = (widget, y);
         Ok(())
@@ -88,6 +98,14 @@ where
 
     fn set_visible(&mut self, widget: WidgetId, visible: bool) -> Result<()> {
         (**self).set_visible(widget, visible)
+    }
+
+    fn set_opacity(&mut self, widget: WidgetId, opacity: u8) -> Result<()> {
+        (**self).set_opacity(widget, opacity)
+    }
+
+    fn set_y_offset(&mut self, widget: WidgetId, offset: i32) -> Result<()> {
+        (**self).set_y_offset(widget, offset)
     }
 
     fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {

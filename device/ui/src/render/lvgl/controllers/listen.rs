@@ -3,6 +3,7 @@ use anyhow::{anyhow, bail, Result};
 use super::shared::{FooterLabel, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::presentation::screens::{ListScreenModel, ScreenModel};
+use crate::presentation::transitions::TransitionSampler;
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -89,7 +90,12 @@ impl TypedScreenController for ListenController {
         Ok(list)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, list: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        list: Self::Model<'_>,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
         let accent = 0x00FF88;
 
         self.ensure_widgets(facade, 4)?;
@@ -134,6 +140,7 @@ impl TypedScreenController for ListenController {
             &self.row_icons,
             &self.row_titles,
             &self.row_subtitles,
+            transitions,
         )
     }
 
@@ -167,11 +174,19 @@ pub(super) fn sync_rows(
     row_icons: &[WidgetId],
     row_titles: &[WidgetId],
     row_subtitles: &[WidgetId],
+    transitions: &TransitionSampler<'_>,
 ) -> Result<()> {
     for index in 0..row_titles.len() {
         if let Some(row) = list.rows.get(index) {
             facade.set_visible(row_containers[index], true)?;
             facade.set_selected(row_containers[index], row.selected)?;
+            let offset = transitions
+                .selection_any(
+                    index,
+                    crate::presentation::transitions::TransitionProperty::SelectionOffset,
+                )
+                .unwrap_or(0);
+            facade.set_y_offset(row_containers[index], offset)?;
             facade.set_icon(row_icons[index], &row.icon_key)?;
             facade.set_accent(row_icons[index], accent)?;
             facade.set_selected(row_titles[index], row.selected)?;
@@ -184,6 +199,7 @@ pub(super) fn sync_rows(
             facade.set_y(row_subtitles[index], 24)?;
         } else {
             facade.set_selected(row_containers[index], false)?;
+            facade.set_y_offset(row_containers[index], 0)?;
             facade.set_visible(row_containers[index], false)?;
         }
     }

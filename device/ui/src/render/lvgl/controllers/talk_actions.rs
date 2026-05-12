@@ -76,7 +76,12 @@ impl TypedScreenController for TalkActionsController {
         talk_actions_model(model)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, actions: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        actions: Self::Model<'_>,
+        _transitions: &crate::presentation::transitions::TransitionSampler<'_>,
+    ) -> Result<()> {
         self.ensure_widgets(facade)?;
         if let Some(root) = self.root {
             self.status

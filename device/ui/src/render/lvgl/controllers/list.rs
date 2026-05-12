@@ -3,6 +3,7 @@ use anyhow::{anyhow, bail, Result};
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::presentation::screens::{ListScreenModel, ScreenModel};
+use crate::presentation::transitions::{TransitionProperty, TransitionSampler};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -65,7 +66,12 @@ impl TypedScreenController for ListController {
         list_model(model)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, list: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        list: Self::Model<'_>,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
         self.ensure_base_widgets(facade)?;
         self.ensure_row_widgets(facade, list.rows.len())?;
 
@@ -86,6 +92,10 @@ impl TypedScreenController for ListController {
             if let Some(row) = list.rows.get(index) {
                 facade.set_visible(self.row_containers[index], true)?;
                 facade.set_selected(self.row_containers[index], row.selected)?;
+                let offset = transitions
+                    .selection_any(index, TransitionProperty::SelectionOffset)
+                    .unwrap_or(0);
+                facade.set_y_offset(self.row_containers[index], offset)?;
                 facade.set_accent(self.row_containers[index], accent)?;
                 facade.set_icon(self.row_icons[index], &row.icon_key)?;
                 facade.set_accent(self.row_icons[index], accent)?;
@@ -93,6 +103,7 @@ impl TypedScreenController for ListController {
                 facade.set_text(self.row_subtitles[index], &row.subtitle)?;
             } else {
                 facade.set_selected(self.row_containers[index], false)?;
+                facade.set_y_offset(self.row_containers[index], 0)?;
                 facade.set_visible(self.row_containers[index], false)?;
             }
         }

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::path::Path;
 use std::ptr::{self, NonNull};
@@ -11,41 +10,17 @@ use crate::render::lvgl::ffi;
 use crate::render::lvgl::icons;
 use crate::render::lvgl::layout::LayoutResolver;
 use crate::render::lvgl::roles;
-use crate::render::lvgl::style::{self as theme, WidgetStyle};
+use crate::render::lvgl::style::WidgetStyle;
+use crate::render::lvgl::style_apply;
 use crate::render::lvgl::theme::ThemeResolver;
+use crate::render::lvgl::widget_factory;
+use crate::render::lvgl::widget_registry::{Layout, WidgetKind, WidgetNode, WidgetRegistry};
 use crate::render::lvgl::{LvglFacade, WidgetId};
 use crate::render::Framebuffer;
 
 const DEFAULT_WIDTH: i32 = 240;
 const DEFAULT_HEIGHT: i32 = 280;
 const DRAW_BUFFER_ROWS: usize = 40;
-const OFFSCREEN: i32 = -4096;
-
-#[derive(Debug, Clone, Copy)]
-struct Layout {
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WidgetKind {
-    Root,
-    Container,
-    Label,
-    Image,
-}
-
-#[derive(Debug)]
-struct WidgetNode {
-    obj: NonNull<ffi::lv_obj_t>,
-    _kind: WidgetKind,
-    role: &'static str,
-    _parent: Option<WidgetId>,
-    children: Vec<WidgetId>,
-    layout: Layout,
-}
 
 #[derive(Default)]
 struct FlushTarget {
@@ -59,10 +34,9 @@ pub struct NativeLvglFacade {
     flush_target: FlushTarget,
     display_size: Option<(usize, usize)>,
     last_tick: Instant,
-    next_widget_id: u64,
-    widgets: HashMap<WidgetId, WidgetNode>,
+    widgets: WidgetRegistry,
     active_root: Option<WidgetId>,
-    role_occurrences: HashMap<&'static str, usize>,
+    role_occurrences: std::collections::HashMap<&'static str, usize>,
     render_assets: RenderAssets,
 }
 
@@ -81,10 +55,9 @@ impl NativeLvglFacade {
             flush_target: FlushTarget::default(),
             display_size: None,
             last_tick: Instant::now(),
-            next_widget_id: 0,
-            widgets: HashMap::new(),
+            widgets: WidgetRegistry::default(),
             active_root: None,
-            role_occurrences: HashMap::new(),
+            role_occurrences: std::collections::HashMap::new(),
             render_assets,
         })
     }
@@ -165,22 +138,11 @@ impl NativeLvglFacade {
     }
 
     fn widget_obj(&self, widget: WidgetId) -> Result<NonNull<ffi::lv_obj_t>> {
-        self.widgets
-            .get(&widget)
-            .map(|node| node.obj)
-            .ok_or_else(|| anyhow!("unknown LVGL widget {}", widget.raw()))
+        self.widgets.obj(widget)
     }
 
     fn widget_node_mut(&mut self, widget: WidgetId) -> Result<&mut WidgetNode> {
-        self.widgets
-            .get_mut(&widget)
-            .ok_or_else(|| anyhow!("unknown LVGL widget {}", widget.raw()))
-    }
-
-    fn next_widget_id(&mut self) -> WidgetId {
-        let id = WidgetId::new(self.next_widget_id);
-        self.next_widget_id += 1;
-        id
+        self.widgets.node_mut(widget)
     }
 
     fn register_widget(
@@ -191,24 +153,7 @@ impl NativeLvglFacade {
         parent: Option<WidgetId>,
         layout: Layout,
     ) -> WidgetId {
-        let id = self.next_widget_id();
-        self.widgets.insert(
-            id,
-            WidgetNode {
-                obj,
-                _kind: kind,
-                role,
-                _parent: parent,
-                children: Vec::new(),
-                layout,
-            },
-        );
-        if let Some(parent) = parent {
-            if let Some(parent_node) = self.widgets.get_mut(&parent) {
-                parent_node.children.push(id);
-            }
-        }
-        id
+        self.widgets.register(obj, kind, role, parent, layout)
     }
 
     fn ensure_blank_screen(&mut self) -> Result<NonNull<ffi::lv_obj_t>> {
@@ -223,8 +168,8 @@ impl NativeLvglFacade {
             .display_size
             .map(|(width, height)| (width as i32, height as i32))
             .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
-        Self::reset_style_raw(blank);
-        Self::apply_style_raw(blank, self.style_for_role(roles::ROOT)?);
+        style_apply::reset_style_raw(blank);
+        style_apply::apply_style_raw(blank, self.style_for_role(roles::ROOT)?);
         Self::apply_layout_raw(
             blank,
             Layout {
@@ -236,14 +181,6 @@ impl NativeLvglFacade {
         );
         self.blank_screen = Some(blank);
         Ok(blank)
-    }
-
-    fn remove_widget_subtree(&mut self, widget: WidgetId) {
-        if let Some(node) = self.widgets.remove(&widget) {
-            for child in node.children {
-                self.remove_widget_subtree(child);
-            }
-        }
     }
 
     fn invalidate_widget_registry(&mut self) {
@@ -261,6 +198,16 @@ impl NativeLvglFacade {
         }
     }
 
+    fn apply_node_layout_raw(obj: NonNull<ffi::lv_obj_t>, layout: Layout, y_offset: i32) {
+        Self::apply_layout_raw(
+            obj,
+            Layout {
+                y: layout.y + y_offset,
+                ..layout
+            },
+        );
+    }
+
     fn layout_for_role_asset(&self, role: &'static str, occurrence: usize) -> Option<Layout> {
         LayoutResolver::new(&self.render_assets)
             .resolve_role(role, occurrence)
@@ -270,487 +217,6 @@ impl NativeLvglFacade {
                 width: layout.width,
                 height: layout.height,
             })
-    }
-
-    fn apply_role_tuning_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str) {
-        const SELECTOR: ffi::LvStyleSelector = 0;
-
-        unsafe {
-            match role {
-                "hub_card_panel" => {
-                    ffi::lv_obj_set_style_pad_left(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_right(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_top(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_bottom(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 24, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
-                    ffi::lv_obj_set_scrollbar_mode(obj.as_ptr(), ffi::LV_SCROLLBAR_MODE_OFF);
-                }
-                "now_playing_panel"
-                | "now_playing_state_chip"
-                | "now_playing_progress_track"
-                | "now_playing_progress_fill" => {
-                    ffi::lv_obj_set_style_pad_left(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_right(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_top(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_bottom(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_outline_width(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_scrollbar_mode(obj.as_ptr(), ffi::LV_SCROLLBAR_MODE_OFF);
-                }
-                "now_playing_icon_halo" => {
-                    ffi::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_outline_width(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_scrollbar_mode(obj.as_ptr(), ffi::LV_SCROLLBAR_MODE_OFF);
-                }
-                "hub_icon_glow"
-                | "footer_bar"
-                | "talk_card_panel"
-                | "talk_card_glow"
-                | "talk_actions_primary_button"
-                | "ask_icon_glow"
-                | "ask_icon_halo"
-                | "call_panel"
-                | "call_icon_halo"
-                | "call_state_chip"
-                | "call_mute_badge"
-                | "power_icon_halo"
-                | "power_row"
-                | "status_bar"
-                | "status_battery_outline"
-                | "listen_panel"
-                | "playlist_panel"
-                | "listen_empty_panel"
-                | "playlist_empty_panel" => {
-                    ffi::lv_obj_set_scrollbar_mode(obj.as_ptr(), ffi::LV_SCROLLBAR_MODE_OFF);
-                }
-                "listen_row" | "playlist_row" | "list_row" => {
-                    ffi::lv_obj_set_style_pad_left(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_right(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_top(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_pad_bottom(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_scrollbar_mode(obj.as_ptr(), ffi::LV_SCROLLBAR_MODE_OFF);
-                }
-                "status_gps_ring" => {
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_TRANSP, SELECTOR);
-                    ffi::lv_obj_set_style_radius(obj.as_ptr(), ffi::LV_RADIUS_CIRCLE, SELECTOR);
-                }
-                "status_gps_center" => {
-                    ffi::lv_obj_set_style_radius(obj.as_ptr(), ffi::LV_RADIUS_CIRCLE, SELECTOR);
-                }
-                "status_gps_tail" => {
-                    ffi::lv_obj_set_style_radius(obj.as_ptr(), 1, SELECTOR);
-                }
-                "status_voip_dot_left" | "status_voip_dot_after_gps" | "talk_dot" | "power_dot" => {
-                    ffi::lv_obj_set_style_radius(obj.as_ptr(), ffi::LV_RADIUS_CIRCLE, SELECTOR);
-                }
-                "hub_icon" | "ask_icon" => {
-                    ffi::lv_obj_set_style_image_recolor_opa(
-                        obj.as_ptr(),
-                        theme::OPA_COVER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_image_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "hub_title" | "power_title" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "hub_subtitle" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "listen_title" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                }
-                "listen_subtitle" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                }
-                "listen_row_icon" | "playlist_row_icon" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                }
-                "listen_row_title" | "playlist_row_title" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_16,
-                        SELECTOR,
-                    );
-                }
-                "listen_row_subtitle" | "playlist_row_subtitle" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                }
-                "listen_empty_icon" | "playlist_empty_icon" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "listen_empty_title" | "playlist_empty_title" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "now_playing_icon_label" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                "now_playing_state_label" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                "talk_actions_header_label" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                "talk_actions_header_name" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "talk_actions_title_label" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "talk_actions_button_label" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                "talk_actions_status_label" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "call_state_icon" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                "call_title" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "call_state_label" | "call_mute_label" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                "now_playing_title" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_line_space(obj.as_ptr(), -2, SELECTOR);
-                }
-                "now_playing_artist" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "listen_empty_subtitle" | "playlist_empty_subtitle" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "ask_title" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "ask_subtitle" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_14,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "hub_footer"
-                | "ask_footer"
-                | "call_footer"
-                | "power_footer"
-                | "overlay_footer"
-                | "now_playing_footer"
-                | "listen_footer"
-                | "playlist_footer"
-                | "talk_footer"
-                | "talk_actions_footer" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "status_network"
-                | "status_signal"
-                | "status_battery"
-                | "status_wifi"
-                | "status_time"
-                | "status_battery_label" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                }
-                "power_icon" => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_align(obj.as_ptr(), ffi::LV_ALIGN_CENTER, 0, 0);
-                }
-                "power_row_title" => {
-                    ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_12,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_LEFT,
-                        SELECTOR,
-                    );
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn reset_style_raw(obj: NonNull<ffi::lv_obj_t>) {
-        unsafe {
-            ffi::lv_obj_remove_style_all(obj.as_ptr());
-        }
-    }
-
-    fn apply_style_raw(obj: NonNull<ffi::lv_obj_t>, style: WidgetStyle) {
-        const SELECTOR: ffi::LvStyleSelector = 0;
-
-        unsafe {
-            if let Some(bg_color) = style.bg_color {
-                ffi::lv_obj_set_style_bg_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(bg_color & 0xFFFFFF),
-                    SELECTOR,
-                );
-            }
-            ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), style.bg_opa, SELECTOR);
-
-            if let Some(text_color) = style.text_color {
-                ffi::lv_obj_set_style_text_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(text_color & 0xFFFFFF),
-                    SELECTOR,
-                );
-            }
-
-            if let Some(border_color) = style.border_color {
-                ffi::lv_obj_set_style_border_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(border_color & 0xFFFFFF),
-                    SELECTOR,
-                );
-            }
-            ffi::lv_obj_set_style_border_width(obj.as_ptr(), style.border_width, SELECTOR);
-            ffi::lv_obj_set_style_radius(obj.as_ptr(), style.radius, SELECTOR);
-            ffi::lv_obj_set_style_outline_width(obj.as_ptr(), style.outline_width, SELECTOR);
-            ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), style.shadow_width, SELECTOR);
-        }
-    }
-
-    fn hide_widget_raw(obj: NonNull<ffi::lv_obj_t>) {
-        unsafe {
-            ffi::lv_obj_set_pos(obj.as_ptr(), OFFSCREEN, OFFSCREEN);
-            ffi::lv_obj_set_size(obj.as_ptr(), 1, 1);
-        }
     }
 
     fn layout_for_root(&self) -> Layout {
@@ -791,11 +257,10 @@ impl NativeLvglFacade {
 
 impl LvglFacade for NativeLvglFacade {
     fn create_root(&mut self) -> Result<WidgetId> {
-        let obj = unsafe { ffi::lv_obj_create(ptr::null_mut()) };
-        let obj = NonNull::new(obj).ok_or_else(|| anyhow!("LVGL root widget creation failed"))?;
+        let obj = widget_factory::create_root_object()?;
         let layout = self.layout_for_root();
-        Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, self.style_for_role(roles::ROOT)?);
+        style_apply::reset_style_raw(obj);
+        style_apply::apply_style_raw(obj, self.style_for_role(roles::ROOT)?);
         Self::apply_layout_raw(obj, layout);
         unsafe {
             ffi::lv_screen_load(obj.as_ptr());
@@ -808,48 +273,23 @@ impl LvglFacade for NativeLvglFacade {
 
     fn create_container(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
         let parent_obj = self.widget_obj(parent)?;
-        let obj = unsafe { ffi::lv_obj_create(parent_obj.as_ptr()) };
-        let obj = NonNull::new(obj)
-            .ok_or_else(|| anyhow!("LVGL container creation failed for {role}"))?;
+        let obj = widget_factory::create_container_object(parent_obj, role)?;
         let layout = self.next_role_layout(Some(parent), role)?;
-        Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, self.style_for_role(role)?);
+        style_apply::reset_style_raw(obj);
+        style_apply::apply_style_raw(obj, self.style_for_role(role)?);
         Self::apply_layout_raw(obj, layout);
-        Self::apply_role_tuning_raw(obj, role);
+        style_apply::apply_role_tuning_raw(obj, role);
         Ok(self.register_widget(obj, WidgetKind::Container, role, Some(parent), layout))
     }
 
     fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
         let parent_obj = self.widget_obj(parent)?;
-        let is_image = matches!(role, "hub_icon" | "ask_icon");
-        let obj = unsafe {
-            if is_image {
-                ffi::lv_image_create(parent_obj.as_ptr())
-            } else {
-                ffi::lv_label_create(parent_obj.as_ptr())
-            }
-        };
-        let obj =
-            NonNull::new(obj).ok_or_else(|| anyhow!("LVGL label creation failed for {role}"))?;
+        let (obj, kind) = widget_factory::create_label_object(parent_obj, role)?;
         let layout = self.next_role_layout(Some(parent), role)?;
-        Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, self.style_for_role(role)?);
+        style_apply::reset_style_raw(obj);
+        style_apply::apply_style_raw(obj, self.style_for_role(role)?);
         Self::apply_layout_raw(obj, layout);
-        Self::apply_role_tuning_raw(obj, role);
-        let kind = if is_image {
-            WidgetKind::Image
-        } else {
-            let empty = CString::new("").expect("empty CString");
-            unsafe {
-                ffi::lv_label_set_text(obj.as_ptr(), empty.as_ptr());
-            }
-            WidgetKind::Label
-        };
-        if is_image {
-            unsafe {
-                ffi::lv_obj_center(obj.as_ptr());
-            }
-        }
+        style_apply::apply_role_tuning_raw(obj, role);
         Ok(self.register_widget(obj, kind, role, Some(parent), layout))
     }
 
@@ -880,18 +320,18 @@ impl LvglFacade for NativeLvglFacade {
     }
 
     fn set_selected(&mut self, _widget: WidgetId, _selected: bool) -> Result<()> {
-        let (obj, role, layout) = {
+        let (obj, role, layout, y_offset) = {
             let node = self.widget_node_mut(_widget)?;
-            (node.obj, node.role, node.layout)
+            (node.obj, node.role, node.layout, node.y_offset)
         };
-        Self::apply_style_raw(obj, self.style_for_selected_role(role, _selected)?);
-        Self::apply_layout_raw(obj, layout);
+        style_apply::apply_style_raw(obj, self.style_for_selected_role(role, _selected)?);
+        Self::apply_node_layout_raw(obj, layout, y_offset);
         Ok(())
     }
 
     fn set_icon(&mut self, widget: WidgetId, icon_key: &str) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
-        if node._kind == WidgetKind::Image {
+        if node.kind == WidgetKind::Image {
             let descriptor = icons::descriptor_for_key(icon_key);
             unsafe {
                 ffi::lv_image_set_src(
@@ -902,7 +342,7 @@ impl LvglFacade for NativeLvglFacade {
             }
             return Ok(());
         }
-        self.set_text(widget, &icon_label(icon_key))
+        self.set_text(widget, &style_apply::icon_label(icon_key))
     }
 
     fn set_progress(&mut self, widget: WidgetId, value: i32) -> Result<()> {
@@ -911,7 +351,7 @@ impl LvglFacade for NativeLvglFacade {
         if node.role == "now_playing_progress_fill" {
             let fill_width = (168 * value) / 1000;
             if fill_width <= 0 {
-                Self::hide_widget_raw(node.obj);
+                style_apply::hide_widget_raw(node.obj);
             } else {
                 Self::apply_layout_raw(
                     node.obj,
@@ -926,7 +366,7 @@ impl LvglFacade for NativeLvglFacade {
         if node.role == "status_battery_fill" {
             let fill_width = (12 * value) / 100;
             if fill_width <= 0 {
-                Self::hide_widget_raw(node.obj);
+                style_apply::hide_widget_raw(node.obj);
             } else {
                 Self::apply_layout_raw(
                     node.obj,
@@ -953,17 +393,32 @@ impl LvglFacade for NativeLvglFacade {
     fn set_visible(&mut self, widget: WidgetId, visible: bool) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
         if visible {
-            Self::apply_layout_raw(node.obj, node.layout);
+            Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
         } else {
-            Self::hide_widget_raw(node.obj);
+            style_apply::hide_widget_raw(node.obj);
         }
+        Ok(())
+    }
+
+    fn set_opacity(&mut self, widget: WidgetId, opacity: u8) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        unsafe {
+            ffi::lv_obj_set_style_opa(node.obj.as_ptr(), opacity, 0);
+        }
+        Ok(())
+    }
+
+    fn set_y_offset(&mut self, widget: WidgetId, offset: i32) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        node.y_offset = offset;
+        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
         Ok(())
     }
 
     fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
         node.layout.y = y;
-        Self::apply_layout_raw(node.obj, node.layout);
+        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
         Ok(())
     }
 
@@ -982,7 +437,7 @@ impl LvglFacade for NativeLvglFacade {
             width,
             height,
         };
-        Self::apply_layout_raw(node.obj, node.layout);
+        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
         Ok(())
     }
 
@@ -993,13 +448,13 @@ impl LvglFacade for NativeLvglFacade {
         accent_rgb: u32,
     ) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
-        Self::apply_variant_raw(node.obj, node.role, variant, accent_rgb);
+        style_apply::apply_variant_raw(node.obj, node.role, variant, accent_rgb);
         Ok(())
     }
 
     fn set_accent(&mut self, widget: WidgetId, rgb: u32) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
-        Self::apply_accent_raw(node.obj, node.role, rgb);
+        style_apply::apply_accent_raw(node.obj, node.role, rgb);
         Ok(())
     }
 
@@ -1014,7 +469,7 @@ impl LvglFacade for NativeLvglFacade {
         unsafe {
             ffi::lv_obj_delete(obj.as_ptr());
         }
-        self.remove_widget_subtree(widget);
+        self.widgets.remove_subtree(widget);
         if self.active_root == Some(widget) {
             self.active_root = None;
             self.role_occurrences.clear();
@@ -1023,605 +478,12 @@ impl LvglFacade for NativeLvglFacade {
     }
 }
 
-impl NativeLvglFacade {
-    fn apply_variant_raw(
-        obj: NonNull<ffi::lv_obj_t>,
-        role: &'static str,
-        variant: &'static str,
-        accent_rgb: u32,
-    ) {
-        const SELECTOR: ffi::LvStyleSelector = 0;
-        unsafe {
-            match (role, variant) {
-                ("ask_icon_glow", "ask_listening") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 76)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 128, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 42, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 102, SELECTOR);
-                }
-                ("ask_icon_glow", "ask_thinking") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 82)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 51, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 22, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 51, SELECTOR);
-                }
-                ("ask_icon_glow", "ask_idle") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 82)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 76, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 28, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
-                }
-                ("ask_icon_halo", "ask_listening") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 68)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("ask_icon_halo", "ask_idle" | "ask_thinking") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 74)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("ask_title", "ask_reply") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_LEFT,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::INK_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("ask_title", "ask_idle" | "ask_listening" | "ask_thinking") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::INK_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("ask_subtitle", "ask_reply") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_16,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_LEFT,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::MUTED_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("ask_subtitle", "ask_thinking") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_14,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::MUTED_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("ask_subtitle", "ask_idle" | "ask_listening") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_14,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_align(
-                        obj.as_ptr(),
-                        ffi::LV_TEXT_ALIGN_CENTER,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                }
-                ("talk_actions_primary_button", "talk_action_primary") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::SURFACE_RAISED_RGB),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
-                    ffi::lv_obj_set_style_border_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                }
-                ("talk_actions_primary_button", "talk_action_selected") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_width(obj.as_ptr(), 0, SELECTOR);
-                }
-                ("talk_actions_primary_button", "talk_action_unselected") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::SURFACE_RAISED_RGB),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
-                    ffi::lv_obj_set_style_border_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                }
-                ("talk_actions_button_label", "talk_action_primary") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_24,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                ("talk_actions_button_label", "talk_action_unselected") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                ("talk_actions_button_label", "talk_action_selected") => {
-                    ffi::lv_obj_set_style_text_font(
-                        obj.as_ptr(),
-                        &ffi::lv_font_montserrat_18,
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::INK_RGB),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_center(obj.as_ptr());
-                }
-                ("talk_actions_status_label", "talk_action_status") => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                }
-                ("call_icon_halo", "call_halo") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 68)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("call_panel", "call_panel_filled") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_width(obj.as_ptr(), 0, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 22, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
-                }
-                ("call_panel", "call_panel_outlined") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 80)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_width(obj.as_ptr(), 2, SELECTOR);
-                    ffi::lv_obj_set_style_border_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 0, SELECTOR);
-                }
-                ("call_mute_badge", "call_mute") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 85)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("now_playing_icon_halo", "now_playing_playing") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 80)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 60)),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_icon_halo", "now_playing_paused" | "now_playing_stopped") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(
-                            theme::SURFACE_RAISED_RGB,
-                            theme::BACKGROUND_RGB,
-                            20,
-                        )),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(theme::MUTED_RGB, theme::BACKGROUND_RGB, 60)),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_icon_halo", "now_playing_offline") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 82)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 60)),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_icon_label" | "now_playing_state_label", "now_playing_playing") => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                }
-                (
-                    "now_playing_icon_label" | "now_playing_state_label",
-                    "now_playing_paused" | "now_playing_stopped",
-                ) => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::MUTED_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_icon_label", "now_playing_offline") => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::INK_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_state_label", "now_playing_offline") => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::ERROR_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_state_chip", "now_playing_playing") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 65)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("now_playing_state_chip", "now_playing_paused" | "now_playing_stopped") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::SURFACE_RAISED_RGB),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("now_playing_state_chip", "now_playing_offline") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 78)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("now_playing_progress_fill", "now_playing_playing") => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(accent_rgb),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                (
-                    "now_playing_progress_fill",
-                    "now_playing_paused" | "now_playing_stopped" | "now_playing_offline",
-                ) => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::MUTED_DIM_RGB),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                ("now_playing_footer", "now_playing_playing") => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(accent_rgb, theme::SURFACE_RGB, 55)),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_footer", "now_playing_paused" | "now_playing_stopped") => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::MUTED_RGB),
-                        SELECTOR,
-                    );
-                }
-                ("now_playing_footer", "now_playing_offline") => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::MUTED_DIM_RGB),
-                        SELECTOR,
-                    );
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, rgb: u32) {
-        const SELECTOR: ffi::LvStyleSelector = 0;
-        let accent = unsafe { ffi::lv_color_hex(rgb & 0xFFFFFF) };
-        unsafe {
-            match role {
-                "hub_icon_glow" => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 72)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 102, SELECTOR);
-                }
-                "talk_card_glow" => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 68)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 96, SELECTOR);
-                }
-                "call_icon_halo" => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 68)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "hub_card_panel" | "talk_card_panel" | "call_panel" => {
-                    ffi::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_shadow_color(obj.as_ptr(), accent, SELECTOR);
-                }
-                "now_playing_icon_halo" => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 80)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                    ffi::lv_obj_set_style_border_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 60)),
-                        SELECTOR,
-                    );
-                }
-                "ask_icon_glow" | "ask_icon_halo" | "talk_actions_header_box" => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 82)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 76, SELECTOR);
-                }
-                "call_state_chip" => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 85)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "now_playing_state_chip" => {
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 65)),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "talk_actions_primary_button" => {
-                    ffi::lv_obj_set_style_border_color(obj.as_ptr(), accent, SELECTOR);
-                    ffi::lv_obj_set_style_bg_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::SURFACE_RAISED_RGB),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "playlist_underline" => {
-                    ffi::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "now_playing_progress_fill" => {
-                    ffi::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "hub_icon" => {
-                    ffi::lv_obj_set_style_image_recolor(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(theme::INK_RGB),
-                        SELECTOR,
-                    );
-                    ffi::lv_obj_set_style_image_recolor_opa(
-                        obj.as_ptr(),
-                        theme::OPA_COVER,
-                        SELECTOR,
-                    );
-                }
-                "ask_icon" => {
-                    ffi::lv_obj_set_style_image_recolor(obj.as_ptr(), accent, SELECTOR);
-                    ffi::lv_obj_set_style_image_recolor_opa(
-                        obj.as_ptr(),
-                        theme::OPA_COVER,
-                        SELECTOR,
-                    );
-                }
-                "call_state_icon"
-                | "list_row_icon"
-                | "listen_row_icon"
-                | "playlist_row_icon"
-                | "power_row_icon"
-                | "now_playing_icon_label"
-                | "power_icon"
-                | "now_playing_state_label"
-                | "talk_card_label"
-                | "talk_actions_header_label"
-                | "talk_actions_button_label"
-                | "talk_actions_status_label"
-                | "call_state_label"
-                | "status_wifi"
-                | "status_time"
-                | "status_battery_label" => {
-                    ffi::lv_obj_set_style_text_color(obj.as_ptr(), accent, SELECTOR);
-                }
-                "status_signal_bar_0"
-                | "status_signal_bar_1"
-                | "status_signal_bar_2"
-                | "status_signal_bar_3"
-                | "talk_dot"
-                | "power_dot"
-                | "status_gps_center"
-                | "status_gps_tail"
-                | "status_voip_dot_left"
-                | "status_voip_dot_after_gps"
-                | "status_battery_fill"
-                | "status_battery_tip" => {
-                    ffi::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
-                    ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-                }
-                "status_gps_ring" | "status_battery_outline" => {
-                    ffi::lv_obj_set_style_border_color(obj.as_ptr(), accent, SELECTOR);
-                }
-                "now_playing_footer" => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::SURFACE_RGB, 55)),
-                        SELECTOR,
-                    );
-                }
-                "listen_footer" | "power_footer" => {
-                    ffi::lv_obj_set_style_text_color(
-                        obj.as_ptr(),
-                        ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 65)),
-                        SELECTOR,
-                    );
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
 impl Drop for NativeLvglFacade {
     fn drop(&mut self) {
         if let Some(root) = self.active_root.take() {
-            if let Some(node) = self.widgets.remove(&root) {
+            if let Ok(obj) = self.widgets.obj(root) {
                 unsafe {
-                    ffi::lv_obj_delete(node.obj.as_ptr());
+                    ffi::lv_obj_delete(obj.as_ptr());
                 }
             }
         }
@@ -1651,48 +513,6 @@ fn validate_explicit_source_dir(explicit_source: Option<&Path>) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn mix_u24(primary_rgb: u32, secondary_rgb: u32, secondary_ratio_percent: u8) -> u32 {
-    let secondary_ratio = u32::from(secondary_ratio_percent.min(100));
-    let primary_ratio = 100 - secondary_ratio;
-    let red = ((((primary_rgb >> 16) & 0xFF) * primary_ratio
-        + ((secondary_rgb >> 16) & 0xFF) * secondary_ratio)
-        / 100)
-        & 0xFF;
-    let green = ((((primary_rgb >> 8) & 0xFF) * primary_ratio
-        + ((secondary_rgb >> 8) & 0xFF) * secondary_ratio)
-        / 100)
-        & 0xFF;
-    let blue = (((primary_rgb & 0xFF) * primary_ratio + (secondary_rgb & 0xFF) * secondary_ratio)
-        / 100)
-        & 0xFF;
-    (red << 16) | (green << 8) | blue
-}
-
-fn icon_label(icon_key: &str) -> String {
-    if let Some(monogram) = icon_key.strip_prefix("mono:") {
-        if !monogram.is_empty() {
-            return monogram.to_string();
-        }
-    }
-
-    let label = match icon_key {
-        "playlist" | "people" | "person" | "contact" | "contacts" => "\u{f00b}",
-        "ask" => "AI",
-        "battery" | "setup" | "power" => "\u{f011}",
-        "call_active" | "call_incoming" | "call_outgoing" | "call" | "talk" => "\u{f095}",
-        "check" => "\u{f00c}",
-        "clock" | "retry" | "recent" | "history" => "\u{f021}",
-        "close" => "\u{f00d}",
-        "listen" | "music_note" | "play" | "track" => "\u{f001}",
-        "microphone" | "mic" | "voice_note" => "\u{f304}",
-        "signal" | "network" => "\u{f1eb}",
-        "care" | "settings" => "\u{f013}",
-        "mic_off" => "X",
-        _ => "\u{f00b}",
-    };
-    label.to_string()
 }
 
 unsafe extern "C" fn lvgl_flush_callback(

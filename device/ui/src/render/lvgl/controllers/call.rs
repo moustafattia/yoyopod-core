@@ -82,7 +82,12 @@ impl TypedScreenController for CallController {
         call_model(model)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        model: Self::Model<'_>,
+        _transitions: &crate::presentation::transitions::TransitionSampler<'_>,
+    ) -> Result<()> {
         let call = model.call;
         self.ensure_widgets(facade)?;
         let accent = 0x00D4FF;

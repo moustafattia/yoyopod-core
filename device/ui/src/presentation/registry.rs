@@ -1,4 +1,5 @@
 use crate::app::UiScreen;
+use yoyopod_protocol::ui::{InputAction, UiIntent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderScene {
@@ -90,6 +91,78 @@ pub enum NavigationPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntentTemplate {
+    MusicShuffleAll,
+    MusicPlayPause,
+    VoiceAskStart,
+    VoiceAskStop,
+    VoiceCaptureStartRecipient,
+    VoiceCaptureStop,
+    VoiceCaptureCancel,
+    VoiceDiscard,
+    CallAnswer,
+    CallReject,
+    CallHangup,
+    CallToggleMute,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListKind {
+    Playlists,
+    RecentTracks,
+    Contacts,
+    CallHistory,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DynamicActionKind {
+    TalkContact,
+    VoiceNote,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionTarget {
+    PushScreen(UiScreen),
+    EmitIntent(IntentTemplate),
+    PushWithIntent {
+        screen: UiScreen,
+        intent: IntentTemplate,
+    },
+    DynamicListItem {
+        kind: ListKind,
+    },
+    DynamicAction {
+        kind: DynamicActionKind,
+    },
+    AdvanceFocus,
+    Noop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotCondition {
+    Always,
+    VoiceReady,
+    VoiceRecording,
+    VoiceReviewOrFailedOrSent,
+    VoiceReadyOrRecording,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PassthroughPolicy {
+    pub trigger: InputAction,
+    pub when: SnapshotCondition,
+    pub intent: IntentTemplate,
+    pub captures_button: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackPolicy {
+    pub when: SnapshotCondition,
+    pub intent: IntentTemplate,
+    pub pop_screen: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScreenRegistryEntry {
     pub screen: UiScreen,
     pub model_kind: ScreenModelKind,
@@ -99,6 +172,9 @@ pub struct ScreenRegistryEntry {
     pub navigation_policy: NavigationPolicy,
     pub render_scene: RenderScene,
     pub native_scene: NativeRenderScene,
+    pub select_targets: &'static [SelectionTarget],
+    pub passthrough_policies: &'static [PassthroughPolicy],
+    pub back_policies: &'static [BackPolicy],
 }
 
 pub const fn screen_entry(screen: UiScreen) -> ScreenRegistryEntry {
@@ -111,6 +187,175 @@ pub const fn screen_entry(screen: UiScreen) -> ScreenRegistryEntry {
         navigation_policy: navigation_policy(screen),
         render_scene: render_scene(screen),
         native_scene: native_scene(screen),
+        select_targets: select_targets(screen),
+        passthrough_policies: passthrough_policies(screen),
+        back_policies: back_policies(screen),
+    }
+}
+
+const HUB_SELECT: &[SelectionTarget] = &[
+    SelectionTarget::PushScreen(UiScreen::Listen),
+    SelectionTarget::PushScreen(UiScreen::Talk),
+    SelectionTarget::PushScreen(UiScreen::Ask),
+    SelectionTarget::PushScreen(UiScreen::Power),
+];
+const LISTEN_SELECT: &[SelectionTarget] = &[
+    SelectionTarget::PushScreen(UiScreen::Playlists),
+    SelectionTarget::PushScreen(UiScreen::RecentTracks),
+    SelectionTarget::PushWithIntent {
+        screen: UiScreen::NowPlaying,
+        intent: IntentTemplate::MusicShuffleAll,
+    },
+];
+const TALK_SELECT: &[SelectionTarget] = &[
+    SelectionTarget::PushScreen(UiScreen::Contacts),
+    SelectionTarget::PushScreen(UiScreen::CallHistory),
+    SelectionTarget::PushScreen(UiScreen::VoiceNote),
+];
+const PLAYLISTS_SELECT: &[SelectionTarget] = &[SelectionTarget::DynamicListItem {
+    kind: ListKind::Playlists,
+}];
+const RECENT_TRACKS_SELECT: &[SelectionTarget] = &[SelectionTarget::DynamicListItem {
+    kind: ListKind::RecentTracks,
+}];
+const CONTACTS_SELECT: &[SelectionTarget] = &[SelectionTarget::DynamicListItem {
+    kind: ListKind::Contacts,
+}];
+const CALL_HISTORY_SELECT: &[SelectionTarget] = &[SelectionTarget::DynamicListItem {
+    kind: ListKind::CallHistory,
+}];
+const NOW_PLAYING_SELECT: &[SelectionTarget] =
+    &[SelectionTarget::EmitIntent(IntentTemplate::MusicPlayPause)];
+const ASK_SELECT: &[SelectionTarget] =
+    &[SelectionTarget::EmitIntent(IntentTemplate::VoiceAskStart)];
+const TALK_CONTACT_SELECT: &[SelectionTarget] = &[SelectionTarget::DynamicAction {
+    kind: DynamicActionKind::TalkContact,
+}];
+const VOICE_NOTE_SELECT: &[SelectionTarget] = &[SelectionTarget::DynamicAction {
+    kind: DynamicActionKind::VoiceNote,
+}];
+const INCOMING_SELECT: &[SelectionTarget] =
+    &[SelectionTarget::EmitIntent(IntentTemplate::CallAnswer)];
+const IN_CALL_SELECT: &[SelectionTarget] =
+    &[SelectionTarget::EmitIntent(IntentTemplate::CallToggleMute)];
+const POWER_SELECT: &[SelectionTarget] = &[SelectionTarget::AdvanceFocus];
+const NO_SELECT: &[SelectionTarget] = &[SelectionTarget::Noop];
+
+const ASK_PASSTHROUGH: &[PassthroughPolicy] = &[
+    PassthroughPolicy {
+        trigger: InputAction::PttPress,
+        when: SnapshotCondition::Always,
+        intent: IntentTemplate::VoiceAskStart,
+        captures_button: false,
+    },
+    PassthroughPolicy {
+        trigger: InputAction::PttRelease,
+        when: SnapshotCondition::Always,
+        intent: IntentTemplate::VoiceAskStop,
+        captures_button: false,
+    },
+];
+const VOICE_NOTE_PASSTHROUGH: &[PassthroughPolicy] = &[
+    PassthroughPolicy {
+        trigger: InputAction::PttPress,
+        when: SnapshotCondition::VoiceReady,
+        intent: IntentTemplate::VoiceCaptureStartRecipient,
+        captures_button: true,
+    },
+    PassthroughPolicy {
+        trigger: InputAction::PttRelease,
+        when: SnapshotCondition::VoiceRecording,
+        intent: IntentTemplate::VoiceCaptureStop,
+        captures_button: true,
+    },
+];
+const NO_PASSTHROUGH: &[PassthroughPolicy] = &[];
+
+const VOICE_NOTE_BACK: &[BackPolicy] = &[
+    BackPolicy {
+        when: SnapshotCondition::VoiceRecording,
+        intent: IntentTemplate::VoiceCaptureCancel,
+        pop_screen: true,
+    },
+    BackPolicy {
+        when: SnapshotCondition::VoiceReviewOrFailedOrSent,
+        intent: IntentTemplate::VoiceDiscard,
+        pop_screen: true,
+    },
+];
+const NO_BACK: &[BackPolicy] = &[];
+
+const fn select_targets(screen: UiScreen) -> &'static [SelectionTarget] {
+    match screen {
+        UiScreen::Hub => HUB_SELECT,
+        UiScreen::Listen => LISTEN_SELECT,
+        UiScreen::Talk => TALK_SELECT,
+        UiScreen::Playlists => PLAYLISTS_SELECT,
+        UiScreen::RecentTracks => RECENT_TRACKS_SELECT,
+        UiScreen::NowPlaying => NOW_PLAYING_SELECT,
+        UiScreen::Ask => ASK_SELECT,
+        UiScreen::VoiceNote => VOICE_NOTE_SELECT,
+        UiScreen::Contacts => CONTACTS_SELECT,
+        UiScreen::TalkContact => TALK_CONTACT_SELECT,
+        UiScreen::CallHistory => CALL_HISTORY_SELECT,
+        UiScreen::IncomingCall => INCOMING_SELECT,
+        UiScreen::InCall => IN_CALL_SELECT,
+        UiScreen::Power => POWER_SELECT,
+        UiScreen::OutgoingCall | UiScreen::Loading | UiScreen::Error => NO_SELECT,
+    }
+}
+
+const fn passthrough_policies(screen: UiScreen) -> &'static [PassthroughPolicy] {
+    match screen {
+        UiScreen::Ask => ASK_PASSTHROUGH,
+        UiScreen::VoiceNote => VOICE_NOTE_PASSTHROUGH,
+        _ => NO_PASSTHROUGH,
+    }
+}
+
+const fn back_policies(screen: UiScreen) -> &'static [BackPolicy] {
+    match screen {
+        UiScreen::VoiceNote => VOICE_NOTE_BACK,
+        _ => NO_BACK,
+    }
+}
+
+pub fn static_intent_template(template: IntentTemplate) -> Option<UiIntent> {
+    match template {
+        IntentTemplate::MusicShuffleAll => Some(UiIntent::Music(
+            yoyopod_protocol::ui::MusicIntent::ShuffleAll,
+        )),
+        IntentTemplate::MusicPlayPause => Some(UiIntent::Music(
+            yoyopod_protocol::ui::MusicIntent::PlayPause,
+        )),
+        IntentTemplate::VoiceAskStart => {
+            Some(UiIntent::Voice(yoyopod_protocol::ui::VoiceIntent::AskStart))
+        }
+        IntentTemplate::VoiceAskStop => {
+            Some(UiIntent::Voice(yoyopod_protocol::ui::VoiceIntent::AskStop))
+        }
+        IntentTemplate::VoiceCaptureStartRecipient => None,
+        IntentTemplate::VoiceCaptureStop => Some(UiIntent::Voice(
+            yoyopod_protocol::ui::VoiceIntent::CaptureStop,
+        )),
+        IntentTemplate::VoiceCaptureCancel => Some(UiIntent::Voice(
+            yoyopod_protocol::ui::VoiceIntent::CaptureCancel,
+        )),
+        IntentTemplate::VoiceDiscard => {
+            Some(UiIntent::Voice(yoyopod_protocol::ui::VoiceIntent::Discard))
+        }
+        IntentTemplate::CallAnswer => {
+            Some(UiIntent::Call(yoyopod_protocol::ui::CallIntent::Answer))
+        }
+        IntentTemplate::CallReject => {
+            Some(UiIntent::Call(yoyopod_protocol::ui::CallIntent::Reject))
+        }
+        IntentTemplate::CallHangup => {
+            Some(UiIntent::Call(yoyopod_protocol::ui::CallIntent::Hangup))
+        }
+        IntentTemplate::CallToggleMute => {
+            Some(UiIntent::Call(yoyopod_protocol::ui::CallIntent::ToggleMute))
+        }
     }
 }
 

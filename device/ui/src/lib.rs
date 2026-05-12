@@ -64,6 +64,23 @@ mod architecture_tests {
     }
 
     #[test]
+    fn transport_layer_does_not_import_render_layer() {
+        let transport_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/transport");
+        let mut violations = Vec::new();
+        for path in rust_files(&transport_dir) {
+            let contents = fs::read_to_string(&path).expect("reading Rust source");
+            if contents.contains("crate::render") {
+                violations.push(path.display().to_string());
+            }
+        }
+
+        assert!(
+            violations.is_empty(),
+            "transport must not import render-layer APIs: {violations:?}"
+        );
+    }
+
+    #[test]
     fn removed_root_modules_do_not_return() {
         let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         for filename in [

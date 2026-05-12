@@ -5,6 +5,7 @@ use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::app::UiScreen;
 use crate::presentation::screens::{ListScreenModel, ScreenModel};
+use crate::presentation::transitions::TransitionSampler;
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -91,7 +92,12 @@ impl TypedScreenController for PlaylistController {
         playlist_model(model)
     }
 
-    fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()> {
+    fn sync_model(
+        &mut self,
+        facade: &mut dyn LvglFacade,
+        model: Self::Model<'_>,
+        transitions: &TransitionSampler<'_>,
+    ) -> Result<()> {
         let list = model.list;
         let accent = accent_for_playlist(list);
 
@@ -132,6 +138,7 @@ impl TypedScreenController for PlaylistController {
             &self.row_icons,
             &self.row_titles,
             &self.row_subtitles,
+            transitions,
         )
     }
 
