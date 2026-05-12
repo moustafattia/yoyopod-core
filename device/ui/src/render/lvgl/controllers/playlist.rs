@@ -86,6 +86,8 @@ impl PlaylistController {
 }
 
 impl TypedScreenController for PlaylistController {
+    const SUPPORTS_TRANSITIONS: bool = true;
+
     type Model<'a> = PlaylistControllerModel<'a>;
 
     fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {

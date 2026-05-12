@@ -57,6 +57,8 @@ impl HubController {
 }
 
 impl TypedScreenController for HubController {
+    const SUPPORTS_TRANSITIONS: bool = true;
+
     type Model<'a> = &'a HubViewModel;
 
     fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {

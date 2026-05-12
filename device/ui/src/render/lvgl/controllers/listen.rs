@@ -78,6 +78,8 @@ impl ListenController {
 }
 
 impl TypedScreenController for ListenController {
+    const SUPPORTS_TRANSITIONS: bool = true;
+
     type Model<'a> = &'a ListScreenModel;
 
     fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {

@@ -68,6 +68,21 @@ Each ≤ 200 LOC. Makes the FFI layer reviewable.
 **Acceptance.** No file under `render/lvgl/` exceeds 250 LOC except
 generated assets.
 
+## E4b. Split `render/lvgl/style_apply.rs` by style responsibility `[high]`
+
+Phase 1 moved the hardcoded LVGL styling out of `backend.rs`, but
+`style_apply.rs` is still the largest hand-authored LVGL file. Split it by
+responsibility before adding new style behavior:
+
+- role tuning / one-off LVGL widget tuning
+- base style application from `WidgetStyle`
+- variant application
+- accent application
+- icon fallback label mapping
+
+**Acceptance.** `style_apply.rs` is split into named modules with no
+hand-authored style module over 250 LOC.
+
 ---
 
 ## E5. Per-domain dirty bounding boxes → dirty-rectangle rendering `[high impact]`

@@ -30,6 +30,8 @@ pub use talk::TalkController;
 pub use talk_actions::TalkActionsController;
 
 pub trait TypedScreenController {
+    const SUPPORTS_TRANSITIONS: bool = false;
+
     type Model<'a>
     where
         Self: 'a;

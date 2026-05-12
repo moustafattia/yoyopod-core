@@ -15,11 +15,10 @@ Status legend: ❌ not shipped · 🟡 partial / inert · ✅ shipped (listed fo
 The proposal required strict layer purity: `transport/` may only know about
 `device/protocol` and serde — never LVGL, never the framebuffer.
 
-**Observed:**
-- `device/ui/src/transport/mod.rs:17` — `use crate::render::{Framebuffer, LvglRenderer};`
-- `device/ui/src/transport/dispatcher.rs:10` — same import.
-- The dispatcher also drives the render tick (`render_if_dirty`), which is
-  an application-layer responsibility.
+**Closed:**
+- `transport/` no longer imports `crate::render`.
+- The dispatcher maps `UiCommand` into `AppEvent` only.
+- Render dirty handling moved into the app layer through `UiRuntime::render_if_dirty`.
 
 **Goal:**
 - Remove `Framebuffer` and `LvglRenderer` imports from `transport/`.
@@ -35,8 +34,9 @@ The proposal required strict layer purity: `transport/` may only know about
 
 ## D2. `app/core.rs` is the new monolith `[high]` ✅
 
-`runtime/state_machine.rs` was 628 LOC. `app/core.rs` is now **677 LOC**.
-The split files exist but are skeletal:
+`runtime/state_machine.rs` was 628 LOC. The first cut moved too much into
+`app/core.rs`, which reached **677 LOC**. The split files existed but were
+skeletal:
 
 | File | LOC | Substantive content |
 |---|---|---|
@@ -45,17 +45,17 @@ The split files exist but are skeletal:
 | `app/input_router.rs` | 56 | `route()` ignores its `_state` param |
 | `app/intents.rs` | 50 | 4 small action builders |
 
-The substantive logic stayed in `core.rs`:
+The substantive logic had stayed in `core.rs`:
 - `select_focused` at `core.rs:265–330` — 60+ LOC of hardcoded
   `match UiScreen { Hub => match focus_index { 0 => …, 1 => … } }`.
 - `apply_app_state_route` at `core.rs:245`, not in `navigator.rs`.
 - 49 references to specific `UiScreen::*` variants in `core.rs`.
 
-**Goal:**
+**Closed:**
 - Move `apply_app_state_route` into `navigator.rs`.
 - Replace `select_focused`'s match with a registry-driven dispatcher
   (see D2b below) so screen-specific logic stops touching `core.rs`.
-- Target: `core.rs` ≤ 300 LOC of orchestration only.
+- `core.rs` is now below 300 LOC of orchestration.
 
 **Acceptance:**
 - `core.rs` line count ≤ 300.
@@ -102,7 +102,7 @@ Proposal target: `native_backend.rs` shrinks from 2,383 → ~600 LOC of pure
 FFI. Layout/theme tables did move to RON (✅), but the backend file is still
 3× the target.
 
-**Observed:**
+**Original state:**
 ```
 render/lvgl/backend.rs   1,757 LOC   (~41 functions)
 render/lvgl/facade.rs      124
@@ -112,7 +112,7 @@ render/lvgl/theme.rs        84   ✅
 render/lvgl/style.rs        45   ✅
 ```
 
-**Goal:** Split `backend.rs` into focused modules:
+**Closed:** Split `backend.rs` into focused modules:
 - `render/lvgl/widget_factory.rs` — widget creation + registration.
 - `render/lvgl/widget_registry.rs` — the `HashMap<WidgetId, WidgetNode>`.
 - `render/lvgl/style_apply.rs` — `ThemeRole` consumption.
@@ -181,8 +181,8 @@ animation.
 
 ## D6. Dispatcher is doing too much `[med]` ✅
 
-`transport/dispatcher.rs` is 269 LOC and owns command decoding, rendering,
-and error emission. After D1 lands, finish the split:
+`transport/dispatcher.rs` was 269 LOC and owned command decoding, rendering,
+and error emission. The completed split is:
 
 - `transport/dispatcher.rs` — only `UiCommand → AppEvent`.
 - `app/core.rs::after_command()` — render + dirty handling.
