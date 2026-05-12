@@ -48,9 +48,9 @@ Current Runtime Status
   - `device/voip/` for Liblinphone/SIP ownership
   - `device/network/` for SIM7600/PPP/GPS ownership
   - `device/cloud/` for cloud MQTT telemetry/command transport
-- The Rust UI host now contains native Rust LVGL scene controllers for the main
-  screen set. The C LVGL shim and LVGL native library still exist as display
-  infrastructure during the transition.
+- The Rust UI host contains native Rust LVGL scene controllers for the main
+  screen set. The only C dependency in the LVGL display path is the pinned
+  upstream LVGL native library.
 - Python is no longer the architectural target for the app runtime. It remains
   for CLI/deploy tooling.
 - Dev service runs the Rust owner directly through `yoyopod-runtime`.

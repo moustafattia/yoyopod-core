@@ -18,7 +18,7 @@ runtime.
 - `device/ui/src/worker.rs`: worker protocol loop
 - `device/ui/src/render/`: framebuffer and LVGL render path
 - `device/ui/src/lvgl/`: native LVGL scene backend and screen controllers
-- `yoyopod_cli/pi/support/lvgl_binding/native/`: C LVGL shim used by the Rust build
+- `device/ui/native/lvgl/`: pinned upstream LVGL C build configuration
 
 ## Architecture
 
@@ -26,7 +26,7 @@ runtime.
 yoyopod-runtime
   -> yoyopod-ui-host worker
      -> Rust scene state
-        -> native LVGL scene backend
+        -> Rust-owned LVGL scene backend
         -> hardware flush path or preview/readback support
 ```
 

@@ -457,7 +457,6 @@ def _remote_build_pi_command(*, channel: str, version: str | None, python_versio
         '[ -n "${build_root:-}" ]; then rm -rf "$build_root"; fi; exit "$rc"; }; '
         "trap cleanup_build_root EXIT; "
         "build_root=$(mktemp -d /tmp/yoyopod-release-build.XXXXXX); "
-        f"{python_bin} -m yoyopod_cli.main build ensure-native; "
         f'slot=$({python_bin} scripts/build_release.py --output "$build_root" --channel '
         f"{shlex.quote(channel)}{version_arg} --with-venv --python-version "
         f"{shlex.quote(python_version)} | tail -n 1); "

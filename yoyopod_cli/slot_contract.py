@@ -11,22 +11,6 @@ SLOT_PYTHON_STDLIB_MARKER = Path("python") / "lib" / "python3.12" / "os.py"
 SLOT_VOICE_WORKER_ARTIFACT = Path("app") / "device" / "speech" / "build" / "yoyopod-speech-host"
 
 APP_NATIVE_RUNTIME_ARTIFACTS: tuple[Path, ...] = (
-    Path("yoyopod_cli")
-    / "pi"
-    / "support"
-    / "lvgl_binding"
-    / "native"
-    / "build"
-    / "libyoyopod_lvgl_shim.so",
-    Path("yoyopod_cli")
-    / "pi"
-    / "support"
-    / "lvgl_binding"
-    / "native"
-    / "build"
-    / "lvgl"
-    / "lib"
-    / "liblvgl.so.9",
     Path("device") / "cloud" / "build" / "yoyopod-cloud-host",
     Path("device") / "media" / "build" / "yoyopod-media-host",
     Path("device") / "voip" / "build" / "yoyopod-voip-host",

@@ -18,17 +18,17 @@ The supported portrait UI has one visual source of truth:
 
 The browser is transport, not a second layout engine.
 
-That also means simulation requires the native LVGL shim. If the shim is not
+That also means simulation requires the native LVGL library. If LVGL is not
 available, startup should fail loudly instead of silently reviving a second
-renderer. The supported fix is to build the shim first with
+renderer. The supported fix is to build LVGL first with
 `yoyopod build simulation` (or `yoyopod build ensure-native`).
 
 ## Implemented Direction
 
 The Rust UI preview path reuses the same render contract as hardware:
 
-1. LVGL scenes still own the object tree and layout behavior.
-2. The native LVGL shim provides the shared scene/backend path.
+1. Rust LVGL scene controllers own the object tree and layout behavior.
+2. Upstream LVGL provides the native C rendering library.
 3. Mock hardware mode exercises the worker protocol without reviving a second
    Python renderer.
 
@@ -83,13 +83,13 @@ Small anti-aliasing or color differences can be tolerated. Geometry drift should
 
 - `device/ui/`
   - owns Rust UI state, scene selection, rendering, and worker protocol
-- `yoyopod_cli/pi/support/lvgl_binding/native/`
-  - owns the native C LVGL shim used by the Rust UI build
+- `device/ui/native/lvgl/`
+  - owns the pinned upstream LVGL C build configuration
 
 ## Acceptance Criteria
 
 - `device/runtime/build/yoyopod-runtime --config-dir config` shows the same layout geometry as the current
-  Whisplay UI for the required parity screens when the native LVGL shim has been built
+  Whisplay UI for the required parity screens when native LVGL has been built
 - simulation no longer relies on a second drifting copy of Whisplay-first
   layout behavior
 - the browser preview remains usable both locally and from the Pi IP

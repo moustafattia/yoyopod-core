@@ -27,8 +27,6 @@ pub use controllers::{
 #[cfg(feature = "native-lvgl")]
 pub use native_backend::NativeLvglFacade;
 pub use primitives::WidgetId;
-#[cfg(feature = "native-lvgl")]
-pub use scene_backend::ShimSceneBridge;
 pub use scene_backend::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

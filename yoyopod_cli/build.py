@@ -81,12 +81,11 @@ def _resolve_native_dir(label: str, *candidates: Path) -> Path:
 
 
 def _resolve_lvgl_native_dir() -> Path:
-    """Resolve the LVGL shim native source directory for the current repo layout."""
+    """Resolve the LVGL native build directory for the current repo layout."""
 
     return _resolve_native_dir(
         "LVGL",
-        _REPO_ROOT / "yoyopod_cli" / "pi" / "support" / "lvgl_binding" / "native",
-        _REPO_ROOT / "src" / "yoyopod_cli" / "pi" / "support" / "lvgl_binding" / "native",
+        _REPO_ROOT / "device" / "ui" / "native" / "lvgl",
     )
 
 
@@ -314,7 +313,7 @@ def _native_artifacts() -> tuple[NativeArtifact, ...]:
     return (
         NativeArtifact(
             label="LVGL",
-            output=lvgl_native_dir / "build" / "libyoyopod_lvgl_shim.so",
+            output=lvgl_native_dir / "build" / "lvgl" / "lib" / "liblvgl.a",
             sources=(lvgl_native_dir,),
         ),
     )
@@ -431,7 +430,7 @@ def build_lvgl(
         typer.Option("--skip-fetch", help="Skip cloning/updating the LVGL source."),
     ] = False,
 ) -> None:
-    """Build the pinned LVGL shim for the current platform."""
+    """Build the pinned upstream LVGL library for the current platform."""
     native_dir = _resolve_lvgl_native_dir()
     resolved_source = source_dir if source_dir is not None else _default_lvgl_source_dir()
     resolved_build = build_dir if build_dir is not None else native_dir / "build"
@@ -440,7 +439,7 @@ def build_lvgl(
         _ensure_lvgl_source(resolved_source)
 
     _build_lvgl(native_dir, resolved_source, resolved_build)
-    typer.echo(f"Built LVGL shim in {resolved_build}")
+    typer.echo(f"Built LVGL in {resolved_build}")
 
 
 @app.command("ensure-native")
@@ -453,7 +452,7 @@ def ensure_native(
         ),
     ] = False,
 ) -> None:
-    """Build missing or stale native artifacts required by the app."""
+    """Build missing or stale native artifacts for local development."""
 
     rebuilt = _ensure_native_shims(skip_lvgl_fetch=skip_lvgl_fetch)
     if rebuilt:
@@ -484,7 +483,7 @@ def build_simulation(
         ),
     ] = False,
 ) -> None:
-    """Build the LVGL native shim used to simulate the device UI host."""
+    """Build the LVGL native library used to simulate the device UI host."""
 
     native_dir = _resolve_lvgl_native_dir()
     source_dir = _default_lvgl_source_dir()
@@ -494,4 +493,4 @@ def build_simulation(
         _ensure_lvgl_source(source_dir)
 
     _build_lvgl(native_dir, source_dir, build_dir)
-    typer.echo(f"Built simulation LVGL shim in {build_dir}")
+    typer.echo(f"Built simulation LVGL in {build_dir}")

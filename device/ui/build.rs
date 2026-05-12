@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 fn main() {
     println!("cargo:rerun-if-env-changed=YOYOPOD_LVGL_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=LVGL_SOURCE_DIR");
-    println!("cargo:rerun-if-changed=../../yoyopod_cli/pi/support/lvgl_binding/native");
+    println!("cargo:rerun-if-changed=native/lvgl");
 
     if env::var_os("CARGO_FEATURE_NATIVE_LVGL").is_none() {
         return;
@@ -14,9 +14,9 @@ fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let native_dir = normalize_cmake_path(
         manifest_dir
-            .join("../../yoyopod_cli/pi/support/lvgl_binding/native")
+            .join("native/lvgl")
             .canonicalize()
-            .expect("canonicalize YoYoPod LVGL native directory"),
+            .expect("canonicalize YoYoPod LVGL build directory"),
     );
     let lvgl_source_dir = env::var("YOYOPOD_LVGL_SOURCE_DIR")
         .or_else(|_| env::var("LVGL_SOURCE_DIR"))
@@ -34,8 +34,7 @@ fn main() {
 
     let dst = cmake::Config::new(&native_dir)
         .define("LVGL_SOURCE_DIR", &lvgl_source_dir)
-        .define("YOYOPOD_LVGL_BUILD_SHARED", "OFF")
-        .build_target("yoyopod_lvgl_shim")
+        .build_target("lvgl")
         .build();
 
     let lvgl_link_dir = find_library_dir(&dst, lvgl_library_file_names()).unwrap_or_else(|| {
@@ -44,18 +43,7 @@ fn main() {
             dst.display()
         )
     });
-    let shim_link_dir = find_library_dir(&dst, shim_library_file_names()).unwrap_or_else(|| {
-        panic!(
-            "failed to locate built YoYoPod LVGL shim library under {}",
-            dst.display()
-        )
-    });
-
     println!("cargo:rustc-link-search=native={}", lvgl_link_dir.display());
-    if shim_link_dir != lvgl_link_dir {
-        println!("cargo:rustc-link-search=native={}", shim_link_dir.display());
-    }
-    println!("cargo:rustc-link-lib=yoyopod_lvgl_shim");
     println!("cargo:rustc-link-lib=lvgl");
 
     if cfg!(target_os = "linux") {
@@ -64,23 +52,11 @@ fn main() {
             "cargo:rustc-link-arg=-Wl,-rpath,{}",
             lvgl_link_dir.display()
         );
-        if shim_link_dir != lvgl_link_dir {
-            println!(
-                "cargo:rustc-link-arg=-Wl,-rpath,{}",
-                shim_link_dir.display()
-            );
-        }
     } else if cfg!(target_os = "macos") {
         println!(
             "cargo:rustc-link-arg=-Wl,-rpath,{}",
             lvgl_link_dir.display()
         );
-        if shim_link_dir != lvgl_link_dir {
-            println!(
-                "cargo:rustc-link-arg=-Wl,-rpath,{}",
-                shim_link_dir.display()
-            );
-        }
     }
 }
 
@@ -126,15 +102,5 @@ fn lvgl_library_file_names() -> &'static [&'static str] {
         &["liblvgl.dylib", "liblvgl.a"]
     } else {
         &["liblvgl.so", "liblvgl.a"]
-    }
-}
-
-fn shim_library_file_names() -> &'static [&'static str] {
-    if cfg!(target_os = "windows") {
-        &["yoyopod_lvgl_shim.lib", "yoyopod_lvgl_shim.dll"]
-    } else if cfg!(target_os = "macos") {
-        &["libyoyopod_lvgl_shim.dylib", "libyoyopod_lvgl_shim.a"]
-    } else {
-        &["libyoyopod_lvgl_shim.so", "libyoyopod_lvgl_shim.a"]
     }
 }

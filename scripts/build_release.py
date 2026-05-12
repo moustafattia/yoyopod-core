@@ -297,7 +297,7 @@ def _resolve_venv(dest_venv: Path, requirements_path: Path, python_version: str)
 
 
 def _copy_native_runtime_artifacts(repo_root: Path, dest_app: Path, *, required: bool) -> None:
-    """Copy only the runtime `.so` shims into the slot app tree."""
+    """Copy prebuilt runtime worker artifacts into the slot app tree."""
 
     for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
         src = repo_root / relative

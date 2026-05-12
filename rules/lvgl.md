@@ -1,6 +1,6 @@
 # LVGL Display Pipeline
 
-Applies to: `device/ui/**` and `yoyopod_cli/pi/support/lvgl_binding/native/**`
+Applies to: `device/ui/**`
 
 ## Overview
 
@@ -12,9 +12,9 @@ For the Figma-to-Whisplay implementation workflow, screen extraction order, and 
 
 - Non-simulated Whisplay runs are a production LVGL path.
 - `display.whisplay_renderer: lvgl` is the only supported production setting for Whisplay hardware.
-- If the Whisplay driver, hardware init, or LVGL shim/backend is unavailable, startup must fail loudly instead of silently degrading to another renderer.
+- If the Whisplay driver, hardware init, or LVGL backend is unavailable, startup must fail loudly instead of silently degrading to another renderer.
 - The Rust runtime software preview reuses the Whisplay LVGL render contract and browser preview transport; it is not a separate PIL renderer.
-- Simulation also requires the native LVGL shim. If the shim is missing, the correct fix is to build it, not to fall back to PIL.
+- Simulation also requires native LVGL. If native LVGL is missing, the correct fix is to build it, not to fall back to PIL.
 
 ## Rendering Pipeline
 
@@ -23,18 +23,14 @@ LVGL object tree
   -> partial render (40-line draw buffer)
   -> flush callback (RGB565_SWAPPED)
   -> Rust display bridge in `device/ui/src/lvgl/`
-  -> native shim flush target
   -> hardware SPI + RGB565 framebuffer/browser preview
 ```
 
-## C Shim (`native/lvgl_shim.c`)
+## Native Boundary
 
-The C shim bridges Rust and the LVGL C library:
-- `yoyopod_lvgl_init/shutdown` -- lifecycle
-- `yoyopod_lvgl_register_display` -- sets up flush callback, RGB565_SWAPPED format
-- Scene functions (`hub_build/sync/destroy`, `listen_*`, `playlist_*`, etc.) -- each screen type
-- `yoyopod_lvgl_snapshot` -- captures active screen via `lv_snapshot_take()`
-- `yoyopod_lvgl_force_refresh` -- invalidates and redraws immediately
+Rust owns the scene controllers and calls upstream LVGL directly through
+`device/ui/src/lvgl/sys.rs`. The only C dependency in this path is upstream
+LVGL itself, built from the pinned 9.5.0 source using `device/ui/native/lvgl`.
 
 ## lv_conf.h
 
@@ -47,12 +43,13 @@ Minimal config enabling only what YoYoPod uses:
 ## Building
 
 ```bash
-yoyopod build simulation   # prepares the LVGL shim used by the Rust runtime preview
-yoyopod build lvgl         # clones LVGL 9.5.0, compiles shim
+yoyopod build simulation   # prepares native LVGL used by the Rust runtime preview
+yoyopod build lvgl         # clones LVGL 9.5.0, compiles native LVGL
 yoyopod build ensure-native
 ```
 
-Must rebuild on Pi after changing `lv_conf.h` or `lvgl_shim.c`.
+Do not rebuild LVGL on the Pi for normal dev/prod validation. Use CI-built Rust
+artifacts for the exact commit under test.
 
 ## Screenshot Support
 

@@ -70,17 +70,22 @@ def _build_startup_verification(pi: PiPaths, *, attempts: int = 20) -> str:
 
 
 def _build_native_shim_refresh(pi: PiPaths) -> str:
-    """Build the shell that refreshes missing or stale native artifacts before restart."""
-    return "{ " f"{checkout_module_command(pi.venv, 'build', 'ensure-native')}" " ; }"
+    """Return the legacy native-refresh step.
+
+    Rust UI artifacts now link LVGL directly from the CI build, so the Pi
+    restart path must not compile native LVGL.
+    """
+    _ = pi
+    return ":"
 
 
-def _build_stale_app_cleanup() -> str:
-    """Kill only unmanaged/stale YoYoPod app processes, without matching this shell."""
+def _build_stale_runtime_cleanup() -> str:
+    """Kill only unmanaged/stale YoYoPod runtime processes, without matching this shell."""
     return r"pkill -f '[y]oyopod-runtime' || true"
 
 
 def _build_restart(pi: PiPaths, lanes: LanePaths | None = None) -> str:
-    """Build the shell that restarts the app and waits for startup verification."""
+    """Build the shell that restarts the dev runtime service and waits for startup verification."""
     lane_paths = lanes or load_lane_paths()
     pid = shell_quote(pi.pid_file)
     dev_service = shell_quote(lane_paths.dev_service)
@@ -93,7 +98,7 @@ def _build_restart(pi: PiPaths, lanes: LanePaths | None = None) -> str:
         'pwd -P || printf "%s" "$dev_service_checkout")"'
     )
     cleanup_commands = [f"rm -f {pid}"]
-    cleanup_commands.append(_build_stale_app_cleanup())
+    cleanup_commands.append(_build_stale_runtime_cleanup())
     cleanup = " ; ".join(cleanup_commands)
     managed_restart = (
         f"{selected_checkout_guard}; "
@@ -135,7 +140,7 @@ def _build_logs_tail(
 
 
 def _build_sync(pi: PiPaths, branch: str, *, clean_native: bool = False) -> str:
-    """Build the shell that syncs a clean checkout and restarts the app."""
+    """Build the shell that syncs a clean checkout and restarts the dev runtime service."""
     br = shell_quote(branch)
     origin_br = shell_quote(f"origin/{branch}")
     native_clean = (
@@ -221,7 +226,7 @@ def status(ctx: typer.Context, verbose: bool = typer.Option(False, "--verbose"))
 
 @app.command()
 def restart(ctx: typer.Context, verbose: bool = typer.Option(False, "--verbose")) -> None:
-    """Restart the yoyopod app on the Pi."""
+    """Restart the YoYoPod dev runtime service on the Pi."""
     configure_logging(verbose)
     conn = pi_conn(ctx)
     validate_config(conn)
@@ -257,7 +262,7 @@ def sync(
     ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """Update the dev lane checkout from Git and restart the dev app service."""
+    """Update the dev lane checkout from Git and restart the dev runtime service."""
     configure_logging(verbose)
     conn = pi_conn(ctx)
     validate_config(conn)
