@@ -4,11 +4,11 @@ use std::path::Path;
 use anyhow::{bail, Result};
 
 use crate::runtime::UiScreen;
-use crate::screens::{AskViewModel, ListScreenModel, ScreenModel, StatusBarModel};
+use crate::screens::{ListScreenModel, ScreenModel, StatusBarModel};
 
 use super::{
     AskController, CallController, HubController, ListenController, LvglFacade, NativeSceneKey,
-    NowPlayingController, PlaylistController, PowerController, ScreenController,
+    NowPlayingController, OverlayController, PlaylistController, PowerController, ScreenController,
     TalkActionsController, TalkController,
 };
 
@@ -198,7 +198,7 @@ fn controller_for_native_scene(scene: NativeSceneKey) -> Box<dyn ScreenControlle
         }
         NativeSceneKey::Ask => Box::new(AskController::default()),
         NativeSceneKey::Power => Box::new(PowerController::default()),
-        NativeSceneKey::Overlay => Box::new(AskController::default()),
+        NativeSceneKey::Overlay => Box::new(OverlayController::default()),
     }
 }
 
@@ -251,15 +251,6 @@ fn rust_owned_scene_model(model: &ScreenModel, scene: NativeSceneKey) -> ScreenM
         }
         (NativeSceneKey::Playlist, ScreenModel::CallHistory(list)) => {
             ScreenModel::CallHistory(capped_list_model(list, NativeListSelection::Clamp))
-        }
-        (NativeSceneKey::Overlay, ScreenModel::Loading(overlay))
-        | (NativeSceneKey::Overlay, ScreenModel::Error(overlay)) => {
-            ScreenModel::Ask(AskViewModel {
-                chrome: overlay.chrome.clone(),
-                title: overlay.title.clone(),
-                subtitle: overlay.subtitle.clone(),
-                icon_key: "ask".to_string(),
-            })
         }
         _ => model.clone(),
     }
