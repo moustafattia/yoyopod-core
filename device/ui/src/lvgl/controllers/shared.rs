@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
+use crate::lvgl::roles;
 use crate::lvgl::{LvglFacade, WidgetId};
 use crate::screens::StatusBarModel;
 
@@ -10,13 +11,6 @@ const SIGNAL_INACTIVE_RGB: u32 = 0x3C3F46;
 const STATUS_MUTED_RGB: u32 = 0xB4B7BE;
 const STATUS_INK_RGB: u32 = 0xFFFFFF;
 const STATUS_ERROR_RGB: u32 = 0xFF675D;
-const STATUS_SIGNAL_ROLES: [&str; 4] = [
-    "status_signal_bar_0",
-    "status_signal_bar_1",
-    "status_signal_bar_2",
-    "status_signal_bar_3",
-];
-
 #[derive(Default)]
 pub(crate) struct StatusBarWidgets {
     bar: Option<WidgetId>,
@@ -113,52 +107,54 @@ impl StatusBarWidgets {
 
     fn ensure_widgets(&mut self, facade: &mut dyn LvglFacade, root: WidgetId) -> Result<()> {
         if self.bar.is_none() {
-            self.bar = Some(facade.create_container(root, "status_bar")?);
+            self.bar = Some(facade.create_container(root, roles::STATUS_BAR)?);
         }
         let bar = self
             .bar
             .ok_or_else(|| anyhow!("status bar missing root widget"))?;
 
-        while self.signal_bars.len() < STATUS_SIGNAL_ROLES.len() {
-            let role = STATUS_SIGNAL_ROLES[self.signal_bars.len()];
+        while self.signal_bars.len() < roles::STATUS_SIGNAL_BARS.len() {
+            let role = roles::STATUS_SIGNAL_BARS[self.signal_bars.len()];
             self.signal_bars.push(facade.create_container(bar, role)?);
         }
         if self.wifi.is_none() {
-            self.wifi = Some(facade.create_label(bar, "status_wifi")?);
+            self.wifi = Some(facade.create_label(bar, roles::STATUS_WIFI)?);
         }
         if self.gps_ring.is_none() {
-            self.gps_ring = Some(facade.create_container(bar, "status_gps_ring")?);
+            self.gps_ring = Some(facade.create_container(bar, roles::STATUS_GPS_RING)?);
         }
         if self.gps_center.is_none() {
-            self.gps_center = Some(facade.create_container(bar, "status_gps_center")?);
+            self.gps_center = Some(facade.create_container(bar, roles::STATUS_GPS_CENTER)?);
         }
         if self.gps_tail.is_none() {
-            self.gps_tail = Some(facade.create_container(bar, "status_gps_tail")?);
+            self.gps_tail = Some(facade.create_container(bar, roles::STATUS_GPS_TAIL)?);
         }
         if self.voip_left.is_none() {
-            self.voip_left = Some(facade.create_container(bar, "status_voip_dot_left")?);
+            self.voip_left = Some(facade.create_container(bar, roles::STATUS_VOIP_DOT_LEFT)?);
         }
         if self.voip_after_gps.is_none() {
-            self.voip_after_gps = Some(facade.create_container(bar, "status_voip_dot_after_gps")?);
+            self.voip_after_gps =
+                Some(facade.create_container(bar, roles::STATUS_VOIP_DOT_AFTER_GPS)?);
         }
         if self.time.is_none() {
-            self.time = Some(facade.create_label(bar, "status_time")?);
+            self.time = Some(facade.create_label(bar, roles::STATUS_TIME)?);
         }
         if self.battery_outline.is_none() {
-            self.battery_outline = Some(facade.create_container(bar, "status_battery_outline")?);
+            self.battery_outline =
+                Some(facade.create_container(bar, roles::STATUS_BATTERY_OUTLINE)?);
         }
         let battery_outline = self
             .battery_outline
             .ok_or_else(|| anyhow!("status bar missing battery outline"))?;
         if self.battery_fill.is_none() {
             self.battery_fill =
-                Some(facade.create_container(battery_outline, "status_battery_fill")?);
+                Some(facade.create_container(battery_outline, roles::STATUS_BATTERY_FILL)?);
         }
         if self.battery_tip.is_none() {
-            self.battery_tip = Some(facade.create_container(bar, "status_battery_tip")?);
+            self.battery_tip = Some(facade.create_container(bar, roles::STATUS_BATTERY_TIP)?);
         }
         if self.battery_label.is_none() {
-            self.battery_label = Some(facade.create_label(bar, "status_battery_label")?);
+            self.battery_label = Some(facade.create_label(bar, roles::STATUS_BATTERY_LABEL)?);
         }
 
         Ok(())
@@ -226,7 +222,7 @@ impl FooterBar {
         label_role: &'static str,
     ) -> Result<()> {
         if self.bar.is_none() {
-            self.bar = Some(facade.create_container(root, "footer_bar")?);
+            self.bar = Some(facade.create_container(root, roles::FOOTER_BAR)?);
         }
         let bar = self
             .bar

@@ -5,6 +5,7 @@ mod hub_icon_assets;
 #[cfg(feature = "native-lvgl")]
 mod native_backend;
 pub mod primitives;
+mod roles;
 pub mod scene_backend;
 #[cfg(feature = "native-lvgl")]
 pub mod sys;

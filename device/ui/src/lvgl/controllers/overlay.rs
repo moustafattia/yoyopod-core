@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
+use crate::lvgl::roles;
 use crate::lvgl::{LvglFacade, ScreenController, WidgetId};
 use crate::screens::{OverlayViewModel, ScreenModel};
 
@@ -24,10 +25,10 @@ impl OverlayController {
             .ok_or_else(|| anyhow!("overlay controller missing root widget"))?;
 
         if self.title.is_none() {
-            self.title = Some(facade.create_label(root, "overlay_title")?);
+            self.title = Some(facade.create_label(root, roles::OVERLAY_TITLE)?);
         }
         if self.subtitle.is_none() {
-            self.subtitle = Some(facade.create_label(root, "overlay_subtitle")?);
+            self.subtitle = Some(facade.create_label(root, roles::OVERLAY_SUBTITLE)?);
         }
 
         Ok(())
@@ -43,7 +44,7 @@ impl ScreenController for OverlayController {
             self.status
                 .sync(facade, root, &overlay.chrome.status, true)?;
             self.footer
-                .sync(facade, root, "overlay_footer", &overlay.chrome.footer)?;
+                .sync(facade, root, roles::OVERLAY_FOOTER, &overlay.chrome.footer)?;
         }
 
         if let Some(title) = self.title {
