@@ -170,6 +170,32 @@ pub struct UiError {
     pub message: String,
 }
 
+impl UiError {
+    pub fn new(code: UiErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            code: code.as_str().to_string(),
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiErrorCode {
+    DecodeError,
+    InvalidCommand,
+    WorkerError,
+}
+
+impl UiErrorCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DecodeError => "decode_error",
+            Self::InvalidCommand => "invalid_command",
+            Self::WorkerError => "worker_error",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiEvent {
     Ready(UiReady),
@@ -633,11 +659,34 @@ fn required_string(payload: &Value, field: &str) -> Result<String, ProtocolError
 }
 
 fn error_from_payload(message_type: String, payload: &Value) -> UiError {
+    let raw_code = string_field(payload, "code").unwrap_or_else(|| message_type.clone());
     UiError {
-        code: string_field(payload, "code").unwrap_or_else(|| message_type.clone()),
+        code: normalize_error_code(&raw_code),
         message: string_field(payload, "message")
             .or_else(|| string_field(payload, "error"))
             .unwrap_or(message_type),
+    }
+}
+
+fn normalize_error_code(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut previous_was_separator = false;
+    for character in value.trim().chars() {
+        if character.is_ascii_alphanumeric() {
+            normalized.push(character.to_ascii_lowercase());
+            previous_was_separator = false;
+        } else if !previous_was_separator && !normalized.is_empty() {
+            normalized.push('_');
+            previous_was_separator = true;
+        }
+    }
+    while normalized.ends_with('_') {
+        normalized.pop();
+    }
+    if normalized.is_empty() {
+        UiErrorCode::WorkerError.as_str().to_string()
+    } else {
+        normalized
     }
 }
 
@@ -716,6 +765,27 @@ mod tests {
         assert_eq!(
             RuntimeSnapshotPatch::Full(RuntimeSnapshot::default()).domain(),
             RuntimeSnapshotDomain::Full
+        );
+    }
+
+    #[test]
+    fn error_envelope_codes_are_normalized() {
+        let envelope = WorkerEnvelope::error("ui.worker-error", None, "Worker.Error", "failed");
+        let decoded = UiEvent::from_envelope(envelope).unwrap();
+        assert_eq!(
+            decoded,
+            UiEvent::Error(UiError {
+                code: "worker_error".to_string(),
+                message: "failed".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn typed_error_constructor_uses_canonical_code() {
+        assert_eq!(
+            UiError::new(UiErrorCode::InvalidCommand, "bad").code,
+            "invalid_command"
         );
     }
 }

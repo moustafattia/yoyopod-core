@@ -2,7 +2,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 
 use anyhow::Result;
 use yoyopod_protocol::ui::{
-    DisplayInfo, UiCommand, UiError, UiEvent, UiHealth, UiInputEvent, UiReady, UiScreenChanged,
+    DisplayInfo, UiCommand, UiError, UiErrorCode, UiEvent, UiHealth, UiInputEvent, UiReady,
+    UiScreenChanged,
 };
 
 use crate::framebuffer::Framebuffer;
@@ -62,10 +63,10 @@ where
                         writeln!(errors, "UI command decode error: {err}")?;
                         emit_event(
                             output,
-                            UiEvent::Error(UiError {
-                                code: "invalid_command".to_string(),
-                                message: err.to_string(),
-                            }),
+                            UiEvent::Error(UiError::new(
+                                UiErrorCode::InvalidCommand,
+                                err.to_string(),
+                            )),
                         )?;
                         continue;
                     }
@@ -209,10 +210,7 @@ where
                 writeln!(errors, "protocol decode error: {err}")?;
                 emit_event(
                     output,
-                    UiEvent::Error(UiError {
-                        code: "decode_error".to_string(),
-                        message: err.to_string(),
-                    }),
+                    UiEvent::Error(UiError::new(UiErrorCode::DecodeError, err.to_string())),
                 )?;
             }
         }
