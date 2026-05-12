@@ -10,6 +10,8 @@ pub(crate) mod ffi;
 #[cfg(feature = "native-lvgl")]
 pub(crate) mod icons;
 pub mod layout;
+pub mod primitives;
+pub(crate) mod roles;
 pub mod theme;
 
 use crate::framebuffer::Framebuffer;

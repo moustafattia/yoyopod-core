@@ -2,7 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::lvgl::{roles, LvglFacade, WidgetId};
+use crate::lvgl::{LvglFacade, WidgetId};
+use crate::render::lvgl::roles;
 use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]

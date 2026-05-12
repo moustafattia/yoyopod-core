@@ -30,8 +30,8 @@ impl<'a> LayoutResolver<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lvgl::roles;
     use crate::render::assets;
+    use crate::render::lvgl::roles;
 
     #[test]
     fn resolves_asset_backed_role_layout() {
