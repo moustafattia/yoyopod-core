@@ -1,9 +1,9 @@
 pub mod registry;
+pub mod screens;
 
 use crate::app::{UiScreen, UiView};
 use crate::runtime::{ListItemSnapshot, RuntimeSnapshot};
-use crate::screens;
-use crate::screens::ScreenModel;
+use screens::ScreenModel;
 
 pub fn view_for_screen(
     screen: UiScreen,

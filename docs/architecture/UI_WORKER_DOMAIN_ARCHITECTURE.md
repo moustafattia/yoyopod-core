@@ -28,8 +28,9 @@ yoyopod-runtime
 - `device/ui/src/app/` owns snapshot application, navigation, focus policy,
   input routing, and typed intent creation.
 - `device/ui/src/presentation/` maps app state into LVGL-free screen/view
-  models. The current screen implementations still live under
-  `device/ui/src/screens/` while the presentation boundary is being finalized.
+  models. Screen builders and models live under
+  `device/ui/src/presentation/screens/`; `device/ui/src/screens/` remains a
+  compatibility re-export while downstream imports are migrated.
 - Python remains CLI/deploy/validation tooling only. It is not in the UI
   runtime path.
 
