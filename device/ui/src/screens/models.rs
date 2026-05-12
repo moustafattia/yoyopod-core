@@ -264,4 +264,24 @@ impl ScreenModel {
             Self::Error(_) => UiScreen::Error,
         }
     }
+
+    pub fn chrome(&self) -> &ChromeModel {
+        match self {
+            Self::Hub(model) => &model.chrome,
+            Self::Listen(model)
+            | Self::Playlists(model)
+            | Self::RecentTracks(model)
+            | Self::Talk(model)
+            | Self::Contacts(model)
+            | Self::CallHistory(model) => &model.chrome,
+            Self::NowPlaying(model) => &model.chrome,
+            Self::Ask(model) => &model.chrome,
+            Self::TalkContact(model) | Self::VoiceNote(model) => &model.chrome,
+            Self::IncomingCall(model) | Self::OutgoingCall(model) | Self::InCall(model) => {
+                &model.chrome
+            }
+            Self::Power(model) => &model.chrome,
+            Self::Loading(model) | Self::Error(model) => &model.chrome,
+        }
+    }
 }

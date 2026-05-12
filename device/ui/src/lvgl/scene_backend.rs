@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 
 use crate::runtime::UiScreen;
-use crate::screens::{AskViewModel, ChromeModel, ListScreenModel, ScreenModel, StatusBarModel};
+use crate::screens::{AskViewModel, ListScreenModel, ScreenModel, StatusBarModel};
 
 use super::{
     AskController, CallController, HubController, ListenController, LvglFacade, NativeSceneKey,
@@ -50,7 +50,7 @@ where
             self.active_scene = Some(scene);
         }
 
-        self.bridge.sync_status(chrome(model).status())?;
+        self.bridge.sync_status(&model.chrome().status)?;
         self.bridge.sync_scene(model)?;
         self.active_screen = Some(screen);
         Ok(())
@@ -290,35 +290,5 @@ fn capped_list_model(model: &ListScreenModel, selection: NativeListSelection) ->
         title: model.title.clone(),
         subtitle: model.subtitle.clone(),
         rows,
-    }
-}
-
-trait ChromeRef {
-    fn status(&self) -> &StatusBarModel;
-}
-
-impl ChromeRef for ChromeModel {
-    fn status(&self) -> &StatusBarModel {
-        &self.status
-    }
-}
-
-fn chrome(model: &ScreenModel) -> &ChromeModel {
-    match model {
-        ScreenModel::Hub(model) => &model.chrome,
-        ScreenModel::Listen(model)
-        | ScreenModel::Playlists(model)
-        | ScreenModel::RecentTracks(model)
-        | ScreenModel::Talk(model)
-        | ScreenModel::Contacts(model)
-        | ScreenModel::CallHistory(model) => &model.chrome,
-        ScreenModel::NowPlaying(model) => &model.chrome,
-        ScreenModel::Ask(model) => &model.chrome,
-        ScreenModel::TalkContact(model) | ScreenModel::VoiceNote(model) => &model.chrome,
-        ScreenModel::IncomingCall(model)
-        | ScreenModel::OutgoingCall(model)
-        | ScreenModel::InCall(model) => &model.chrome,
-        ScreenModel::Power(model) => &model.chrome,
-        ScreenModel::Loading(model) | ScreenModel::Error(model) => &model.chrome,
     }
 }
