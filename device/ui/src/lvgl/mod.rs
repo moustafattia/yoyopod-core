@@ -1,8 +1,4 @@
 pub mod controllers;
-#[cfg(feature = "native-lvgl")]
-pub(crate) mod ffi;
-#[cfg(feature = "native-lvgl")]
-mod native_backend;
 pub mod primitives;
 pub(crate) mod roles;
 pub mod scene_backend;
@@ -20,13 +16,13 @@ use crate::presentation::registry::{
 use crate::runtime::UiScreen;
 use crate::screens::ScreenModel;
 
+#[cfg(feature = "native-lvgl")]
+pub use crate::render::lvgl::backend::NativeLvglFacade;
 pub use controllers::{
     typed_controller, AskController, CallController, HubController, ListController,
     ListenController, NowPlayingController, OverlayController, PlaylistController, PowerController,
     ScreenController, TalkActionsController, TalkController, TypedScreenController,
 };
-#[cfg(feature = "native-lvgl")]
-pub use native_backend::NativeLvglFacade;
 pub use primitives::WidgetId;
 pub use scene_backend::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
 

@@ -17,16 +17,22 @@ mod architecture_tests {
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn raw_lvgl_ffi_imports_stay_inside_lvgl_module() {
+    fn raw_lvgl_ffi_imports_stay_inside_render_lvgl_module() {
         let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut violations = Vec::new();
         for path in rust_files(&src_dir) {
             let relative = path.strip_prefix(&src_dir).unwrap_or(&path);
-            let inside_lvgl = relative
+            let components = relative
                 .components()
-                .next()
-                .is_some_and(|component| component.as_os_str().to_string_lossy() == "lvgl");
-            if inside_lvgl {
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+            let inside_render_lvgl = components
+                .first()
+                .is_some_and(|component| component == "render")
+                && components
+                    .get(1)
+                    .is_some_and(|component| component == "lvgl");
+            if inside_render_lvgl {
                 continue;
             }
 
@@ -35,10 +41,14 @@ mod architecture_tests {
             let legacy_crate_module_path = ["crate", "lvgl", "sys"].join("::");
             let module_path = ["lvgl", "ffi"].join("::");
             let crate_module_path = ["crate", "lvgl", "ffi"].join("::");
+            let render_module_path = ["render", "lvgl", "ffi"].join("::");
+            let render_crate_module_path = ["crate", "render", "lvgl", "ffi"].join("::");
             if contents.contains(&legacy_module_path)
                 || contents.contains(&legacy_crate_module_path)
                 || contents.contains(&module_path)
                 || contents.contains(&crate_module_path)
+                || contents.contains(&render_module_path)
+                || contents.contains(&render_crate_module_path)
             {
                 violations.push(relative.display().to_string());
             }
@@ -46,7 +56,7 @@ mod architecture_tests {
 
         assert!(
             violations.is_empty(),
-            "raw LVGL FFI imports outside src/lvgl: {violations:?}"
+            "raw LVGL FFI imports outside src/render/lvgl: {violations:?}"
         );
     }
 

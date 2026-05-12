@@ -29,8 +29,9 @@ LVGL object tree
 ## Native Boundary
 
 Rust owns the scene controllers and calls upstream LVGL directly through
-`device/ui/src/lvgl/sys.rs`. The only C dependency in this path is upstream
-LVGL itself, built from the pinned 9.5.0 source using `device/ui/native/lvgl`.
+`device/ui/src/render/lvgl/ffi.rs`. The only C dependency in this path is
+upstream LVGL itself, built from the pinned 9.5.0 source using
+`device/ui/native/lvgl`.
 
 ## lv_conf.h
 

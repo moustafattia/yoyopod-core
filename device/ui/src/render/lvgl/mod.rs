@@ -3,14 +3,20 @@ use std::path::Path;
 use anyhow::Result;
 
 #[cfg(feature = "native-lvgl")]
+pub mod backend;
+#[cfg(feature = "native-lvgl")]
+pub(crate) mod ffi;
+#[cfg(feature = "native-lvgl")]
 pub(crate) mod icons;
 pub mod layout;
 pub mod theme;
 
 use crate::framebuffer::Framebuffer;
 #[cfg(feature = "native-lvgl")]
-use crate::lvgl::{NativeLvglFacade, NativeSceneRenderer, RustSceneBridge, SceneBridge};
+use crate::lvgl::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
 use crate::screens::ScreenModel;
+#[cfg(feature = "native-lvgl")]
+use backend::NativeLvglFacade;
 
 #[cfg(not(feature = "native-lvgl"))]
 pub struct LvglRenderer;

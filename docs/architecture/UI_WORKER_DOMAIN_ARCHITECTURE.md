@@ -109,16 +109,16 @@ The only C dependency in this domain is upstream LVGL 9.5, built from the
 pinned source through `device/ui/native/lvgl`.
 
 - YoYoPod screen state and scene controllers are Rust.
-- YoYoPod LVGL FFI declarations are in `device/ui/src/lvgl/ffi.rs`.
+- YoYoPod LVGL FFI declarations are in `device/ui/src/render/lvgl/ffi.rs`.
 - YoYoPod LVGL facade and unsafe native calls are contained in
-  `device/ui/src/lvgl/native_backend.rs`.
+  `device/ui/src/render/lvgl/backend.rs`.
 - YoYoPod-owned C scene or shim code is not part of the current UI domain.
 
 ## Invariants
 
 - Missing native LVGL is a startup/render failure, not a signal to degrade.
 - App screen layout belongs in Rust screen models and Rust LVGL controllers.
-- Raw LVGL calls stay inside `device/ui/src/lvgl/`.
+- Raw LVGL calls stay inside `device/ui/src/render/lvgl/`.
 - Hardware access stays behind `DisplayDevice` and `ButtonDevice`.
 - UI navigation/focus/preemption belongs in `UiRuntime`, not in controllers.
 - Controllers sync an already-selected `ScreenModel`; they do not route app

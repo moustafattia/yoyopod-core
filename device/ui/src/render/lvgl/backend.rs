@@ -7,10 +7,10 @@ use std::time::Instant;
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::framebuffer::Framebuffer;
-use crate::lvgl::ffi;
 use crate::lvgl::theme::{self, WidgetStyle};
 use crate::lvgl::{LvglFacade, WidgetId};
 use crate::render::assets::{self, RenderAssets};
+use crate::render::lvgl::ffi;
 use crate::render::lvgl::icons;
 use crate::render::lvgl::layout::LayoutResolver;
 use crate::render::lvgl::theme::ThemeResolver;
