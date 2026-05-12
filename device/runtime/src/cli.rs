@@ -8,7 +8,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use serde_json::json;
-use yoyopod_protocol::ui::{RuntimeSnapshot, UiCommand};
+use yoyopod_protocol::ui::UiCommand;
 
 use crate::config::{resolve_worker_program_for_config_dir, RuntimeConfig};
 use crate::logging::{
@@ -324,8 +324,6 @@ fn send_startup_commands(workers: &mut WorkerSupervisor, config: &RuntimeConfig)
 }
 
 fn send_initial_runtime_snapshot(workers: &mut WorkerSupervisor, state: &RuntimeState) {
-    let snapshot = RuntimeSnapshot::from_payload(&state.ui_snapshot_payload())
-        .expect("runtime UI snapshot payload must satisfy shared protocol");
-    let envelope = UiCommand::RuntimeSnapshot(snapshot).into_envelope();
+    let envelope = UiCommand::RuntimeSnapshot(state.ui_snapshot()).into_envelope();
     let _ = workers.send_envelope(WorkerDomain::Ui, envelope);
 }

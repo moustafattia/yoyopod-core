@@ -5,7 +5,7 @@ use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
-use yoyopod_protocol::ui::{RuntimeSnapshot, UiCommand};
+use yoyopod_protocol::ui::UiCommand;
 
 use crate::event::{commands_for_event, runtime_event_from_worker, RuntimeCommand};
 use crate::protocol::WorkerEnvelope;
@@ -77,7 +77,7 @@ impl RuntimeLoop {
             let before = self.state.clone();
             event.apply(&mut self.state);
             if self.state != before {
-                self.send_runtime_snapshot(io);
+                self.send_runtime_snapshot_patches(io, &before);
             }
 
             processed += 1;
@@ -143,11 +143,11 @@ impl RuntimeLoop {
         }
     }
 
-    fn send_runtime_snapshot(&self, io: &mut impl LoopIo) {
-        let snapshot = RuntimeSnapshot::from_payload(&self.state.ui_snapshot_payload())
-            .expect("runtime UI snapshot payload must satisfy shared protocol");
-        let envelope = UiCommand::RuntimeSnapshot(snapshot).into_envelope();
-        let _ = io.send_worker_envelope(WorkerDomain::Ui, envelope);
+    fn send_runtime_snapshot_patches(&self, io: &mut impl LoopIo, before: &RuntimeState) {
+        for patch in self.state.ui_snapshot_patches_since(before) {
+            let envelope = UiCommand::RuntimePatch(patch).into_envelope();
+            let _ = io.send_worker_envelope(WorkerDomain::Ui, envelope);
+        }
     }
 
     fn send_tick(&self, io: &mut impl LoopIo) {
@@ -249,4 +249,101 @@ fn current_epoch_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yoyopod_protocol::ui::RuntimeSnapshotPatch;
+
+    #[derive(Default)]
+    struct FakeLoopIo {
+        messages: Vec<(WorkerDomain, WorkerEnvelope)>,
+        protocol_errors: Vec<(WorkerDomain, WorkerProtocolError)>,
+        sent: Vec<(WorkerDomain, WorkerEnvelope)>,
+    }
+
+    impl LoopIo for FakeLoopIo {
+        fn drain_worker_messages(&mut self) -> Vec<(WorkerDomain, WorkerEnvelope)> {
+            std::mem::take(&mut self.messages)
+        }
+
+        fn drain_worker_protocol_errors(&mut self) -> Vec<(WorkerDomain, WorkerProtocolError)> {
+            std::mem::take(&mut self.protocol_errors)
+        }
+
+        fn send_worker_envelope(&mut self, domain: WorkerDomain, envelope: WorkerEnvelope) -> bool {
+            self.sent.push((domain, envelope));
+            true
+        }
+
+        fn write_power_shutdown_state(
+            &mut self,
+            _path: &str,
+            _payload: &Value,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn request_system_shutdown(&mut self, _command: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn state_change_sends_domain_runtime_patch() {
+        let mut io = FakeLoopIo {
+            messages: vec![(
+                WorkerDomain::Media,
+                WorkerEnvelope::event(
+                    "media.snapshot",
+                    json!({
+                        "playback_state": "playing",
+                        "current_track": {
+                            "title": "Patch Song",
+                            "artist": "Patch Artist",
+                        },
+                    }),
+                ),
+            )],
+            ..FakeLoopIo::default()
+        };
+        let mut runtime = RuntimeLoop::new(RuntimeState::default());
+
+        runtime.run_once(&mut io);
+
+        let ui_patches = io
+            .sent
+            .iter()
+            .filter(|(domain, envelope)| {
+                *domain == WorkerDomain::Ui && envelope.message_type == "ui.runtime_patch"
+            })
+            .map(|(_, envelope)| UiCommand::from_envelope(envelope.clone()).unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(ui_patches.len(), 1);
+        let UiCommand::RuntimePatch(RuntimeSnapshotPatch::Music(music)) = &ui_patches[0] else {
+            panic!("expected music runtime patch");
+        };
+        assert!(music.playing);
+        assert_eq!(music.title, "Patch Song");
+    }
+
+    #[test]
+    fn worker_health_only_change_does_not_send_ui_patch() {
+        let mut io = FakeLoopIo {
+            messages: vec![(
+                WorkerDomain::Cloud,
+                WorkerEnvelope::event("cloud.ready", json!({})),
+            )],
+            ..FakeLoopIo::default()
+        };
+        let mut runtime = RuntimeLoop::new(RuntimeState::default());
+
+        runtime.run_once(&mut io);
+
+        assert!(!io.sent.iter().any(|(domain, envelope)| {
+            *domain == WorkerDomain::Ui && envelope.message_type == "ui.runtime_patch"
+        }));
+    }
 }

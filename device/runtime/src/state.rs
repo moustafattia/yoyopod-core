@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
-use yoyopod_protocol::ui::{UiIntent, VoiceIntent};
+use yoyopod_protocol::ui::{RuntimeSnapshot, RuntimeSnapshotPatch, UiIntent, VoiceIntent};
 
 use crate::voice::{
     match_voice_confirmation_response, normalize_voice_activation, route_voice_transcript,
@@ -1555,6 +1555,44 @@ impl RuntimeState {
                 WorkerDomain::Voice.as_str(): worker_payload(&self.voice_worker),
             },
         })
+    }
+
+    pub fn ui_snapshot(&self) -> RuntimeSnapshot {
+        RuntimeSnapshot::from_payload(&self.ui_snapshot_payload())
+            .expect("runtime UI snapshot payload must satisfy shared protocol")
+    }
+
+    pub fn ui_snapshot_patches_since(&self, before: &Self) -> Vec<RuntimeSnapshotPatch> {
+        let before = before.ui_snapshot();
+        let after = self.ui_snapshot();
+        let mut patches = Vec::new();
+
+        if before.app_state != after.app_state {
+            patches.push(RuntimeSnapshotPatch::AppState(after.app_state.clone()));
+        }
+        if before.hub != after.hub {
+            patches.push(RuntimeSnapshotPatch::Hub(after.hub.clone()));
+        }
+        if before.music != after.music {
+            patches.push(RuntimeSnapshotPatch::Music(after.music.clone()));
+        }
+        if before.call != after.call {
+            patches.push(RuntimeSnapshotPatch::Call(after.call.clone()));
+        }
+        if before.voice != after.voice {
+            patches.push(RuntimeSnapshotPatch::Voice(after.voice.clone()));
+        }
+        if before.power != after.power {
+            patches.push(RuntimeSnapshotPatch::Power(after.power.clone()));
+        }
+        if before.network != after.network {
+            patches.push(RuntimeSnapshotPatch::Network(after.network.clone()));
+        }
+        if before.overlay != after.overlay {
+            patches.push(RuntimeSnapshotPatch::Overlay(after.overlay.clone()));
+        }
+
+        patches
     }
 
     fn default_hub_cards(&self) -> Vec<Value> {
