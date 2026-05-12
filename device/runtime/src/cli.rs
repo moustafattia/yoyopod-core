@@ -8,7 +8,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use serde_json::json;
-use yoyopod_protocol::ui::UiCommand;
+use yoyopod_protocol::ui::{UiCommand, UiEvent};
 
 use crate::config::{resolve_worker_program_for_config_dir, RuntimeConfig};
 use crate::logging::{
@@ -110,7 +110,12 @@ fn start_workers(
     )) {
         bail!("failed to start UI worker");
     }
-    if !workers.wait_for_ready(WorkerDomain::Ui, "ui.ready", Duration::from_secs(5)) {
+    if !workers.wait_for_message(WorkerDomain::Ui, Duration::from_secs(5), |envelope| {
+        matches!(
+            UiEvent::from_envelope(envelope.clone()),
+            Ok(UiEvent::Ready(_))
+        )
+    }) {
         bail!("timed out waiting for ui.ready");
     }
     state.mark_worker(WorkerDomain::Ui, WorkerState::Running, "ready");

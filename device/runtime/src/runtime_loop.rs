@@ -256,6 +256,13 @@ mod tests {
     use super::*;
     use yoyopod_protocol::ui::RuntimeSnapshotPatch;
 
+    fn ui_runtime_patch_command(envelope: WorkerEnvelope) -> Option<UiCommand> {
+        let Ok(command) = UiCommand::from_envelope(envelope) else {
+            return None;
+        };
+        matches!(command, UiCommand::RuntimePatch(_)).then_some(command)
+    }
+
     #[derive(Default)]
     struct FakeLoopIo {
         messages: Vec<(WorkerDomain, WorkerEnvelope)>,
@@ -315,10 +322,8 @@ mod tests {
         let ui_patches = io
             .sent
             .iter()
-            .filter(|(domain, envelope)| {
-                *domain == WorkerDomain::Ui && envelope.message_type == "ui.runtime_patch"
-            })
-            .map(|(_, envelope)| UiCommand::from_envelope(envelope.clone()).unwrap())
+            .filter(|(domain, _)| *domain == WorkerDomain::Ui)
+            .filter_map(|(_, envelope)| ui_runtime_patch_command(envelope.clone()))
             .collect::<Vec<_>>();
 
         assert_eq!(ui_patches.len(), 1);
@@ -343,7 +348,7 @@ mod tests {
         runtime.run_once(&mut io);
 
         assert!(!io.sent.iter().any(|(domain, envelope)| {
-            *domain == WorkerDomain::Ui && envelope.message_type == "ui.runtime_patch"
+            *domain == WorkerDomain::Ui && ui_runtime_patch_command(envelope.clone()).is_some()
         }));
     }
 }

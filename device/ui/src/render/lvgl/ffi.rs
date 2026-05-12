@@ -37,7 +37,6 @@ pub type LvStyleSelector = u32;
 
 pub const LV_DISPLAY_RENDER_MODE_PARTIAL: i32 = 0;
 pub const LV_ALIGN_CENTER: i32 = 9;
-pub const LV_ALIGN_BOTTOM_MID: i32 = 5;
 pub const LV_LABEL_LONG_MODE_WRAP: i32 = 0;
 pub const LV_LABEL_LONG_MODE_DOTS: i32 = 1;
 pub const LV_LABEL_LONG_MODE_CLIP: i32 = 4;
@@ -80,8 +79,6 @@ unsafe extern "C" {
     pub fn lv_obj_delete(obj: *mut lv_obj_t);
     pub fn lv_obj_set_pos(obj: *mut lv_obj_t, x: i32, y: i32);
     pub fn lv_obj_set_size(obj: *mut lv_obj_t, width: i32, height: i32);
-    pub fn lv_obj_set_width(obj: *mut lv_obj_t, width: i32);
-    pub fn lv_obj_set_height(obj: *mut lv_obj_t, height: i32);
     pub fn lv_obj_invalidate(obj: *mut lv_obj_t);
     pub fn lv_obj_remove_style_all(obj: *mut lv_obj_t);
     pub fn lv_obj_set_style_bg_color(

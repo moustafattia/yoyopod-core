@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 
-use crate::framebuffer::Framebuffer;
-use crate::hardware::{ButtonDevice, DisplayDevice};
-use crate::whisplay_panel::{
+use super::whisplay_panel::{
     backlight_output_high, whisplay_address_window, whisplay_init_sequence,
     DEFAULT_BACKLIGHT_ACTIVE_LOW, DEFAULT_BACKLIGHT_GPIO, DEFAULT_BUTTON_ACTIVE_LOW,
     DEFAULT_BUTTON_GPIO, DEFAULT_DC_GPIO, DEFAULT_RESET_GPIO, DEFAULT_SPI_HZ, HEIGHT, WIDTH,
 };
+use crate::framebuffer::Framebuffer;
+use crate::hardware::{ButtonDevice, DisplayDevice};
 
 const SPI_CHUNK_BYTES: usize = 4096;
 

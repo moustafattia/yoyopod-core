@@ -1,6 +1,6 @@
 # YoYoPod Input HAL Architecture
 
-**Last updated:** 2026-04-15
+**Last updated:** 2026-05-12
 **Status:** Implemented
 
 This document describes the input abstraction layer that now exists in the UI package.
@@ -15,69 +15,44 @@ This document describes the input abstraction layer that now exists in the UI pa
 ## Current Files
 
 - `device/ui/src/input/`: Rust input model and hardware event normalization
-- `device/ui/src/worker.rs`: input events emitted through the worker protocol
+- `device/ui/src/app/input_router.rs`: typed input action to app command routing
+- `device/ui/src/transport/`: input events emitted through the typed worker protocol
 
-## Core Semantic Actions
+## Core Typed Actions
 
-- navigation: `SELECT`, `BACK`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `MENU`, `HOME`
-- playback: `PLAY_PAUSE`, `NEXT_TRACK`, `PREV_TRACK`, `VOLUME_UP`, `VOLUME_DOWN`
-- VoIP: `CALL_ANSWER`, `CALL_REJECT`, `CALL_HANGUP`
-- PTT: `PTT_PRESS`, `PTT_RELEASE`
-- voice: `VOICE_COMMAND`
+- `Advance`
+- `Select`
+- `Back`
+- `PttPress`
+- `PttRelease`
 
-## Adapter Mapping
+## Runtime Mapping
 
-### PTTInputAdapter
+Whisplay single-button hardware emits click-pattern actions for navigation. When
+voice-note recording owns the screen, the same button path switches to typed PTT
+passthrough so press and release surface as `PttPress` and `PttRelease`.
 
-- button press and release emit `PTT_PRESS` and `PTT_RELEASE`
-- optional click patterns can emit `SELECT` and `BACK`
-- this is the canonical runtime path for Whisplay hardware
-
-### FourButtonInputAdapter
-
-- button layout emits `SELECT`, `BACK`, `UP`, and `DOWN`
-- used by the Pimoroni display path when the corresponding GPIO/display helpers are available
-
-### KeyboardInputAdapter
-
-Used in simulation mode:
-
-- `Enter` or `Space -> SELECT`
-- `Esc` or `Backspace -> BACK`
-- `Up` or `K -> UP`
-- `Down` or `J -> DOWN`
-
-Simulation also wires browser button input onto the same semantic actions.
-
-The current product runtime keeps three input surfaces alive: Whisplay
-single-button hardware, Pimoroni four-button hardware, and simulation keyboard
-/ browser input.
-
-## How ScreenManager Uses It
-
-`ScreenManager` connects semantic actions to the current screen when screens change.
+Runtime or test commands can send `UiCommand::InputAction`. The UI transport
+emits every command and hardware action back as typed `UiEvent::Input`, then the
+app layer produces typed intents when a screen owns the action.
 
 This is the current call path:
 
 ```text
-input adapter -> InputManager -> ScreenManager -> current screen handler
+button or UiCommand::InputAction -> transport -> app::input_router -> UiRuntime -> typed UiIntent
 ```
 
 ## Screen Contract
 
 Current behavior:
 
-- `ScreenManager` registers semantic callbacks
-- `Screen` defines semantic methods like `on_select()`, `on_back()`, `on_up()`, and `on_down()`
-- concrete screens implement those semantic handlers directly
-
-Legacy `on_button_*()` compatibility methods have been removed from `Screen`.
-
-## Known Gaps
-
-- some older historical docs still reference deleted pre-HAL input modules
-- `keyboard.py` still has small naming drift between `get_supported_actions()` and the manager's `get_capabilities()` convention
+- screen behavior is driven by typed app commands, registry focus policy, and
+  registry navigation policy
+- screen-specific side effects are typed `UiIntent` values from
+  `device/ui/src/app/intents.rs`
+- there are no legacy `on_button_*()` or Python input compatibility contracts in
+  the Rust UI domain
 
 ## Summary
 
-The input HAL is real and in use today. Screen input is now fully semantic end to end.
+Screen input is typed end to end in the Rust UI domain.

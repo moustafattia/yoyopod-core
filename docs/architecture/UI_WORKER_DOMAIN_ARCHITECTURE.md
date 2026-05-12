@@ -26,7 +26,11 @@ yoyopod-runtime
 - `yoyopod-ui-host` owns UI-domain state, input interpretation, rendering, and
   hardware display/button access.
 - `device/ui/src/app/` owns snapshot application, navigation, focus policy,
-  input routing, and typed intent creation.
+  input routing, and typed intent creation. `app::input_router` converts
+  protocol input into app commands, `app::intents` builds typed intent payloads,
+  and `UiRuntime` consumes registry focus/navigation policy.
+- `device/ui/src/transport/` owns the JSON-line worker loop, typed command
+  decoding, typed event emission, and runtime-manager heartbeat timeout.
 - `device/ui/src/presentation/` maps app state into LVGL-free screen/view
   models. Screen builders and models live under
   `device/ui/src/presentation/screens/`.
@@ -57,7 +61,9 @@ method `command`. Polled hardware input is also routed through `UiRuntime`, so
 button events and PTT events always surface as typed input and typed intents
 when the active screen owns an action. Clean shutdown completion is reported through
 `ui.shutdown_complete` for both explicit stop commands and runtime-manager stdin
-EOF.
+EOF. If the runtime manager stops sending command/heartbeat traffic without
+closing stdin, the worker emits `ui.error` with code `manager_timeout`, reports
+shutdown completion, and exits.
 
 ## Render Contract
 

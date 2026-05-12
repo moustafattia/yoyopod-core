@@ -1,15 +1,16 @@
 use crate::input::InputAction;
 use crate::presentation;
+use crate::presentation::registry::{screen_entry, FocusPolicy, NavigationPolicy};
 use crate::presentation::screens;
 use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::Transition;
 use yoyopod_protocol::ui::{
-    AnimationRequest, CallIntent, ContactAction, ListItemAction, ListItemSnapshot, MusicIntent,
-    RuntimeSnapshot, RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiIntent, VoiceFileAction,
-    VoiceIntent, VoiceRecipientAction,
+    AnimationRequest, CallIntent, ListItemSnapshot, MusicIntent, RuntimeSnapshot,
+    RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiIntent, VoiceFileAction, VoiceIntent,
+    VoiceRecipientAction,
 };
 
-use super::{focus, navigator, UiScreen, UiView};
+use super::{focus, input_router, intents, navigator, snapshot, UiScreen, UiView};
 
 #[derive(Debug, Clone)]
 pub struct UiRuntime {
@@ -110,27 +111,22 @@ impl Default for UiRuntime {
 
 impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
-        let previous_app_state = self.snapshot.app_state.clone();
-        let app_state = snapshot.app_state.clone();
-        self.snapshot = snapshot;
-        self.apply_app_state_route(&previous_app_state, &app_state);
+        let change = snapshot::replace_full(&mut self.snapshot, snapshot);
+        self.apply_app_state_route(&change.previous_app_state, &change.app_state);
         self.apply_runtime_preemption();
         self.clamp_focus();
         self.dirty.mark_full();
     }
 
     pub fn apply_patch(&mut self, patch: RuntimeSnapshotPatch) {
-        let domain = patch.domain();
         let previous_screen = self.active_screen;
         let previous_focus = self.focus_index;
         let previous_stack_len = self.screen_stack.len();
-        let previous_app_state = self.snapshot.app_state.clone();
-        self.snapshot.apply_patch(patch);
-        let app_state = self.snapshot.app_state.clone();
-        self.apply_app_state_route(&previous_app_state, &app_state);
+        let change = snapshot::apply_patch(&mut self.snapshot, patch);
+        self.apply_app_state_route(&change.previous_app_state, &change.app_state);
         self.apply_runtime_preemption();
         self.clamp_focus();
-        self.dirty.mark_patch_domain(domain);
+        self.dirty.mark_patch_domain(change.domain);
         if self.active_screen != previous_screen || self.screen_stack.len() != previous_stack_len {
             self.dirty.navigation = true;
         }
@@ -140,12 +136,16 @@ impl UiRuntime {
     }
 
     pub fn handle_input(&mut self, action: InputAction) {
-        match action {
-            InputAction::Advance => self.advance_focus(),
-            InputAction::Select => self.select_focused(),
-            InputAction::Back => self.go_back_or_emit(),
-            InputAction::PttPress => self.handle_ptt_press(),
-            InputAction::PttRelease => self.handle_ptt_release(),
+        let route_state = input_router::InputRouteState {
+            active_screen: self.active_screen,
+            voice_note_phase: self.voice_note_phase(),
+        };
+        match input_router::route(action, &route_state) {
+            input_router::AppCommand::AdvanceFocus => self.advance_focus(),
+            input_router::AppCommand::SelectFocused => self.select_focused(),
+            input_router::AppCommand::GoBack => self.go_back_or_emit(),
+            input_router::AppCommand::PttPress => self.handle_ptt_press(),
+            input_router::AppCommand::PttRelease => self.handle_ptt_release(),
         }
         self.clamp_focus();
         self.dirty.input = true;
@@ -259,7 +259,11 @@ impl UiRuntime {
 
     fn advance_focus(&mut self) {
         let count = self.focus_count();
-        self.focus_index = focus::advance(self.focus_index, count);
+        self.focus_index = match screen_entry(self.active_screen).focus_policy {
+            FocusPolicy::None => self.focus_index,
+            FocusPolicy::Wrap => focus::advance(self.focus_index, count),
+            FocusPolicy::Clamp => focus::advance_clamped(self.focus_index, count),
+        };
     }
 
     fn select_focused(&mut self) {
@@ -285,10 +289,9 @@ impl UiRuntime {
             },
             UiScreen::Playlists => {
                 if let Some(item) = self.snapshot.music.playlists.get(self.focus_index).cloned() {
-                    self.intents
-                        .push(UiIntent::Music(MusicIntent::LoadPlaylist(item_action(
-                            &item,
-                        ))));
+                    self.intents.push(UiIntent::Music(MusicIntent::LoadPlaylist(
+                        intents::list_item_action(&item),
+                    )));
                     self.push_screen(UiScreen::NowPlaying);
                 }
             }
@@ -301,9 +304,9 @@ impl UiRuntime {
                     .cloned()
                 {
                     self.intents
-                        .push(UiIntent::Music(MusicIntent::PlayRecentTrack(item_action(
-                            &item,
-                        ))));
+                        .push(UiIntent::Music(MusicIntent::PlayRecentTrack(
+                            intents::list_item_action(&item),
+                        )));
                     self.push_screen(UiScreen::NowPlaying);
                 }
             }
@@ -330,34 +333,45 @@ impl UiRuntime {
     }
 
     fn go_back_or_emit(&mut self) {
+        if self.active_screen == UiScreen::VoiceNote && self.voice_note_phase() == "recording" {
+            self.intents
+                .push(UiIntent::Voice(VoiceIntent::CaptureCancel));
+            self.pop_screen_or_hub();
+            return;
+        }
+        if self.active_screen == UiScreen::VoiceNote
+            && matches!(
+                self.voice_note_phase().as_str(),
+                "review" | "failed" | "sent"
+            )
+        {
+            self.intents.push(UiIntent::Voice(VoiceIntent::Discard));
+            self.pop_screen_or_hub();
+            return;
+        }
+
+        match screen_entry(self.active_screen).navigation_policy {
+            NavigationPolicy::Root => {}
+            NavigationPolicy::Overlay | NavigationPolicy::Stack => self.pop_screen_or_hub(),
+            NavigationPolicy::Call => self.go_back_from_call_screen(),
+        }
+    }
+
+    fn go_back_from_call_screen(&mut self) {
         match self.active_screen {
             UiScreen::IncomingCall => self.intents.push(UiIntent::Call(CallIntent::Reject)),
             UiScreen::OutgoingCall | UiScreen::InCall => {
-                self.intents.push(UiIntent::Call(CallIntent::Hangup))
+                self.intents.push(UiIntent::Call(CallIntent::Hangup));
             }
-            UiScreen::VoiceNote if self.voice_note_phase() == "recording" => {
-                self.intents
-                    .push(UiIntent::Voice(VoiceIntent::CaptureCancel));
-                self.pop_screen_or_hub();
-            }
-            UiScreen::VoiceNote
-                if matches!(
-                    self.voice_note_phase().as_str(),
-                    "review" | "failed" | "sent"
-                ) =>
-            {
-                self.intents.push(UiIntent::Voice(VoiceIntent::Discard));
-                self.pop_screen_or_hub();
-            }
-            UiScreen::Loading | UiScreen::Error => self.pop_screen_or_hub(),
-            UiScreen::Hub => {}
-            _ => self.pop_screen_or_hub(),
+            _ => {}
         }
     }
 
     fn emit_call_start(&mut self, item: &ListItemSnapshot) {
         self.intents
-            .push(UiIntent::Call(CallIntent::Start(contact_action(item))));
+            .push(UiIntent::Call(CallIntent::Start(intents::contact_action(
+                item,
+            ))));
     }
 
     fn select_talk_contact_action(&mut self) {
@@ -462,15 +476,7 @@ impl UiRuntime {
             .selected_contact
             .as_ref()
             .or_else(|| self.snapshot.call.contacts.first())?;
-        if contact.id.trim().is_empty() {
-            return None;
-        }
-        Some(VoiceRecipientAction {
-            id: contact.id.clone(),
-            recipient_address: contact.id.clone(),
-            recipient_name: contact.title.clone(),
-            file_path: String::new(),
-        })
+        intents::voice_recipient_action(contact)
     }
 
     fn latest_voice_note_payload(&self) -> Option<VoiceFileAction> {
@@ -483,16 +489,7 @@ impl UiRuntime {
             .call
             .latest_voice_note_by_contact
             .get(&contact.id)?;
-        if note.local_file_path.trim().is_empty() {
-            return None;
-        }
-        Some(VoiceFileAction {
-            id: contact.id.clone(),
-            recipient_name: contact.title.clone(),
-            file_path: note.local_file_path.clone(),
-            uri: String::new(),
-            sip_address: String::new(),
-        })
+        intents::voice_file_action(contact, note)
     }
 
     fn push_screen(&mut self, screen: UiScreen) {
@@ -533,24 +530,6 @@ impl UiRuntime {
             &self.snapshot,
             self.selected_contact.as_ref(),
         )
-    }
-}
-
-fn item_action(item: &ListItemSnapshot) -> ListItemAction {
-    ListItemAction {
-        id: item.id.clone(),
-        title: item.title.clone(),
-        path: String::new(),
-        track_uri: String::new(),
-    }
-}
-
-fn contact_action(item: &ListItemSnapshot) -> ContactAction {
-    ContactAction {
-        id: item.id.clone(),
-        name: item.title.clone(),
-        sip_address: String::new(),
-        uri: String::new(),
     }
 }
 
@@ -623,5 +602,80 @@ mod tests {
 
         assert!(!runtime.advance_animations(1300));
         assert!(!runtime.is_dirty());
+    }
+
+    #[test]
+    fn wrap_focus_policy_cycles_focus() {
+        let mut runtime = UiRuntime {
+            active_screen: UiScreen::Hub,
+            focus_index: 3,
+            ..UiRuntime::default()
+        };
+
+        runtime.handle_input(InputAction::Advance);
+
+        assert_eq!(runtime.focus_index(), 0);
+    }
+
+    #[test]
+    fn clamp_focus_policy_stops_at_last_item() {
+        let mut runtime = UiRuntime::default();
+        runtime.apply_snapshot(RuntimeSnapshot {
+            app_state: "playlists".to_string(),
+            music: MusicRuntimeSnapshot {
+                playlists: vec![
+                    ListItemSnapshot::new("one", "One", "", "playlist"),
+                    ListItemSnapshot::new("two", "Two", "", "playlist"),
+                ],
+                ..MusicRuntimeSnapshot::default()
+            },
+            ..RuntimeSnapshot::default()
+        });
+        runtime.focus_index = 1;
+
+        runtime.handle_input(InputAction::Advance);
+
+        assert_eq!(runtime.focus_index(), 1);
+    }
+
+    #[test]
+    fn none_focus_policy_does_not_advance_focus() {
+        let mut runtime = UiRuntime::default();
+        runtime.apply_snapshot(RuntimeSnapshot {
+            app_state: "now_playing".to_string(),
+            ..RuntimeSnapshot::default()
+        });
+
+        runtime.handle_input(InputAction::Advance);
+
+        assert_eq!(runtime.focus_index(), 0);
+    }
+
+    #[test]
+    fn stack_navigation_policy_pops_on_back() {
+        let mut runtime = UiRuntime {
+            active_screen: UiScreen::Playlists,
+            screen_stack: vec![UiScreen::Hub],
+            ..UiRuntime::default()
+        };
+
+        runtime.handle_input(InputAction::Back);
+
+        assert_eq!(runtime.active_screen(), UiScreen::Hub);
+    }
+
+    #[test]
+    fn call_navigation_policy_emits_call_back_intent() {
+        let mut runtime = UiRuntime {
+            active_screen: UiScreen::IncomingCall,
+            ..UiRuntime::default()
+        };
+
+        runtime.handle_input(InputAction::Back);
+
+        assert_eq!(
+            runtime.take_intents(),
+            vec![UiIntent::Call(CallIntent::Reject)]
+        );
     }
 }

@@ -183,6 +183,7 @@ impl UiError {
 pub enum UiErrorCode {
     DecodeError,
     InvalidCommand,
+    ManagerTimeout,
     WorkerError,
 }
 
@@ -191,6 +192,7 @@ impl UiErrorCode {
         match self {
             Self::DecodeError => "decode_error",
             Self::InvalidCommand => "invalid_command",
+            Self::ManagerTimeout => "manager_timeout",
             Self::WorkerError => "worker_error",
         }
     }
@@ -727,6 +729,30 @@ mod tests {
     }
 
     #[test]
+    fn every_ui_command_round_trips_through_worker_envelope() {
+        let commands = vec![
+            UiCommand::SetBacklight { brightness: 0.5 },
+            UiCommand::RuntimeSnapshot(RuntimeSnapshot::default()),
+            UiCommand::RuntimePatch(RuntimeSnapshotPatch::Music(MusicRuntimeSnapshot::default())),
+            UiCommand::InputAction(InputAction::Select),
+            UiCommand::Tick,
+            UiCommand::PollInput,
+            UiCommand::Health,
+            UiCommand::Animate(AnimationRequest {
+                transition_id: "screen_enter".to_string(),
+                duration_ms: 180,
+            }),
+            UiCommand::Shutdown,
+            UiCommand::WorkerStop,
+        ];
+
+        for command in commands {
+            let decoded = UiCommand::from_envelope(command.clone().into_envelope()).unwrap();
+            assert_eq!(decoded, command);
+        }
+    }
+
+    #[test]
     fn event_round_trip_decodes_typed_intent() {
         let intent = UiIntent::Music(MusicIntent::LoadPlaylist(ListItemAction {
             id: "mix".to_string(),
@@ -736,6 +762,71 @@ mod tests {
         let envelope = UiEvent::Intent(intent.clone()).into_envelope();
         let decoded = UiEvent::from_envelope(envelope).unwrap();
         assert_eq!(decoded, UiEvent::Intent(intent));
+    }
+
+    #[test]
+    fn every_ui_event_round_trips_through_worker_envelope() {
+        let events = vec![
+            UiEvent::Ready(UiReady {
+                display: DisplayInfo {
+                    width: 240,
+                    height: 280,
+                },
+            }),
+            UiEvent::Input(UiInputEvent {
+                action: InputAction::Advance,
+                method: "button".to_string(),
+                timestamp_ms: 42,
+                duration_ms: 7,
+            }),
+            UiEvent::Intent(UiIntent::Runtime(RuntimeIntent::Shutdown)),
+            UiEvent::ScreenChanged(UiScreenChanged {
+                screen: "hub".to_string(),
+                title: "Hub".to_string(),
+            }),
+            UiEvent::Health(UiHealth {
+                frames: 3,
+                button_events: 2,
+                last_ui_renderer: "lvgl".to_string(),
+                active_screen: "hub".to_string(),
+            }),
+            UiEvent::Error(UiError::new(UiErrorCode::InvalidCommand, "bad command")),
+            UiEvent::ShutdownComplete,
+        ];
+
+        for event in events {
+            let decoded = UiEvent::from_envelope(event.clone().into_envelope()).unwrap();
+            assert_eq!(decoded, event);
+        }
+    }
+
+    #[test]
+    fn every_ui_intent_domain_round_trips_through_event_payload() {
+        let intents = vec![
+            UiIntent::Music(MusicIntent::PlayPause),
+            UiIntent::Call(CallIntent::Start(ContactAction {
+                id: "sip:ada@example.test".to_string(),
+                name: "Ada".to_string(),
+                ..ContactAction::default()
+            })),
+            UiIntent::Voice(VoiceIntent::CaptureStart(VoiceRecipientAction {
+                id: "sip:ada@example.test".to_string(),
+                recipient_address: "sip:ada@example.test".to_string(),
+                recipient_name: "Ada".to_string(),
+                ..VoiceRecipientAction::default()
+            })),
+            UiIntent::Power(PowerIntent::SetRtcAlarm(RtcAlarmAction {
+                when: "2026-05-12T08:00:00Z".to_string(),
+                repeat_mask: 31,
+            })),
+            UiIntent::Navigation(NavigationIntent::Back),
+            UiIntent::Runtime(RuntimeIntent::Shutdown),
+        ];
+
+        for intent in intents {
+            let decoded = UiIntent::from_event_payload(&intent.to_event_payload()).unwrap();
+            assert_eq!(decoded, intent);
+        }
     }
 
     #[test]
@@ -786,6 +877,10 @@ mod tests {
         assert_eq!(
             UiError::new(UiErrorCode::InvalidCommand, "bad").code,
             "invalid_command"
+        );
+        assert_eq!(
+            UiError::new(UiErrorCode::ManagerTimeout, "stale manager").code,
+            "manager_timeout"
         );
     }
 }

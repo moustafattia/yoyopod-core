@@ -1,6 +1,6 @@
 # YoYoPod Display HAL Architecture
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-05-12
 **Status:** Current implementation
 
 This document describes the live Rust-owned display path used by the LVGL-only
@@ -15,9 +15,9 @@ runtime.
 ## Current Files
 
 - `device/ui/src/main.rs`: Rust UI host entrypoint
-- `device/ui/src/worker.rs`: worker protocol loop
-- `device/ui/src/render/`: LVGL app render path
-- `device/ui/src/lvgl/`: native LVGL scene backend and screen controllers
+- `device/ui/src/transport/`: typed UI worker protocol loop
+- `device/ui/src/render/lvgl/`: native LVGL scene backend and screen controllers
+- `device/ui/src/hardware/`: hardware display/button adapters
 - `device/ui/native/lvgl/`: pinned upstream LVGL C build configuration
 
 ## Architecture
@@ -27,7 +27,7 @@ yoyopod-runtime
   -> yoyopod-ui-host worker
      -> Rust scene state
         -> Rust-owned LVGL scene backend
-        -> hardware flush path or preview/readback support
+        -> hardware flush path or explicit mock display surface
 ```
 
 ## Supported Runtime Surfaces
@@ -47,8 +47,9 @@ yoyopod-runtime
 
 ### Preview
 
-The Rust UI host can run in mock hardware mode for protocol and render smoke
-checks. The production hardware path remains Whisplay-focused.
+The Rust UI host can run in explicit mock hardware mode for protocol and render
+smoke checks. It is not the default startup mode; callers must choose a hardware
+mode and production uses Whisplay.
 
 ## Production Contract
 

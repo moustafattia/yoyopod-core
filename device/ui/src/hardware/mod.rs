@@ -1,4 +1,5 @@
 pub mod mock;
+pub mod whisplay_panel;
 
 #[cfg(all(target_os = "linux", feature = "whisplay-hardware"))]
 pub mod whisplay;

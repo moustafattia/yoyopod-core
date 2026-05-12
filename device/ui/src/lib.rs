@@ -4,8 +4,7 @@ pub mod hardware;
 pub mod input;
 pub mod presentation;
 pub mod render;
-pub mod whisplay_panel;
-pub mod worker;
+pub mod transport;
 
 #[cfg(test)]
 mod architecture_tests {
@@ -63,6 +62,18 @@ mod architecture_tests {
             !old_lvgl_dir.exists(),
             "src/lvgl module must not remain; LVGL implementation belongs in src/render/lvgl"
         );
+    }
+
+    #[test]
+    fn removed_root_modules_do_not_return() {
+        let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        for filename in ["worker.rs", "input.rs", "whisplay_panel.rs"] {
+            let path = src_dir.join(filename);
+            assert!(
+                !path.exists(),
+                "{filename} must stay in its audit-aligned module directory"
+            );
+        }
     }
 
     fn rust_files(root: &Path) -> Vec<PathBuf> {

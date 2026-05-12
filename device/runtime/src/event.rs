@@ -1202,4 +1202,32 @@ mod tests {
         assert_eq!(domain, WorkerDomain::Ui);
         assert!(message.contains("missing UI field action"));
     }
+
+    #[test]
+    fn typed_ui_input_event_routes_to_runtime_input() {
+        let input = UiInputEvent {
+            action: InputAction::PttPress,
+            method: "button".to_string(),
+            timestamp_ms: 10,
+            duration_ms: 0,
+        };
+        let envelope = UiEvent::Input(input.clone()).into_envelope();
+
+        let event = runtime_event_from_worker(WorkerDomain::Ui, envelope).unwrap();
+
+        assert_eq!(event, RuntimeEvent::UiInput(input));
+    }
+
+    #[test]
+    fn unknown_ui_event_type_becomes_worker_error() {
+        let envelope = WorkerEnvelope::event("ui.nope", json!({}));
+
+        let event = runtime_event_from_worker(WorkerDomain::Ui, envelope).unwrap();
+
+        let RuntimeEvent::WorkerError { domain, message } = event else {
+            panic!("expected worker error");
+        };
+        assert_eq!(domain, WorkerDomain::Ui);
+        assert!(message.contains("unknown UI event type ui.nope"));
+    }
 }

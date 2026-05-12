@@ -1,4 +1,7 @@
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::thread;
+use std::time::Duration;
 
 use anyhow::Result;
 use yoyopod_protocol::ui::{
@@ -14,6 +17,8 @@ use crate::input::{ButtonTiming, OneButtonMachine};
 use crate::presentation::screens::ScreenModel;
 use crate::render::LvglRenderer;
 
+const MANAGER_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
+
 pub fn run_worker<R, W, E, D, B>(
     input: R,
     output: &mut W,
@@ -22,7 +27,7 @@ pub fn run_worker<R, W, E, D, B>(
     mut button: B,
 ) -> Result<()>
 where
-    R: Read,
+    R: Read + Send + 'static,
     W: Write,
     E: Write,
     D: DisplayDevice,
@@ -48,9 +53,24 @@ where
         }),
     )?;
 
-    let reader = BufReader::new(input);
-    for line in reader.lines() {
-        let line = line?;
+    let lines = spawn_command_reader(input);
+    loop {
+        let line = match lines.recv_timeout(MANAGER_HEARTBEAT_TIMEOUT) {
+            Ok(line) => line?,
+            Err(RecvTimeoutError::Timeout) => {
+                let message = format!(
+                    "runtime manager heartbeat timed out after {}ms",
+                    MANAGER_HEARTBEAT_TIMEOUT.as_millis()
+                );
+                writeln!(errors, "{message}")?;
+                emit_event(
+                    output,
+                    UiEvent::Error(UiError::new(UiErrorCode::ManagerTimeout, message)),
+                )?;
+                break;
+            }
+            Err(RecvTimeoutError::Disconnected) => break,
+        };
         if line.trim().is_empty() {
             continue;
         }
@@ -234,6 +254,22 @@ where
     }
 
     Ok(())
+}
+
+fn spawn_command_reader<R>(input: R) -> Receiver<io::Result<String>>
+where
+    R: Read + Send + 'static,
+{
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let reader = BufReader::new(input);
+        for line in reader.lines() {
+            if sender.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    receiver
 }
 
 fn emit<W: Write>(output: &mut W, envelope: WorkerEnvelope) -> Result<()> {

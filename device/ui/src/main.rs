@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use yoyopod_ui::{hardware, worker};
+use yoyopod_ui::{hardware, transport};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum HardwareMode {
@@ -12,7 +12,7 @@ enum HardwareMode {
 #[command(name = "yoyopod-ui-host")]
 #[command(about = "Whisplay Rust UI host")]
 struct Args {
-    #[arg(long, value_enum, default_value_t = HardwareMode::Mock)]
+    #[arg(long, value_enum)]
     hardware: HardwareMode,
 }
 
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
             let stdin = std::io::stdin();
             let mut stdout = std::io::stdout();
             let mut stderr = std::io::stderr();
-            worker::run_worker(stdin, &mut stdout, &mut stderr, display, button)
+            transport::run_worker(stdin, &mut stdout, &mut stderr, display, button)
         }
         HardwareMode::Whisplay => {
             #[cfg(all(target_os = "linux", feature = "whisplay-hardware"))]
@@ -34,7 +34,7 @@ fn main() -> Result<()> {
                 let stdin = std::io::stdin();
                 let mut stdout = std::io::stdout();
                 let mut stderr = std::io::stderr();
-                return worker::run_worker(stdin, &mut stdout, &mut stderr, display, button);
+                return transport::run_worker(stdin, &mut stdout, &mut stderr, display, button);
             }
             #[cfg(not(all(target_os = "linux", feature = "whisplay-hardware")))]
             {

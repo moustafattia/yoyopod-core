@@ -173,6 +173,17 @@ impl WorkerSupervisor {
         ready_type: &str,
         timeout: Duration,
     ) -> bool {
+        self.wait_for_message(domain, timeout, |message| {
+            message.message_type == ready_type
+        })
+    }
+
+    pub fn wait_for_message(
+        &mut self,
+        domain: WorkerDomain,
+        timeout: Duration,
+        mut matches_message: impl FnMut(&WorkerEnvelope) -> bool,
+    ) -> bool {
         let Some(worker) = self.workers.get_mut(&domain) else {
             return false;
         };
@@ -181,7 +192,7 @@ impl WorkerSupervisor {
         let mut preserved = VecDeque::new();
 
         while let Some(message) = worker.pending_messages.pop_front() {
-            if message.message_type == ready_type {
+            if matches_message(&message) {
                 prepend_pending(worker, preserved);
                 return true;
             }
@@ -190,7 +201,7 @@ impl WorkerSupervisor {
 
         while Instant::now() < deadline {
             while let Ok(message) = worker.messages.try_recv() {
-                if message.message_type == ready_type {
+                if matches_message(&message) {
                     prepend_pending(worker, preserved);
                     return true;
                 }

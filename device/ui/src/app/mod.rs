@@ -1,6 +1,9 @@
 pub mod core;
 pub mod focus;
+pub mod input_router;
+pub mod intents;
 pub mod navigator;
+pub mod snapshot;
 pub mod state;
 
 pub use core::UiRuntime;

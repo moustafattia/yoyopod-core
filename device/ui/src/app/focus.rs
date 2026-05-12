@@ -11,6 +11,14 @@ pub fn advance(current: usize, count: usize) -> usize {
     }
 }
 
+pub fn advance_clamped(current: usize, count: usize) -> usize {
+    if count == 0 {
+        0
+    } else {
+        (current + 1).min(count - 1)
+    }
+}
+
 pub fn clamp(current: usize, count: usize) -> usize {
     if count == 0 {
         0

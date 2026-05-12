@@ -11,6 +11,7 @@ use crate::render::assets::{self, RenderAssets};
 use crate::render::lvgl::ffi;
 use crate::render::lvgl::icons;
 use crate::render::lvgl::layout::LayoutResolver;
+use crate::render::lvgl::roles;
 use crate::render::lvgl::style::{self as theme, WidgetStyle};
 use crate::render::lvgl::theme::ThemeResolver;
 use crate::render::lvgl::{LvglFacade, WidgetId};
