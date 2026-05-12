@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>UI Host Worker — Architecture Audit & Refactor Plan</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --border: #2a313c;
+    --text: #d6deeb;
+    --muted: #8a94a7;
+    --accent: #79b8ff;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --purple: #c792ea;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  .layout { display: flex; min-height: 100vh; }
+  nav.toc {
+    position: sticky; top: 0; align-self: flex-start;
+    width: 280px; padding: 24px 16px; height: 100vh; overflow-y: auto;
+    border-right: 1px solid var(--border); background: var(--panel);
+    font-size: 13px;
+  }
+  nav.toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 12px; }
+  nav.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: section; }
+  nav.toc li { counter-increment: section; margin: 4px 0; }
+  nav.toc li::before { content: counter(section) ". "; color: var(--muted); }
+  nav.toc a { color: var(--text); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+  main { flex: 1; padding: 40px 56px; max-width: 1200px; }
+  h1 { font-size: 30px; margin: 0 0 8px; color: #fff; }
+  h2 { font-size: 22px; margin-top: 48px; padding-bottom: 8px; border-bottom: 1px solid var(--border); color: #fff; }
+  h3 { font-size: 17px; margin-top: 28px; color: var(--accent); }
+  h4 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 20px; margin-bottom: 8px; }
+  .subtitle { color: var(--muted); margin-bottom: 32px; }
+  .meta { display: flex; gap: 24px; font-size: 13px; color: var(--muted); margin-bottom: 28px; flex-wrap: wrap; }
+  .meta span strong { color: var(--text); }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--panel-2); padding: 1px 6px; border-radius: 3px; color: #e7ecef; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--border); padding: 8px 11px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); color: var(--text); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
+  .pill.red { background: rgba(248,113,113,0.15); color: var(--red); }
+  .pill.amber { background: rgba(251,191,36,0.15); color: var(--amber); }
+  .pill.green { background: rgba(74,222,128,0.15); color: var(--green); }
+  .pill.blue { background: rgba(121,184,255,0.15); color: var(--accent); }
+  .pill.purple { background: rgba(199,146,234,0.15); color: var(--purple); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+  .callout.warn { border-left-color: var(--amber); }
+  .callout.danger { border-left-color: var(--red); }
+  .callout.good { border-left-color: var(--green); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); padding: 16px; border-radius: 6px; }
+  .card h4 { margin-top: 0; }
+  .file-ref { font-family: var(--mono); font-size: 0.85em; color: var(--purple); }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0 24px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); padding: 16px; border-radius: 6px; }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--accent); }
+  .stat .lab { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+  .ascii { background: var(--panel); border: 1px solid var(--border); padding: 14px; border-radius: 6px; font-family: var(--mono); font-size: 12px; line-height: 1.4; color: #c9d1d9; white-space: pre; overflow-x: auto; }
+  details { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; margin: 8px 0; }
+  details summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+  details[open] summary { margin-bottom: 8px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .severity-high { color: var(--red); font-weight: 600; }
+  .severity-med { color: var(--amber); font-weight: 600; }
+  .severity-low { color: var(--green); font-weight: 600; }
+  ul.tight li { margin: 2px 0; }
+  blockquote { margin: 12px 0; padding: 10px 14px; border-left: 3px solid var(--muted); background: var(--panel-2); color: var(--text); font-style: italic; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 16px; font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#exec">Executive summary</a></li>
+    <li><a href="#inventory">File inventory</a></li>
+    <li><a href="#current-arch">Current architecture</a></li>
+    <li><a href="#protocol">Wire protocol surface</a></li>
+    <li><a href="#cross-crate">Cross-crate interactions</a></li>
+    <li><a href="#runtime-model">Threading, lifecycle, state</a></li>
+    <li><a href="#per-screen">Per-screen analysis</a></li>
+    <li><a href="#issues">Coupling smells &amp; issues</a></li>
+    <li><a href="#friction">Extension friction</a></li>
+    <li><a href="#dead-code">Dead code, TODOs, naming</a></li>
+    <li><a href="#errors">Error handling &amp; gaps</a></li>
+    <li><a href="#proposed">Proposed architecture</a></li>
+    <li><a href="#new-tree">New folder structure</a></li>
+    <li><a href="#new-protocol">Standardized envelope</a></li>
+    <li><a href="#migration">Migration plan</a></li>
+    <li><a href="#extending">Extending to animation</a></li>
+    <li><a href="#appendix">Appendix: snippets</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<h1>UI Host Worker — Architecture Audit &amp; Refactor Plan</h1>
+<div class="subtitle">Comprehensive analysis of <code>device/ui/</code> with proposed clean-architecture refactor and standardized worker ↔ runtime-manager protocol.</div>
+
+<div class="meta">
+  <span><strong>Date:</strong> 2026-05-12</span>
+  <span><strong>Repo:</strong> yoyopod</span>
+  <span><strong>Crate:</strong> device/ui</span>
+  <span><strong>LOC scanned:</strong> 7,806 (src) + 853 (icon assets)</span>
+  <span><strong>Branch:</strong> main</span>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="exec">1. Executive summary</h2>
+
+<div class="stat-grid">
+  <div class="stat"><div class="num">35</div><div class="lab">Rust source files</div></div>
+  <div class="stat"><div class="num">7,806</div><div class="lab">lines of Rust</div></div>
+  <div class="stat"><div class="num">13</div><div class="lab">protocol message types</div></div>
+  <div class="stat"><div class="num">17</div><div class="lab">UiScreen variants</div></div>
+</div>
+
+<p>The Rust UI worker is a single-threaded, stdin/stdout-driven LVGL frontend that consumes <code>RuntimeSnapshot</code> commands from the runtime manager and emits <code>UiIntent</code> events. It is structurally close to a clean-architecture shape (hardware traits, pure screen-model builders, controller pattern), but suffers from three concentrated debt clusters:</p>
+
+<ol>
+  <li><strong>Monolithic state machine</strong> — <code class="file-ref">runtime/state_machine.rs (628 LOC)</code> mixes navigation, focus, input routing, intent-payload construction, PTT semantics, and overlay preemption.</li>
+  <li><strong>Hardcoded layout/style tables in LVGL backend</strong> — <code class="file-ref">lvgl/native_backend.rs (2,383 LOC)</code> bakes ~200 match arms of layout coords and RGB styles into code.</li>
+  <li><strong>Stringly-typed protocol</strong> — the dispatch in <code class="file-ref">worker.rs</code> matches on raw <code>message_type</code> strings and intent payloads are unstructured <code>serde_json::Value</code>.</li>
+</ol>
+
+<div class="callout">
+  <strong>Headline recommendation.</strong> Introduce four explicit layers (<em>transport → application → presentation → render</em>) with a typed <code>UiCommand</code> / <code>UiEvent</code> envelope, a declarative navigation graph, and a frame-clocked transition layer. The current crate already has the right <em>files</em>; what is missing is a stable boundary between them.
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:var(--red)"></span> high severity</span>
+  <span><span class="dot" style="background:var(--amber)"></span> medium</span>
+  <span><span class="dot" style="background:var(--green)"></span> low / nit</span>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="inventory">2. File inventory</h2>
+
+<p>Sorted by location. <span class="pill red">XL</span> = &gt; 400 LOC.</p>
+
+<table>
+  <thead><tr><th>Path</th><th>LOC</th><th>Purpose</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>main.rs</code></td><td>47</td><td>CLI entry, hardware selection, delegate to <code>run_worker</code></td><td>Hardcoded mock/whisplay branching.</td></tr>
+    <tr><td><code>lib.rs</code></td><td>10</td><td>Module re-exports</td><td>No logic.</td></tr>
+    <tr><td><code>worker.rs</code></td><td>308</td><td>Main message loop, dispatch, intent emission</td><td>String dispatch; mixes transport + orchestration.</td></tr>
+    <tr><td><code>protocol.rs</code></td><td>29</td><td>Thin envelope helpers + monotonic clock</td><td>Re-exports <code>yoyopod_protocol::WorkerEnvelope</code>.</td></tr>
+    <tr><td><code>input.rs</code></td><td>296</td><td><code>OneButtonMachine</code>: debounce, single/double tap, long-hold</td><td>Hardcoded timing constants (50/300/800 ms).</td></tr>
+    <tr><td><code>framebuffer.rs</code></td><td>94</td><td>RGB565 framebuffer abstraction</td><td>No dirty-rect tracking.</td></tr>
+    <tr><td><code>whisplay_panel.rs</code></td><td>86</td><td>SPI command/data constants for the panel</td><td>Hardware-specific.</td></tr>
+    <tr><td><code>hardware/mod.rs</code></td><td>19</td><td><code>DisplayDevice</code> &amp; <code>ButtonDevice</code> traits</td><td>Already clean.</td></tr>
+    <tr><td><code>hardware/mock.rs</code></td><td>57</td><td>In-memory mock display + button</td><td>Used for desktop/test.</td></tr>
+    <tr><td><code>hardware/whisplay.rs</code></td><td>224</td><td>rppal-backed GPIO/SPI implementation</td><td>Env-var driven.</td></tr>
+    <tr><td><code>render/mod.rs</code></td><td>3</td><td>Re-export</td><td>—</td></tr>
+    <tr><td><code>render/lvgl.rs</code></td><td>101</td><td><code>LvglRenderer</code> facade over <code>RustSceneBridge</code></td><td>Feature-gated stub if <code>native-lvgl</code> off.</td></tr>
+    <tr><td><code>runtime/mod.rs</code></td><td>10</td><td>Re-exports</td><td>—</td></tr>
+    <tr><td><code>runtime/intent.rs</code></td><td>36</td><td><code>UiIntent { domain, action, payload: Value }</code></td><td>Stringly-typed; not enum.</td></tr>
+    <tr><td><code>runtime/snapshot.rs</code></td><td>349</td><td><code>RuntimeSnapshot</code> domain tree</td><td>Always-full payload; no deltas.</td></tr>
+    <tr><td><code>runtime/state_machine.rs</code></td><td>628 <span class="pill red">XL</span></td><td><code>UiRuntime</code> — navigation, focus, input, intents</td><td><strong>Largest accidental complexity hotspot.</strong></td></tr>
+    <tr><td><code>screens/mod.rs</code></td><td>16</td><td>Re-exports</td><td>—</td></tr>
+    <tr><td><code>screens/models.rs</code></td><td>267</td><td>View-model structs: Hub, List, NowPlaying, Ask, Call, …</td><td>Clean / LVGL-free.</td></tr>
+    <tr><td><code>screens/chrome.rs</code></td><td>41</td><td>Status-bar / chrome extractor</td><td>—</td></tr>
+    <tr><td><code>screens/hub.rs</code></td><td>48</td><td>Hub builder</td><td>—</td></tr>
+    <tr><td><code>screens/listen.rs</code></td><td>30</td><td>Listen builder</td><td>—</td></tr>
+    <tr><td><code>screens/talk.rs</code></td><td>30</td><td>Talk builder + <code>talk_contact_actions</code></td><td>—</td></tr>
+    <tr><td><code>screens/music.rs</code></td><td>69</td><td>NowPlaying, Playlists, RecentTracks builders</td><td>—</td></tr>
+    <tr><td><code>screens/ask.rs</code></td><td>208</td><td>Ask/voice builder</td><td>—</td></tr>
+    <tr><td><code>screens/call.rs</code></td><td>226</td><td>Incoming/Outgoing/InCall builders</td><td>—</td></tr>
+    <tr><td><code>screens/power.rs</code></td><td>209</td><td>Power pages builder</td><td>—</td></tr>
+    <tr><td><code>screens/overlay.rs</code></td><td>40</td><td>Loading/Error builder</td><td>—</td></tr>
+    <tr><td><code>lvgl/mod.rs</code></td><td>341</td><td><code>LvglFacade</code> trait, <code>NativeSceneKey</code>, <code>RustSceneBridge</code></td><td>Mixes abstraction + factory.</td></tr>
+    <tr><td><code>lvgl/sys.rs</code></td><td>155</td><td>FFI bindings to LVGL C</td><td><code>unsafe extern "C"</code>.</td></tr>
+    <tr><td><code>lvgl/primitives.rs</code></td><td>12</td><td><code>WidgetId(u64)</code></td><td>—</td></tr>
+    <tr><td><code>lvgl/native_backend.rs</code></td><td>2,383 <span class="pill red">XL</span></td><td><code>NativeLvglFacade</code>: widget registry, layout table, style table, flush callback</td><td><strong>Layout (~475 LOC) and style (~75 LOC) tables should be data.</strong></td></tr>
+    <tr><td><code>lvgl/scene_backend.rs</code></td><td>324</td><td><code>SceneBridge</code>, <code>NativeSceneRenderer</code>, controller factory</td><td>Hardcoded scene→controller match.</td></tr>
+    <tr><td><code>lvgl/theme.rs</code></td><td>243</td><td>Colors, fonts, spacing, role→style dispatcher</td><td>String-keyed roles.</td></tr>
+    <tr><td><code>lvgl/chrome.rs</code></td><td>14</td><td>Chrome extractor (duplicate of <code>state_machine</code> match)</td><td>Duplicated logic.</td></tr>
+    <tr><td><code>lvgl/hub_icon_assets.rs</code></td><td>853 <span class="pill red">XL</span></td><td>Embedded icon bitmaps</td><td>Pure asset blob.</td></tr>
+    <tr><td><code>lvgl/controllers/mod.rs</code></td><td>35</td><td><code>ScreenController</code> trait + factory</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/shared.rs</code></td><td>322</td><td><code>StatusBarWidgets</code>: shared chrome rendering</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/hub.rs</code></td><td>123</td><td>Hub controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/listen.rs</code></td><td>184</td><td>Listen controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/playlist.rs</code></td><td>191</td><td>Playlist controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/now_playing.rs</code></td><td>166</td><td>NowPlaying controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/talk.rs</code></td><td>152</td><td>Talk controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/talk_actions.rs</code></td><td>318</td><td>TalkContact actions controller</td><td>Borderline XL.</td></tr>
+    <tr><td><code>lvgl/controllers/ask.rs</code></td><td>137</td><td>Ask/voice controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/call.rs</code></td><td>220</td><td>Call (incoming/outgoing/in-call) controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/list.rs</code></td><td>135</td><td>Shared list rendering helper</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/power.rs</code></td><td>153</td><td>Power pages controller</td><td>—</td></tr>
+    <tr><td><code>lvgl/controllers/overlay.rs</code></td><td>80</td><td>Loading/Error controller</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="current-arch">3. Current architecture</h2>
+
+<h3>3.1 Logical layering (as built)</h3>
+
+<div class="ascii">┌────────────────────────────────────────────────────────────────────────┐
+│                      runtime manager (device/runtime)                  │
+│             spawns ui worker as child process; stdin/stdout            │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │ JSON-line WorkerEnvelope
+                               ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  worker.rs  —  run_worker(): blocking loop, string-matched dispatch    │
+│  ▸ ui.set_backlight  ▸ ui.runtime_snapshot  ▸ ui.input_action          │
+│  ▸ ui.tick           ▸ ui.poll_input        ▸ ui.health  ▸ ui.shutdown │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │
+              ┌────────────────┼─────────────────────────────┐
+              ▼                ▼                             ▼
+   ┌──────────────────┐ ┌───────────────┐         ┌────────────────────┐
+   │ runtime/         │ │ input.rs      │         │ hardware/          │
+   │   UiRuntime      │ │ OneButton     │         │   Display / Button │
+   │   - apply_snap   │ │   Machine     │         │   (mock|whisplay)  │
+   │   - handle_input │ └───────┬───────┘         └─────────┬──────────┘
+   │   - intents      │         │ InputAction              ▲
+   │   - active_screen│         └─→ runtime ──intents──┐   │ flush frame
+   │   - focus_index  │                                │   │
+   │   - screen_stack │                                ▼   │
+   └────────┬─────────┘                       ┌─────────────────────────┐
+            │ active_screen_model()           │     framebuffer.rs       │
+            │ ScreenModel (enum)              └─────────────▲────────────┘
+            ▼                                               │
+   ┌────────────────────────┐    render_screen_model()      │
+   │ screens/  (pure)       │─────────────────────────┐     │
+   │   *_model() builders   │                         │     │
+   └────────────────────────┘                         ▼     │
+                                            ┌─────────────────────────┐
+                                            │ render/lvgl.rs          │
+                                            │   LvglRenderer          │
+                                            └───────────┬─────────────┘
+                                                        │
+                                            ┌───────────▼─────────────┐
+                                            │ lvgl/scene_backend.rs   │
+                                            │  NativeSceneRenderer    │
+                                            │   - build/destroy scene │
+                                            │   - controller_for_*    │
+                                            └───────────┬─────────────┘
+                                                        │
+                              ┌─────────────────────────┴────────────────┐
+                              ▼                                          ▼
+                ┌──────────────────────────┐               ┌────────────────────────┐
+                │ lvgl/controllers/*.rs    │               │ lvgl/native_backend.rs │
+                │ ScreenController::sync() │──facade───▶  │   LVGL FFI, layout +    │
+                │ (per-screen)             │               │   style hardcoded       │
+                └──────────────────────────┘               └────────────────────────┘</div>
+
+<h3>3.2 What is already clean</h3>
+<ul class="tight">
+  <li><code>hardware/</code> traits cleanly separate device I/O from the worker.</li>
+  <li><code>screens/*.rs</code> builder functions are pure: <code>(&amp;RuntimeSnapshot, focus) → ScreenModel</code>. Zero LVGL leakage.</li>
+  <li><code>screens/models.rs</code> view-models are render-engine-agnostic.</li>
+  <li><code>ScreenController</code> trait isolates LVGL imperative code per screen.</li>
+  <li>Single envelope type <code>WorkerEnvelope</code> on the wire (no ad-hoc per-message structs).</li>
+</ul>
+
+<h3>3.3 What violates the boundaries</h3>
+<ul class="tight">
+  <li><code>worker.rs</code> simultaneously plays transport, dispatcher, render-tick driver, input poller, and intent emitter.</li>
+  <li><code>state_machine.rs</code> bakes navigation graph, focus rules, intent <code>json!{}</code> payload-building, and PTT semantics into one file.</li>
+  <li><code>native_backend.rs</code> hardcodes per-role layout coords and RGB styles instead of consuming a table.</li>
+  <li><code>UiScreen</code>, <code>NativeSceneKey</code>, <code>ScreenModel</code> are three parallel enums that must stay synchronized by hand.</li>
+  <li><code>UiIntent</code> payloads are untyped <code>serde_json::Value</code>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="protocol">4. Wire protocol surface</h2>
+
+<h3>4.1 Envelope (verbatim)</h3>
+<p>Defined in <code class="file-ref">device/protocol/src/lib.rs</code>:</p>
+<pre><code>pub struct WorkerEnvelope {
+    pub schema_version: u16,         // SUPPORTED_SCHEMA_VERSION = 1
+    pub kind: EnvelopeKind,          // Command | Event | Result | Error | Heartbeat
+    pub message_type: String,        // "ui.tick", "ui.intent", ...
+    pub request_id: Option&lt;String&gt;,
+    pub timestamp_ms: u64,
+    pub deadline_ms: u64,
+    pub payload: Value,              // must be object, not null
+}</code></pre>
+
+<h3>4.2 All message types</h3>
+
+<table>
+  <thead><tr><th>Dir</th><th>message_type</th><th>Payload</th><th>Handler / Emitter</th><th>Frequency</th></tr></thead>
+  <tbody>
+    <tr><td><span class="pill blue">IN</span></td><td><code>ui.set_backlight</code></td><td><code>{ brightness: f64 }</code></td><td><code>worker.rs</code></td><td>on user adjust</td></tr>
+    <tr><td><span class="pill blue">IN</span></td><td><code>ui.runtime_snapshot</code></td><td><code>RuntimeSnapshot</code></td><td><code>worker.rs</code> → <code>UiRuntime::apply_snapshot</code></td><td>100–500 ms</td></tr>
+    <tr><td><span class="pill blue">IN</span></td><td><code>ui.input_action</code></td><td><code>{ action: str }</code></td><td><code>parse_input_action</code></td><td>test injection</td></tr>
+    <tr><td><span class="pill blue">IN</span></td><td><code>ui.tick</code></td><td><code>{}</code></td><td>poll button, render if dirty</td><td>10–100 ms</td></tr>
+    <tr><td><span class="pill blue">IN</span></td><td><code>ui.poll_input</code></td><td><code>{}</code></td><td>read button only</td><td>optional</td></tr>
+    <tr><td><span class="pill blue">IN</span></td><td><code>ui.health</code></td><td><code>{}</code></td><td>emits ui.health event</td><td>on demand</td></tr>
+    <tr><td><span class="pill blue">IN</span></td><td><code>ui.shutdown</code> / <code>worker.stop</code></td><td><code>{}</code></td><td>break loop</td><td>once</td></tr>
+    <tr><td><span class="pill green">OUT</span></td><td><code>ui.ready</code></td><td><code>{ display: { width, height } }</code></td><td>startup</td><td>once</td></tr>
+    <tr><td><span class="pill green">OUT</span></td><td><code>ui.input</code></td><td><code>{ action, method, timestamp_ms, duration_ms }</code></td><td>per gesture</td><td>on button</td></tr>
+    <tr><td><span class="pill green">OUT</span></td><td><code>ui.intent</code></td><td><code>{ domain, action, payload }</code></td><td><code>UiRuntime</code> intents</td><td>on user input</td></tr>
+    <tr><td><span class="pill green">OUT</span></td><td><code>ui.screen_changed</code></td><td><code>{ screen, title }</code></td><td>on stack change</td><td>per nav</td></tr>
+    <tr><td><span class="pill green">OUT</span></td><td><code>ui.health</code></td><td><code>{ frames, button_events, last_ui_renderer, active_screen }</code></td><td>on request</td><td>on demand</td></tr>
+    <tr><td><span class="pill green">OUT</span></td><td><code>ui.error</code></td><td><code>{ code, message }</code></td><td>on failure</td><td>rare</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+<strong>Protocol gaps.</strong>
+<ul class="tight">
+  <li>No schema version negotiation beyond the global <code>schema_version</code> field.</li>
+  <li>No delta updates — entire <code>RuntimeSnapshot</code> (5–50 KB) re-sent every tick.</li>
+  <li>No <code>ui.shutdown_complete</code> ack — runtime manager cannot confirm clean teardown.</li>
+  <li>Intent payloads are <code>Value</code>: no compile-time contract between worker and runtime manager.</li>
+  <li>PTT press/release are <em>consumed internally</em> and never surface to the runtime manager.</li>
+  <li>Unknown <code>message_type</code> is silently dropped (<code>continue</code> in worker loop) — no <code>ui.error</code> emitted.</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cross-crate">5. Cross-crate interactions</h2>
+
+<table>
+  <thead><tr><th>Crate</th><th>Role</th><th>What it provides to UI</th></tr></thead>
+  <tbody>
+    <tr><td><code>device/protocol</code></td><td>Wire schema</td><td><code>WorkerEnvelope</code>, <code>EnvelopeKind</code>, schema version constants, JSON-line framing helpers.</td></tr>
+    <tr><td><code>device/worker</code></td><td>Worker IO scaffolding</td><td>Stdin/stdout multiplexing, <code>drain_worker_messages</code>, protocol-error draining; used identically by every worker (ui/voip/network/…).</td></tr>
+    <tr><td><code>device/runtime</code></td><td>Supervisor</td><td>Spawns the UI worker as a child process, owns the snapshot, calls <code>runtime_event_from_worker</code> → <code>commands_for_event</code> → dispatch. Records <code>WorkerState::Degraded</code> on protocol fault.</td></tr>
+    <tr><td><code>device/harness</code></td><td>Dev harness</td><td>Lets the UI worker be driven from a test rig outside the runtime manager.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="runtime-model">6. Threading, lifecycle &amp; state</h2>
+
+<h3>6.1 Threading</h3>
+<ul class="tight">
+  <li><strong>Single OS thread.</strong> Blocking stdin read drives everything. No tokio, no futures, no channels.</li>
+  <li>Button read (~50 ns), LVGL render and SPI flush (~11 ms on Whisplay) are <strong>synchronous on the worker thread</strong>.</li>
+  <li>LVGL's flush callback re-enters Rust synchronously inside <code>renderer.render()</code> and pushes pixels to the display device.</li>
+</ul>
+
+<h3>6.2 Startup ordering</h3>
+<ol>
+  <li><code>main.rs</code> parses CLI, instantiates <code>MockDisplay</code> | <code>WhisplayDisplay</code> + button.</li>
+  <li><code>run_worker</code> constructs an empty <code>UiRuntime</code> with default <code>RuntimeSnapshot</code>.</li>
+  <li>If <code>native-lvgl</code>: <code>LvglRenderer::open()</code> initializes LVGL display, draw buffer, flush callback.</li>
+  <li>Emit <code>ui.ready { display }</code>.</li>
+  <li>Enter blocking message loop.</li>
+</ol>
+
+<h3>6.3 Shutdown</h3>
+<ul class="tight">
+  <li>On <code>ui.shutdown</code> / EOF, the loop breaks. Drops cascade: <code>LvglRenderer</code> → <code>RustSceneBridge</code> → active <code>ScreenController::teardown()</code> → framebuffer → display → button.</li>
+  <li>No signal handler: SIGTERM kills the process without controller teardown — GPIO state may persist.</li>
+  <li>No <code>ui.shutdown_complete</code> sent.</li>
+</ul>
+
+<h3>6.4 State storage map</h3>
+<table>
+  <thead><tr><th>Where</th><th>What</th><th>Lifetime</th></tr></thead>
+  <tbody>
+    <tr><td><code>UiRuntime</code></td><td>snapshot, active_screen, screen_stack, focus_index, intents queue, dirty flag, last_app_state, selected_contact</td><td>worker process</td></tr>
+    <tr><td><code>NativeLvglFacade</code></td><td><code>HashMap&lt;WidgetId, WidgetNode&gt;</code>, LVGL display + draw buffer pointers</td><td>worker process</td></tr>
+    <tr><td><code>NativeSceneRenderer</code></td><td>active_scene + boxed controller</td><td>destroyed/rebuilt per scene change</td></tr>
+    <tr><td><code>OneButtonMachine</code></td><td>debounce + gesture timing state</td><td>worker process</td></tr>
+    <tr><td><code>Framebuffer</code></td><td>240×280 RGB565 buffer (~134 KB)</td><td>worker process</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="per-screen">7. Per-screen analysis</h2>
+
+<table>
+  <thead><tr><th>Screen</th><th>Snapshot fields read</th><th>Intents emitted</th><th>Quirks</th></tr></thead>
+  <tbody>
+    <tr><td>Hub</td><td><code>hub.cards</code>, status chrome</td><td><code>music.navigate</code>, <code>voice.navigate</code>, <code>power.show_menu</code></td><td>Card order &amp; intents hardcoded in <code>state_machine.rs</code>.</td></tr>
+    <tr><td>Listen</td><td><code>music.*</code></td><td><code>music.navigate</code></td><td>Wrap selection mode.</td></tr>
+    <tr><td>Playlists / RecentTracks</td><td><code>music.playlists</code> / <code>music.recent_tracks</code></td><td><code>music.load_playlist</code>, <code>music.play_track</code></td><td>Variant name plural ↔ <code>UiScreen::Playlist</code> singular.</td></tr>
+    <tr><td>NowPlaying</td><td><code>music.now_playing</code></td><td><code>music.play_pause</code>, <code>music.next</code></td><td>Clamp selection mode.</td></tr>
+    <tr><td>Talk / Contacts / CallHistory</td><td><code>call.contacts</code>, <code>call.history</code></td><td><code>call.start</code> (via TalkContact)</td><td>Three list screens share a model variant.</td></tr>
+    <tr><td>TalkContact</td><td><code>UiRuntime.selected_contact</code></td><td><code>call.start</code>, <code>voice.capture_start</code>, <code>voice.play_note</code></td><td>Action set depends on action.kind.</td></tr>
+    <tr><td>VoiceNote</td><td><code>voice.phase</code>, recipient</td><td><code>voice.capture_start/stop</code>, <code>voice.send_note</code>, <code>voice.cancel_note</code></td><td>Back is context-dependent; PTT never surfaces.</td></tr>
+    <tr><td>Ask</td><td><code>voice.*</code>, <code>overlay</code></td><td><code>voice.ask_start/stop</code></td><td>PTT passthrough special-case.</td></tr>
+    <tr><td>Incoming / Outgoing / InCall</td><td><code>call.*</code></td><td><code>call.answer / reject / hangup / toggle_mute</code></td><td>Back ≠ pop; Back = action.</td></tr>
+    <tr><td>Power</td><td><code>power.pages</code></td><td>(none — display-only)</td><td>Wraps silently on page advance.</td></tr>
+    <tr><td>Overlay (Loading / Error)</td><td><code>overlay.*</code></td><td>(none)</td><td>Preempts stack on <code>apply_snapshot</code>.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="issues">8. Coupling smells &amp; issues</h2>
+
+<table>
+  <thead><tr><th>#</th><th>Severity</th><th>Issue</th><th>Where</th><th>Impact</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td class="severity-high">High</td><td>Stringly-typed message_type dispatch</td><td><code>worker.rs:64-185</code></td><td>No exhaustiveness; unknown types silently dropped.</td></tr>
+    <tr><td>2</td><td class="severity-high">High</td><td>Monolithic state machine</td><td><code>runtime/state_machine.rs</code></td><td>Navigation, focus, input, intent JSON, PTT all entangled in 628 LOC.</td></tr>
+    <tr><td>3</td><td class="severity-high">High</td><td>Hardcoded layout/style tables</td><td><code>lvgl/native_backend.rs:900-1450</code></td><td>~200 match arms; any design change is a 2,383-line file edit.</td></tr>
+    <tr><td>4</td><td class="severity-high">High</td><td>Untyped intent payloads (<code>serde_json::Value</code>)</td><td><code>runtime/state_machine.rs:337-388</code></td><td>No contract with runtime manager; runtime errors at boundary.</td></tr>
+    <tr><td>5</td><td class="severity-high">High</td><td>Three parallel enums must stay synced</td><td><code>UiScreen</code> / <code>NativeSceneKey</code> / <code>ScreenModel</code></td><td>Adding a screen → edit 5 files.</td></tr>
+    <tr><td>6</td><td class="severity-med">Med</td><td>Navigation graph implicit in match arms</td><td><code>state_machine.rs:326-391</code></td><td>Cannot be inspected, tested, or visualized as data.</td></tr>
+    <tr><td>7</td><td class="severity-med">Med</td><td>Scene-to-controller factory hardcoded</td><td><code>scene_backend.rs:188-203</code></td><td>Parallel match to <code>NativeSceneKey</code>.</td></tr>
+    <tr><td>8</td><td class="severity-med">Med</td><td>Full snapshot re-sent every tick</td><td>protocol &amp; <code>UiRuntime::apply_snapshot</code></td><td>5–50 KB/100 ms; no delta; copy-on-apply.</td></tr>
+    <tr><td>9</td><td class="severity-med">Med</td><td>Full scene rebuild on every screen change</td><td><code>scene_backend.rs:41-57</code></td><td>20–50 deallocations + 40–100 LVGL FFI allocations per transition; visible flicker.</td></tr>
+    <tr><td>10</td><td class="severity-med">Med</td><td>Full framebuffer redraw every tick</td><td><code>worker.rs</code></td><td>No dirty-rect tracking; 134 KB SPI per frame.</td></tr>
+    <tr><td>11</td><td class="severity-med">Med</td><td>Controller variant check at runtime</td><td><code>controllers/hub.rs</code> et al.</td><td>Wrong-variant pairing panics at sync time, not compile time.</td></tr>
+    <tr><td>12</td><td class="severity-med">Med</td><td>Snapshot mixes persistent + transient state</td><td><code>runtime/snapshot.rs</code></td><td>Overlay loading/error live next to music/contacts; animation has no home.</td></tr>
+    <tr><td>13</td><td class="severity-med">Med</td><td>Hardcoded input timing</td><td><code>input.rs:20-25</code></td><td>50/300/800 ms not tunable for accessibility or hardware variance.</td></tr>
+    <tr><td>14</td><td class="severity-med">Med</td><td>PTT events never surface upstream</td><td><code>state_machine.rs</code></td><td>Voice service cannot observe button-by-button gestures.</td></tr>
+    <tr><td>15</td><td class="severity-med">Med</td><td>Duplicate chrome extractor</td><td><code>state_machine.rs:600-620</code> &amp; <code>scene_backend.rs:296-324</code></td><td>Two match statements must stay in sync.</td></tr>
+    <tr><td>16</td><td class="severity-med">Med</td><td>Back-button semantics differ per screen</td><td><code>state_machine.rs:290-310</code></td><td>Sometimes pop, sometimes intent-only; not documented.</td></tr>
+    <tr><td>17</td><td class="severity-low">Low</td><td>Stale <code>last_app_state</code> field</td><td><code>UiRuntime</code></td><td>Assigned, never read.</td></tr>
+    <tr><td>18</td><td class="severity-low">Low</td><td>Inconsistent builder naming</td><td><code>hub_model</code> vs <code>playlists_model</code> vs <code>now_playing_model</code></td><td>No registry, easy to mis-call.</td></tr>
+    <tr><td>19</td><td class="severity-low">Low</td><td>Unused <code>explicit_source</code> param</td><td><code>LvglRenderer::open</code></td><td>Misleading API surface.</td></tr>
+    <tr><td>20</td><td class="severity-low">Low</td><td>Inconsistent error casing</td><td>multiple</td><td>Hard to grep.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="friction">9. Extension friction scenarios</h2>
+
+<table>
+  <thead><tr><th>Scenario</th><th>Files to touch</th><th>Friction</th></tr></thead>
+  <tbody>
+    <tr><td>Add a new screen (e.g. <em>Settings</em>)</td>
+    <td><code>UiScreen</code>, <code>NativeSceneKey</code>, <code>NativeSceneKey::for_screen</code>, <code>ScreenModel</code>, <code>screens/settings.rs</code>, <code>controller_for_native_scene</code>, <code>controllers/settings.rs</code>, <code>chrome()</code> match, <code>active_screen_model</code> match, <code>select_focused</code> nav rules, <code>native_backend</code> layout entries</td>
+    <td>~10 file edits, three enum-match sites; easy to forget arms.</td></tr>
+    <tr><td>Add a new intent (e.g. <code>music.shuffle</code>)</td>
+    <td><code>state_machine.rs</code> (compose <code>json!</code> in the right match arm), plus runtime-manager-side handler</td>
+    <td>No type contract; typos discovered only at runtime.</td></tr>
+    <tr><td>Change NowPlaying layout</td>
+    <td><code>lvgl/native_backend.rs:900-1375</code> (per-role layout match), <code>theme.rs</code>, possibly <code>controllers/now_playing.rs</code></td>
+    <td>Layout literals (x/y/w/h) buried in 475-LOC match.</td></tr>
+    <tr><td>Add a second display resolution</td>
+    <td><code>native_backend.rs</code> entire layout table; <code>framebuffer.rs</code>; <code>hardware/*</code>; LVGL display init</td>
+    <td>Layout is not data-driven; every coord is a literal.</td></tr>
+    <tr><td>Add an animation (e.g. fade-in on screen enter)</td>
+    <td><code>worker.rs</code> (new command), <code>LvglFacade</code> trait (animate ops), 11 controllers (interpolate state), <code>state_machine.rs</code> (transient state), render loop (mark dirty while animating)</td>
+    <td>~15 files; no transition abstraction exists.</td></tr>
+    <tr><td>Tune button timing per-user</td>
+    <td><code>input.rs</code> constants; no plumbing for user prefs</td>
+    <td>Recompile required.</td></tr>
+    <tr><td>Add a 2nd locale</td>
+    <td>Strings are embedded in screen builders and the icon assets file</td>
+    <td>No i18n boundary today.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="dead-code">10. Dead code, TODOs, naming inconsistencies</h2>
+
+<h3>10.1 Dead / vestigial</h3>
+<ul class="tight">
+  <li><code>UiRuntime.last_app_state</code> — written, never read.</li>
+  <li><code>LvglRenderer::open(explicit_source)</code> — parameter ignored; <code>LVGL_SOURCE_DIR</code> env var wins.</li>
+  <li><code>PowerPageSnapshot.icon_key</code> — never rendered by <code>controllers/power.rs</code>.</li>
+  <li><code>VoiceNoteSummarySnapshot.unread</code> — displayed but never cleared.</li>
+  <li><code>OneButtonMachine.hold_back_fired</code> — defensive flag; current caller doesn't need it.</li>
+  <li><code>hardware/mock.rs</code> hardcoded for 240×280 — undocumented coupling to Whisplay size.</li>
+</ul>
+
+<h3>10.2 Naming inconsistencies</h3>
+<ul class="tight">
+  <li><strong>Scene vs Screen</strong> — <code>NativeSceneKey::Hub</code> and <code>UiScreen::Hub</code> mean the same thing in different layers.</li>
+  <li><strong>Singular vs plural</strong> — <code>UiScreen::Playlist</code> ↔ <code>ScreenModel::Playlists</code>.</li>
+  <li><strong>Builder naming</strong> — <code>hub_model</code> / <code>listen_model</code> / <code>playlists_model</code> / <code>now_playing_model</code> have no pattern.</li>
+  <li><strong>Feature flag casing</strong> — <code>native-lvgl</code> (hyphen in Cargo.toml) vs <code>cfg(feature = "native-lvgl")</code> — easy to mistype as underscore.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="errors">11. Error handling &amp; safety gaps</h2>
+
+<ul class="tight">
+  <li><span class="severity-high">High</span> — LVGL FFI assumes non-null return from <code>lv_obj_create</code>; null = panic, no recovery.</li>
+  <li><span class="severity-med">Med</span> — Unknown <code>app_state</code> string silently falls back to current screen (<code>state_machine.rs:167</code>).</li>
+  <li><span class="severity-med">Med</span> — Unknown <code>message_type</code> dropped silently in worker loop.</li>
+  <li><span class="severity-med">Med</span> — Display flush return values ignored in some paths.</li>
+  <li><span class="severity-med">Med</span> — No watchdog: if runtime manager dies, worker keeps rendering the last snapshot forever.</li>
+  <li><span class="severity-low">Low</span> — Inconsistent <code>anyhow::Result</code> vs typed <code>Result</code> across crate boundaries.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="proposed">12. Proposed architecture</h2>
+
+<h3>12.1 Layers</h3>
+
+<div class="ascii">┌─────────────────────────────────────────────────────────────────────┐
+│                       runtime manager (unchanged)                   │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │  WorkerEnvelope (wire)
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  TRANSPORT LAYER  — transport/                                      │
+│    codec.rs        encode/decode WorkerEnvelope                     │
+│    inbound.rs      enum UiCommand   (#[serde(tag, content)])        │
+│    outbound.rs     enum UiEvent                                     │
+│    dispatcher.rs   typed match → AppEvent                           │
+│    handshake.rs    ui.ready / schema negotiation                    │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  APPLICATION LAYER  — app/                                          │
+│    runtime.rs      AppCore: owns AppState, drives one tick          │
+│    state.rs        struct AppState { snapshot, ui_state, anim }     │
+│    navigator.rs    declarative nav graph (data, not match)          │
+│    focus.rs        generic focus/cursor controller                  │
+│    input_router.rs InputAction + active_screen → AppCommand         │
+│    intents.rs      enum UiIntent (typed; serializes to envelope)    │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  PRESENTATION LAYER  — presentation/                                │
+│    view_model.rs   (Snapshot, UiState) → ScreenView                 │
+│    screens/        per-screen builders (existing, cleaned up)       │
+│    transitions.rs  Transition table; frame-clocked interpolation    │
+│    chrome.rs       single source of truth for status bar            │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  RENDER LAYER  — render/                                            │
+│    Renderer trait                                                   │
+│    lvgl/                                                            │
+│      backend.rs    LvglFacade — primitive widget ops only           │
+│      controllers/  thin adapters: ScreenView → facade calls         │
+│      layout.rs     data-driven layouts (RON/JSON)                   │
+│      theme.rs      data-driven styles                               │
+│      ffi.rs        sys.rs renamed, scoped to render/lvgl/           │
+│    null/           NullRenderer for tests / headless                │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  HARDWARE LAYER  — hardware/   (already clean — keep)               │
+│    DisplayDevice, ButtonDevice, mock, whisplay                      │
+└─────────────────────────────────────────────────────────────────────┘</div>
+
+<h3>12.2 Layer responsibilities (strict)</h3>
+<table>
+  <thead><tr><th>Layer</th><th>Knows about</th><th>Must not import</th></tr></thead>
+  <tbody>
+    <tr><td>transport</td><td><code>yoyopod_protocol</code>, serde, JSON</td><td>LVGL, screens, hardware</td></tr>
+    <tr><td>app</td><td>transport types, presentation view-models</td><td>LVGL, framebuffer, hardware FFI</td></tr>
+    <tr><td>presentation</td><td>view-models, transition primitives</td><td>LVGL, FFI</td></tr>
+    <tr><td>render</td><td>view-models + facade trait + LVGL FFI</td><td>app state, transport</td></tr>
+    <tr><td>hardware</td><td>traits; impls own GPIO/SPI</td><td>everything else</td></tr>
+  </tbody>
+</table>
+
+<h3>12.3 Core design moves</h3>
+<ol>
+  <li><strong>Typed envelope</strong> — replace string dispatch with an exhaustive <code>UiCommand</code> / <code>UiEvent</code> enum, serde-tagged on <code>message_type</code>. Compiler-checked.</li>
+  <li><strong>Typed UiIntent</strong> — kill <code>serde_json::Value</code> payloads. Each variant has its own struct. Shared with the runtime manager via <code>device/protocol</code>.</li>
+  <li><strong>Declarative navigation graph</strong> — replace <code>select_focused</code> match arms with a <code>HashMap&lt;UiScreen, ScreenSpec&gt;</code> table loaded once.</li>
+  <li><strong>Single screen identity</strong> — collapse <code>UiScreen</code>, <code>NativeSceneKey</code>, <code>ScreenModel</code> into one enum + a trait <code>Screen</code> with associated <code>ViewModel</code> + <code>Controller</code> types.</li>
+  <li><strong>Data-driven layout/theme</strong> — extract the 475-LOC <code>layout_for_role</code> match and the 75-LOC style match into <code>layout.ron</code> / <code>theme.ron</code> loaded at startup. <code>native_backend.rs</code> drops to ~600 LOC of FFI only.</li>
+  <li><strong>Transitions/animation layer</strong> — explicit struct <code>Transition { target, prop, from, to, duration_ms, started_at, easing }</code>. The render loop ticks transitions and the view model returns <em>interpolated</em> values — controllers stay stateless.</li>
+  <li><strong>Snapshot deltas</strong> — extend protocol with <code>ui.runtime_patch { path, value }</code> alongside <code>ui.runtime_snapshot</code> for partial updates.</li>
+  <li><strong>Per-screen <code>Controller&lt;Model = T&gt;</code> trait</strong> — typed associated <code>Model</code>; eliminates the runtime <code>let ScreenModel::Hub(_) = …</code> pattern.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="new-tree">13. Proposed folder structure</h2>
+
+<div class="ascii">device/ui/
+├── Cargo.toml
+├── build.rs
+├── native/                              (LVGL C source — unchanged)
+├── assets/                              NEW — data-driven config
+│   ├── layouts.ron                      role → rect/anchors table
+│   ├── theme.ron                        role → colors/fonts/spacing
+│   └── nav.ron                          screen → next screens, intents
+└── src/
+    ├── main.rs                          tiny: parse args, build app, run
+    ├── lib.rs                           re-exports
+    │
+    ├── transport/                       NEW
+    │   ├── mod.rs
+    │   ├── codec.rs                     WorkerEnvelope ↔ bytes
+    │   ├── inbound.rs                   enum UiCommand
+    │   ├── outbound.rs                  enum UiEvent
+    │   ├── dispatcher.rs                UiCommand → AppEvent (no JSON inside app)
+    │   └── handshake.rs                 ready / schema negotiation
+    │
+    ├── app/                             NEW (was runtime/)
+    │   ├── mod.rs
+    │   ├── core.rs                      AppCore::tick(), AppCore::on_event()
+    │   ├── state.rs                     AppState (snapshot + ui_state + animations)
+    │   ├── ui_state.rs                  active_screen, screen_stack, focus_index
+    │   ├── navigator.rs                 declarative nav graph executor
+    │   ├── focus.rs                     generic focus/cursor controller
+    │   ├── input_router.rs              InputAction → AppCommand
+    │   ├── intents.rs                   typed enum UiIntent + to_envelope()
+    │   └── snapshot/                    (split today's 349-LOC file)
+    │       ├── mod.rs
+    │       ├── full.rs                  RuntimeSnapshot
+    │       ├── patch.rs                 RuntimeSnapshotPatch (deltas)
+    │       └── domains/                 hub.rs, music.rs, call.rs, voice.rs, …
+    │
+    ├── presentation/                    NEW (absorbs screens/)
+    │   ├── mod.rs
+    │   ├── view.rs                      trait Screen, registry
+    │   ├── view_model.rs                ScreenView enum or trait object
+    │   ├── chrome.rs                    single chrome extractor (no duplication)
+    │   ├── transitions.rs               Transition + Easing + interpolator
+    │   └── screens/
+    │       ├── hub.rs   listen.rs   talk.rs    music.rs   ask.rs
+    │       ├── call.rs  power.rs    overlay.rs settings.rs (future)
+    │
+    ├── render/
+    │   ├── mod.rs                       Renderer trait
+    │   ├── null.rs                      NullRenderer for tests
+    │   └── lvgl/
+    │       ├── mod.rs
+    │       ├── backend.rs               LvglFacade trait + NativeLvglFacade (FFI only, ~600 LOC)
+    │       ├── ffi.rs                   was sys.rs
+    │       ├── primitives.rs            WidgetId
+    │       ├── layout.rs                load layouts.ron → role → Rect resolver
+    │       ├── theme.rs                 load theme.ron → role → style resolver
+    │       ├── scene.rs                 was scene_backend.rs (uses registry, not match)
+    │       ├── icons.rs                 was hub_icon_assets.rs
+    │       └── controllers/
+    │           ├── mod.rs               trait ScreenController&lt;Model = …&gt;
+    │           ├── shared.rs            StatusBarWidgets
+    │           ├── hub.rs   listen.rs   playlist.rs   now_playing.rs
+    │           ├── talk.rs  talk_actions.rs   ask.rs   call.rs
+    │           ├── list.rs  power.rs    overlay.rs
+    │
+    ├── input/
+    │   ├── mod.rs
+    │   ├── machine.rs                   was input.rs (debounce + gesture)
+    │   └── config.rs                    tunable timing constants
+    │
+    ├── hardware/                        UNCHANGED
+    │   ├── mod.rs    mock.rs    whisplay.rs    whisplay_panel.rs
+    │
+    └── framebuffer.rs                   (consider moving under render/)
+</div>
+
+<h3>13.1 What moves where</h3>
+<table>
+  <thead><tr><th>From</th><th>To</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td><code>worker.rs</code> dispatch</td><td><code>transport/dispatcher.rs</code></td><td>Pure I/O routing — no domain logic.</td></tr>
+    <tr><td><code>worker.rs</code> tick orchestration</td><td><code>app/core.rs</code></td><td>App owns the tick.</td></tr>
+    <tr><td><code>runtime/state_machine.rs</code> nav + focus + intents</td><td><code>app/navigator.rs</code> + <code>app/focus.rs</code> + <code>app/intents.rs</code></td><td>Three separate concerns split out.</td></tr>
+    <tr><td><code>runtime/intent.rs</code></td><td><code>app/intents.rs</code> (now typed enum)</td><td>Compile-time intent contract.</td></tr>
+    <tr><td><code>runtime/snapshot.rs</code> (349 LOC)</td><td><code>app/snapshot/domains/*.rs</code></td><td>One file per domain.</td></tr>
+    <tr><td><code>screens/*</code></td><td><code>presentation/screens/*</code></td><td>Builders sit in the presentation layer.</td></tr>
+    <tr><td><code>screens/models.rs</code></td><td><code>presentation/view_model.rs</code></td><td>View-model = presentation concept.</td></tr>
+    <tr><td><code>lvgl/native_backend.rs</code> layout match</td><td><code>render/lvgl/layout.rs</code> + <code>assets/layouts.ron</code></td><td>Data, not code.</td></tr>
+    <tr><td><code>lvgl/native_backend.rs</code> style match</td><td><code>render/lvgl/theme.rs</code> + <code>assets/theme.ron</code></td><td>Data, not code.</td></tr>
+    <tr><td><code>lvgl/scene_backend.rs</code> controller factory</td><td><code>render/lvgl/scene.rs</code> via screen registry</td><td>Replaces hardcoded match.</td></tr>
+    <tr><td><code>lvgl/chrome.rs</code> + <code>screens/chrome.rs</code></td><td><code>presentation/chrome.rs</code> (single)</td><td>De-duplicate.</td></tr>
+    <tr><td><code>input.rs</code></td><td><code>input/machine.rs</code> + <code>input/config.rs</code></td><td>Separate timing constants.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="new-protocol">14. Standardized envelope &amp; typed messages</h2>
+
+<h3>14.1 Wire stays compatible</h3>
+<p><code>WorkerEnvelope</code> is unchanged on the wire. The change is purely <em>inside</em> the worker and the runtime manager: both decode/encode into typed enums shared via <code>device/protocol</code>.</p>
+
+<h3>14.2 New shared types (proposed)</h3>
+<pre><code>// device/protocol/src/ui.rs   (NEW — shared between runtime manager and ui worker)
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "message_type", content = "payload", rename_all = "snake_case")]
+pub enum UiCommand {
+    #[serde(rename = "ui.set_backlight")]
+    SetBacklight { brightness: f32 },
+
+    #[serde(rename = "ui.runtime_snapshot")]
+    ApplySnapshot(RuntimeSnapshot),
+
+    #[serde(rename = "ui.runtime_patch")]              // NEW — delta
+    ApplyPatch(RuntimeSnapshotPatch),
+
+    #[serde(rename = "ui.input_action")]
+    InputAction { action: InputAction },
+
+    #[serde(rename = "ui.tick")]
+    Tick,
+
+    #[serde(rename = "ui.poll_input")]
+    PollInput,
+
+    #[serde(rename = "ui.health")]
+    Health,
+
+    #[serde(rename = "ui.animate")]                    // NEW — animation
+    Animate(AnimationRequest),
+
+    #[serde(rename = "ui.shutdown")]
+    Shutdown,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "message_type", content = "payload", rename_all = "snake_case")]
+pub enum UiEvent {
+    #[serde(rename = "ui.ready")]            Ready { display: DisplayInfo, schema_version: u16 },
+    #[serde(rename = "ui.intent")]           Intent(UiIntent),
+    #[serde(rename = "ui.screen_changed")]   ScreenChanged { screen: UiScreen, title: String },
+    #[serde(rename = "ui.input")]            Input(InputEvent),
+    #[serde(rename = "ui.health")]           Health(HealthReport),
+    #[serde(rename = "ui.error")]            Error { code: UiErrorCode, message: String },
+    #[serde(rename = "ui.shutdown_complete")] ShutdownComplete,    // NEW
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "domain", content = "action", rename_all = "snake_case")]
+pub enum UiIntent {
+    Music(MusicIntent),
+    Voice(VoiceIntent),
+    Call(CallIntent),
+    Power(PowerIntent),
+    Navigation(NavIntent),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "action", content = "payload", rename_all = "snake_case")]
+pub enum MusicIntent {
+    PlayPause,
+    Next,
+    Previous,
+    Shuffle,                                 // ← new intent = one line, type-safe
+    LoadPlaylist { id: String },
+    PlayTrack    { playlist_id: String, track_id: String },
+}
+// … CallIntent, VoiceIntent, etc.</code></pre>
+
+<h3>14.3 What this buys us</h3>
+<ul class="tight">
+  <li><strong>Exhaustiveness checking</strong> — the compiler enforces every command has a handler.</li>
+  <li><strong>Single source of truth</strong> — the runtime manager and worker share the same enums; no parallel JSON contracts.</li>
+  <li><strong>Discoverable surface</strong> — <code>cargo doc</code> renders the protocol.</li>
+  <li><strong>Adding a new command/intent = one variant + one handler</strong> — no string typos.</li>
+  <li><strong>Backwards-compatible wire</strong> — schema is unchanged; rolling deploys are safe.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="migration">15. Migration plan</h2>
+
+<table>
+  <thead><tr><th>Step</th><th>Effort</th><th>Risk</th><th>Outcome</th></tr></thead>
+  <tbody>
+    <tr><td>1. Introduce typed <code>UiCommand</code>/<code>UiEvent</code> in <code>device/protocol</code>; adapt <code>worker.rs</code> dispatch</td><td>1–2 days</td><td>Low</td><td>Exhaustive dispatch; deletes ~80 LOC of string matching.</td></tr>
+    <tr><td>2. Typed <code>UiIntent</code> enum; update both worker and runtime manager handlers</td><td>1 day</td><td>Low</td><td>Kills <code>json!{}</code> payload building in state machine.</td></tr>
+    <tr><td>3. Split <code>state_machine.rs</code> → <code>navigator.rs</code> + <code>focus.rs</code> + <code>input_router.rs</code> + <code>intents.rs</code></td><td>2–3 days</td><td>Med</td><td>628 → ~150 LOC orchestration + 4 focused files.</td></tr>
+    <tr><td>4. Unify <code>UiScreen</code>/<code>NativeSceneKey</code>/<code>ScreenModel</code> via a <code>Screen</code> trait + registry</td><td>2 days</td><td>Med</td><td>Adding a screen → one file. Compile-time controller↔model pairing.</td></tr>
+    <tr><td>5. Extract layout + theme tables from <code>native_backend.rs</code> into <code>assets/*.ron</code></td><td>3–5 days</td><td>Med (LVGL FFI)</td><td><code>native_backend.rs</code> 2,383 → ~600 LOC of FFI.</td></tr>
+    <tr><td>6. Add <code>presentation/transitions.rs</code> + <code>ui.animate</code> command</td><td>2–3 days</td><td>Low (greenfield)</td><td>Animation works for any property on any controller without per-controller edits.</td></tr>
+    <tr><td>7. Add <code>ui.runtime_patch</code> delta protocol + per-domain dirty flags</td><td>3 days</td><td>Med</td><td>Snapshot bandwidth drops 10×+.</td></tr>
+    <tr><td>8. Move files into the new tree (cosmetic; do last)</td><td>0.5 day</td><td>Low</td><td>Folder structure matches layer boundaries.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout good">
+<strong>Ordering rationale.</strong> Steps 1–2 are self-contained, prove the new envelope works, and are free wins. Step 3 is the biggest maintainability gain. Step 5 is the biggest raw LOC reduction but is the riskiest (LVGL pixel-accurate parity). Step 6 is greenfield and unlocks the original use case (animation). Step 8 is purely cosmetic — do it once the new boundaries are stable to avoid noisy rebases.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="extending">16. Worked example: adding animation</h2>
+
+<h3>Today (current code)</h3>
+<p>Adding "fade-in the now-playing screen over 300 ms" touches ~15 files: a new string in worker dispatch, a new field in <code>UiRuntime</code>, new <code>LvglFacade</code> methods, every controller's <code>sync()</code> checking whether each widget is animating, a render-loop tweak to keep marking dirty, and lifecycle hooks to cancel on scene teardown.</p>
+
+<h3>After refactor</h3>
+<ol>
+  <li><code>UiCommand::Animate(AnimationRequest)</code> — one enum variant.</li>
+  <li><code>AppCore::on_event(UiCommand::Animate(req)) → state.transitions.push(req.into())</code> — one match arm.</li>
+  <li>Each tick, <code>presentation/transitions.rs</code> advances all transitions and the view model returns <em>interpolated</em> values.</li>
+  <li>Controllers stay <strong>completely unchanged</strong> — they just call <code>facade.set_accent(widget, view_model.signal_color)</code>; the color happens to be interpolated.</li>
+</ol>
+
+<pre><code>// presentation/transitions.rs
+pub struct Transition&lt;V&gt; {
+    pub target_role: WidgetRole,
+    pub prop: AnimatableProp,
+    pub from: V,
+    pub to: V,
+    pub started_at_ms: u64,
+    pub duration_ms: u32,
+    pub easing: Easing,
+}
+
+impl&lt;V: Lerp&gt; Transition&lt;V&gt; {
+    pub fn value_at(&amp;self, now_ms: u64) -&gt; V {
+        let t = ((now_ms - self.started_at_ms) as f32 / self.duration_ms as f32).min(1.0);
+        V::lerp(&amp;self.from, &amp;self.to, self.easing.apply(t))
+    }
+}</code></pre>
+
+<p>Adding new animatable properties = one variant of <code>AnimatableProp</code>. Adding new screens that animate = nothing — they get it for free.</p>
+
+<!-- ============================================================ -->
+<h2 id="appendix">17. Appendix — worst-coupling snippets</h2>
+
+<details>
+<summary>A. Scene-to-controller hardcoded factory (<code>scene_backend.rs:188-203</code>)</summary>
+<pre><code>fn controller_for_native_scene(scene: NativeSceneKey) -> Box&lt;dyn ScreenController&gt; {
+    match scene {
+        NativeSceneKey::Hub          =&gt; Box::new(HubController::default()),
+        NativeSceneKey::Listen       =&gt; Box::new(ListenController::default()),
+        NativeSceneKey::Playlist     =&gt; Box::new(PlaylistController::default()),
+        NativeSceneKey::NowPlaying   =&gt; Box::new(NowPlayingController::default()),
+        NativeSceneKey::Talk         =&gt; Box::new(TalkController::default()),
+        NativeSceneKey::TalkActions  =&gt; Box::new(TalkActionsController::default()),
+        NativeSceneKey::IncomingCall | NativeSceneKey::OutgoingCall | NativeSceneKey::InCall
+                                     =&gt; Box::new(CallController::default()),
+        NativeSceneKey::Ask          =&gt; Box::new(AskController::default()),
+        NativeSceneKey::Power        =&gt; Box::new(PowerController::default()),
+        NativeSceneKey::Overlay      =&gt; Box::new(AskController::default()),
+    }
+}</code></pre>
+</details>
+
+<details>
+<summary>B. Intent emission matrix (<code>state_machine.rs:450-550</code>)</summary>
+<pre><code>match (self.active_screen, self.focus_index, action) {
+    (UiScreen::Hub, 0, InputAction::Select) =&gt; {
+        self.emit_intent("music", "navigate", json!({"action": "listen"}));
+        self.push_screen(UiScreen::Listen);
+    }
+    (UiScreen::Hub, 1, InputAction::Select) =&gt; {
+        self.emit_intent("voice", "navigate", json!({"action": "talk"}));
+        self.push_screen(UiScreen::Talk);
+    }
+    // … ~50 more arms; payloads are untyped json!{} …
+}</code></pre>
+</details>
+
+<details>
+<summary>C. Chrome extractor duplicated (<code>state_machine.rs:600-620</code> and <code>scene_backend.rs:296-324</code>)</summary>
+<pre><code>// state_machine.rs
+fn chrome(model: &amp;ScreenModel) -&gt; &amp;ChromeModel {
+    match model {
+        ScreenModel::Hub(m)          =&gt; &amp;m.chrome,
+        ScreenModel::Listen(m) | ScreenModel::Playlists(m) | ScreenModel::RecentTracks(m)
+        | ScreenModel::Talk(m) | ScreenModel::Contacts(m) | ScreenModel::CallHistory(m)
+                                     =&gt; &amp;m.chrome,
+        // … all variants again …
+    }
+}
+// scene_backend.rs has an almost-identical match.</code></pre>
+</details>
+
+<details>
+<summary>D. RuntimeSnapshot copy on every apply (<code>state_machine.rs:100-120</code>)</summary>
+<pre><code>pub fn apply_snapshot(&amp;mut self, snapshot: RuntimeSnapshot) -&gt; Result&lt;()&gt; {
+    self.snapshot = snapshot;   // full memcpy of 5–50 KB every 100 ms
+    // …
+}</code></pre>
+</details>
+
+<details>
+<summary>E. Controller variant unpack (every <code>controllers/*.rs</code>)</summary>
+<pre><code>pub fn sync(&amp;mut self, facade: &amp;mut dyn LvglFacade, model: &amp;ScreenModel) -&gt; Result&lt;()&gt; {
+    let ScreenModel::Hub(view_model) = model else {
+        return Err(anyhow!("Expected Hub model"));   // runtime-only check
+    };
+    // …
+}</code></pre>
+</details>
+
+<hr>
+
+<p style="color: var(--muted); font-size: 13px; margin-top: 48px;">
+Report generated 2026-05-12 for the <code>yoyopod</code> repository. Source paths are relative to <code>/home/tifo/Workspace/yoyopod/device/ui/</code>. Line counts captured from <code>wc -l</code> at audit time.
+</p>
+
+</main>
+</div>
+</body>
+</html>
