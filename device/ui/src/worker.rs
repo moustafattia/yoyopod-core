@@ -35,6 +35,7 @@ where
     let mut ui_runtime = UiRuntime::default();
     let mut last_active_screen: Option<UiScreen> = None;
     let mut lvgl_renderer = LvglRenderer::open(None)?;
+    let mut shutdown_complete_emitted = false;
 
     emit_event(
         output,
@@ -103,6 +104,8 @@ where
                         }
                     }
                     UiCommand::InputAction(action) => {
+                        input_events += 1;
+                        emit_input_action(output, action, "command", monotonic_millis(), 0)?;
                         ui_runtime.handle_input(action);
                         emit_intents(output, ui_runtime.take_intents())?;
                         if render_runtime_if_dirty(
@@ -127,14 +130,12 @@ where
                         };
                         for event in button_events {
                             input_events += 1;
-                            emit_event(
+                            emit_input_action(
                                 output,
-                                UiEvent::Input(UiInputEvent {
-                                    action: event.action,
-                                    method: event.method.to_string(),
-                                    timestamp_ms: event.timestamp_ms,
-                                    duration_ms: event.duration_ms,
-                                }),
+                                event.action,
+                                event.method,
+                                event.timestamp_ms,
+                                event.duration_ms,
                             )?;
                             ui_runtime.handle_input(event.action);
                         }
@@ -161,14 +162,12 @@ where
                         };
                         for event in button_events {
                             input_events += 1;
-                            emit_event(
+                            emit_input_action(
                                 output,
-                                UiEvent::Input(UiInputEvent {
-                                    action: event.action,
-                                    method: event.method.to_string(),
-                                    timestamp_ms: event.timestamp_ms,
-                                    duration_ms: event.duration_ms,
-                                }),
+                                event.action,
+                                event.method,
+                                event.timestamp_ms,
+                                event.duration_ms,
                             )?;
                         }
                     }
@@ -187,6 +186,7 @@ where
                     UiCommand::Animate(_) => {}
                     UiCommand::Shutdown | UiCommand::WorkerStop => {
                         emit_event(output, UiEvent::ShutdownComplete)?;
+                        shutdown_complete_emitted = true;
                         break;
                     }
                 }
@@ -202,6 +202,10 @@ where
                 )?;
             }
         }
+    }
+
+    if !shutdown_complete_emitted {
+        emit_event(output, UiEvent::ShutdownComplete)?;
     }
 
     Ok(())
@@ -224,6 +228,24 @@ fn emit_intents<W: Write>(output: &mut W, intents: Vec<UiIntent>) -> Result<()> 
         emit_event(output, UiEvent::Intent(intent))?;
     }
     Ok(())
+}
+
+fn emit_input_action<W: Write>(
+    output: &mut W,
+    action: yoyopod_protocol::ui::InputAction,
+    method: impl Into<String>,
+    timestamp_ms: u64,
+    duration_ms: u64,
+) -> Result<()> {
+    emit_event(
+        output,
+        UiEvent::Input(UiInputEvent {
+            action,
+            method: method.into(),
+            timestamp_ms,
+            duration_ms,
+        }),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]

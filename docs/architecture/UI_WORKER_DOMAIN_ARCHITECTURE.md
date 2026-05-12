@@ -52,6 +52,10 @@ Runtime snapshots are shared protocol DTOs, not UI-local copies. Local button
 or command input is interpreted as typed `InputAction`. Domain actions leave
 the UI worker as typed `UiIntent` variants for the runtime to route. Unknown or
 malformed UI commands produce a typed `ui.error` event instead of being ignored.
+Explicit `ui.input_action` commands are echoed as typed `ui.input` events with
+method `command`. Clean shutdown completion is reported through
+`ui.shutdown_complete` for both explicit stop commands and runtime-manager stdin
+EOF.
 
 ## Render Contract
 
