@@ -1,4 +1,4 @@
-use crate::input::InputAction;
+use yoyopod_protocol::ui::InputAction;
 
 use super::UiScreen;
 

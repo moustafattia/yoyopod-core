@@ -1,11 +1,10 @@
-use crate::input::InputAction;
 use crate::presentation;
 use crate::presentation::registry::{screen_entry, FocusPolicy, NavigationPolicy};
 use crate::presentation::screens;
 use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::Transition;
 use yoyopod_protocol::ui::{
-    AnimationRequest, CallIntent, ListItemSnapshot, MusicIntent, RuntimeSnapshot,
+    AnimationRequest, CallIntent, InputAction, ListItemSnapshot, MusicIntent, RuntimeSnapshot,
     RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiIntent, VoiceFileAction, VoiceIntent,
     VoiceRecipientAction,
 };
