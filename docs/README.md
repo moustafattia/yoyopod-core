@@ -32,7 +32,7 @@ Plan docs are useful context, but they are not automatically the current impleme
 - [`hardware/`](hardware/README.md) - audio, power, deployed Pi dependencies, and board bringup notes.
 - [`features/`](features/README.md) - cloud provisioning, cloud voice, local music, mpv, and remote playback contracts.
 - [`design/`](design/README.md) - active screen/UI design targets, parity contracts, and visual previews.
-- [`product/`](product/README.md) - product definition, V1 scope, positioning, technical priorities, and research material.
+- [`product/`](product/README.md) - product definition, V1 scope, positioning copy, and research material.
 - [`assets/`](assets/) - images and media used by docs.
 - [`../apps/`](../apps/) - future web and mobile applications.
 - [`../packages/`](../packages/) - future shared contracts, SDKs, and app packages.

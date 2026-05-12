@@ -22,7 +22,6 @@ from yoyopod_cli.remote_transport import (
 app = build_remote_app("validate_app", "Validate commit + health on the Pi.")
 
 _RUST_UI_HOST_WORKER = "device/ui/build/yoyopod-ui-host"
-_RUST_UI_POC_WORKER = _RUST_UI_HOST_WORKER
 _RUST_RUNTIME_WORKER = "device/runtime/build/yoyopod-runtime"
 _RUST_CLOUD_HOST_WORKER = "device/cloud/build/yoyopod-cloud-host"
 _RUST_MEDIA_HOST_WORKER = "device/media/build/yoyopod-media-host"
@@ -123,7 +122,6 @@ def _build_validate(
     voip_soak_target: str = "",
     voip_soak_seconds: float = 300.0,
     with_rust_ui_host: bool = False,
-    with_rust_ui_poc: bool = False,
 ) -> str:
     """Shell that fast-forwards the branch on the Pi, then runs staged validation.
 
@@ -213,7 +211,7 @@ def _build_validate(
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "lvgl"))
     if with_navigation:
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "navigation"))
-    if with_rust_ui_host or with_rust_ui_poc:
+    if with_rust_ui_host:
         steps.append(
             checkout_module_command(
                 venv_relpath,
@@ -272,11 +270,6 @@ def validate(
         "--with-rust-ui-host",
         help="Run the Rust UI host using a preinstalled CI artifact.",
     ),
-    with_rust_ui_poc: bool = typer.Option(
-        False,
-        "--with-rust-ui-poc",
-        help="Compatibility alias for --with-rust-ui-host.",
-    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """Run staged Pi validation. Pass --with-* to add optional stages."""
@@ -300,6 +293,5 @@ def validate(
         voip_soak_target=voip_soak_target,
         voip_soak_seconds=voip_soak_seconds,
         with_rust_ui_host=with_rust_ui_host,
-        with_rust_ui_poc=with_rust_ui_poc,
     )
     raise typer.Exit(run_remote(conn, cmd, tty=True))

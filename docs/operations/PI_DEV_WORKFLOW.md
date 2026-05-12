@@ -333,9 +333,9 @@ yoyopod remote mode activate dev
 yoyopod remote mode activate prod
 ```
 
-`yoyopod remote service ...` is intentionally unsupported now. Use
-`yoyopod-dev.service` for mutable hardware testing and `yoyopod-prod.service`
-for packaged slot releases.
+Use `yoyopod-dev.service` for mutable hardware testing and
+`yoyopod-prod.service` for packaged slot releases. Manage lane ownership through
+`yoyopod remote mode ...`.
 
 ### PiSugar helpers
 
@@ -420,6 +420,5 @@ yoyopod remote validate --branch <branch> --sha <commit> --with-navigation
 
 - `yoyopod remote validate` is the default board-validation contract for branches and PRs.
 - `yoyopod remote preflight` is intentionally non-launching.
-- `yoyopod remote service ...` is a hard-cut legacy command; bootstrap and lane activation own systemd now.
 - `yoyopod remote sync` used as a dirty-tree override is a debugging escape hatch, not the normal deploy story.
 - For deeper hardware debugging, use `docs/operations/RPI_SMOKE_VALIDATION.md`.

@@ -203,7 +203,7 @@ def activate(
     lane: str = typer.Argument(..., help="Lane to activate: dev or prod."),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """Activate dev or prod, stopping conflicting app and legacy services first."""
+    """Activate dev or prod, stopping conflicting runtime and legacy services first."""
     configure_logging(verbose)
     conn = pi_conn(ctx)
     validate_config(conn)

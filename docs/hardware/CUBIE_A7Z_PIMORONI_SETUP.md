@@ -163,7 +163,7 @@ Button X is on PIN_36 (PB4), which is assigned to the I2S0 audio controller as `
 sudo tee /etc/systemd/system/disable-i2s0.service > /dev/null << 'EOF'
 [Unit]
 Description=Unbind I2S0 to free PB4 (PIN_36) for Pimoroni Button X
-Before=yoyopod@radxa.service
+Before=yoyopod-dev.service
 
 [Service]
 Type=oneshot

@@ -205,7 +205,6 @@ Target-side validation suite:
 ```bash
 yoyopod pi validate deploy
 yoyopod pi validate smoke
-yoyopod pi validate smoke
 yoyopod pi validate voip
 yoyopod pi validate navigation
 yoyopod pi validate stability
@@ -227,7 +226,6 @@ git rev-parse HEAD
 yoyopod remote validate --branch <branch> --sha <commit> --with-voip --with-lvgl-soak
 yoyopod remote validate --branch <branch> --sha <commit> --with-navigation
 yoyopod remote preflight --branch <branch>
-yoyopod remote service status
 yoyopod remote logs --lines 200
 ```
 

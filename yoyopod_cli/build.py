@@ -179,14 +179,6 @@ def _rust_runtime_binary_path() -> Path:
     return _rust_runtime_crate_dir() / "build" / f"yoyopod-runtime{suffix}"
 
 
-def _rust_ui_poc_dir() -> Path:
-    return _rust_ui_host_crate_dir()
-
-
-def _rust_ui_poc_binary_path() -> Path:
-    return _rust_ui_host_binary_path()
-
-
 def build_speech_host() -> Path:
     """Build the Rust speech host and return the copied binary path."""
 
@@ -266,12 +258,6 @@ def build_rust_runtime() -> Path:
     built_binary = workspace_dir / "target" / "release" / f"yoyopod-runtime{suffix}"
     shutil.copy2(built_binary, output)
     return output
-
-
-def build_rust_ui_poc(*, hardware_feature: bool = True) -> Path:
-    """Compatibility wrapper for the renamed Rust UI host build."""
-
-    return build_rust_ui_host(hardware_feature=hardware_feature)
 
 
 def _default_lvgl_source_dir() -> Path:
@@ -373,22 +359,6 @@ def build_voice_worker_command() -> None:
 
     output = build_voice_worker()
     typer.echo(f"Built Rust speech host: {output}")
-
-
-@app.command("rust-ui-poc")
-def build_rust_ui_poc_command(
-    no_hardware_feature: Annotated[
-        bool,
-        typer.Option(
-            "--no-hardware-feature",
-            help="Build without the whisplay-hardware Cargo feature.",
-        ),
-    ] = False,
-) -> None:
-    """Compatibility alias for `yoyopod build rust-ui-host`."""
-
-    output = build_rust_ui_host(hardware_feature=not no_hardware_feature)
-    typer.echo(f"Built Rust UI host: {output}")
 
 
 @app.command("rust-ui-host")

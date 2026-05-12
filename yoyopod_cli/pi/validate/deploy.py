@@ -170,7 +170,7 @@ def deploy(
     ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
-    """Validate deploy-readiness for the current target checkout without launching the app."""
+    """Validate deploy-readiness for the current target checkout without launching the runtime."""
     from loguru import logger
 
     configure_logging(verbose)

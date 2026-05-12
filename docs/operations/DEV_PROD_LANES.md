@@ -179,7 +179,7 @@ publishing a prod slot.
 
 ## Pitfalls
 
-- Do not run dev and prod app services together; they share hardware, audio, and
+- Do not run dev and prod runtime services together; they share hardware, audio, and
   the PID file contract.
 - Do not ignore `active_lane=conflict`; `remote mode activate dev|prod` is the
   supported cleanup path for legacy/manual owners.

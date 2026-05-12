@@ -1,4 +1,4 @@
-"""Remote infra commands: power snapshot, rtc, systemd service management."""
+"""Remote infra commands: power snapshot and RTC control."""
 
 from __future__ import annotations
 
@@ -14,11 +14,6 @@ from yoyopod_cli.remote_transport import (
 )
 
 app = build_remote_app("infra", "Remote power, rtc, and service commands.")
-
-LEGACY_SERVICE_UNSUPPORTED = (
-    "Legacy yoyopod@ service management is no longer supported. "
-    "Bootstrap dev/prod lanes and use `yoyopod remote mode activate dev|prod`."
-)
 
 
 def _build_power(*, venv_relpath: str) -> str:
@@ -68,14 +63,3 @@ def rtc(
             conn, _build_rtc(action, venv_relpath=pi.venv, time_iso=time, repeat_mask=repeat_mask)
         )
     )
-
-
-@app.command()
-def service(
-    action: str = typer.Argument(..., help="Legacy service action (unsupported)."),
-    verbose: bool = typer.Option(False, "--verbose"),
-) -> None:
-    """Unsupported legacy yoyopod@ service manager."""
-    configure_logging(verbose)
-    typer.echo(f"{LEGACY_SERVICE_UNSUPPORTED} Requested legacy action: {action}.", err=True)
-    raise typer.Exit(2)

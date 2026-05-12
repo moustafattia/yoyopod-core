@@ -80,7 +80,7 @@ Read:
 Current reality:
 
 - `yoyopod-runtime` is the target top-level owner for runtime state and worker supervision
-- Python app/bootstrap code is compatibility/tooling surface unless current code still routes through it
+- Python code is operations CLI, deploy, release, validation, or compatibility tooling unless current code proves otherwise
 - runtime/state/model cleanup should prefer Rust ownership over broad Python rewrites
 
 ### Raspberry Pi and setup work

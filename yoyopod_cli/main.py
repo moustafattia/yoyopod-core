@@ -1,13 +1,7 @@
-"""
-yoyopod — app launcher and CLI dispatcher.
+"""YoYoPod operations CLI.
 
 Usage:
-    yoyopod                      # Launch the YoYoPod app
-    yoyopod deploy               # Sync code to the Pi and restart
-    yoyopod status               # Pi health dashboard
-    yoyopod logs [-f --errors]   # Tail logs from the Pi
-    yoyopod restart              # Restart the app on the Pi
-    yoyopod validate             # Run the validation suite on the Pi
+    yoyopod --help               # Show command groups
     yoyopod release <cmd>        # Versioning and release artifacts
     yoyopod remote <cmd>         # Dev-machine → Pi commands
     yoyopod pi <cmd>             # On-device commands
@@ -17,18 +11,11 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any
-
 import typer
 
 from yoyopod_cli import __version__
 
-app = typer.Typer(
-    name="yoyopod",
-    help="YoYoPod operations CLI.",
-    no_args_is_help=False,
-    add_completion=False,
-)
+app = typer.Typer(name="yoyopod", help="YoYoPod operations CLI.", add_completion=False)
 
 
 def _version_callback(value: bool) -> None:
@@ -48,7 +35,7 @@ def _root(
         help="Show version and exit.",
     ),
 ) -> None:
-    """Run YoYoPod operations commands."""
+    """Manage YoYoPod build, setup, release, remote Pi, and on-device operations."""
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit(0)
@@ -108,7 +95,6 @@ remote_app.command(name="validate")(_remote_validate.validate)
 # infra
 remote_app.command(name="power")(_remote_infra.power)
 remote_app.command(name="rtc")(_remote_infra.rtc)
-remote_app.command(name="service")(_remote_infra.service)
 
 # setup
 remote_app.command(name="setup")(_remote_setup.setup)
@@ -129,156 +115,6 @@ app.add_typer(remote_app, name="remote")
 from yoyopod_cli.pi import app as pi_app  # noqa: E402
 
 app.add_typer(pi_app, name="pi")
-
-# --- top-level shortcut commands (thin aliases to remote_ops / remote_validate)
-from yoyopod_cli.remote_shared import _resolve_remote_connection as _resolve_conn  # noqa: E402
-
-
-def _with_connection(host: str, user: str, project_dir: str, branch: str) -> Any:
-    """Build a typer.Context-like object carrying a RemoteConnection for shortcut handlers."""
-
-    class _Ctx:
-        def __init__(self, conn: Any) -> None:
-            self.obj = conn
-
-        def ensure_object(self, cls: Any) -> Any:
-            if not isinstance(self.obj, cls):
-                raise RuntimeError("shortcut context not seeded with a RemoteConnection")
-            return self.obj
-
-    conn = _resolve_conn(host, user, project_dir, branch)
-    return _Ctx(conn)
-
-
-@app.command(name="deploy")
-def _deploy_shortcut(
-    host: str = typer.Option("", "--host", envvar="YOYOPOD_PI_HOST"),
-    user: str = typer.Option("", "--user", envvar="YOYOPOD_PI_USER"),
-    project_dir: str = typer.Option("", "--project-dir", envvar="YOYOPOD_PI_PROJECT_DIR"),
-    branch: str = typer.Option("", "--branch", envvar="YOYOPOD_PI_BRANCH"),
-    clean_native: bool = typer.Option(
-        False,
-        "--clean-native",
-        help="Remove dev lane native build dirs before rebuilding after a branch switch.",
-    ),
-    verbose: bool = typer.Option(False, "--verbose"),
-) -> None:
-    """Update the dev lane checkout and restart (alias for `remote sync`)."""
-    _remote_ops.sync(
-        ctx=_with_connection(host, user, project_dir, branch),
-        clean_native=clean_native,
-        verbose=verbose,
-    )
-
-
-@app.command(name="status")
-def _status_shortcut(
-    host: str = typer.Option("", "--host", envvar="YOYOPOD_PI_HOST"),
-    user: str = typer.Option("", "--user", envvar="YOYOPOD_PI_USER"),
-    project_dir: str = typer.Option("", "--project-dir", envvar="YOYOPOD_PI_PROJECT_DIR"),
-    branch: str = typer.Option("", "--branch", envvar="YOYOPOD_PI_BRANCH"),
-    verbose: bool = typer.Option(False, "--verbose"),
-) -> None:
-    """Show Pi health dashboard (alias for `remote status`)."""
-    _remote_ops.status(ctx=_with_connection(host, user, project_dir, branch), verbose=verbose)
-
-
-@app.command(name="restart")
-def _restart_shortcut(
-    host: str = typer.Option("", "--host", envvar="YOYOPOD_PI_HOST"),
-    user: str = typer.Option("", "--user", envvar="YOYOPOD_PI_USER"),
-    project_dir: str = typer.Option("", "--project-dir", envvar="YOYOPOD_PI_PROJECT_DIR"),
-    branch: str = typer.Option("", "--branch", envvar="YOYOPOD_PI_BRANCH"),
-    verbose: bool = typer.Option(False, "--verbose"),
-) -> None:
-    """Restart the yoyopod app on the Pi (alias for `remote restart`)."""
-    _remote_ops.restart(ctx=_with_connection(host, user, project_dir, branch), verbose=verbose)
-
-
-@app.command(name="logs")
-def _logs_shortcut(
-    host: str = typer.Option("", "--host", envvar="YOYOPOD_PI_HOST"),
-    user: str = typer.Option("", "--user", envvar="YOYOPOD_PI_USER"),
-    project_dir: str = typer.Option("", "--project-dir", envvar="YOYOPOD_PI_PROJECT_DIR"),
-    branch: str = typer.Option("", "--branch", envvar="YOYOPOD_PI_BRANCH"),
-    lines: int = typer.Option(50, "--lines"),
-    follow: bool = typer.Option(False, "--follow", "-f"),
-    errors: bool = typer.Option(False, "--errors"),
-    filter: str = typer.Option("", "--filter"),
-    verbose: bool = typer.Option(False, "--verbose"),
-) -> None:
-    """Tail yoyopod logs on the Pi (alias for `remote logs`)."""
-    _remote_ops.logs(
-        ctx=_with_connection(host, user, project_dir, branch),
-        lines=lines,
-        follow=follow,
-        errors=errors,
-        filter=filter,
-        verbose=verbose,
-    )
-
-
-@app.command(name="validate")
-def _validate_shortcut(
-    host: str = typer.Option("", "--host", envvar="YOYOPOD_PI_HOST"),
-    user: str = typer.Option("", "--user", envvar="YOYOPOD_PI_USER"),
-    project_dir: str = typer.Option("", "--project-dir", envvar="YOYOPOD_PI_PROJECT_DIR"),
-    branch: str = typer.Option("", "--branch", envvar="YOYOPOD_PI_BRANCH"),
-    sha: str = typer.Option(
-        "",
-        "--sha",
-        help="Pin validation to a specific commit (must be an ancestor of origin/<branch>).",
-    ),
-    with_voip: bool = typer.Option(False, "--with-voip"),
-    with_cloud_voice: bool = typer.Option(
-        False,
-        "--with-cloud-voice",
-        help="Also validate cloud STT/TTS worker boundaries on the target.",
-    ),
-    with_lvgl_soak: bool = typer.Option(False, "--with-lvgl-soak"),
-    with_navigation: bool = typer.Option(False, "--with-navigation"),
-    with_voip_call_soak: bool = typer.Option(
-        False,
-        "--with-voip-call-soak",
-        help="Run a real outbound VoIP call soak on the target.",
-    ),
-    voip_soak_target: str = typer.Option(
-        "",
-        "--voip-soak-target",
-        help="SIP URI to call when --with-voip-call-soak is enabled.",
-    ),
-    voip_soak_seconds: float = typer.Option(
-        300.0,
-        "--voip-soak-seconds",
-        help="Seconds to hold the call connected during --with-voip-call-soak.",
-    ),
-    with_rust_ui_host: bool = typer.Option(
-        False,
-        "--with-rust-ui-host",
-        help="Run the Rust UI host using a preinstalled CI artifact.",
-    ),
-    with_rust_ui_poc: bool = typer.Option(
-        False,
-        "--with-rust-ui-poc",
-        help="Compatibility alias for --with-rust-ui-host.",
-    ),
-    verbose: bool = typer.Option(False, "--verbose"),
-) -> None:
-    """Run staged Pi validation (alias for `remote validate`)."""
-    _remote_validate.validate(
-        ctx=_with_connection(host, user, project_dir, branch),
-        sha=sha,
-        with_voip=with_voip,
-        with_cloud_voice=with_cloud_voice,
-        with_lvgl_soak=with_lvgl_soak,
-        with_navigation=with_navigation,
-        with_voip_call_soak=with_voip_call_soak,
-        voip_soak_target=voip_soak_target,
-        voip_soak_seconds=voip_soak_seconds,
-        with_rust_ui_host=with_rust_ui_host,
-        with_rust_ui_poc=with_rust_ui_poc,
-        verbose=verbose,
-    )
 
 
 # --- dev utilities

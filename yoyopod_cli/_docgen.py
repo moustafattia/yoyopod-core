@@ -31,10 +31,10 @@ def generate_commands_md(typer_app: typer.Typer) -> str:
     entries = _walk(typer_app)
 
     groups: dict[str, list[tuple[str, str]]] = {
-        "Top-level shortcuts": [],
         "`yoyopod remote` - dev-machine to Pi via SSH": [],
         "`yoyopod pi` - on the Pi": [],
         "`yoyopod build`": [],
+        "`yoyopod health`": [],
         "`yoyopod voice`": [],
         "`yoyopod release`": [],
         "`yoyopod setup`": [],
@@ -43,14 +43,14 @@ def generate_commands_md(typer_app: typer.Typer) -> str:
 
     for path, help_text in entries:
         parts = path.split()
-        if len(parts) == 2:
-            groups["Top-level shortcuts"].append((path, help_text))
-        elif parts[1] == "remote":
+        if parts[1] == "remote":
             groups["`yoyopod remote` - dev-machine to Pi via SSH"].append((path, help_text))
         elif parts[1] == "pi":
             groups["`yoyopod pi` - on the Pi"].append((path, help_text))
         elif parts[1] == "build":
             groups["`yoyopod build`"].append((path, help_text))
+        elif parts[1] == "health":
+            groups["`yoyopod health`"].append((path, help_text))
         elif parts[1] == "voice":
             groups["`yoyopod voice`"].append((path, help_text))
         elif parts[1] == "release":
