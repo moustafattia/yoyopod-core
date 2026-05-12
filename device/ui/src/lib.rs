@@ -1,7 +1,9 @@
+pub mod app;
 pub mod framebuffer;
 pub mod hardware;
 pub mod input;
 pub mod lvgl;
+pub mod presentation;
 pub mod protocol;
 pub mod render;
 pub mod runtime;

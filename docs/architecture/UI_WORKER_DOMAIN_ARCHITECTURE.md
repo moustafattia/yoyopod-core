@@ -13,8 +13,8 @@ controllers, native LVGL rendering, and display flushes.
 ```text
 yoyopod-runtime
   -> yoyopod-ui-host
-     -> UiRuntime
-     -> ScreenModel
+     -> app::UiRuntime
+     -> presentation::ScreenModel builders
      -> Rust LVGL scene controllers
      -> NativeLvglFacade
      -> upstream LVGL 9.5 C library
@@ -25,6 +25,11 @@ yoyopod-runtime
 - `yoyopod-runtime` owns process supervision and app-domain state.
 - `yoyopod-ui-host` owns UI-domain state, input interpretation, rendering, and
   hardware display/button access.
+- `device/ui/src/app/` owns snapshot application, navigation, focus policy,
+  input routing, and typed intent creation.
+- `device/ui/src/presentation/` maps app state into LVGL-free screen/view
+  models. The current screen implementations still live under
+  `device/ui/src/screens/` while the presentation boundary is being finalized.
 - Python remains CLI/deploy/validation tooling only. It is not in the UI
   runtime path.
 
@@ -56,7 +61,8 @@ software app renderer.
 
 ```text
 RuntimeSnapshot
-  -> UiRuntime navigation/preemption/focus
+  -> app::UiRuntime navigation/preemption/focus
+  -> presentation model builder
   -> ScreenModel
   -> NativeSceneRenderer
   -> RustSceneBridge

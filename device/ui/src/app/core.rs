@@ -1,69 +1,13 @@
-use serde::{Deserialize, Serialize};
-
 use crate::input::InputAction;
+use crate::presentation;
 use crate::screens;
 use crate::screens::ScreenModel;
-
-use super::{
+use yoyopod_protocol::ui::{
     CallIntent, ContactAction, ListItemAction, ListItemSnapshot, MusicIntent, RuntimeSnapshot,
     RuntimeSnapshotPatch, UiIntent, VoiceFileAction, VoiceIntent, VoiceRecipientAction,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum UiScreen {
-    Hub,
-    Listen,
-    Playlists,
-    RecentTracks,
-    NowPlaying,
-    Ask,
-    Talk,
-    Contacts,
-    CallHistory,
-    TalkContact,
-    VoiceNote,
-    IncomingCall,
-    OutgoingCall,
-    InCall,
-    Power,
-    Loading,
-    Error,
-}
-
-impl UiScreen {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Hub => "hub",
-            Self::Listen => "listen",
-            Self::Playlists => "playlists",
-            Self::RecentTracks => "recent_tracks",
-            Self::NowPlaying => "now_playing",
-            Self::Ask => "ask",
-            Self::Talk => "talk",
-            Self::Contacts => "contacts",
-            Self::CallHistory => "call_history",
-            Self::TalkContact => "talk_contact",
-            Self::VoiceNote => "voice_note",
-            Self::IncomingCall => "incoming_call",
-            Self::OutgoingCall => "outgoing_call",
-            Self::InCall => "in_call",
-            Self::Power => "power",
-            Self::Loading => "loading",
-            Self::Error => "error",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UiView {
-    pub screen: UiScreen,
-    pub title: String,
-    pub subtitle: String,
-    pub footer: String,
-    pub items: Vec<ListItemSnapshot>,
-    pub focus_index: usize,
-}
+use super::{focus, navigator, UiScreen, UiView};
 
 #[derive(Debug, Clone)]
 pub struct UiRuntime {
@@ -73,7 +17,6 @@ pub struct UiRuntime {
     focus_index: usize,
     intents: Vec<UiIntent>,
     dirty: bool,
-    last_app_state: String,
     selected_contact: Option<ListItemSnapshot>,
 }
 
@@ -86,7 +29,6 @@ impl Default for UiRuntime {
             focus_index: 0,
             intents: Vec::new(),
             dirty: true,
-            last_app_state: "hub".to_string(),
             selected_contact: None,
         }
     }
@@ -94,20 +36,20 @@ impl Default for UiRuntime {
 
 impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
+        let previous_app_state = self.snapshot.app_state.clone();
         let app_state = snapshot.app_state.clone();
         self.snapshot = snapshot;
-        self.apply_app_state_route(&app_state);
-        self.last_app_state = app_state;
+        self.apply_app_state_route(&previous_app_state, &app_state);
         self.apply_runtime_preemption();
         self.clamp_focus();
         self.dirty = true;
     }
 
     pub fn apply_patch(&mut self, patch: RuntimeSnapshotPatch) {
+        let previous_app_state = self.snapshot.app_state.clone();
         self.snapshot.apply_patch(patch);
         let app_state = self.snapshot.app_state.clone();
-        self.apply_app_state_route(&app_state);
-        self.last_app_state = app_state;
+        self.apply_app_state_route(&previous_app_state, &app_state);
         self.apply_runtime_preemption();
         self.clamp_focus();
         self.dirty = true;
@@ -154,146 +96,45 @@ impl UiRuntime {
     }
 
     pub fn active_view(&self) -> UiView {
-        match self.active_screen {
-            UiScreen::TalkContact => screens::call::talk_contact_view(
-                &self.snapshot,
-                self.focus_index,
-                self.selected_contact.as_ref(),
-            ),
-            UiScreen::VoiceNote => screens::ask::voice_note_view(
-                &self.snapshot,
-                self.focus_index,
-                self.selected_contact.as_ref(),
-            ),
-            _ => Self::view_for_screen(self.active_screen, &self.snapshot, self.focus_index),
-        }
+        presentation::view_for_screen(
+            self.active_screen,
+            &self.snapshot,
+            self.focus_index,
+            self.selected_contact.as_ref(),
+        )
     }
 
     pub fn active_screen_model(&self) -> ScreenModel {
-        match self.active_screen {
-            UiScreen::TalkContact => ScreenModel::TalkContact(screens::call::talk_contact_model(
-                &self.snapshot,
-                self.focus_index,
-                self.selected_contact.as_ref(),
-            )),
-            UiScreen::VoiceNote => ScreenModel::VoiceNote(screens::ask::voice_note_model(
-                &self.snapshot,
-                self.focus_index,
-                self.selected_contact.as_ref(),
-            )),
-            _ => {
-                Self::screen_model_for_screen(self.active_screen, &self.snapshot, self.focus_index)
-            }
-        }
-    }
-
-    pub fn view_for_screen(
-        screen: UiScreen,
-        snapshot: &RuntimeSnapshot,
-        focus_index: usize,
-    ) -> UiView {
-        match screen {
-            UiScreen::Hub => screens::hub::view(snapshot, focus_index),
-            UiScreen::Listen => screens::listen::view(snapshot, focus_index),
-            UiScreen::Playlists => screens::music::playlists_view(snapshot, focus_index),
-            UiScreen::RecentTracks => screens::music::recent_tracks_view(snapshot, focus_index),
-            UiScreen::NowPlaying => screens::music::now_playing_view(snapshot, focus_index),
-            UiScreen::Ask => screens::ask::ask_view(snapshot, focus_index),
-            UiScreen::Talk => screens::talk::view(focus_index),
-            UiScreen::Contacts => screens::call::contacts_view(snapshot, focus_index),
-            UiScreen::CallHistory => screens::call::call_history_view(snapshot, focus_index),
-            UiScreen::TalkContact => screens::call::talk_contact_view(snapshot, focus_index, None),
-            UiScreen::VoiceNote => screens::ask::voice_note_view(snapshot, focus_index, None),
-            UiScreen::IncomingCall => screens::call::incoming_view(snapshot, focus_index),
-            UiScreen::OutgoingCall => screens::call::outgoing_view(snapshot, focus_index),
-            UiScreen::InCall => screens::call::in_call_view(snapshot, focus_index),
-            UiScreen::Power => screens::power::view(snapshot, focus_index),
-            UiScreen::Loading => screens::overlay::loading_view(snapshot),
-            UiScreen::Error => screens::overlay::error_view(snapshot),
-        }
-    }
-
-    pub fn screen_model_for_screen(
-        screen: UiScreen,
-        snapshot: &RuntimeSnapshot,
-        focus_index: usize,
-    ) -> ScreenModel {
-        match screen {
-            UiScreen::Hub => ScreenModel::Hub(screens::hub::model(snapshot, focus_index)),
-            UiScreen::Listen => ScreenModel::Listen(screens::listen::model(snapshot, focus_index)),
-            UiScreen::Playlists => {
-                ScreenModel::Playlists(screens::music::playlists_model(snapshot, focus_index))
-            }
-            UiScreen::RecentTracks => ScreenModel::RecentTracks(
-                screens::music::recent_tracks_model(snapshot, focus_index),
-            ),
-            UiScreen::NowPlaying => {
-                ScreenModel::NowPlaying(screens::music::now_playing_model(snapshot))
-            }
-            UiScreen::Ask => ScreenModel::Ask(screens::ask::ask_model(snapshot)),
-            UiScreen::Talk => ScreenModel::Talk(screens::talk::model(snapshot, focus_index)),
-            UiScreen::Contacts => {
-                ScreenModel::Contacts(screens::call::contacts_model(snapshot, focus_index))
-            }
-            UiScreen::CallHistory => {
-                ScreenModel::CallHistory(screens::call::call_history_model(snapshot, focus_index))
-            }
-            UiScreen::TalkContact => ScreenModel::TalkContact(screens::call::talk_contact_model(
-                snapshot,
-                focus_index,
-                None,
-            )),
-            UiScreen::VoiceNote => {
-                ScreenModel::VoiceNote(screens::ask::voice_note_model(snapshot, focus_index, None))
-            }
-            UiScreen::IncomingCall => {
-                ScreenModel::IncomingCall(screens::call::incoming_model(snapshot))
-            }
-            UiScreen::OutgoingCall => {
-                ScreenModel::OutgoingCall(screens::call::outgoing_model(snapshot))
-            }
-            UiScreen::InCall => ScreenModel::InCall(screens::call::in_call_model(snapshot)),
-            UiScreen::Power => ScreenModel::Power(screens::power::model(snapshot, focus_index)),
-            UiScreen::Loading => ScreenModel::Loading(screens::overlay::loading_model(snapshot)),
-            UiScreen::Error => ScreenModel::Error(screens::overlay::error_model(snapshot)),
-        }
+        presentation::screen_model_for_screen(
+            self.active_screen,
+            &self.snapshot,
+            self.focus_index,
+            self.selected_contact.as_ref(),
+        )
     }
 
     fn apply_runtime_preemption(&mut self) {
-        let desired = if !self.snapshot.overlay.error.trim().is_empty() {
-            Some(UiScreen::Error)
-        } else if self.snapshot.overlay.loading {
-            Some(UiScreen::Loading)
-        } else {
-            match self.snapshot.call.state.as_str() {
-                "incoming" => Some(UiScreen::IncomingCall),
-                "outgoing" => Some(UiScreen::OutgoingCall),
-                "active" => Some(UiScreen::InCall),
-                _ => None,
-            }
-        };
-
-        if let Some(screen) = desired {
+        if let Some(screen) = navigator::runtime_preemption(&self.snapshot) {
             if self.active_screen != screen {
                 self.push_screen(screen);
             }
             return;
         }
 
-        if self.is_overlay_screen() {
+        if navigator::is_overlay_screen(self.active_screen) {
             self.pop_until_not_overlay();
         }
 
-        if self.is_call_screen() && self.snapshot.call.state == "idle" {
+        if navigator::is_call_screen(self.active_screen) && self.snapshot.call.state == "idle" {
             self.pop_until_not_call();
         }
     }
 
-    fn apply_app_state_route(&mut self, app_state: &str) {
-        if app_state == self.last_app_state {
+    fn apply_app_state_route(&mut self, previous_app_state: &str, app_state: &str) {
+        if app_state == previous_app_state {
             return;
         }
-        let Some(screen) = Self::screen_for_app_state(app_state) else {
+        let Some(screen) = navigator::screen_for_app_state(app_state) else {
             return;
         };
         if self.active_screen != screen {
@@ -303,35 +144,9 @@ impl UiRuntime {
         }
     }
 
-    fn screen_for_app_state(app_state: &str) -> Option<UiScreen> {
-        match app_state.trim() {
-            "hub" | "home" | "menu" => Some(UiScreen::Hub),
-            "listen" => Some(UiScreen::Listen),
-            "playlists" => Some(UiScreen::Playlists),
-            "recent_tracks" => Some(UiScreen::RecentTracks),
-            "now_playing" => Some(UiScreen::NowPlaying),
-            "ask" => Some(UiScreen::Ask),
-            "call" | "talk" => Some(UiScreen::Talk),
-            "contacts" => Some(UiScreen::Contacts),
-            "call_history" => Some(UiScreen::CallHistory),
-            "talk_contact" => Some(UiScreen::TalkContact),
-            "voice_note" => Some(UiScreen::VoiceNote),
-            "incoming_call" => Some(UiScreen::IncomingCall),
-            "outgoing_call" => Some(UiScreen::OutgoingCall),
-            "in_call" => Some(UiScreen::InCall),
-            "power" | "setup" => Some(UiScreen::Power),
-            "loading" => Some(UiScreen::Loading),
-            "error" => Some(UiScreen::Error),
-            _ => None,
-        }
-    }
-
     fn advance_focus(&mut self) {
         let count = self.focus_count();
-        if count == 0 {
-            return;
-        }
-        self.focus_index = (self.focus_index + 1) % count;
+        self.focus_index = focus::advance(self.focus_index, count);
     }
 
     fn select_focused(&mut self) {
@@ -581,56 +396,30 @@ impl UiRuntime {
     }
 
     fn pop_until_not_call(&mut self) {
-        while self.is_call_screen() {
+        while navigator::is_call_screen(self.active_screen) {
             self.active_screen = self.screen_stack.pop().unwrap_or(UiScreen::Hub);
         }
         self.focus_index = 0;
     }
 
     fn pop_until_not_overlay(&mut self) {
-        while self.is_overlay_screen() {
+        while navigator::is_overlay_screen(self.active_screen) {
             self.active_screen = self.screen_stack.pop().unwrap_or(UiScreen::Hub);
         }
         self.focus_index = 0;
     }
 
-    fn is_call_screen(&self) -> bool {
-        matches!(
-            self.active_screen,
-            UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall
-        )
-    }
-
-    fn is_overlay_screen(&self) -> bool {
-        matches!(self.active_screen, UiScreen::Loading | UiScreen::Error)
-    }
-
     fn clamp_focus(&mut self) {
         let count = self.focus_count();
-        if count == 0 {
-            self.focus_index = 0;
-        } else if self.focus_index >= count {
-            self.focus_index = count - 1;
-        }
+        self.focus_index = focus::clamp(self.focus_index, count);
     }
 
     fn focus_count(&self) -> usize {
-        match self.active_screen {
-            UiScreen::Hub => self.snapshot.hub.cards.len().max(1),
-            UiScreen::Listen => screens::listen::items(&self.snapshot).len(),
-            UiScreen::Playlists => self.snapshot.music.playlists.len(),
-            UiScreen::RecentTracks => self.snapshot.music.recent_tracks.len(),
-            UiScreen::Talk => screens::talk::items().len(),
-            UiScreen::Contacts => self.snapshot.call.contacts.len(),
-            UiScreen::CallHistory => self.snapshot.call.history.len(),
-            UiScreen::TalkContact => {
-                screens::call::talk_contact_actions(&self.snapshot, self.selected_contact.as_ref())
-                    .len()
-            }
-            UiScreen::VoiceNote => screens::ask::voice_note_action_count(&self.snapshot),
-            UiScreen::Power => screens::power::page_count(&self.snapshot),
-            _ => 0,
-        }
+        focus::focus_count(
+            self.active_screen,
+            &self.snapshot,
+            self.selected_contact.as_ref(),
+        )
     }
 }
 
