@@ -171,6 +171,19 @@ where
                                 event.timestamp_ms,
                                 event.duration_ms,
                             )?;
+                            ui_runtime.handle_input(event.action);
+                        }
+                        emit_intents(output, ui_runtime.take_intents())?;
+                        if render_runtime_if_dirty(
+                            output,
+                            &mut display,
+                            &mut framebuffer,
+                            &mut ui_runtime,
+                            &mut last_active_screen,
+                            &mut last_ui_renderer,
+                            &mut lvgl_renderer,
+                        )? {
+                            frames += 1;
                         }
                     }
                     UiCommand::Health => {
