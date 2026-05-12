@@ -16,6 +16,7 @@ use std::path::Path;
 use anyhow::bail;
 use anyhow::{anyhow, Result};
 
+use crate::presentation::registry::{self, NativeRenderScene, RenderScene};
 use crate::runtime::UiScreen;
 use crate::screens::ScreenModel;
 
@@ -43,20 +44,15 @@ pub enum SceneKey {
 
 impl SceneKey {
     pub const fn for_screen(screen: UiScreen) -> Self {
-        match screen {
-            UiScreen::Hub => Self::Hub,
-            UiScreen::Listen
-            | UiScreen::Playlists
-            | UiScreen::RecentTracks
-            | UiScreen::Talk
-            | UiScreen::Contacts
-            | UiScreen::CallHistory => Self::List,
-            UiScreen::NowPlaying => Self::NowPlaying,
-            UiScreen::Ask => Self::Ask,
-            UiScreen::TalkContact | UiScreen::VoiceNote => Self::TalkActions,
-            UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall => Self::Call,
-            UiScreen::Power => Self::Power,
-            UiScreen::Loading | UiScreen::Error => Self::Overlay,
+        match registry::screen_entry(screen).render_scene {
+            RenderScene::Hub => Self::Hub,
+            RenderScene::List => Self::List,
+            RenderScene::NowPlaying => Self::NowPlaying,
+            RenderScene::Ask => Self::Ask,
+            RenderScene::TalkActions => Self::TalkActions,
+            RenderScene::Call => Self::Call,
+            RenderScene::Power => Self::Power,
+            RenderScene::Overlay => Self::Overlay,
         }
     }
 
@@ -92,22 +88,19 @@ pub enum NativeSceneKey {
 
 impl NativeSceneKey {
     pub const fn for_screen(screen: UiScreen) -> Self {
-        match screen {
-            UiScreen::Hub => Self::Hub,
-            UiScreen::Listen => Self::Listen,
-            UiScreen::Playlists
-            | UiScreen::RecentTracks
-            | UiScreen::Contacts
-            | UiScreen::CallHistory => Self::Playlist,
-            UiScreen::NowPlaying => Self::NowPlaying,
-            UiScreen::Talk => Self::Talk,
-            UiScreen::TalkContact | UiScreen::VoiceNote => Self::TalkActions,
-            UiScreen::IncomingCall => Self::IncomingCall,
-            UiScreen::OutgoingCall => Self::OutgoingCall,
-            UiScreen::InCall => Self::InCall,
-            UiScreen::Ask => Self::Ask,
-            UiScreen::Power => Self::Power,
-            UiScreen::Loading | UiScreen::Error => Self::Overlay,
+        match registry::screen_entry(screen).native_scene {
+            NativeRenderScene::Hub => Self::Hub,
+            NativeRenderScene::Listen => Self::Listen,
+            NativeRenderScene::Playlist => Self::Playlist,
+            NativeRenderScene::NowPlaying => Self::NowPlaying,
+            NativeRenderScene::Talk => Self::Talk,
+            NativeRenderScene::TalkActions => Self::TalkActions,
+            NativeRenderScene::IncomingCall => Self::IncomingCall,
+            NativeRenderScene::OutgoingCall => Self::OutgoingCall,
+            NativeRenderScene::InCall => Self::InCall,
+            NativeRenderScene::Ask => Self::Ask,
+            NativeRenderScene::Power => Self::Power,
+            NativeRenderScene::Overlay => Self::Overlay,
         }
     }
 

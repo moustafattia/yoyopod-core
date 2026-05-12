@@ -25,6 +25,26 @@ pub enum UiScreen {
 }
 
 impl UiScreen {
+    pub const ALL: [Self; 17] = [
+        Self::Hub,
+        Self::Listen,
+        Self::Playlists,
+        Self::RecentTracks,
+        Self::NowPlaying,
+        Self::Ask,
+        Self::Talk,
+        Self::Contacts,
+        Self::CallHistory,
+        Self::TalkContact,
+        Self::VoiceNote,
+        Self::IncomingCall,
+        Self::OutgoingCall,
+        Self::InCall,
+        Self::Power,
+        Self::Loading,
+        Self::Error,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Hub => "hub",

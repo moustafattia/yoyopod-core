@@ -1,3 +1,5 @@
+pub mod registry;
+
 use crate::app::{UiScreen, UiView};
 use crate::runtime::{ListItemSnapshot, RuntimeSnapshot};
 use crate::screens;
