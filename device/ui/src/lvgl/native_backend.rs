@@ -12,6 +12,8 @@ use crate::lvgl::hub_icon_assets;
 use crate::lvgl::theme::{self, WidgetStyle};
 use crate::lvgl::{LvglFacade, WidgetId};
 use crate::render::assets::{self, RenderAssets};
+use crate::render::lvgl::layout::LayoutResolver;
+use crate::render::lvgl::theme::ThemeResolver;
 
 const DEFAULT_WIDTH: i32 = 240;
 const DEFAULT_HEIGHT: i32 = 280;
@@ -265,12 +267,14 @@ impl NativeLvglFacade {
     }
 
     fn layout_for_role_asset(&self, role: &'static str) -> Option<Layout> {
-        self.render_assets.layout_role(role).map(|layout| Layout {
-            x: layout.x,
-            y: layout.y,
-            width: layout.width,
-            height: layout.height,
-        })
+        LayoutResolver::new(&self.render_assets)
+            .resolve_role(role)
+            .map(|layout| Layout {
+                x: layout.x,
+                y: layout.y,
+                width: layout.width,
+                height: layout.height,
+            })
     }
 
     fn apply_role_tuning_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str) {
@@ -1429,30 +1433,11 @@ impl NativeLvglFacade {
     }
 
     fn style_for_role(&self, role: &'static str) -> WidgetStyle {
-        self.render_assets
-            .theme_role(role)
-            .map(|theme_role| {
-                let mut style = theme::style_for_role(role);
-                if let Some(fill_rgb) = theme_role.fill_rgb {
-                    style.bg_color = Some(fill_rgb);
-                }
-                if let Some(text_rgb) = theme_role.text_rgb {
-                    style.text_color = Some(text_rgb);
-                }
-                if let Some(opacity) = theme_role.opacity {
-                    style.bg_opa = opacity;
-                }
-                style
-            })
-            .unwrap_or_else(|| theme::style_for_role(role))
+        ThemeResolver::new(&self.render_assets).style_for_role(role)
     }
 
     fn style_for_selected_role(&self, role: &'static str, selected: bool) -> WidgetStyle {
-        if selected {
-            theme::style_for_selected_role(role, true)
-        } else {
-            self.style_for_role(role)
-        }
+        ThemeResolver::new(&self.render_assets).style_for_selected_role(role, selected)
     }
 }
 

@@ -2,6 +2,9 @@ use std::path::Path;
 
 use anyhow::Result;
 
+pub mod layout;
+pub mod theme;
+
 use crate::framebuffer::Framebuffer;
 #[cfg(feature = "native-lvgl")]
 use crate::lvgl::{NativeLvglFacade, NativeSceneRenderer, RustSceneBridge, SceneBridge};
