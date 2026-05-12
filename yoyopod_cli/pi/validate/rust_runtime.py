@@ -197,9 +197,10 @@ def rust_ui_navigation_check(
         _expect_screen(supervisor, "hub")
 
         visited: list[str] = ["hub"]
+        expected_selected_screen = "listen"
         for cycle in range(max(1, cycles)):
             _send_input(supervisor, "select", f"navigation-{cycle}-select")
-            visited.append(_expect_screen(supervisor, "listen"))
+            visited.append(_expect_screen(supervisor, expected_selected_screen))
             _sleep(hold_seconds)
             _sleep(idle_seconds)
 
@@ -210,6 +211,7 @@ def rust_ui_navigation_check(
             _send_input(supervisor, "advance", f"navigation-{cycle}-advance")
             health = _request_health(supervisor)
             _require_healthy_ui(health.payload)
+            expected_selected_screen = "talk"
             _sleep(hold_seconds)
 
         _sleep(tail_idle_seconds)
