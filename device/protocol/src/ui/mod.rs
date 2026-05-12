@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 pub use snapshot::{
     CallRuntimeSnapshot, HubCardSnapshot, HubRuntimeSnapshot, ListItemSnapshot,
     MusicRuntimeSnapshot, NetworkRuntimeSnapshot, OverlayRuntimeSnapshot, PowerPageSnapshot,
-    PowerRuntimeSnapshot, RuntimeSnapshot, RuntimeSnapshotPatch, VoiceNoteSummarySnapshot,
-    VoiceRuntimeSnapshot,
+    PowerRuntimeSnapshot, RuntimeSnapshot, RuntimeSnapshotDomain, RuntimeSnapshotPatch,
+    VoiceNoteSummarySnapshot, VoiceRuntimeSnapshot,
 };
 
 use crate::{EnvelopeKind, ProtocolError, WorkerEnvelope};
@@ -705,5 +705,17 @@ mod tests {
             UiEvent::from_envelope(envelope),
             Err(ProtocolError::InvalidEnvelope(_))
         ));
+    }
+
+    #[test]
+    fn runtime_patch_reports_domain() {
+        assert_eq!(
+            RuntimeSnapshotPatch::Music(MusicRuntimeSnapshot::default()).domain(),
+            RuntimeSnapshotDomain::Music
+        );
+        assert_eq!(
+            RuntimeSnapshotPatch::Full(RuntimeSnapshot::default()).domain(),
+            RuntimeSnapshotDomain::Full
+        );
     }
 }

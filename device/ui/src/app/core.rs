@@ -4,7 +4,8 @@ use crate::screens;
 use crate::screens::ScreenModel;
 use yoyopod_protocol::ui::{
     CallIntent, ContactAction, ListItemAction, ListItemSnapshot, MusicIntent, RuntimeSnapshot,
-    RuntimeSnapshotPatch, UiIntent, VoiceFileAction, VoiceIntent, VoiceRecipientAction,
+    RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiIntent, VoiceFileAction, VoiceIntent,
+    VoiceRecipientAction,
 };
 
 use super::{focus, navigator, UiScreen, UiView};
@@ -16,8 +17,72 @@ pub struct UiRuntime {
     screen_stack: Vec<UiScreen>,
     focus_index: usize,
     intents: Vec<UiIntent>,
-    dirty: bool,
+    dirty: DirtyState,
     selected_contact: Option<ListItemSnapshot>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DirtyState {
+    pub full: bool,
+    pub app_state: bool,
+    pub hub: bool,
+    pub music: bool,
+    pub call: bool,
+    pub voice: bool,
+    pub power: bool,
+    pub network: bool,
+    pub overlay: bool,
+    pub navigation: bool,
+    pub focus: bool,
+    pub input: bool,
+}
+
+impl DirtyState {
+    pub fn any(self) -> bool {
+        self.full
+            || self.app_state
+            || self.hub
+            || self.music
+            || self.call
+            || self.voice
+            || self.power
+            || self.network
+            || self.overlay
+            || self.navigation
+            || self.focus
+            || self.input
+    }
+
+    fn mark_full(&mut self) {
+        self.full = true;
+        self.app_state = true;
+        self.hub = true;
+        self.music = true;
+        self.call = true;
+        self.voice = true;
+        self.power = true;
+        self.network = true;
+        self.overlay = true;
+        self.navigation = true;
+        self.focus = true;
+    }
+
+    fn mark_patch_domain(&mut self, domain: RuntimeSnapshotDomain) {
+        match domain {
+            RuntimeSnapshotDomain::Full => self.mark_full(),
+            RuntimeSnapshotDomain::AppState => {
+                self.app_state = true;
+                self.navigation = true;
+            }
+            RuntimeSnapshotDomain::Hub => self.hub = true,
+            RuntimeSnapshotDomain::Music => self.music = true,
+            RuntimeSnapshotDomain::Call => self.call = true,
+            RuntimeSnapshotDomain::Voice => self.voice = true,
+            RuntimeSnapshotDomain::Power => self.power = true,
+            RuntimeSnapshotDomain::Network => self.network = true,
+            RuntimeSnapshotDomain::Overlay => self.overlay = true,
+        }
+    }
 }
 
 impl Default for UiRuntime {
@@ -28,7 +93,11 @@ impl Default for UiRuntime {
             screen_stack: Vec::new(),
             focus_index: 0,
             intents: Vec::new(),
-            dirty: true,
+            dirty: {
+                let mut dirty = DirtyState::default();
+                dirty.mark_full();
+                dirty
+            },
             selected_contact: None,
         }
     }
@@ -42,17 +111,27 @@ impl UiRuntime {
         self.apply_app_state_route(&previous_app_state, &app_state);
         self.apply_runtime_preemption();
         self.clamp_focus();
-        self.dirty = true;
+        self.dirty.mark_full();
     }
 
     pub fn apply_patch(&mut self, patch: RuntimeSnapshotPatch) {
+        let domain = patch.domain();
+        let previous_screen = self.active_screen;
+        let previous_focus = self.focus_index;
+        let previous_stack_len = self.screen_stack.len();
         let previous_app_state = self.snapshot.app_state.clone();
         self.snapshot.apply_patch(patch);
         let app_state = self.snapshot.app_state.clone();
         self.apply_app_state_route(&previous_app_state, &app_state);
         self.apply_runtime_preemption();
         self.clamp_focus();
-        self.dirty = true;
+        self.dirty.mark_patch_domain(domain);
+        if self.active_screen != previous_screen || self.screen_stack.len() != previous_stack_len {
+            self.dirty.navigation = true;
+        }
+        if self.focus_index != previous_focus {
+            self.dirty.focus = true;
+        }
     }
 
     pub fn handle_input(&mut self, action: InputAction) {
@@ -64,7 +143,8 @@ impl UiRuntime {
             InputAction::PttRelease => self.handle_ptt_release(),
         }
         self.clamp_focus();
-        self.dirty = true;
+        self.dirty.input = true;
+        self.dirty.focus = true;
     }
 
     pub fn active_screen(&self) -> UiScreen {
@@ -84,11 +164,15 @@ impl UiRuntime {
     }
 
     pub fn is_dirty(&self) -> bool {
+        self.dirty.any()
+    }
+
+    pub fn dirty_state(&self) -> DirtyState {
         self.dirty
     }
 
     pub fn mark_clean(&mut self) {
-        self.dirty = false;
+        self.dirty = DirtyState::default();
     }
 
     pub fn take_intents(&mut self) -> Vec<UiIntent> {
@@ -438,5 +522,46 @@ fn contact_action(item: &ListItemSnapshot) -> ContactAction {
         name: item.title.clone(),
         sip_address: String::new(),
         uri: String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yoyopod_protocol::ui::{CallRuntimeSnapshot, MusicRuntimeSnapshot};
+
+    #[test]
+    fn runtime_patch_marks_only_changed_snapshot_domain() {
+        let mut runtime = UiRuntime::default();
+        runtime.mark_clean();
+
+        runtime.apply_patch(RuntimeSnapshotPatch::Music(MusicRuntimeSnapshot {
+            title: "Track".to_string(),
+            ..MusicRuntimeSnapshot::default()
+        }));
+
+        let dirty = runtime.dirty_state();
+        assert!(dirty.music);
+        assert!(!dirty.call);
+        assert!(!dirty.network);
+        assert!(!dirty.full);
+        assert!(!dirty.navigation);
+    }
+
+    #[test]
+    fn runtime_preemption_marks_navigation_dirty() {
+        let mut runtime = UiRuntime::default();
+        runtime.mark_clean();
+
+        runtime.apply_patch(RuntimeSnapshotPatch::Call(CallRuntimeSnapshot {
+            state: "incoming".to_string(),
+            peer_name: "Ada".to_string(),
+            ..CallRuntimeSnapshot::default()
+        }));
+
+        let dirty = runtime.dirty_state();
+        assert!(dirty.call);
+        assert!(dirty.navigation);
+        assert_eq!(runtime.active_screen(), UiScreen::IncomingCall);
     }
 }

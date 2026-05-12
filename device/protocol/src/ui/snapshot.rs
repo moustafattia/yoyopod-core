@@ -75,11 +75,38 @@ pub enum RuntimeSnapshotPatch {
     Overlay(OverlayRuntimeSnapshot),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeSnapshotDomain {
+    Full,
+    AppState,
+    Hub,
+    Music,
+    Call,
+    Voice,
+    Power,
+    Network,
+    Overlay,
+}
+
 impl RuntimeSnapshotPatch {
     pub fn from_payload(payload: &Value) -> Result<Self, ProtocolError> {
         serde_json::from_value(payload.clone()).map_err(|error| {
             ProtocolError::InvalidEnvelope(format!("invalid UI runtime patch: {error}"))
         })
+    }
+
+    pub const fn domain(&self) -> RuntimeSnapshotDomain {
+        match self {
+            Self::Full(_) => RuntimeSnapshotDomain::Full,
+            Self::AppState(_) => RuntimeSnapshotDomain::AppState,
+            Self::Hub(_) => RuntimeSnapshotDomain::Hub,
+            Self::Music(_) => RuntimeSnapshotDomain::Music,
+            Self::Call(_) => RuntimeSnapshotDomain::Call,
+            Self::Voice(_) => RuntimeSnapshotDomain::Voice,
+            Self::Power(_) => RuntimeSnapshotDomain::Power,
+            Self::Network(_) => RuntimeSnapshotDomain::Network,
+            Self::Overlay(_) => RuntimeSnapshotDomain::Overlay,
+        }
     }
 }
 
