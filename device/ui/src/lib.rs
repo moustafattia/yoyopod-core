@@ -31,9 +31,15 @@ mod architecture_tests {
             }
 
             let contents = fs::read_to_string(&path).expect("reading Rust source");
-            let module_path = ["lvgl", "sys"].join("::");
-            let crate_module_path = ["crate", "lvgl", "sys"].join("::");
-            if contents.contains(&module_path) || contents.contains(&crate_module_path) {
+            let legacy_module_path = ["lvgl", "sys"].join("::");
+            let legacy_crate_module_path = ["crate", "lvgl", "sys"].join("::");
+            let module_path = ["lvgl", "ffi"].join("::");
+            let crate_module_path = ["crate", "lvgl", "ffi"].join("::");
+            if contents.contains(&legacy_module_path)
+                || contents.contains(&legacy_crate_module_path)
+                || contents.contains(&module_path)
+                || contents.contains(&crate_module_path)
+            {
                 violations.push(relative.display().to_string());
             }
         }
