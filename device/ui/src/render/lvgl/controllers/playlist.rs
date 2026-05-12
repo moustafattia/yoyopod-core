@@ -3,9 +3,9 @@ use anyhow::{anyhow, bail, Result};
 use super::listen::sync_rows;
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
+use crate::app::UiScreen;
+use crate::presentation::screens::{ListScreenModel, ScreenModel};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
-use crate::runtime::UiScreen;
-use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
 pub struct PlaylistController {

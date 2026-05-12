@@ -29,8 +29,7 @@ yoyopod-runtime
   input routing, and typed intent creation.
 - `device/ui/src/presentation/` maps app state into LVGL-free screen/view
   models. Screen builders and models live under
-  `device/ui/src/presentation/screens/`; `device/ui/src/screens/` remains a
-  compatibility re-export while downstream imports are migrated.
+  `device/ui/src/presentation/screens/`.
 - Python remains CLI/deploy/validation tooling only. It is not in the UI
   runtime path.
 

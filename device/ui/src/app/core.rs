@@ -1,8 +1,8 @@
 use crate::input::InputAction;
 use crate::presentation;
+use crate::presentation::screens;
+use crate::presentation::screens::ScreenModel;
 use crate::presentation::transitions::Transition;
-use crate::screens;
-use crate::screens::ScreenModel;
 use yoyopod_protocol::ui::{
     AnimationRequest, CallIntent, ContactAction, ListItemAction, ListItemSnapshot, MusicIntent,
     RuntimeSnapshot, RuntimeSnapshotDomain, RuntimeSnapshotPatch, UiIntent, VoiceFileAction,

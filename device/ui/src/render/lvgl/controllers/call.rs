@@ -2,9 +2,9 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
+use crate::app::UiScreen;
+use crate::presentation::screens::{CallViewModel, ScreenModel};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
-use crate::runtime::UiScreen;
-use crate::screens::{CallViewModel, ScreenModel};
 
 #[derive(Default)]
 pub struct CallController {

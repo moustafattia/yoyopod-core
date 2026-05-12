@@ -2,8 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
+use crate::presentation::screens::{ListScreenModel, ScreenModel};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
-use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
 pub struct TalkController {
@@ -130,7 +130,7 @@ impl TypedScreenController for TalkController {
     }
 }
 
-fn selected_row(model: &ListScreenModel) -> Option<&crate::screens::ListRowModel> {
+fn selected_row(model: &ListScreenModel) -> Option<&crate::presentation::screens::ListRowModel> {
     model
         .rows
         .iter()

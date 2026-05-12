@@ -1,4 +1,4 @@
-use crate::runtime::UiScreen;
+use crate::app::UiScreen;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusBarModel {

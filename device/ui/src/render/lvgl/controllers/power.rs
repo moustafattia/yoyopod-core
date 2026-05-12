@@ -2,8 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
 use super::TypedScreenController;
+use crate::presentation::screens::{PowerViewModel, ScreenModel};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
-use crate::screens::{PowerViewModel, ScreenModel};
 
 #[derive(Default)]
 pub struct PowerController {

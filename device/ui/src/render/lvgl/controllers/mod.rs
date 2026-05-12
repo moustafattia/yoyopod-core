@@ -13,8 +13,8 @@ mod talk_actions;
 
 use anyhow::Result;
 
+use crate::presentation::screens::ScreenModel;
 use crate::render::lvgl::LvglFacade;
-use crate::screens::ScreenModel;
 
 pub use ask::AskController;
 pub use call::CallController;
@@ -80,7 +80,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::screens::{
+    use crate::presentation::screens::{
         CallViewModel, ChromeModel, HubViewModel, ListScreenModel, NowPlayingViewModel,
         OverlayViewModel, ScreenModel, StatusBarModel,
     };

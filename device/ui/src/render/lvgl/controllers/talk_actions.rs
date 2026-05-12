@@ -2,8 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
+use crate::presentation::screens::{ScreenModel, TalkActionsViewModel};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
-use crate::screens::{ScreenModel, TalkActionsViewModel};
 
 const ACCENT: u32 = 0x00D4FF;
 const BACKGROUND: u32 = 0x2A2D35;

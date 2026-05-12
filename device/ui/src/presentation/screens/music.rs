@@ -1,5 +1,6 @@
-use crate::runtime::{RuntimeSnapshot, UiScreen, UiView};
-use crate::screens::{chrome, ListScreenModel, NowPlayingViewModel};
+use crate::app::{UiScreen, UiView};
+use crate::presentation::screens::{chrome, ListScreenModel, NowPlayingViewModel};
+use yoyopod_protocol::ui::RuntimeSnapshot;
 
 pub fn playlists_model(snapshot: &RuntimeSnapshot, focus_index: usize) -> ListScreenModel {
     ListScreenModel {

@@ -2,8 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
+use crate::presentation::screens::{AskViewModel, ScreenModel};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
-use crate::screens::{AskViewModel, ScreenModel};
 
 #[derive(Default)]
 pub struct AskController {

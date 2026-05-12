@@ -3,9 +3,9 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
+use crate::app::UiScreen;
 use crate::presentation::registry::{self, ControllerKind, NativeRenderScene};
-use crate::runtime::UiScreen;
-use crate::screens::{ListScreenModel, ScreenModel, StatusBarModel};
+use crate::presentation::screens::{ListScreenModel, ScreenModel, StatusBarModel};
 
 use crate::render::lvgl::controllers::{
     typed_controller, AskController, CallController, HubController, ListenController,

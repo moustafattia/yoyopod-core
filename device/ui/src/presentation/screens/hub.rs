@@ -1,5 +1,6 @@
-use crate::runtime::{ListItemSnapshot, RuntimeSnapshot, UiScreen, UiView};
-use crate::screens::{chrome, HubCardModel, HubViewModel};
+use crate::app::{UiScreen, UiView};
+use crate::presentation::screens::{chrome, HubCardModel, HubViewModel};
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn model(snapshot: &RuntimeSnapshot, focus_index: usize) -> HubViewModel {
     HubViewModel {

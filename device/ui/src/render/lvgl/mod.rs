@@ -18,7 +18,7 @@ pub mod style;
 pub mod theme;
 
 use crate::framebuffer::Framebuffer;
-use crate::screens::ScreenModel;
+use crate::presentation::screens::ScreenModel;
 #[cfg(feature = "native-lvgl")]
 use backend::NativeLvglFacade;
 #[cfg(feature = "native-lvgl")]

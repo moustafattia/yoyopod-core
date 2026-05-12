@@ -3,9 +3,9 @@ use anyhow::{anyhow, bail, Result};
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::presentation::screens::hub;
+use crate::presentation::screens::{HubViewModel, ScreenModel};
 use crate::render::lvgl::roles;
 use crate::render::lvgl::{LvglFacade, WidgetId};
-use crate::screens::{HubViewModel, ScreenModel};
 
 #[derive(Default)]
 pub struct HubController {

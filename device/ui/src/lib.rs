@@ -3,10 +3,7 @@ pub mod framebuffer;
 pub mod hardware;
 pub mod input;
 pub mod presentation;
-pub mod protocol;
 pub mod render;
-pub mod runtime;
-pub mod screens;
 pub mod whisplay_panel;
 pub mod worker;
 

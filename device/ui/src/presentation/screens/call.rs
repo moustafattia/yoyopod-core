@@ -1,7 +1,8 @@
-use crate::runtime::{ListItemSnapshot, RuntimeSnapshot, UiScreen, UiView};
-use crate::screens::{
+use crate::app::{UiScreen, UiView};
+use crate::presentation::screens::{
     chrome, CallViewModel, ListScreenModel, TalkActionButtonModel, TalkActionsViewModel,
 };
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn contacts_model(snapshot: &RuntimeSnapshot, focus_index: usize) -> ListScreenModel {
     ListScreenModel {

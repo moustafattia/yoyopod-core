@@ -1,5 +1,6 @@
-use crate::runtime::{RuntimeSnapshot, UiScreen, UiView};
-use crate::screens::{chrome, OverlayViewModel};
+use crate::app::{UiScreen, UiView};
+use crate::presentation::screens::{chrome, OverlayViewModel};
+use yoyopod_protocol::ui::RuntimeSnapshot;
 
 pub fn loading_model(snapshot: &RuntimeSnapshot) -> OverlayViewModel {
     OverlayViewModel {

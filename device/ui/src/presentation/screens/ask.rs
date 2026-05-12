@@ -1,5 +1,8 @@
-use crate::runtime::{ListItemSnapshot, RuntimeSnapshot, UiScreen, UiView};
-use crate::screens::{chrome, AskViewModel, TalkActionButtonModel, TalkActionsViewModel};
+use crate::app::{UiScreen, UiView};
+use crate::presentation::screens::{
+    chrome, AskViewModel, TalkActionButtonModel, TalkActionsViewModel,
+};
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn ask_model(snapshot: &RuntimeSnapshot) -> AskViewModel {
     AskViewModel {

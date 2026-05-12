@@ -1,4 +1,4 @@
-use crate::runtime::{ListItemSnapshot, RuntimeSnapshot};
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 use super::{ChromeModel, ListRowModel, StatusBarModel};
 

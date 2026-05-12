@@ -2,17 +2,17 @@ use std::io::{BufRead, BufReader, Read, Write};
 
 use anyhow::Result;
 use yoyopod_protocol::ui::{
-    DisplayInfo, UiCommand, UiError, UiErrorCode, UiEvent, UiHealth, UiInputEvent, UiReady,
-    UiScreenChanged,
+    DisplayInfo, UiCommand, UiError, UiErrorCode, UiEvent, UiHealth, UiInputEvent, UiIntent,
+    UiReady, UiScreenChanged,
 };
+use yoyopod_protocol::WorkerEnvelope;
 
+use crate::app::{UiRuntime, UiScreen};
 use crate::framebuffer::Framebuffer;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
-use crate::protocol::{monotonic_millis, Envelope};
+use crate::presentation::screens::ScreenModel;
 use crate::render::LvglRenderer;
-use crate::runtime::{UiIntent, UiRuntime, UiScreen};
-use crate::screens::ScreenModel;
 
 pub fn run_worker<R, W, E, D, B>(
     input: R,
@@ -55,7 +55,7 @@ where
             continue;
         }
 
-        match Envelope::decode(line.as_bytes()) {
+        match WorkerEnvelope::decode(line.as_bytes()) {
             Ok(envelope) => {
                 let command = match UiCommand::from_envelope(envelope) {
                     Ok(command) => command,
@@ -236,7 +236,7 @@ where
     Ok(())
 }
 
-fn emit<W: Write>(output: &mut W, envelope: Envelope) -> Result<()> {
+fn emit<W: Write>(output: &mut W, envelope: WorkerEnvelope) -> Result<()> {
     output.write_all(&envelope.encode()?)?;
     output.flush()?;
     Ok(())
@@ -343,4 +343,12 @@ fn screen_model_title(model: &ScreenModel) -> &str {
         ScreenModel::Power(power) => &power.title,
         ScreenModel::Loading(overlay) | ScreenModel::Error(overlay) => &overlay.title,
     }
+}
+
+fn monotonic_millis() -> u64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_millis() as u64
 }

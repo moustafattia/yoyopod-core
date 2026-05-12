@@ -1,5 +1,5 @@
-use crate::runtime::{ListItemSnapshot, RuntimeSnapshot};
-use crate::screens;
+use crate::presentation::screens;
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 use super::UiScreen;
 

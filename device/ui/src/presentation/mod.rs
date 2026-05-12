@@ -3,8 +3,8 @@ pub mod screens;
 pub mod transitions;
 
 use crate::app::{UiScreen, UiView};
-use crate::runtime::{ListItemSnapshot, RuntimeSnapshot};
 use screens::ScreenModel;
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn view_for_screen(
     screen: UiScreen,

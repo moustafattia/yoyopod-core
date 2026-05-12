@@ -2,8 +2,8 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterLabel, StatusBarWidgets};
 use super::TypedScreenController;
+use crate::presentation::screens::{ListScreenModel, ScreenModel};
 use crate::render::lvgl::{roles, LvglFacade, WidgetId};
-use crate::screens::{ListScreenModel, ScreenModel};
 
 #[derive(Default)]
 pub struct ListenController {

@@ -1,5 +1,6 @@
-use crate::runtime::{ListItemSnapshot, RuntimeSnapshot, UiScreen, UiView};
-use crate::screens::{chrome, ListRowModel, PowerViewModel};
+use crate::app::{UiScreen, UiView};
+use crate::presentation::screens::{chrome, ListRowModel, PowerViewModel};
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetupPageModel {
@@ -108,13 +109,7 @@ pub fn pages(snapshot: &RuntimeSnapshot) -> Vec<SetupPageModel> {
         return vec![SetupPageModel {
             title: "Power".to_string(),
             icon_key: "battery".to_string(),
-            rows: snapshot
-                .power
-                .rows
-                .iter()
-                .take(5)
-                .map(format_legacy_row)
-                .collect(),
+            rows: snapshot.power.rows.iter().take(5).cloned().collect(),
         }];
     }
 
@@ -186,14 +181,6 @@ fn active_page_index(pages: &[SetupPageModel], focus_index: usize) -> usize {
         0
     } else {
         focus_index % pages.len()
-    }
-}
-
-fn format_legacy_row(row: &String) -> String {
-    if row.contains(':') {
-        row.clone()
-    } else {
-        row.to_string()
     }
 }
 

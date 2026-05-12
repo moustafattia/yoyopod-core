@@ -1,4 +1,4 @@
-use crate::runtime::RuntimeSnapshot;
+use yoyopod_protocol::ui::RuntimeSnapshot;
 
 use super::UiScreen;
 
