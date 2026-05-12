@@ -3,15 +3,85 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
-use crate::presentation::registry::{self, ControllerKind};
+use crate::presentation::registry::{self, ControllerKind, NativeRenderScene};
 use crate::runtime::UiScreen;
 use crate::screens::{ListScreenModel, ScreenModel, StatusBarModel};
 
-use super::{
-    typed_controller, AskController, CallController, HubController, ListenController, LvglFacade,
-    NativeSceneKey, NowPlayingController, OverlayController, PlaylistController, PowerController,
-    ScreenController, TalkActionsController, TalkController,
+use crate::render::lvgl::controllers::{
+    typed_controller, AskController, CallController, HubController, ListenController,
+    NowPlayingController, OverlayController, PlaylistController, PowerController, ScreenController,
+    TalkActionsController, TalkController,
 };
+use crate::render::lvgl::LvglFacade;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeSceneKey {
+    Hub,
+    Listen,
+    Playlist,
+    NowPlaying,
+    Talk,
+    TalkActions,
+    IncomingCall,
+    OutgoingCall,
+    InCall,
+    Ask,
+    Power,
+    Overlay,
+}
+
+impl NativeSceneKey {
+    pub const fn for_screen(screen: UiScreen) -> Self {
+        match registry::screen_entry(screen).native_scene {
+            NativeRenderScene::Hub => Self::Hub,
+            NativeRenderScene::Listen => Self::Listen,
+            NativeRenderScene::Playlist => Self::Playlist,
+            NativeRenderScene::NowPlaying => Self::NowPlaying,
+            NativeRenderScene::Talk => Self::Talk,
+            NativeRenderScene::TalkActions => Self::TalkActions,
+            NativeRenderScene::IncomingCall => Self::IncomingCall,
+            NativeRenderScene::OutgoingCall => Self::OutgoingCall,
+            NativeRenderScene::InCall => Self::InCall,
+            NativeRenderScene::Ask => Self::Ask,
+            NativeRenderScene::Power => Self::Power,
+            NativeRenderScene::Overlay => Self::Overlay,
+        }
+    }
+
+    pub const fn registry_scene(self) -> NativeRenderScene {
+        match self {
+            Self::Hub => NativeRenderScene::Hub,
+            Self::Listen => NativeRenderScene::Listen,
+            Self::Playlist => NativeRenderScene::Playlist,
+            Self::NowPlaying => NativeRenderScene::NowPlaying,
+            Self::Talk => NativeRenderScene::Talk,
+            Self::TalkActions => NativeRenderScene::TalkActions,
+            Self::IncomingCall => NativeRenderScene::IncomingCall,
+            Self::OutgoingCall => NativeRenderScene::OutgoingCall,
+            Self::InCall => NativeRenderScene::InCall,
+            Self::Ask => NativeRenderScene::Ask,
+            Self::Power => NativeRenderScene::Power,
+            Self::Overlay => NativeRenderScene::Overlay,
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hub => "hub",
+            Self::Listen => "listen",
+            Self::Playlist => "playlist",
+            Self::NowPlaying => "now_playing",
+            Self::Talk => "talk",
+            Self::TalkActions => "talk_actions",
+            Self::IncomingCall => "incoming_call",
+            Self::OutgoingCall => "outgoing_call",
+            Self::InCall => "in_call",
+            Self::Ask => "ask",
+            Self::Power => "power",
+            Self::Overlay => "overlay",
+        }
+    }
+}
 
 pub trait SceneBridge {
     fn build_scene(&mut self, scene: NativeSceneKey) -> Result<()>;
@@ -207,9 +277,11 @@ fn controller_for_native_scene(scene: NativeSceneKey) -> Result<Box<dyn ScreenCo
 }
 
 #[cfg(feature = "native-lvgl")]
-impl RustSceneBridge<super::NativeLvglFacade> {
+impl RustSceneBridge<crate::render::lvgl::backend::NativeLvglFacade> {
     pub fn open(explicit_source: Option<&Path>) -> Result<Self> {
-        Ok(Self::new(super::NativeLvglFacade::open(explicit_source)?))
+        Ok(Self::new(
+            crate::render::lvgl::backend::NativeLvglFacade::open(explicit_source)?,
+        ))
     }
 
     pub fn display_needs_reset(&self, framebuffer: &crate::framebuffer::Framebuffer) -> bool {

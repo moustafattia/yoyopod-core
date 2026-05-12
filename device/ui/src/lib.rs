@@ -2,7 +2,6 @@ pub mod app;
 pub mod framebuffer;
 pub mod hardware;
 pub mod input;
-pub mod lvgl;
 pub mod presentation;
 pub mod protocol;
 pub mod render;
@@ -37,14 +36,14 @@ mod architecture_tests {
             }
 
             let contents = fs::read_to_string(&path).expect("reading Rust source");
-            let legacy_module_path = ["lvgl", "sys"].join("::");
-            let legacy_crate_module_path = ["crate", "lvgl", "sys"].join("::");
+            let old_module_path = ["lvgl", "sys"].join("::");
+            let old_crate_module_path = ["crate", "lvgl", "sys"].join("::");
             let module_path = ["lvgl", "ffi"].join("::");
             let crate_module_path = ["crate", "lvgl", "ffi"].join("::");
             let render_module_path = ["render", "lvgl", "ffi"].join("::");
             let render_crate_module_path = ["crate", "render", "lvgl", "ffi"].join("::");
-            if contents.contains(&legacy_module_path)
-                || contents.contains(&legacy_crate_module_path)
+            if contents.contains(&old_module_path)
+                || contents.contains(&old_crate_module_path)
                 || contents.contains(&module_path)
                 || contents.contains(&crate_module_path)
                 || contents.contains(&render_module_path)
@@ -57,6 +56,15 @@ mod architecture_tests {
         assert!(
             violations.is_empty(),
             "raw LVGL FFI imports outside src/render/lvgl: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn no_old_top_level_lvgl_module_remains() {
+        let old_lvgl_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lvgl");
+        assert!(
+            !old_lvgl_dir.exists(),
+            "src/lvgl module must not remain; LVGL implementation belongs in src/render/lvgl"
         );
     }
 

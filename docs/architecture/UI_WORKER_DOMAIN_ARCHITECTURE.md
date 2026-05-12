@@ -99,9 +99,9 @@ rather than owning animation state directly.
 
 Checked-in RON assets under `device/ui/assets/` provide the current extracted
 layout/theme role data. The native facade parses and validates those assets at
-startup, rejects missing, duplicate, or unknown covered roles, and uses covered
-asset entries before falling back to the remaining legacy match tables. Full
-layout/theme extraction is still in progress.
+startup, rejects missing, duplicate, or unknown roles, and uses asset entries
+as the only layout and style source for LVGL role geometry, base styles, and
+selected-state styles.
 
 ## Native Boundary
 

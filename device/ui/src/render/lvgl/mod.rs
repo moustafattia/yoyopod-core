@@ -5,6 +5,7 @@ use anyhow::Result;
 #[cfg(feature = "native-lvgl")]
 pub mod backend;
 pub mod controllers;
+pub mod facade;
 #[cfg(feature = "native-lvgl")]
 pub(crate) mod ffi;
 #[cfg(feature = "native-lvgl")]
@@ -12,14 +13,20 @@ pub(crate) mod icons;
 pub mod layout;
 pub mod primitives;
 pub(crate) mod roles;
+pub mod scene;
+pub mod style;
 pub mod theme;
 
 use crate::framebuffer::Framebuffer;
-#[cfg(feature = "native-lvgl")]
-use crate::lvgl::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
 use crate::screens::ScreenModel;
 #[cfg(feature = "native-lvgl")]
 use backend::NativeLvglFacade;
+#[cfg(feature = "native-lvgl")]
+use scene::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
+
+pub use facade::LvglFacade;
+pub use primitives::WidgetId;
+pub use scene::NativeSceneKey;
 
 #[cfg(not(feature = "native-lvgl"))]
 pub struct LvglRenderer;

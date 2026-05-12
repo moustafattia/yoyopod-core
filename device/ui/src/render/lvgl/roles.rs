@@ -1,3 +1,4 @@
+pub(crate) const ROOT: &str = "root";
 pub(crate) const FOOTER_BAR: &str = "footer_bar";
 
 pub(crate) const ASK_FOOTER: &str = "ask_footer";

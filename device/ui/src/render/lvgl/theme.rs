@@ -1,5 +1,7 @@
-use crate::lvgl::theme::{self as legacy_theme, WidgetStyle};
-use crate::render::assets::RenderAssets;
+use anyhow::{anyhow, Result};
+
+use crate::render::assets::{RenderAssets, ThemeRole};
+use crate::render::lvgl::style::{self, WidgetStyle};
 
 pub struct ThemeResolver<'a> {
     assets: &'a RenderAssets,
@@ -10,31 +12,37 @@ impl<'a> ThemeResolver<'a> {
         Self { assets }
     }
 
-    pub fn style_for_role(&self, role: &str) -> WidgetStyle {
-        self.assets
+    pub fn style_for_role(&self, role: &str) -> Result<WidgetStyle> {
+        let theme_role = self
+            .assets
             .theme_role(role)
-            .map(|theme_role| {
-                let mut style = legacy_theme::style_for_role(role);
-                if let Some(fill_rgb) = theme_role.fill_rgb {
-                    style.bg_color = Some(fill_rgb);
-                }
-                if let Some(text_rgb) = theme_role.text_rgb {
-                    style.text_color = Some(text_rgb);
-                }
-                if let Some(opacity) = theme_role.opacity {
-                    style.bg_opa = opacity;
-                }
-                style
-            })
-            .unwrap_or_else(|| legacy_theme::style_for_role(role))
+            .ok_or_else(|| anyhow!("missing LVGL theme asset for role {role}"))?;
+        Ok(style_from_theme_role(theme_role))
     }
 
-    pub fn style_for_selected_role(&self, role: &str, selected: bool) -> WidgetStyle {
+    pub fn style_for_selected_role(&self, role: &str, selected: bool) -> Result<WidgetStyle> {
         if selected {
-            legacy_theme::style_for_selected_role(role, true)
+            let theme_role = self
+                .assets
+                .selected_theme_role(role)
+                .ok_or_else(|| anyhow!("missing selected LVGL theme asset for role {role}"))?;
+            Ok(style_from_theme_role(theme_role))
         } else {
             self.style_for_role(role)
         }
+    }
+}
+
+fn style_from_theme_role(theme_role: &ThemeRole) -> WidgetStyle {
+    WidgetStyle {
+        bg_color: theme_role.fill_rgb,
+        bg_opa: theme_role.opacity.unwrap_or(style::OPA_TRANSP),
+        text_color: theme_role.text_rgb,
+        border_color: theme_role.border_rgb,
+        border_width: theme_role.border_width,
+        radius: theme_role.radius,
+        outline_width: theme_role.outline_width,
+        shadow_width: theme_role.shadow_width,
     }
 }
 
@@ -49,19 +57,28 @@ mod tests {
         let render_assets = assets::load_render_assets().unwrap();
         let resolver = ThemeResolver::new(&render_assets);
 
-        let style = resolver.style_for_role(roles::OVERLAY_SUBTITLE);
+        let resolved_style = resolver.style_for_role(roles::OVERLAY_SUBTITLE).unwrap();
 
-        assert_eq!(style.text_color, Some(legacy_theme::MUTED_RGB));
+        assert_eq!(resolved_style.text_color, Some(style::MUTED_RGB));
     }
 
     #[test]
-    fn falls_back_to_legacy_role_style() {
+    fn rejects_roles_missing_from_theme_asset() {
         let render_assets = assets::load_render_assets().unwrap();
         let resolver = ThemeResolver::new(&render_assets);
 
-        assert_eq!(
-            resolver.style_for_role("hub_title"),
-            legacy_theme::style_for_role("hub_title")
-        );
+        assert!(resolver.style_for_role("not_a_real_role").is_err());
+    }
+
+    #[test]
+    fn resolves_selected_asset_style() {
+        let render_assets = assets::load_render_assets().unwrap();
+        let resolver = ThemeResolver::new(&render_assets);
+
+        let resolved_style = resolver
+            .style_for_selected_role(roles::LIST_ROW, true)
+            .unwrap();
+
+        assert_eq!(resolved_style.bg_color, Some(style::SELECTED_ROW_RGB));
     }
 }

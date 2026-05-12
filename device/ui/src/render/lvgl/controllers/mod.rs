@@ -13,7 +13,7 @@ mod talk_actions;
 
 use anyhow::Result;
 
-use crate::lvgl::LvglFacade;
+use crate::render::lvgl::LvglFacade;
 use crate::screens::ScreenModel;
 
 pub use ask::AskController;

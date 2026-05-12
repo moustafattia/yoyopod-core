@@ -22,7 +22,7 @@ For the Figma-to-Whisplay implementation workflow, screen extraction order, and 
 LVGL object tree
   -> partial render (40-line draw buffer)
   -> flush callback (RGB565_SWAPPED)
-  -> Rust display bridge in `device/ui/src/lvgl/`
+  -> Rust display bridge in `device/ui/src/render/lvgl/`
   -> hardware SPI + RGB565 framebuffer/browser preview
 ```
 

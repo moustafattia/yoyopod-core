@@ -7,13 +7,13 @@ use std::time::Instant;
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::framebuffer::Framebuffer;
-use crate::lvgl::theme::{self, WidgetStyle};
-use crate::lvgl::{LvglFacade, WidgetId};
 use crate::render::assets::{self, RenderAssets};
 use crate::render::lvgl::ffi;
 use crate::render::lvgl::icons;
 use crate::render::lvgl::layout::LayoutResolver;
+use crate::render::lvgl::style::{self as theme, WidgetStyle};
 use crate::render::lvgl::theme::ThemeResolver;
+use crate::render::lvgl::{LvglFacade, WidgetId};
 
 const DEFAULT_WIDTH: i32 = 240;
 const DEFAULT_HEIGHT: i32 = 280;
@@ -61,9 +61,7 @@ pub struct NativeLvglFacade {
     next_widget_id: u64,
     widgets: HashMap<WidgetId, WidgetNode>,
     active_root: Option<WidgetId>,
-    hub_dot_count: usize,
-    list_row_count: usize,
-    power_row_count: usize,
+    role_occurrences: HashMap<&'static str, usize>,
     render_assets: RenderAssets,
 }
 
@@ -85,9 +83,7 @@ impl NativeLvglFacade {
             next_widget_id: 0,
             widgets: HashMap::new(),
             active_root: None,
-            hub_dot_count: 0,
-            list_row_count: 0,
-            power_row_count: 0,
+            role_occurrences: HashMap::new(),
             render_assets,
         })
     }
@@ -227,7 +223,7 @@ impl NativeLvglFacade {
             .map(|(width, height)| (width as i32, height as i32))
             .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
         Self::reset_style_raw(blank);
-        Self::apply_style_raw(blank, self.style_for_role("root"));
+        Self::apply_style_raw(blank, self.style_for_role(roles::ROOT)?);
         Self::apply_layout_raw(
             blank,
             Layout {
@@ -253,9 +249,7 @@ impl NativeLvglFacade {
         self.blank_screen = None;
         self.widgets.clear();
         self.active_root = None;
-        self.hub_dot_count = 0;
-        self.list_row_count = 0;
-        self.power_row_count = 0;
+        self.role_occurrences.clear();
         self.flush_target.framebuffer = ptr::null_mut();
     }
 
@@ -266,9 +260,9 @@ impl NativeLvglFacade {
         }
     }
 
-    fn layout_for_role_asset(&self, role: &'static str) -> Option<Layout> {
+    fn layout_for_role_asset(&self, role: &'static str, occurrence: usize) -> Option<Layout> {
         LayoutResolver::new(&self.render_assets)
-            .resolve_role(role)
+            .resolve_role(role, occurrence)
             .map(|layout| Layout {
                 x: layout.x,
                 y: layout.y,
@@ -771,672 +765,25 @@ impl NativeLvglFacade {
         }
     }
 
-    fn next_role_layout(&mut self, parent: Option<WidgetId>, role: &'static str) -> Result<Layout> {
-        let parent_role = parent
-            .and_then(|widget| self.widgets.get(&widget).map(|node| node.role))
-            .unwrap_or("root");
-
-        if let Some(layout) = self.layout_for_role_asset(role) {
+    fn next_role_layout(
+        &mut self,
+        _parent: Option<WidgetId>,
+        role: &'static str,
+    ) -> Result<Layout> {
+        let occurrence = *self.role_occurrences.entry(role).or_insert(0);
+        if let Some(layout) = self.layout_for_role_asset(role, occurrence) {
+            self.role_occurrences.insert(role, occurrence + 1);
             return Ok(layout);
         }
 
-        let layout = match role {
-            "status_bar" => Layout {
-                x: 0,
-                y: 0,
-                width: 240,
-                height: 30,
-            },
-            "status_signal_bar_0" => Layout {
-                x: 16,
-                y: 17,
-                width: 3,
-                height: 4,
-            },
-            "status_signal_bar_1" => Layout {
-                x: 20,
-                y: 14,
-                width: 3,
-                height: 7,
-            },
-            "status_signal_bar_2" => Layout {
-                x: 24,
-                y: 11,
-                width: 3,
-                height: 10,
-            },
-            "status_signal_bar_3" => Layout {
-                x: 28,
-                y: 8,
-                width: 3,
-                height: 13,
-            },
-            "status_wifi" => Layout {
-                x: 37,
-                y: 8,
-                width: 12,
-                height: 14,
-            },
-            "status_gps_ring" => Layout {
-                x: 37,
-                y: 9,
-                width: 8,
-                height: 8,
-            },
-            "status_gps_center" => Layout {
-                x: 40,
-                y: 12,
-                width: 2,
-                height: 2,
-            },
-            "status_gps_tail" => Layout {
-                x: 40,
-                y: 16,
-                width: 2,
-                height: 5,
-            },
-            "status_voip_dot_left" => Layout {
-                x: 16,
-                y: 15,
-                width: 6,
-                height: 6,
-            },
-            "status_voip_dot_after_gps" => Layout {
-                x: 51,
-                y: 15,
-                width: 6,
-                height: 6,
-            },
-            "status_time" => Layout {
-                x: 88,
-                y: 8,
-                width: 64,
-                height: 14,
-            },
-            "status_battery_outline" => Layout {
-                x: 172,
-                y: 11,
-                width: 14,
-                height: 8,
-            },
-            "status_battery_fill" => Layout {
-                x: 1,
-                y: 1,
-                width: 12,
-                height: 6,
-            },
-            "status_battery_tip" => Layout {
-                x: 186,
-                y: 14,
-                width: 2,
-                height: 4,
-            },
-            "status_battery_label" => Layout {
-                x: 196,
-                y: 8,
-                width: 36,
-                height: 14,
-            },
-            "status_network" => Layout {
-                x: 16,
-                y: 8,
-                width: 36,
-                height: 14,
-            },
-            "status_signal" => Layout {
-                x: 98,
-                y: 8,
-                width: 44,
-                height: 14,
-            },
-            "status_battery" => Layout {
-                x: 188,
-                y: 8,
-                width: 36,
-                height: 14,
-            },
-            "footer_bar" => Layout {
-                x: 0,
-                y: 248,
-                width: 240,
-                height: 32,
-            },
-            _ if parent_role == "footer_bar" => Layout {
-                x: 10,
-                y: 8,
-                width: 220,
-                height: 16,
-            },
-            "listen_footer" | "now_playing_footer" | "power_footer" => Layout {
-                x: 13,
-                y: 256,
-                width: 214,
-                height: 16,
-            },
-            "hub_icon_glow" => Layout {
-                x: 62,
-                y: 48,
-                width: 116,
-                height: 116,
-            },
-            "hub_card_panel" => Layout {
-                x: 72,
-                y: 58,
-                width: 96,
-                height: 96,
-            },
-            "hub_icon" => Layout {
-                x: 20,
-                y: 20,
-                width: 56,
-                height: 56,
-            },
-            "hub_title" => Layout {
-                x: 60,
-                y: 176,
-                width: 120,
-                height: 28,
-            },
-            "hub_subtitle" => Layout {
-                x: 60,
-                y: 204,
-                width: 120,
-                height: 18,
-            },
-            "hub_dot" => {
-                let index = self.hub_dot_count;
-                self.hub_dot_count += 1;
-                Layout {
-                    x: 103 + (index as i32 * 10),
-                    y: 218,
-                    width: 4,
-                    height: 4,
-                }
-            }
-            "talk_dot" => {
-                let index = self.hub_dot_count;
-                self.hub_dot_count += 1;
-                Layout {
-                    x: 99 + (index as i32 * 14),
-                    y: 224,
-                    width: 6,
-                    height: 6,
-                }
-            }
-            "list_title" => Layout {
-                x: 20,
-                y: 42,
-                width: 200,
-                height: 24,
-            },
-            "list_subtitle" => Layout {
-                x: 20,
-                y: 66,
-                width: 200,
-                height: 18,
-            },
-            "listen_title" => Layout {
-                x: 16,
-                y: 38,
-                width: 208,
-                height: 28,
-            },
-            "listen_subtitle" => Layout {
-                x: 16,
-                y: 68,
-                width: 208,
-                height: 16,
-            },
-            "listen_panel" => Layout {
-                x: 16,
-                y: 92,
-                width: 208,
-                height: 188,
-            },
-            "listen_row" => {
-                let index = self.list_row_count;
-                self.list_row_count += 1;
-                Layout {
-                    x: 0,
-                    y: index as i32 * 52,
-                    width: 208,
-                    height: 44,
-                }
-            }
-            "listen_row_icon" => Layout {
-                x: 16,
-                y: 12,
-                width: 28,
-                height: 18,
-            },
-            "listen_row_title" => Layout {
-                x: 48,
-                y: 8,
-                width: 120,
-                height: 18,
-            },
-            "listen_row_subtitle" => Layout {
-                x: 48,
-                y: 26,
-                width: 120,
-                height: 14,
-            },
-            "listen_empty_panel" => Layout {
-                x: 18,
-                y: 94,
-                width: 204,
-                height: 156,
-            },
-            "listen_empty_icon" => Layout {
-                x: 72,
-                y: 18,
-                width: 60,
-                height: 24,
-            },
-            "listen_empty_title" => Layout {
-                x: 18,
-                y: 84,
-                width: 168,
-                height: 22,
-            },
-            "listen_empty_subtitle" => Layout {
-                x: 18,
-                y: 112,
-                width: 168,
-                height: 36,
-            },
-            "playlist_title" => Layout {
-                x: 18,
-                y: 38,
-                width: 150,
-                height: 22,
-            },
-            "playlist_underline" => Layout {
-                x: 18,
-                y: 60,
-                width: 30,
-                height: 3,
-            },
-            "playlist_panel" => Layout {
-                x: 12,
-                y: 86,
-                width: 216,
-                height: 166,
-            },
-            "playlist_row" => {
-                let index = self.list_row_count;
-                self.list_row_count += 1;
-                Layout {
-                    x: 16,
-                    y: 8 + (index as i32 * 48),
-                    width: 184,
-                    height: 44,
-                }
-            }
-            "playlist_row_icon" => Layout {
-                x: 14,
-                y: 12,
-                width: 26,
-                height: 18,
-            },
-            "playlist_row_title" => Layout {
-                x: 44,
-                y: 7,
-                width: 92,
-                height: 18,
-            },
-            "playlist_row_subtitle" => Layout {
-                x: 44,
-                y: 24,
-                width: 92,
-                height: 14,
-            },
-            "playlist_empty_panel" => Layout {
-                x: 18,
-                y: 96,
-                width: 204,
-                height: 156,
-            },
-            "playlist_empty_icon" => Layout {
-                x: 72,
-                y: 18,
-                width: 60,
-                height: 24,
-            },
-            "playlist_empty_title" => Layout {
-                x: 18,
-                y: 84,
-                width: 168,
-                height: 22,
-            },
-            "playlist_empty_subtitle" => Layout {
-                x: 18,
-                y: 112,
-                width: 168,
-                height: 36,
-            },
-            "list_row" => {
-                let index = self.list_row_count;
-                self.list_row_count += 1;
-                Layout {
-                    x: 16,
-                    y: 94 + (index as i32 * 36),
-                    width: 208,
-                    height: 32,
-                }
-            }
-            "list_row_icon" => Layout {
-                x: 8,
-                y: 8,
-                width: 40,
-                height: 14,
-            },
-            "list_row_title" => Layout {
-                x: 48,
-                y: 5,
-                width: 144,
-                height: 14,
-            },
-            "list_row_subtitle" => Layout {
-                x: 48,
-                y: 18,
-                width: 144,
-                height: 12,
-            },
-            "now_playing_panel" => Layout {
-                x: 0,
-                y: 38,
-                width: 240,
-                height: 214,
-            },
-            "now_playing_icon_halo" => Layout {
-                x: 74,
-                y: 12,
-                width: 92,
-                height: 66,
-            },
-            "now_playing_icon_label" => Layout {
-                x: 0,
-                y: 19,
-                width: 92,
-                height: 28,
-            },
-            "now_playing_state_chip" => Layout {
-                x: 70,
-                y: 170,
-                width: 100,
-                height: 24,
-            },
-            "now_playing_state_label" => Layout {
-                x: 0,
-                y: 5,
-                width: 100,
-                height: 14,
-            },
-            "now_playing_title" => Layout {
-                x: 16,
-                y: 96,
-                width: 208,
-                height: 44,
-            },
-            "now_playing_artist" => Layout {
-                x: 16,
-                y: 146,
-                width: 208,
-                height: 16,
-            },
-            "now_playing_progress_track" => Layout {
-                x: 36,
-                y: 202,
-                width: 168,
-                height: 8,
-            },
-            "now_playing_progress_fill" => Layout {
-                x: 0,
-                y: 0,
-                width: 1,
-                height: 8,
-            },
-            "talk_card_glow" => Layout {
-                x: 58,
-                y: 42,
-                width: 124,
-                height: 124,
-            },
-            "talk_card_panel" => Layout {
-                x: 64,
-                y: 48,
-                width: 112,
-                height: 112,
-            },
-            "talk_card_label" => Layout {
-                x: 26,
-                y: 44,
-                width: 60,
-                height: 24,
-            },
-            "talk_title" => Layout {
-                x: 30,
-                y: 176,
-                width: 180,
-                height: 28,
-            },
-            "talk_actions_header_box" => Layout {
-                x: 96,
-                y: 50,
-                width: 48,
-                height: 48,
-            },
-            "talk_actions_header_label" => Layout {
-                x: 9,
-                y: 15,
-                width: 30,
-                height: 18,
-            },
-            "talk_actions_header_name" => Layout {
-                x: 50,
-                y: 104,
-                width: 140,
-                height: 16,
-            },
-            "talk_actions_primary_button" => Layout {
-                x: 76,
-                y: 126,
-                width: 88,
-                height: 88,
-            },
-            "talk_actions_button_label" => Layout {
-                x: 24,
-                y: 32,
-                width: 40,
-                height: 24,
-            },
-            "talk_actions_title_label" => Layout {
-                x: 30,
-                y: 198,
-                width: 180,
-                height: 22,
-            },
-            "talk_actions_status_label" => Layout {
-                x: 30,
-                y: 220,
-                width: 180,
-                height: 16,
-            },
-            "ask_icon_halo" => Layout {
-                x: 72,
-                y: 56,
-                width: 96,
-                height: 96,
-            },
-            "ask_icon_glow" => Layout {
-                x: 60,
-                y: 44,
-                width: 120,
-                height: 120,
-            },
-            "ask_icon" => Layout {
-                x: 20,
-                y: 20,
-                width: 56,
-                height: 56,
-            },
-            "ask_title" => Layout {
-                x: 20,
-                y: 176,
-                width: 200,
-                height: 24,
-            },
-            "ask_subtitle" => Layout {
-                x: 24,
-                y: 212,
-                width: 192,
-                height: 28,
-            },
-            "call_panel" => Layout {
-                x: 64,
-                y: 48,
-                width: 112,
-                height: 112,
-            },
-            "call_icon_halo" => Layout {
-                x: 58,
-                y: 42,
-                width: 124,
-                height: 124,
-            },
-            "call_state_icon" => Layout {
-                x: 26,
-                y: 44,
-                width: 60,
-                height: 24,
-            },
-            "call_title" => Layout {
-                x: 30,
-                y: 176,
-                width: 180,
-                height: 24,
-            },
-            "call_subtitle" => Layout {
-                x: 30,
-                y: 204,
-                width: 180,
-                height: 18,
-            },
-            "call_detail" => Layout {
-                x: 48,
-                y: 226,
-                width: 144,
-                height: 18,
-            },
-            "call_state_chip" => Layout {
-                x: 54,
-                y: 208,
-                width: 132,
-                height: 24,
-            },
-            "call_state_label" => Layout {
-                x: 10,
-                y: 6,
-                width: 112,
-                height: 12,
-            },
-            "call_mute_badge" => Layout {
-                x: 72,
-                y: 232,
-                width: 96,
-                height: 24,
-            },
-            "call_mute_label" => Layout {
-                x: 12,
-                y: 6,
-                width: 72,
-                height: 12,
-            },
-            "power_icon_halo" => Layout {
-                x: 92,
-                y: 42,
-                width: 56,
-                height: 56,
-            },
-            "power_icon" => Layout {
-                x: 8,
-                y: 18,
-                width: 40,
-                height: 18,
-            },
-            "power_title" => Layout {
-                x: 60,
-                y: 98,
-                width: 120,
-                height: 24,
-            },
-            "power_subtitle" => Layout {
-                x: 20,
-                y: 122,
-                width: 200,
-                height: 18,
-            },
-            "power_row" => {
-                let index = self.power_row_count;
-                self.power_row_count += 1;
-                Layout {
-                    x: 16,
-                    y: 126 + (index as i32 * 22),
-                    width: 208,
-                    height: 18,
-                }
-            }
-            "power_row_title" => Layout {
-                x: 12,
-                y: 2,
-                width: 184,
-                height: 14,
-            },
-            "power_dot" => {
-                let index = self.hub_dot_count;
-                self.hub_dot_count += 1;
-                Layout {
-                    x: 118 + (index as i32 * 10),
-                    y: 238,
-                    width: 4,
-                    height: 4,
-                }
-            }
-            "overlay_title" => Layout {
-                x: 20,
-                y: 104,
-                width: 200,
-                height: 24,
-            },
-            "overlay_subtitle" => Layout {
-                x: 20,
-                y: 136,
-                width: 200,
-                height: 20,
-            },
-            _ if parent_role == "list_row" || parent_role == "power_row" => Layout {
-                x: 8,
-                y: 8,
-                width: 180,
-                height: 16,
-            },
-            _ => Layout {
-                x: 20,
-                y: 20,
-                width: 200,
-                height: 18,
-            },
-        };
-
-        Ok(layout)
+        anyhow::bail!("missing LVGL layout asset for role {role}")
     }
 
-    fn style_for_role(&self, role: &'static str) -> WidgetStyle {
+    fn style_for_role(&self, role: &'static str) -> Result<WidgetStyle> {
         ThemeResolver::new(&self.render_assets).style_for_role(role)
     }
 
-    fn style_for_selected_role(&self, role: &'static str, selected: bool) -> WidgetStyle {
+    fn style_for_selected_role(&self, role: &'static str, selected: bool) -> Result<WidgetStyle> {
         ThemeResolver::new(&self.render_assets).style_for_selected_role(role, selected)
     }
 }
@@ -1447,15 +794,13 @@ impl LvglFacade for NativeLvglFacade {
         let obj = NonNull::new(obj).ok_or_else(|| anyhow!("LVGL root widget creation failed"))?;
         let layout = self.layout_for_root();
         Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, self.style_for_role("root"));
+        Self::apply_style_raw(obj, self.style_for_role(roles::ROOT)?);
         Self::apply_layout_raw(obj, layout);
         unsafe {
             ffi::lv_screen_load(obj.as_ptr());
         }
-        self.hub_dot_count = 0;
-        self.list_row_count = 0;
-        self.power_row_count = 0;
-        let id = self.register_widget(obj, WidgetKind::Root, "root", None, layout);
+        self.role_occurrences.clear();
+        let id = self.register_widget(obj, WidgetKind::Root, roles::ROOT, None, layout);
         self.active_root = Some(id);
         Ok(id)
     }
@@ -1467,7 +812,7 @@ impl LvglFacade for NativeLvglFacade {
             .ok_or_else(|| anyhow!("LVGL container creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
         Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, self.style_for_role(role));
+        Self::apply_style_raw(obj, self.style_for_role(role)?);
         Self::apply_layout_raw(obj, layout);
         Self::apply_role_tuning_raw(obj, role);
         Ok(self.register_widget(obj, WidgetKind::Container, role, Some(parent), layout))
@@ -1487,7 +832,7 @@ impl LvglFacade for NativeLvglFacade {
             NonNull::new(obj).ok_or_else(|| anyhow!("LVGL label creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
         Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, self.style_for_role(role));
+        Self::apply_style_raw(obj, self.style_for_role(role)?);
         Self::apply_layout_raw(obj, layout);
         Self::apply_role_tuning_raw(obj, role);
         let kind = if is_image {
@@ -1538,7 +883,7 @@ impl LvglFacade for NativeLvglFacade {
             let node = self.widget_node_mut(_widget)?;
             (node.obj, node.role, node.layout)
         };
-        Self::apply_style_raw(obj, self.style_for_selected_role(role, _selected));
+        Self::apply_style_raw(obj, self.style_for_selected_role(role, _selected)?);
         Self::apply_layout_raw(obj, layout);
         Ok(())
     }
@@ -1671,8 +1016,7 @@ impl LvglFacade for NativeLvglFacade {
         self.remove_widget_subtree(widget);
         if self.active_root == Some(widget) {
             self.active_root = None;
-            self.list_row_count = 0;
-            self.power_row_count = 0;
+            self.role_occurrences.clear();
         }
         Ok(())
     }

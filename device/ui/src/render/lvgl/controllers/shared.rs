@@ -1,8 +1,7 @@
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::lvgl::{LvglFacade, WidgetId};
-use crate::render::lvgl::roles;
+use crate::render::lvgl::{roles, LvglFacade, WidgetId};
 use crate::screens::StatusBarModel;
 
 const LV_SYMBOL_WIFI: &str = "\u{f1eb}";

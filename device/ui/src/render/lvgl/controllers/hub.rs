@@ -2,9 +2,9 @@ use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::lvgl::{LvglFacade, WidgetId};
 use crate::presentation::screens::hub;
 use crate::render::lvgl::roles;
+use crate::render::lvgl::{LvglFacade, WidgetId};
 use crate::screens::{HubViewModel, ScreenModel};
 
 #[derive(Default)]

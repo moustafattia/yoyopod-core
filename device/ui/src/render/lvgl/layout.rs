@@ -17,10 +17,10 @@ impl<'a> LayoutResolver<'a> {
         Self { assets }
     }
 
-    pub fn resolve_role(&self, role: &str) -> Option<LayoutRect> {
+    pub fn resolve_role(&self, role: &str, occurrence: usize) -> Option<LayoutRect> {
         self.assets.layout_role(role).map(|layout| LayoutRect {
-            x: layout.x,
-            y: layout.y,
+            x: layout.x + layout.repeat_x.unwrap_or(0) * occurrence as i32,
+            y: layout.y + layout.repeat_y.unwrap_or(0) * occurrence as i32,
             width: layout.width,
             height: layout.height,
         })
@@ -39,7 +39,7 @@ mod tests {
         let resolver = LayoutResolver::new(&render_assets);
 
         assert_eq!(
-            resolver.resolve_role(roles::OVERLAY_TITLE),
+            resolver.resolve_role(roles::OVERLAY_TITLE, 0),
             Some(LayoutRect {
                 x: 18,
                 y: 96,
@@ -50,10 +50,10 @@ mod tests {
     }
 
     #[test]
-    fn unknown_role_returns_none_for_legacy_fallback() {
+    fn unknown_role_returns_none() {
         let render_assets = assets::load_render_assets().unwrap();
         let resolver = LayoutResolver::new(&render_assets);
 
-        assert_eq!(resolver.resolve_role("legacy_only_role"), None);
+        assert_eq!(resolver.resolve_role("unknown_role", 0), None);
     }
 }
