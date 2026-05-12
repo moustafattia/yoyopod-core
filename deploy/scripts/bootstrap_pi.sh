@@ -93,6 +93,7 @@ cat > "/etc/default/yoyopod-prod" <<EOF
 # /etc/default/yoyopod-prod - written by bootstrap_pi.sh
 YOYOPOD_ROOT=${ROOT}
 YOYOPOD_STATE_DIR=${ROOT}/state
+YOYOPOD_PID_FILE=${ROOT}/state/yoyopod.pid
 YOYOPOD_SERVICE_NAME=yoyopod-prod.service
 EOF
 
@@ -102,6 +103,7 @@ YOYOPOD_DEV_ROOT=${DEV_ROOT}
 YOYOPOD_DEV_CHECKOUT=${DEV_ROOT}/checkout
 YOYOPOD_DEV_VENV=${DEV_ROOT}/venv
 YOYOPOD_STATE_DIR=${DEV_ROOT}/state
+YOYOPOD_PID_FILE=${DEV_ROOT}/state/yoyopod.pid
 EOF
 
 # Patch User=/Group= into the unit (only if not already present).

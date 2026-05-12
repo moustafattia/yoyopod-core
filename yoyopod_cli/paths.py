@@ -33,7 +33,7 @@ class PiPaths:
     start_cmd: str = "device/runtime/build/yoyopod-runtime --config-dir config"
     log_file: str = "logs/yoyopod.log"
     error_log_file: str = "logs/yoyopod_errors.log"
-    pid_file: str = "/tmp/yoyopod.pid"
+    pid_file: str = "/opt/yoyopod-dev/state/yoyopod.pid"
     screenshot_path: str = "/tmp/yoyopod_screenshot.png"
     startup_marker: str = "YoYoPod Rust runtime starting"
     kill_processes: tuple[str, ...] = ("yoyopod-runtime",)
@@ -242,7 +242,14 @@ def load_pi_paths(
         start_cmd=_str_field(merged.get("start_cmd"), PI_DEFAULTS.start_cmd),
         log_file=_str_field(merged.get("log_file"), PI_DEFAULTS.log_file),
         error_log_file=_str_field(merged.get("error_log_file"), PI_DEFAULTS.error_log_file),
-        pid_file=_str_field(merged.get("pid_file"), PI_DEFAULTS.pid_file),
+        pid_file=_dev_lane_path_field(
+            field="pid_file",
+            base_data=base_data,
+            local_data=local_data,
+            lane_value=f"{lanes.dev_state.rstrip('/')}/yoyopod.pid",
+            default=PI_DEFAULTS.pid_file,
+            lane_keys=("dev_root", "dev_state"),
+        ),
         screenshot_path=_str_field(merged.get("screenshot_path"), PI_DEFAULTS.screenshot_path),
         startup_marker=_str_field(merged.get("startup_marker"), PI_DEFAULTS.startup_marker),
         kill_processes=_as_str_tuple(merged.get("kill_processes"), PI_DEFAULTS.kill_processes),

@@ -253,7 +253,7 @@ This tails the file sinks declared in `deploy/pi-deploy.yaml`, which is the stab
 
 - `<project-dir>/logs/yoyopod.log`
 - `<project-dir>/logs/yoyopod_errors.log`
-- `/tmp/yoyopod.pid`
+- `/opt/yoyopod-dev/state/yoyopod.pid`
 
 For keep-alive freeze triage, watch the `comm` and `coord` lines together:
 

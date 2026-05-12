@@ -514,7 +514,7 @@ impl RuntimeConfig {
                 string_at_env(
                     &app,
                     &["logging", "pid_file"],
-                    "/tmp/yoyopod.pid",
+                    "state/yoyopod.pid",
                     "YOYOPOD_PID_FILE",
                 ),
             ),

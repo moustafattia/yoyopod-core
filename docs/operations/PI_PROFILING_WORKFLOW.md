@@ -235,15 +235,15 @@ ssh <pi-host>
 cd ~/yoyopod-core
 source .venv/bin/activate
 mkdir -p logs/profiles
-py-spy record -o logs/profiles/pyspy.svg --pid "$(cat /tmp/yoyopod.pid)"
+py-spy record -o logs/profiles/pyspy.svg --pid "$(cat /opt/yoyopod-dev/state/yoyopod.pid)"
 ```
 
 Useful variants:
 
 ```bash
-py-spy top --pid "$(cat /tmp/yoyopod.pid)"
-py-spy dump --pid "$(cat /tmp/yoyopod.pid)"
-py-spy record -o logs/profiles/pyspy-speedscope.json --format speedscope --pid "$(cat /tmp/yoyopod.pid)"
+py-spy top --pid "$(cat /opt/yoyopod-dev/state/yoyopod.pid)"
+py-spy dump --pid "$(cat /opt/yoyopod-dev/state/yoyopod.pid)"
+py-spy record -o logs/profiles/pyspy-speedscope.json --format speedscope --pid "$(cat /opt/yoyopod-dev/state/yoyopod.pid)"
 ```
 
 Notes:
@@ -262,7 +262,7 @@ drivers, and kernel scheduling.
 For a live process:
 
 ```bash
-perf stat -p "$(cat /tmp/yoyopod.pid)" -I 1000
+perf stat -p "$(cat /opt/yoyopod-dev/state/yoyopod.pid)" -I 1000
 ```
 
 For a bounded Rust runtime run:

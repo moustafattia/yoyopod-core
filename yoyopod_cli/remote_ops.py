@@ -97,7 +97,7 @@ def _build_restart(pi: PiPaths, lanes: LanePaths | None = None) -> str:
         'dev_service_checkout="$(cd "$dev_service_checkout" 2>/dev/null && '
         'pwd -P || printf "%s" "$dev_service_checkout")"'
     )
-    cleanup_commands = [f"rm -f {pid}"]
+    cleanup_commands = [f"rm -f {pid} || sudo rm -f {pid}"]
     cleanup_commands.append(_build_stale_runtime_cleanup())
     cleanup = " ; ".join(cleanup_commands)
     managed_restart = (

@@ -99,7 +99,7 @@ class AppLoggingConfig:
         default="logs/yoyopod_errors.log",
         env="YOYOPOD_ERROR_LOG_FILE",
     )
-    pid_file: str = config_value(default="/tmp/yoyopod.pid", env="YOYOPOD_PID_FILE")
+    pid_file: str = config_value(default="state/yoyopod.pid", env="YOYOPOD_PID_FILE")
     rotation: str = config_value(default="5 MB", env="YOYOPOD_LOG_ROTATION")
     retention: str = config_value(default="3 days", env="YOYOPOD_LOG_RETENTION")
     compression: str = config_value(default="gz", env="YOYOPOD_LOG_COMPRESSION")

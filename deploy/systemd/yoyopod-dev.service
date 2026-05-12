@@ -10,8 +10,8 @@ EnvironmentFile=-/etc/default/yoyopod-dev
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=/root
 WorkingDirectory=/
-ExecStartPre=/usr/bin/env bash -lc 'HOME="$${HOME:-/root}"; install -d -m 700 "$$HOME/.local/share/linphone" "$$HOME/.config/linphone"; CHECKOUT="$${YOYOPOD_DEV_CHECKOUT:-/opt/yoyopod-dev/checkout}"; test -f "$$CHECKOUT/pyproject.toml"; test -x "$$CHECKOUT/device/runtime/build/yoyopod-runtime"; test -x "$$CHECKOUT/device/ui/build/yoyopod-ui-host"'
-ExecStart=/usr/bin/env bash -lc 'CHECKOUT="$${YOYOPOD_DEV_CHECKOUT:-/opt/yoyopod-dev/checkout}"; cd "$$CHECKOUT"; exec "$$CHECKOUT/device/runtime/build/yoyopod-runtime" --config-dir "$$CHECKOUT/config" --hardware whisplay'
+ExecStartPre=/usr/bin/env bash -lc 'HOME="$${HOME:-/root}"; DEV_ROOT="$${YOYOPOD_DEV_ROOT:-/opt/yoyopod-dev}"; STATE_DIR="$${YOYOPOD_STATE_DIR:-$$DEV_ROOT/state}"; install -d -m 700 "$$HOME/.local/share/linphone" "$$HOME/.config/linphone"; install -d -m 755 "$$STATE_DIR"; CHECKOUT="$${YOYOPOD_DEV_CHECKOUT:-$$DEV_ROOT/checkout}"; test -f "$$CHECKOUT/pyproject.toml"; test -x "$$CHECKOUT/device/runtime/build/yoyopod-runtime"; test -x "$$CHECKOUT/device/ui/build/yoyopod-ui-host"'
+ExecStart=/usr/bin/env bash -lc 'DEV_ROOT="$${YOYOPOD_DEV_ROOT:-/opt/yoyopod-dev}"; STATE_DIR="$${YOYOPOD_STATE_DIR:-$$DEV_ROOT/state}"; export YOYOPOD_PID_FILE="$${YOYOPOD_PID_FILE:-$$STATE_DIR/yoyopod.pid}"; CHECKOUT="$${YOYOPOD_DEV_CHECKOUT:-$$DEV_ROOT/checkout}"; cd "$$CHECKOUT"; exec "$$CHECKOUT/device/runtime/build/yoyopod-runtime" --config-dir "$$CHECKOUT/config" --hardware whisplay'
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM

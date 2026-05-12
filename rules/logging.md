@@ -30,7 +30,14 @@ Both use gzip compression, UTF-8 encoding, synchronous writes (`enqueue=False`).
 
 ## PID File
 
-Written to `/tmp/yoyopod.pid` on startup, cleaned up via `atexit`. Used by `/yoyopod-restart`, `/yoyopod-deploy`, and `/yoyopod-status` for process management.
+Written under the active lane state directory on startup:
+
+- dev: `/opt/yoyopod-dev/state/yoyopod.pid`
+- prod: `/opt/yoyopod-prod/state/yoyopod.pid`
+
+`YOYOPOD_PID_FILE` is the systemd/launcher override that keeps the Rust runtime
+and `yoyopod remote ...` CLI on the same path. Do not use `/tmp/yoyopod.pid`;
+`/tmp` sticky-bit ownership breaks cleanup when the service and SSH user differ.
 
 ## Startup/Shutdown Markers
 

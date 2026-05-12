@@ -16,6 +16,7 @@ SLOT_DIR="$(dirname "$(dirname "$SCRIPT_PATH")")"
 
 export YOYOPOD_RELEASE_MANIFEST="${SLOT_DIR}/manifest.json"
 export YOYOPOD_STATE_DIR="${YOYOPOD_STATE_DIR:-/opt/yoyopod-prod/state}"
+export YOYOPOD_PID_FILE="${YOYOPOD_PID_FILE:-${YOYOPOD_STATE_DIR}/yoyopod.pid}"
 export PYTHONPATH="${SLOT_DIR}/app"
 export PYTHONUNBUFFERED=1
 
