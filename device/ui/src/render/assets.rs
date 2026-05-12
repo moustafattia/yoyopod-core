@@ -21,6 +21,16 @@ pub enum RenderAssetError {
         asset: &'static str,
         roles: Vec<&'static str>,
     },
+    #[error("{asset} has unknown roles: {roles:?}")]
+    UnknownRoles {
+        asset: &'static str,
+        roles: Vec<String>,
+    },
+    #[error("{asset} has duplicate roles: {roles:?}")]
+    DuplicateRoles {
+        asset: &'static str,
+        roles: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -117,21 +127,47 @@ pub fn validate_theme_asset(asset: &ThemeAsset) -> Result<(), RenderAssetError> 
 
 fn validate_role_coverage<'a>(
     asset: &'static str,
-    roles: impl IntoIterator<Item = &'a str>,
+    role_iter: impl IntoIterator<Item = &'a str>,
 ) -> Result<(), RenderAssetError> {
-    let roles = roles.into_iter().collect::<BTreeSet<_>>();
+    let mut roles: BTreeSet<&str> = BTreeSet::new();
+    let mut duplicates = BTreeSet::new();
+    for role in role_iter {
+        if !roles.insert(role) {
+            duplicates.insert(role.to_string());
+        }
+    }
+    if !duplicates.is_empty() {
+        return Err(RenderAssetError::DuplicateRoles {
+            asset,
+            roles: duplicates.into_iter().collect(),
+        });
+    }
+
+    let required = required_roles().into_iter().collect::<BTreeSet<_>>();
     let missing = required_roles()
         .into_iter()
         .filter(|role| !roles.contains(role))
         .collect::<Vec<_>>();
-    if missing.is_empty() {
-        Ok(())
-    } else {
-        Err(RenderAssetError::MissingRoles {
+    if !missing.is_empty() {
+        return Err(RenderAssetError::MissingRoles {
             asset,
             roles: missing,
-        })
+        });
     }
+
+    let unknown = roles
+        .into_iter()
+        .filter(|role| !required.contains(role))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(RenderAssetError::UnknownRoles {
+            asset,
+            roles: unknown,
+        });
+    }
+
+    Ok(())
 }
 
 fn required_roles() -> Vec<&'static str> {
@@ -192,5 +228,32 @@ mod tests {
                 .and_then(|role| role.text_rgb),
             Some(crate::lvgl::theme::MUTED_RGB)
         );
+    }
+
+    #[test]
+    fn layout_asset_rejects_unknown_roles() {
+        let mut asset = parse_layout_asset().unwrap();
+        asset.roles.push(LayoutRole {
+            role: "not_a_real_role".to_string(),
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        });
+        assert!(matches!(
+            validate_layout_asset(&asset),
+            Err(RenderAssetError::UnknownRoles { .. })
+        ));
+    }
+
+    #[test]
+    fn theme_asset_rejects_duplicate_roles() {
+        let mut asset = parse_theme_asset().unwrap();
+        let duplicate = asset.roles[0].clone();
+        asset.roles.push(duplicate);
+        assert!(matches!(
+            validate_theme_asset(&asset),
+            Err(RenderAssetError::DuplicateRoles { .. })
+        ));
     }
 }
