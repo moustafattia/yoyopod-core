@@ -19,6 +19,19 @@ pub fn model(snapshot: &RuntimeSnapshot, focus_index: usize) -> HubViewModel {
     }
 }
 
+pub fn focused_card(model: &HubViewModel) -> Option<&HubCardModel> {
+    model
+        .cards
+        .get(model.selected_index)
+        .or_else(|| model.cards.first())
+}
+
+pub fn focused_title(model: &HubViewModel) -> &str {
+    focused_card(model)
+        .map(|card| card.title.as_str())
+        .unwrap_or("Listen")
+}
+
 pub fn view(snapshot: &RuntimeSnapshot, focus_index: usize) -> UiView {
     let cards = snapshot.hub.cards.clone();
     let focused = cards.get(focus_index).or_else(|| cards.first());

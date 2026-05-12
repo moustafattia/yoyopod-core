@@ -1,4 +1,3 @@
-mod chrome;
 pub mod controllers;
 #[cfg(feature = "native-lvgl")]
 mod hub_icon_assets;

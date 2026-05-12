@@ -1,8 +1,8 @@
 use anyhow::{anyhow, bail, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
-use crate::lvgl::chrome;
 use crate::lvgl::{LvglFacade, TypedScreenController, WidgetId};
+use crate::presentation::screens::hub;
 use crate::screens::{HubViewModel, ScreenModel};
 
 #[derive(Default)]
@@ -67,7 +67,7 @@ impl TypedScreenController for HubController {
 
     fn sync_model(&mut self, facade: &mut dyn LvglFacade, model: Self::Model<'_>) -> Result<()> {
         self.ensure_widgets(facade)?;
-        let selected = chrome::focused_hub_card(model);
+        let selected = hub::focused_card(model);
         let accent = selected.map(|card| card.accent).unwrap_or(0x00FF88);
         let icon_key = selected.map(|card| card.key.as_str()).unwrap_or("listen");
 
@@ -88,7 +88,7 @@ impl TypedScreenController for HubController {
         }
 
         if let Some(title) = self.title {
-            facade.set_text(title, chrome::focused_hub_title(model))?;
+            facade.set_text(title, hub::focused_title(model))?;
         }
         if let Some(subtitle) = self.subtitle {
             facade.set_text(
