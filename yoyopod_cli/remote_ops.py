@@ -54,7 +54,7 @@ def _build_startup_verification(pi: PiPaths, *, attempts: int = 20) -> str:
             f"test -f {pid}",
             f"pid=\"$(tr -d '\\n' < {pid})\"",
             'test -n "$pid"',
-            'kill -0 "$pid"',
+            'test -d "/proc/$pid"',
             (
                 f"for _ in $(seq 1 {attempts}); do "
                 f"if test -f {log} && "
@@ -159,7 +159,13 @@ def _build_sync(pi: PiPaths, branch: str, *, clean_native: bool = False) -> str:
 def _build_screenshot_alive_check(pi: PiPaths) -> str:
     """Remote shell that prints ALIVE if the app PID is live, DEAD otherwise."""
     pid = shell_quote(pi.pid_file)
-    return f"test -f {pid} && kill -0 $(cat {pid}) 2>/dev/null " "&& echo ALIVE || echo DEAD"
+    return (
+        f"test -f {pid} && "
+        f"pid_value=\"$(tr -d '\\n' < {pid})\" && "
+        'test -n "$pid_value" && '
+        'test -d "/proc/$pid_value" && '
+        "echo ALIVE || echo DEAD"
+    )
 
 
 def _build_screenshot_ready_check(pi: PiPaths, *, attempts: int = 30) -> str:
@@ -168,7 +174,7 @@ def _build_screenshot_ready_check(pi: PiPaths, *, attempts: int = 30) -> str:
     return (
         f"for _ in $(seq 1 {attempts}); do "
         f'pid_value="$(cat {pid} 2>/dev/null || true)"; '
-        'if test -n "$pid_value" && kill -0 "$pid_value" 2>/dev/null && '
+        'if test -n "$pid_value" && test -d "/proc/${pid_value}" && '
         'test -r "/proc/${pid_value}/status"; then '
         'sigcgt="$(awk \'/^SigCgt:/ {print $2}\' "/proc/${pid_value}/status")"; '
         'if test -n "$sigcgt"; then '
@@ -196,7 +202,13 @@ def _build_screenshot_signal(pi: PiPaths, *, readback: bool) -> str:
     """
     signal_name = "USR1" if readback else "USR2"
     pid = shell_quote(pi.pid_file)
-    return f"kill -{signal_name} $(cat {pid})"
+    return (
+        f"pid_value=\"$(tr -d '\\n' < {pid})\" && "
+        "{ "
+        f'kill -{signal_name} "$pid_value" 2>/dev/null || '
+        f'sudo kill -{signal_name} "$pid_value"; '
+        "}"
+    )
 
 
 def _build_screenshot_wait(pi: PiPaths, *, attempts: int = 20) -> str:
