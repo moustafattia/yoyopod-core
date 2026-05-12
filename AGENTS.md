@@ -63,10 +63,6 @@ Pi Lanes And Bootstrap
   `yoyopod-prod.service`; use `remote release ...`, not `remote sync`.
 - Check lane ownership first with `yoyopod remote mode status`; dev/prod
   services should not own hardware together.
-- Hard cut: supported runtime owners are only `yoyopod-dev.service` and
-  `yoyopod-prod.service`; `yoyopod@*.service`, `yoyopod-slot.service`,
-  unmanaged legacy runtime processes, and `remote service ...` are
-  contamination paths.
 - Dev deploy loop: `yoyopod remote mode activate dev`, then
   `yoyopod remote sync --branch <branch>`. Add `--clean-native` after
   native/CMake/lib changes or branch switches.
@@ -104,16 +100,12 @@ High-Value Commands
 - Command reference: `yoyopod_cli/COMMANDS.md`
 
 Verification Policy
-- Do not run the old Python quality gate by default. It is no longer the
-  required pre-commit/pre-push path for Rust runtime work.
 - Prefer Rust build checks and Pi validation for Rust changes. Run Python
   lint/type/compile checks when the changed surface is Python CLI/deploy/
   compatibility code.
 - For hardware work, exact-commit CI artifacts and the Pi result matter more
   than local Python gates. Always report the commit SHA, artifact names, and
   hardware command/result.
-- If a CI failure is specifically in Python tooling, fix and verify that Python
-  surface directly; do not let it block unrelated Rust runtime iteration.
 
 Hardware Modes
 - PiSugar Whisplay: portrait + single button; primary Rust target.
@@ -122,8 +114,4 @@ Hardware Modes
   does not replace Whisplay hardware checks.
 
 Guardrails
-- Prefer narrow, reviewable changes.
-- Keep raw LVGL confined to display/LVGL binding layers.
 - Prefer `yoyopod remote` over ad-hoc SSH sequences.
-- Use current Rust code and hardware evidence as truth. Old planning archives
-  were removed from the repo; current docs must point at live code paths.
