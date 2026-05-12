@@ -57,14 +57,6 @@ class AppDisplayConfig:
     """Display hardware configuration."""
 
     hardware: str = config_value(default="auto", env="YOYOPOD_DISPLAY")
-    whisplay_renderer: str = config_value(
-        default="lvgl",
-        env="YOYOPOD_WHISPLAY_RENDERER",
-    )
-    lvgl_buffer_lines: int = config_value(
-        default=40,
-        env="YOYOPOD_LVGL_BUFFER_LINES",
-    )
     rust_ui_host_enabled: bool = config_value(
         default=False,
         env="YOYOPOD_RUST_UI_HOST_ENABLED",

@@ -3,58 +3,9 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::framebuffer::Framebuffer;
-use crate::lvgl::{LvglFacade, LvglRenderer as SemanticLvglRenderer};
 #[cfg(feature = "native-lvgl")]
 use crate::lvgl::{NativeLvglFacade, NativeSceneRenderer, RustSceneBridge, SceneBridge};
 use crate::screens::ScreenModel;
-
-#[allow(dead_code)]
-pub(crate) trait RuntimeLvglBackend: LvglFacade {
-    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool;
-    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()>;
-    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()>;
-}
-
-#[cfg(feature = "native-lvgl")]
-impl RuntimeLvglBackend for NativeLvglFacade {
-    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
-        NativeLvglFacade::display_needs_reset(self, framebuffer)
-    }
-
-    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
-        NativeLvglFacade::ensure_display_registered(self, framebuffer)
-    }
-
-    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
-        NativeLvglFacade::render_frame(self, framebuffer)
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) struct RuntimeLvglRenderer<B> {
-    renderer: SemanticLvglRenderer<B>,
-}
-
-impl<B> RuntimeLvglRenderer<B>
-where
-    B: RuntimeLvglBackend,
-{
-    #[allow(dead_code)]
-    pub fn render_screen_model(
-        &mut self,
-        framebuffer: &mut Framebuffer,
-        model: &ScreenModel,
-    ) -> Result<()> {
-        if self.renderer.facade().display_needs_reset(framebuffer) {
-            self.renderer.clear()?;
-        }
-        self.renderer
-            .facade_mut()
-            .ensure_display_registered(framebuffer)?;
-        self.renderer.render(model)?;
-        self.renderer.facade_mut().render_frame(framebuffer)
-    }
-}
 
 #[cfg(not(feature = "native-lvgl"))]
 pub struct LvglRenderer;
@@ -146,22 +97,5 @@ impl LvglRenderer {
         _model: &ScreenModel,
     ) -> Result<()> {
         anyhow::bail!("native-lvgl feature is disabled for this build")
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RendererMode {
-    Auto,
-    Lvgl,
-    Framebuffer,
-}
-
-impl RendererMode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Lvgl => "lvgl",
-            Self::Framebuffer => "framebuffer",
-        }
     }
 }

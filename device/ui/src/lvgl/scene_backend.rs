@@ -1,3 +1,4 @@
+#[cfg(feature = "native-lvgl")]
 use std::path::Path;
 
 use anyhow::{bail, Result};

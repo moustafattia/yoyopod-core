@@ -11,7 +11,7 @@ For the Figma-to-Whisplay implementation workflow, screen extraction order, and 
 ## Production Contract
 
 - Non-simulated Whisplay runs are a production LVGL path.
-- `display.whisplay_renderer: lvgl` is the only supported production setting for Whisplay hardware.
+- Whisplay hardware uses LVGL as the only app UI renderer; there is no renderer selection knob.
 - If the Whisplay driver, hardware init, or LVGL backend is unavailable, startup must fail loudly instead of silently degrading to another renderer.
 - The Rust runtime software preview reuses the Whisplay LVGL render contract and browser preview transport; it is not a separate PIL renderer.
 - Simulation also requires native LVGL. If native LVGL is missing, the correct fix is to build it, not to fall back to PIL.

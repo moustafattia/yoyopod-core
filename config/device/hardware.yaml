@@ -8,8 +8,6 @@ input:
 
 display:
   hardware: "auto"
-  whisplay_renderer: "lvgl"
-  lvgl_buffer_lines: 40
   brightness: 80
   rotation: 0
   backlight_timeout_seconds: 60

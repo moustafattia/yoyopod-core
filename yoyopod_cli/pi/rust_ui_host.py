@@ -29,7 +29,7 @@ def rust_ui_host(
     ] = _default_worker_path(),
     frames: Annotated[
         int,
-        typer.Option("--frames", min=1, help="Number of test scene frames to send."),
+        typer.Option("--frames", min=1, help="Number of runtime snapshot frames to send."),
     ] = 10,
     hardware: Annotated[
         str,
@@ -37,8 +37,8 @@ def rust_ui_host(
     ] = "whisplay",
     screen: Annotated[
         str,
-        typer.Option("--screen", help="Screen to render: test-scene or hub."),
-    ] = "test-scene",
+        typer.Option("--screen", help="Screen to render: hub."),
+    ] = "hub",
 ) -> None:
     """Run the Rust UI host against Whisplay hardware."""
 
@@ -50,22 +50,13 @@ def rust_ui_host(
 
     try:
         for counter in range(1, frames + 1):
-            if selected_screen == "hub":
-                supervisor.send(
-                    UiEnvelope.command(
-                        "ui.runtime_snapshot",
-                        RustUiRuntimeSnapshot().to_payload(),
-                        request_id=f"hub-frame-{counter}",
-                    )
+            supervisor.send(
+                UiEnvelope.command(
+                    "ui.runtime_snapshot",
+                    RustUiRuntimeSnapshot().to_payload(),
+                    request_id=f"{selected_screen}-frame-{counter}",
                 )
-            else:
-                supervisor.send(
-                    UiEnvelope.command(
-                        "ui.show_test_scene",
-                        {"counter": counter},
-                        request_id=f"frame-{counter}",
-                    )
-                )
+            )
         supervisor.send(UiEnvelope.command("ui.health", request_id="health"))
         while True:
             health = supervisor.read_event()
@@ -82,13 +73,13 @@ def rust_ui_host(
         supervisor.stop()
 
 
-ScreenName = Literal["test-scene", "hub"]
+ScreenName = Literal["hub"]
 
 
 def _screen_name(value: str) -> ScreenName:
-    if value in {"test-scene", "hub"}:
+    if value == "hub":
         return cast(ScreenName, value)
-    raise typer.BadParameter("screen must be test-scene or hub")
+    raise typer.BadParameter("screen must be hub")
 
 
 def _native_lvgl_env() -> dict[str, str]:

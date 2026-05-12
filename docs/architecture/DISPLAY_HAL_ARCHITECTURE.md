@@ -16,7 +16,7 @@ runtime.
 
 - `device/ui/src/main.rs`: Rust UI host entrypoint
 - `device/ui/src/worker.rs`: worker protocol loop
-- `device/ui/src/render/`: framebuffer and LVGL render path
+- `device/ui/src/render/`: LVGL app render path
 - `device/ui/src/lvgl/`: native LVGL scene backend and screen controllers
 - `device/ui/native/lvgl/`: pinned upstream LVGL C build configuration
 
@@ -52,7 +52,7 @@ checks. The production hardware path remains Whisplay-focused.
 
 ## Production Contract
 
-- Non-simulated Whisplay runs require `display.whisplay_renderer=lvgl`.
+- Non-simulated Whisplay runs use LVGL as the only app UI renderer.
 - If the Whisplay driver, board init, or LVGL backend is unavailable, startup fails loudly.
 - There is no supported PIL renderer or alternate production display backend in the current runtime.
 

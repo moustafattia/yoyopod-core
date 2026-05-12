@@ -39,7 +39,6 @@ pub struct RuntimeConfig {
 pub struct UiConfig {
     pub hardware: String,
     pub brightness: f64,
-    pub renderer: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -187,12 +186,6 @@ impl RuntimeConfig {
                 ),
                 brightness: (int_at(&hardware, &["display", "brightness"], 80) as f64 / 100.0)
                     .clamp(0.0, 1.0),
-                renderer: string_at_env(
-                    &hardware,
-                    &["display", "whisplay_renderer"],
-                    "lvgl",
-                    "YOYOPOD_WHISPLAY_RENDERER",
-                ),
             },
             media: MediaRuntimeConfig {
                 music_dir: string_at_env(

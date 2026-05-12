@@ -267,8 +267,8 @@ def _require_healthy_ui(payload: dict[str, Any]) -> None:
     active_screen = str(payload.get("active_screen", "")).strip()
     if frames < 1:
         raise RuntimeError(f"Rust UI host rendered no frames: {payload}")
-    if not renderer:
-        raise RuntimeError(f"Rust UI host did not report a renderer: {payload}")
+    if renderer != "lvgl":
+        raise RuntimeError(f"Rust UI host did not report LVGL renderer: {payload}")
     if not active_screen:
         raise RuntimeError(f"Rust UI host did not report an active screen: {payload}")
 

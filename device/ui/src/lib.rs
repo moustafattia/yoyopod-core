@@ -1,6 +1,5 @@
 pub mod framebuffer;
 pub mod hardware;
-pub mod hub;
 pub mod input;
 pub mod lvgl;
 pub mod protocol;

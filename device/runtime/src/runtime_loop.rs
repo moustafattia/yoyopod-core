@@ -152,7 +152,7 @@ impl RuntimeLoop {
     }
 
     fn send_tick(&self, io: &mut impl LoopIo) {
-        let envelope = WorkerEnvelope::command("ui.tick", None, json!({"renderer": "auto"}));
+        let envelope = WorkerEnvelope::command("ui.tick", None, json!({}));
         let _ = io.send_worker_envelope(WorkerDomain::Ui, envelope);
     }
 }
