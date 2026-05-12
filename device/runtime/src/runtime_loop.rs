@@ -5,6 +5,7 @@ use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
+use yoyopod_protocol::ui::{RuntimeSnapshot, UiCommand};
 
 use crate::event::{commands_for_event, runtime_event_from_worker, RuntimeCommand};
 use crate::protocol::WorkerEnvelope;
@@ -143,17 +144,14 @@ impl RuntimeLoop {
     }
 
     fn send_runtime_snapshot(&self, io: &mut impl LoopIo) {
-        let envelope = WorkerEnvelope::command(
-            "ui.runtime_snapshot",
-            None,
-            self.state.ui_snapshot_payload(),
-        );
+        let snapshot = RuntimeSnapshot::from_payload(&self.state.ui_snapshot_payload())
+            .expect("runtime UI snapshot payload must satisfy shared protocol");
+        let envelope = UiCommand::RuntimeSnapshot(snapshot).into_envelope();
         let _ = io.send_worker_envelope(WorkerDomain::Ui, envelope);
     }
 
     fn send_tick(&self, io: &mut impl LoopIo) {
-        let envelope = WorkerEnvelope::command("ui.tick", None, json!({}));
-        let _ = io.send_worker_envelope(WorkerDomain::Ui, envelope);
+        let _ = io.send_worker_envelope(WorkerDomain::Ui, UiCommand::Tick.into_envelope());
     }
 }
 

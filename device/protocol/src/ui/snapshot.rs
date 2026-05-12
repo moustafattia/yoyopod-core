@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+
+use crate::ProtocolError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeSnapshot {
@@ -39,8 +40,46 @@ impl Default for RuntimeSnapshot {
 }
 
 impl RuntimeSnapshot {
-    pub fn from_payload(payload: &Value) -> Result<Self> {
-        serde_json::from_value(payload.clone()).context("decoding UI runtime snapshot")
+    pub fn from_payload(payload: &Value) -> Result<Self, ProtocolError> {
+        serde_json::from_value(payload.clone()).map_err(|error| {
+            ProtocolError::InvalidEnvelope(format!("invalid UI runtime snapshot: {error}"))
+        })
+    }
+
+    pub fn apply_patch(&mut self, patch: RuntimeSnapshotPatch) {
+        match patch {
+            RuntimeSnapshotPatch::Full(snapshot) => *self = snapshot,
+            RuntimeSnapshotPatch::AppState(app_state) => self.app_state = app_state,
+            RuntimeSnapshotPatch::Hub(hub) => self.hub = hub,
+            RuntimeSnapshotPatch::Music(music) => self.music = music,
+            RuntimeSnapshotPatch::Call(call) => self.call = call,
+            RuntimeSnapshotPatch::Voice(voice) => self.voice = voice,
+            RuntimeSnapshotPatch::Power(power) => self.power = power,
+            RuntimeSnapshotPatch::Network(network) => self.network = network,
+            RuntimeSnapshotPatch::Overlay(overlay) => self.overlay = overlay,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "domain", content = "snapshot", rename_all = "snake_case")]
+pub enum RuntimeSnapshotPatch {
+    Full(RuntimeSnapshot),
+    AppState(String),
+    Hub(HubRuntimeSnapshot),
+    Music(MusicRuntimeSnapshot),
+    Call(CallRuntimeSnapshot),
+    Voice(VoiceRuntimeSnapshot),
+    Power(PowerRuntimeSnapshot),
+    Network(NetworkRuntimeSnapshot),
+    Overlay(OverlayRuntimeSnapshot),
+}
+
+impl RuntimeSnapshotPatch {
+    pub fn from_payload(payload: &Value) -> Result<Self, ProtocolError> {
+        serde_json::from_value(payload.clone()).map_err(|error| {
+            ProtocolError::InvalidEnvelope(format!("invalid UI runtime patch: {error}"))
+        })
     }
 }
 

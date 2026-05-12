@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use crate::input::InputAction;
 use crate::screens;
 use crate::screens::ScreenModel;
 
-use super::{ListItemSnapshot, RuntimeSnapshot, UiIntent};
+use super::{
+    CallIntent, ContactAction, ListItemAction, ListItemSnapshot, MusicIntent, RuntimeSnapshot,
+    RuntimeSnapshotPatch, UiIntent, VoiceFileAction, VoiceIntent, VoiceRecipientAction,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -94,6 +96,16 @@ impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
         let app_state = snapshot.app_state.clone();
         self.snapshot = snapshot;
+        self.apply_app_state_route(&app_state);
+        self.last_app_state = app_state;
+        self.apply_runtime_preemption();
+        self.clamp_focus();
+        self.dirty = true;
+    }
+
+    pub fn apply_patch(&mut self, patch: RuntimeSnapshotPatch) {
+        self.snapshot.apply_patch(patch);
+        let app_state = self.snapshot.app_state.clone();
         self.apply_app_state_route(&app_state);
         self.last_app_state = app_state;
         self.apply_runtime_preemption();
@@ -334,7 +346,7 @@ impl UiRuntime {
                 0 => self.push_screen(UiScreen::Playlists),
                 1 => self.push_screen(UiScreen::RecentTracks),
                 _ => {
-                    self.intents.push(UiIntent::new("music", "shuffle_all"));
+                    self.intents.push(UiIntent::Music(MusicIntent::ShuffleAll));
                     self.push_screen(UiScreen::NowPlaying);
                 }
             },
@@ -345,11 +357,10 @@ impl UiRuntime {
             },
             UiScreen::Playlists => {
                 if let Some(item) = self.snapshot.music.playlists.get(self.focus_index).cloned() {
-                    self.intents.push(UiIntent::with_payload(
-                        "music",
-                        "load_playlist",
-                        item_payload(&item),
-                    ));
+                    self.intents
+                        .push(UiIntent::Music(MusicIntent::LoadPlaylist(item_action(
+                            &item,
+                        ))));
                     self.push_screen(UiScreen::NowPlaying);
                 }
             }
@@ -361,16 +372,15 @@ impl UiRuntime {
                     .get(self.focus_index)
                     .cloned()
                 {
-                    self.intents.push(UiIntent::with_payload(
-                        "music",
-                        "play_recent_track",
-                        item_payload(&item),
-                    ));
+                    self.intents
+                        .push(UiIntent::Music(MusicIntent::PlayRecentTrack(item_action(
+                            &item,
+                        ))));
                     self.push_screen(UiScreen::NowPlaying);
                 }
             }
-            UiScreen::NowPlaying => self.intents.push(UiIntent::new("music", "play_pause")),
-            UiScreen::Ask => self.intents.push(UiIntent::new("voice", "ask_start")),
+            UiScreen::NowPlaying => self.intents.push(UiIntent::Music(MusicIntent::PlayPause)),
+            UiScreen::Ask => self.intents.push(UiIntent::Voice(VoiceIntent::AskStart)),
             UiScreen::VoiceNote => self.select_voice_note(),
             UiScreen::Contacts => {
                 if let Some(item) = self.snapshot.call.contacts.get(self.focus_index).cloned() {
@@ -384,8 +394,8 @@ impl UiRuntime {
                     self.emit_call_start(&item);
                 }
             }
-            UiScreen::IncomingCall => self.intents.push(UiIntent::new("call", "answer")),
-            UiScreen::InCall => self.intents.push(UiIntent::new("call", "toggle_mute")),
+            UiScreen::IncomingCall => self.intents.push(UiIntent::Call(CallIntent::Answer)),
+            UiScreen::InCall => self.intents.push(UiIntent::Call(CallIntent::ToggleMute)),
             UiScreen::Power => self.advance_focus(),
             _ => {}
         }
@@ -393,12 +403,13 @@ impl UiRuntime {
 
     fn go_back_or_emit(&mut self) {
         match self.active_screen {
-            UiScreen::IncomingCall => self.intents.push(UiIntent::new("call", "reject")),
+            UiScreen::IncomingCall => self.intents.push(UiIntent::Call(CallIntent::Reject)),
             UiScreen::OutgoingCall | UiScreen::InCall => {
-                self.intents.push(UiIntent::new("call", "hangup"))
+                self.intents.push(UiIntent::Call(CallIntent::Hangup))
             }
             UiScreen::VoiceNote if self.voice_note_phase() == "recording" => {
-                self.intents.push(UiIntent::new("voice", "capture_cancel"));
+                self.intents
+                    .push(UiIntent::Voice(VoiceIntent::CaptureCancel));
                 self.pop_screen_or_hub();
             }
             UiScreen::VoiceNote
@@ -407,7 +418,7 @@ impl UiRuntime {
                     "review" | "failed" | "sent"
                 ) =>
             {
-                self.intents.push(UiIntent::new("voice", "discard"));
+                self.intents.push(UiIntent::Voice(VoiceIntent::Discard));
                 self.pop_screen_or_hub();
             }
             UiScreen::Loading | UiScreen::Error => self.pop_screen_or_hub(),
@@ -417,11 +428,8 @@ impl UiRuntime {
     }
 
     fn emit_call_start(&mut self, item: &ListItemSnapshot) {
-        self.intents.push(UiIntent::with_payload(
-            "call",
-            "start",
-            json!({"id": item.id, "name": item.title}),
-        ));
+        self.intents
+            .push(UiIntent::Call(CallIntent::Start(contact_action(item))));
     }
 
     fn select_talk_contact_action(&mut self) {
@@ -440,7 +448,7 @@ impl UiRuntime {
             "play_note" => {
                 if let Some(payload) = self.latest_voice_note_payload() {
                     self.intents
-                        .push(UiIntent::with_payload("voice", "play_latest", payload));
+                        .push(UiIntent::Voice(VoiceIntent::PlayLatest(payload)));
                 }
             }
             _ => {}
@@ -450,28 +458,28 @@ impl UiRuntime {
     fn select_voice_note(&mut self) {
         match self.voice_note_phase().as_str() {
             "ready" => self.pop_screen_or_hub(),
-            "recording" => self.intents.push(UiIntent::new("voice", "capture_stop")),
+            "recording" => self.intents.push(UiIntent::Voice(VoiceIntent::CaptureStop)),
             "review" => match self.focus_index {
                 0 => {
                     if let Some(payload) = self.voice_note_recipient_payload() {
                         self.intents
-                            .push(UiIntent::with_payload("voice", "send", payload));
+                            .push(UiIntent::Voice(VoiceIntent::Send(payload)));
                     }
                 }
-                1 => self.intents.push(UiIntent::new("voice", "play")),
-                _ => self.intents.push(UiIntent::new("voice", "discard")),
+                1 => self.intents.push(UiIntent::Voice(VoiceIntent::Play(None))),
+                _ => self.intents.push(UiIntent::Voice(VoiceIntent::Discard)),
             },
             "failed" => match self.focus_index {
                 0 => {
                     if let Some(payload) = self.voice_note_recipient_payload() {
                         self.intents
-                            .push(UiIntent::with_payload("voice", "send", payload));
+                            .push(UiIntent::Voice(VoiceIntent::Send(payload)));
                     }
                 }
-                _ => self.intents.push(UiIntent::new("voice", "discard")),
+                _ => self.intents.push(UiIntent::Voice(VoiceIntent::Discard)),
             },
             "sent" => {
-                self.intents.push(UiIntent::new("voice", "discard"));
+                self.intents.push(UiIntent::Voice(VoiceIntent::Discard));
                 self.pop_screen_or_hub();
             }
             "sending" => {}
@@ -483,22 +491,22 @@ impl UiRuntime {
         if self.active_screen == UiScreen::VoiceNote && self.voice_note_phase() == "ready" {
             if let Some(payload) = self.voice_note_recipient_payload() {
                 self.intents
-                    .push(UiIntent::with_payload("voice", "capture_start", payload));
+                    .push(UiIntent::Voice(VoiceIntent::CaptureStart(payload)));
             }
             return;
         }
         if self.active_screen == UiScreen::Ask {
-            self.intents.push(UiIntent::new("voice", "ask_start"));
+            self.intents.push(UiIntent::Voice(VoiceIntent::AskStart));
         }
     }
 
     fn handle_ptt_release(&mut self) {
         if self.active_screen == UiScreen::VoiceNote && self.voice_note_phase() == "recording" {
-            self.intents.push(UiIntent::new("voice", "capture_stop"));
+            self.intents.push(UiIntent::Voice(VoiceIntent::CaptureStop));
             return;
         }
         if self.active_screen == UiScreen::Ask {
-            self.intents.push(UiIntent::new("voice", "ask_stop"));
+            self.intents.push(UiIntent::Voice(VoiceIntent::AskStop));
         }
     }
 
@@ -521,7 +529,7 @@ impl UiRuntime {
         "ready".to_string()
     }
 
-    fn voice_note_recipient_payload(&self) -> Option<serde_json::Value> {
+    fn voice_note_recipient_payload(&self) -> Option<VoiceRecipientAction> {
         let contact = self
             .selected_contact
             .as_ref()
@@ -529,14 +537,15 @@ impl UiRuntime {
         if contact.id.trim().is_empty() {
             return None;
         }
-        Some(json!({
-            "id": contact.id,
-            "recipient_address": contact.id,
-            "recipient_name": contact.title,
-        }))
+        Some(VoiceRecipientAction {
+            id: contact.id.clone(),
+            recipient_address: contact.id.clone(),
+            recipient_name: contact.title.clone(),
+            file_path: String::new(),
+        })
     }
 
-    fn latest_voice_note_payload(&self) -> Option<serde_json::Value> {
+    fn latest_voice_note_payload(&self) -> Option<VoiceFileAction> {
         let contact = self
             .selected_contact
             .as_ref()
@@ -549,11 +558,13 @@ impl UiRuntime {
         if note.local_file_path.trim().is_empty() {
             return None;
         }
-        Some(json!({
-            "id": contact.id,
-            "recipient_name": contact.title,
-            "file_path": note.local_file_path,
-        }))
+        Some(VoiceFileAction {
+            id: contact.id.clone(),
+            recipient_name: contact.title.clone(),
+            file_path: note.local_file_path.clone(),
+            uri: String::new(),
+            sip_address: String::new(),
+        })
     }
 
     fn push_screen(&mut self, screen: UiScreen) {
@@ -623,6 +634,20 @@ impl UiRuntime {
     }
 }
 
-fn item_payload(item: &ListItemSnapshot) -> serde_json::Value {
-    json!({"id": item.id, "title": item.title})
+fn item_action(item: &ListItemSnapshot) -> ListItemAction {
+    ListItemAction {
+        id: item.id.clone(),
+        title: item.title.clone(),
+        path: String::new(),
+        track_uri: String::new(),
+    }
+}
+
+fn contact_action(item: &ListItemSnapshot) -> ContactAction {
+    ContactAction {
+        id: item.id.clone(),
+        name: item.title.clone(),
+        sip_address: String::new(),
+        uri: String::new(),
+    }
 }

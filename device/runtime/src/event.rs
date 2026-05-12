@@ -1,6 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
+use yoyopod_protocol::ui::{
+    CallIntent, ContactAction, InputAction, ListItemAction, MusicIntent, PowerIntent,
+    RuntimeIntent, UiCommand, UiEvent, UiInputEvent, UiIntent, VoiceFileAction, VoiceIntent,
+    VoiceRecipientAction,
+};
 
 use crate::protocol::{EnvelopeKind, WorkerEnvelope};
 use crate::state::{CallState, PowerSafetyAction, RuntimeState, WorkerDomain, WorkerState};
@@ -22,12 +27,8 @@ pub enum RuntimeEvent {
     VoiceTranscript(Value),
     VoiceAskResult(Value),
     VoiceSpeakResult(Value),
-    UiInput(Value),
-    UiIntent {
-        domain: String,
-        action: String,
-        payload: Value,
-    },
+    UiInput(UiInputEvent),
+    UiIntent(UiIntent),
     UiScreenChanged {
         screen: String,
     },
@@ -83,11 +84,7 @@ impl RuntimeEvent {
             Self::WorkerExited { domain, reason } => {
                 state.mark_worker(*domain, WorkerState::Stopped, reason.clone());
             }
-            Self::UiIntent {
-                domain,
-                action,
-                payload,
-            } => state.apply_ui_intent(domain, action, payload),
+            Self::UiIntent(intent) => state.apply_ui_intent(intent),
             Self::UiInput(_) | Self::Shutdown | Self::Ignored => {}
         }
     }
@@ -97,6 +94,10 @@ pub fn runtime_event_from_worker(
     domain: WorkerDomain,
     envelope: WorkerEnvelope,
 ) -> Option<RuntimeEvent> {
+    if domain == WorkerDomain::Ui {
+        return Some(runtime_event_from_ui_envelope(envelope));
+    }
+
     let WorkerEnvelope {
         kind,
         message_type,
@@ -131,13 +132,52 @@ pub fn runtime_event_from_worker(
     }
 }
 
+fn runtime_event_from_ui_envelope(envelope: WorkerEnvelope) -> RuntimeEvent {
+    if envelope.kind == EnvelopeKind::Error {
+        return RuntimeEvent::WorkerError {
+            domain: WorkerDomain::Ui,
+            message: worker_error_message(&envelope.message_type, &envelope.payload),
+        };
+    }
+
+    if envelope.kind != EnvelopeKind::Event {
+        return RuntimeEvent::Ignored;
+    }
+
+    match UiEvent::from_envelope(envelope) {
+        Ok(UiEvent::Ready(_)) => RuntimeEvent::WorkerReady {
+            domain: WorkerDomain::Ui,
+        },
+        Ok(UiEvent::Input(input)) => RuntimeEvent::UiInput(input),
+        Ok(UiEvent::Intent(intent)) => {
+            if matches!(intent, UiIntent::Runtime(RuntimeIntent::Shutdown)) {
+                RuntimeEvent::Shutdown
+            } else {
+                RuntimeEvent::UiIntent(intent)
+            }
+        }
+        Ok(UiEvent::ScreenChanged(changed)) => RuntimeEvent::UiScreenChanged {
+            screen: changed.screen,
+        },
+        Ok(UiEvent::Health(_)) => RuntimeEvent::Ignored,
+        Ok(UiEvent::Error(error)) => RuntimeEvent::WorkerError {
+            domain: WorkerDomain::Ui,
+            message: error.message,
+        },
+        Ok(UiEvent::ShutdownComplete) => RuntimeEvent::WorkerExited {
+            domain: WorkerDomain::Ui,
+            reason: "shutdown_complete".to_string(),
+        },
+        Err(error) => RuntimeEvent::WorkerError {
+            domain: WorkerDomain::Ui,
+            message: error.to_string(),
+        },
+    }
+}
+
 pub fn commands_for_event(state: &RuntimeState, event: &RuntimeEvent) -> Vec<RuntimeCommand> {
     match event {
-        RuntimeEvent::UiIntent {
-            domain,
-            action,
-            payload,
-        } => commands_for_ui_intent(state, domain, action, payload),
+        RuntimeEvent::UiIntent(intent) => commands_for_ui_intent(state, intent),
         RuntimeEvent::UiInput(payload) => commands_for_ui_input(state, payload),
         RuntimeEvent::CloudCommand(command) => commands_for_cloud_command(command),
         RuntimeEvent::MediaSnapshot(snapshot) => commands_for_media_snapshot(snapshot),
@@ -170,7 +210,7 @@ fn runtime_event_from_message(
     }
 
     match domain {
-        WorkerDomain::Ui => ui_event_from_message(message_type, payload),
+        WorkerDomain::Ui => RuntimeEvent::Ignored,
         WorkerDomain::Cloud => cloud_event_from_message(message_type, payload),
         WorkerDomain::Media => media_event_from_message(message_type, payload),
         WorkerDomain::Voip => voip_event_from_message(message_type, payload),
@@ -193,24 +233,6 @@ fn cloud_event_from_message(message_type: &str, payload: Value) -> RuntimeEvent 
             .unwrap_or(RuntimeEvent::Ignored),
         "cloud.error" => RuntimeEvent::WorkerError {
             domain: WorkerDomain::Cloud,
-            message: worker_error_message(message_type, &payload),
-        },
-        _ => RuntimeEvent::Ignored,
-    }
-}
-
-fn ui_event_from_message(message_type: &str, payload: Value) -> RuntimeEvent {
-    match message_type {
-        "ui.ready" => RuntimeEvent::WorkerReady {
-            domain: WorkerDomain::Ui,
-        },
-        "ui.input" => RuntimeEvent::UiInput(payload),
-        "ui.intent" => runtime_intent_from_payload(payload),
-        "ui.screen_changed" => string_field(&payload, "screen")
-            .map(|screen| RuntimeEvent::UiScreenChanged { screen })
-            .unwrap_or(RuntimeEvent::Ignored),
-        "ui.error" => RuntimeEvent::WorkerError {
-            domain: WorkerDomain::Ui,
             message: worker_error_message(message_type, &payload),
         },
         _ => RuntimeEvent::Ignored,
@@ -305,53 +327,20 @@ fn voice_event_from_message(message_type: &str, payload: Value) -> RuntimeEvent 
     }
 }
 
-fn runtime_intent_from_payload(payload: Value) -> RuntimeEvent {
-    let Some(domain) = string_field(&payload, "domain") else {
-        return RuntimeEvent::Ignored;
-    };
-    let Some(action) = string_field(&payload, "action") else {
-        return RuntimeEvent::Ignored;
-    };
-    if normalized(&domain) == "runtime" && normalized(&action) == "shutdown" {
-        return RuntimeEvent::Shutdown;
-    }
-    let payload = payload
-        .get("payload")
-        .cloned()
-        .unwrap_or_else(empty_payload);
-
-    RuntimeEvent::UiIntent {
-        domain,
-        action,
-        payload,
+fn commands_for_ui_intent(state: &RuntimeState, intent: &UiIntent) -> Vec<RuntimeCommand> {
+    match intent {
+        UiIntent::Music(intent) => commands_for_music_intent(state, intent),
+        UiIntent::Call(intent) => commands_for_call_intent(state, intent),
+        UiIntent::Voice(intent) => commands_for_voice_intent(state, intent),
+        UiIntent::Power(intent) => commands_for_power_intent(intent),
+        UiIntent::Navigation(_) => Vec::new(),
+        UiIntent::Runtime(RuntimeIntent::Shutdown) => vec![RuntimeCommand::Shutdown],
     }
 }
 
-fn commands_for_ui_intent(
-    state: &RuntimeState,
-    domain: &str,
-    action: &str,
-    payload: &Value,
-) -> Vec<RuntimeCommand> {
-    let domain = normalized(domain);
-    let action = normalized(action);
-
-    match domain.as_str() {
-        "music" => commands_for_music_intent(state, &action, payload),
-        "call" => commands_for_call_intent(state, &action, payload),
-        "voice" => commands_for_voice_intent(state, &action, payload),
-        "power" => commands_for_power_intent(&action, payload),
-        _ => Vec::new(),
-    }
-}
-
-fn commands_for_music_intent(
-    state: &RuntimeState,
-    action: &str,
-    payload: &Value,
-) -> Vec<RuntimeCommand> {
-    match action {
-        "play_pause" => {
+fn commands_for_music_intent(state: &RuntimeState, intent: &MusicIntent) -> Vec<RuntimeCommand> {
+    match intent {
+        MusicIntent::PlayPause => {
             let message_type = match normalized(&state.media.playback_state).as_str() {
                 "playing" => "media.pause",
                 "paused" => "media.resume",
@@ -363,23 +352,22 @@ fn commands_for_music_intent(
                 empty_payload(),
             )]
         }
-        "next" | "next_track" => vec![worker_command(
+        MusicIntent::NextTrack => vec![worker_command(
             WorkerDomain::Media,
             "media.next_track",
             empty_payload(),
         )],
-        "previous" | "previous_track" => vec![worker_command(
+        MusicIntent::PreviousTrack => vec![worker_command(
             WorkerDomain::Media,
             "media.previous_track",
             empty_payload(),
         )],
-        "shuffle_all" => vec![worker_command(
+        MusicIntent::ShuffleAll => vec![worker_command(
             WorkerDomain::Media,
             "media.shuffle_all",
             empty_payload(),
         )],
-        "load_playlist" => string_field(payload, "id")
-            .or_else(|| string_field(payload, "path"))
+        MusicIntent::LoadPlaylist(action) => list_item_target(action)
             .map(|path| {
                 vec![worker_command(
                     WorkerDomain::Media,
@@ -388,8 +376,7 @@ fn commands_for_music_intent(
                 )]
             })
             .unwrap_or_default(),
-        "play_recent_track" => string_field(payload, "id")
-            .or_else(|| string_field(payload, "track_uri"))
+        MusicIntent::PlayRecentTrack(action) => list_item_track_uri(action)
             .map(|track_uri| {
                 vec![worker_command(
                     WorkerDomain::Media,
@@ -398,39 +385,32 @@ fn commands_for_music_intent(
                 )]
             })
             .unwrap_or_default(),
-        _ => Vec::new(),
     }
 }
 
-fn commands_for_call_intent(
-    state: &RuntimeState,
-    action: &str,
-    payload: &Value,
-) -> Vec<RuntimeCommand> {
-    match action {
-        "answer" => vec![worker_command(
+fn commands_for_call_intent(state: &RuntimeState, intent: &CallIntent) -> Vec<RuntimeCommand> {
+    match intent {
+        CallIntent::Answer => vec![worker_command(
             WorkerDomain::Voip,
             "voip.answer",
             empty_payload(),
         )],
-        "hangup" => vec![worker_command(
+        CallIntent::Hangup => vec![worker_command(
             WorkerDomain::Voip,
             "voip.hangup",
             empty_payload(),
         )],
-        "reject" => vec![worker_command(
+        CallIntent::Reject => vec![worker_command(
             WorkerDomain::Voip,
             "voip.reject",
             empty_payload(),
         )],
-        "toggle_mute" => vec![worker_command(
+        CallIntent::ToggleMute => vec![worker_command(
             WorkerDomain::Voip,
             "voip.set_mute",
             json!({ "muted": !state.call.muted }),
         )],
-        "start" => string_field(payload, "id")
-            .or_else(|| string_field(payload, "sip_address"))
-            .or_else(|| string_field(payload, "uri"))
+        CallIntent::Start(action) => contact_uri(action)
             .map(|uri| {
                 vec![worker_command(
                     WorkerDomain::Voip,
@@ -439,17 +419,12 @@ fn commands_for_call_intent(
                 )]
             })
             .unwrap_or_default(),
-        _ => Vec::new(),
     }
 }
 
-fn commands_for_voice_intent(
-    state: &RuntimeState,
-    action: &str,
-    payload: &Value,
-) -> Vec<RuntimeCommand> {
-    match action {
-        "ask_start" | "begin_ask" => {
+fn commands_for_voice_intent(state: &RuntimeState, intent: &VoiceIntent) -> Vec<RuntimeCommand> {
+    match intent {
+        VoiceIntent::AskStart => {
             let file_path = state.voice.ask_recording_file_path();
             vec![worker_command(
                 WorkerDomain::Voip,
@@ -457,17 +432,17 @@ fn commands_for_voice_intent(
                 json!({ "file_path": file_path }),
             )]
         }
-        "ask_stop" | "finish_ask" => vec![worker_command(
+        VoiceIntent::AskStop => vec![worker_command(
             WorkerDomain::Voip,
             "voip.stop_voice_note_recording",
             empty_payload(),
         )],
-        "ask_cancel" => vec![worker_command(
+        VoiceIntent::AskCancel => vec![worker_command(
             WorkerDomain::Voip,
             "voip.cancel_voice_note_recording",
             empty_payload(),
         )],
-        "capture_start" | "start_recording" => {
+        VoiceIntent::CaptureStart(_) => {
             let file_path = state.voice.recording_file_path();
             vec![worker_command(
                 WorkerDomain::Voip,
@@ -475,29 +450,29 @@ fn commands_for_voice_intent(
                 json!({ "file_path": file_path }),
             )]
         }
-        "capture_stop" | "stop_recording" => vec![worker_command(
+        VoiceIntent::CaptureStop => vec![worker_command(
             WorkerDomain::Voip,
             "voip.stop_voice_note_recording",
             empty_payload(),
         )],
-        "capture_cancel" | "cancel_recording" => vec![worker_command(
+        VoiceIntent::CaptureCancel => vec![worker_command(
             WorkerDomain::Voip,
             "voip.cancel_voice_note_recording",
             empty_payload(),
         )],
-        "capture_toggle" => {
+        VoiceIntent::CaptureToggle(_) => {
             if state.voice.phase == "recording" {
-                commands_for_voice_intent(state, "capture_stop", payload)
+                commands_for_voice_intent(state, &VoiceIntent::CaptureStop)
             } else {
-                commands_for_voice_intent(state, "capture_start", payload)
+                commands_for_voice_intent(
+                    state,
+                    &VoiceIntent::CaptureStart(VoiceRecipientAction::default()),
+                )
             }
         }
-        "send" | "send_voice_note" => {
-            let uri = string_field(payload, "recipient_address")
-                .or_else(|| string_field(payload, "sip_address"))
-                .or_else(|| string_field(payload, "id"))
-                .or_else(|| string_field(payload, "uri"));
-            let file_path = string_field(payload, "file_path")
+        VoiceIntent::Send(action) => {
+            let uri = voice_recipient_uri(action);
+            let file_path = non_empty_string(&action.file_path)
                 .or_else(|| non_empty_string(&state.voice.file_path));
             let Some(uri) = uri else {
                 return Vec::new();
@@ -518,7 +493,9 @@ fn commands_for_voice_intent(
                 }),
             )]
         }
-        "play" | "play_voice_note" => string_field(payload, "file_path")
+        VoiceIntent::Play(action) => action
+            .as_ref()
+            .and_then(voice_file_path)
             .or_else(|| non_empty_string(&state.voice.file_path))
             .map(|file_path| {
                 vec![worker_command(
@@ -528,8 +505,8 @@ fn commands_for_voice_intent(
                 )]
             })
             .unwrap_or_default(),
-        "play_latest" => {
-            let Some(file_path) = string_field(payload, "file_path") else {
+        VoiceIntent::PlayLatest(action) => {
+            let Some(file_path) = voice_file_path(action) else {
                 return Vec::new();
             };
             let mut commands = vec![worker_command(
@@ -537,10 +514,7 @@ fn commands_for_voice_intent(
                 "voip.play_voice_note",
                 json!({ "file_path": file_path }),
             )];
-            if let Some(uri) = string_field(payload, "id")
-                .or_else(|| string_field(payload, "uri"))
-                .or_else(|| string_field(payload, "sip_address"))
-            {
+            if let Some(uri) = voice_file_uri(action) {
                 commands.push(worker_command(
                     WorkerDomain::Voip,
                     "voip.mark_voice_notes_seen",
@@ -549,14 +523,12 @@ fn commands_for_voice_intent(
             }
             commands
         }
-        "stop_playback" => vec![worker_command(
+        VoiceIntent::StopPlayback => vec![worker_command(
             WorkerDomain::Voip,
             "voip.stop_voice_note_playback",
             empty_payload(),
         )],
-        "mark_seen" => string_field(payload, "id")
-            .or_else(|| string_field(payload, "uri"))
-            .or_else(|| string_field(payload, "sip_address"))
+        VoiceIntent::MarkSeen(action) => contact_uri(action)
             .map(|uri| {
                 vec![worker_command(
                     WorkerDomain::Voip,
@@ -565,8 +537,7 @@ fn commands_for_voice_intent(
                 )]
             })
             .unwrap_or_default(),
-        "discard" | "again" | "reset" => Vec::new(),
-        _ => Vec::new(),
+        VoiceIntent::Discard => Vec::new(),
     }
 }
 
@@ -617,11 +588,7 @@ fn commands_for_voice_transcript(state: &RuntimeState, payload: &Value) -> Vec<R
                 "max_output_chars": state.voice.command_settings.ask_max_response_chars,
             }),
         )],
-        VoiceRouteKind::AskExit => vec![worker_command(
-            WorkerDomain::Ui,
-            "ui.input_action",
-            json!({"action": "back"}),
-        )],
+        VoiceRouteKind::AskExit => vec![ui_command(UiCommand::InputAction(InputAction::Back))],
         VoiceRouteKind::Action => commands_for_voice_route_action(&decision.route_name),
         VoiceRouteKind::LocalHelp => Vec::new(),
     }
@@ -629,11 +596,7 @@ fn commands_for_voice_transcript(state: &RuntimeState, payload: &Value) -> Vec<R
 
 fn commands_for_voice_route_action(route_name: &str) -> Vec<RuntimeCommand> {
     match route_name {
-        "back" => vec![worker_command(
-            WorkerDomain::Ui,
-            "ui.input_action",
-            json!({"action": "back"}),
-        )],
+        "back" => vec![ui_command(UiCommand::InputAction(InputAction::Back))],
         _ => Vec::new(),
     }
 }
@@ -705,58 +668,46 @@ fn adjusted_volume(state: &RuntimeState, delta: i32) -> i32 {
     (state.media.volume + delta).clamp(0, 100)
 }
 
-fn commands_for_power_intent(action: &str, payload: &Value) -> Vec<RuntimeCommand> {
-    match action {
-        "refresh" | "refresh_snapshot" => vec![worker_command(
+fn commands_for_power_intent(intent: &PowerIntent) -> Vec<RuntimeCommand> {
+    match intent {
+        PowerIntent::Refresh => vec![worker_command(
             WorkerDomain::Power,
             "power.refresh",
             empty_payload(),
         )],
-        "sync_time_to_rtc" | "sync_to_rtc" => vec![worker_command(
+        PowerIntent::SyncTimeToRtc => vec![worker_command(
             WorkerDomain::Power,
             "power.sync_time_to_rtc",
             empty_payload(),
         )],
-        "sync_time_from_rtc" | "sync_from_rtc" => vec![worker_command(
+        PowerIntent::SyncTimeFromRtc => vec![worker_command(
             WorkerDomain::Power,
             "power.sync_time_from_rtc",
             empty_payload(),
         )],
-        "set_rtc_alarm" | "set_alarm" => {
-            let Some(when) = string_field(payload, "when")
-                .or_else(|| string_field(payload, "alarm_time"))
-                .filter(|value| !value.trim().is_empty())
-            else {
+        PowerIntent::SetRtcAlarm(action) => {
+            if action.when.trim().is_empty() {
                 return Vec::new();
-            };
-            let repeat_mask = payload
-                .get("repeat_mask")
-                .and_then(Value::as_i64)
-                .unwrap_or(127);
+            }
             vec![worker_command(
                 WorkerDomain::Power,
                 "power.set_rtc_alarm",
                 json!({
-                    "when": when,
-                    "repeat_mask": repeat_mask,
+                    "when": action.when,
+                    "repeat_mask": action.repeat_mask,
                 }),
             )]
         }
-        "disable_rtc_alarm" | "disable_alarm" => vec![worker_command(
+        PowerIntent::DisableRtcAlarm => vec![worker_command(
             WorkerDomain::Power,
             "power.disable_rtc_alarm",
             empty_payload(),
         )],
-        _ => Vec::new(),
     }
 }
 
-fn commands_for_ui_input(state: &RuntimeState, payload: &Value) -> Vec<RuntimeCommand> {
-    if state.call.state == CallState::Incoming
-        && string_field(payload, "action")
-            .as_deref()
-            .is_some_and(|action| normalized(action) == "select")
-    {
+fn commands_for_ui_input(state: &RuntimeState, input: &UiInputEvent) -> Vec<RuntimeCommand> {
+    if state.call.state == CallState::Incoming && input.action == InputAction::Select {
         return vec![worker_command(
             WorkerDomain::Voip,
             "voip.answer",
@@ -1101,6 +1052,41 @@ fn worker_command(
     }
 }
 
+fn ui_command(command: UiCommand) -> RuntimeCommand {
+    RuntimeCommand::WorkerCommand {
+        domain: WorkerDomain::Ui,
+        envelope: command.into_envelope(),
+    }
+}
+
+fn list_item_target(action: &ListItemAction) -> Option<String> {
+    non_empty_string(&action.id).or_else(|| non_empty_string(&action.path))
+}
+
+fn list_item_track_uri(action: &ListItemAction) -> Option<String> {
+    non_empty_string(&action.id).or_else(|| non_empty_string(&action.track_uri))
+}
+
+fn contact_uri(action: &ContactAction) -> Option<String> {
+    non_empty_string(&action.id)
+        .or_else(|| non_empty_string(&action.sip_address))
+        .or_else(|| non_empty_string(&action.uri))
+}
+
+fn voice_recipient_uri(action: &VoiceRecipientAction) -> Option<String> {
+    non_empty_string(&action.recipient_address).or_else(|| non_empty_string(&action.id))
+}
+
+fn voice_file_path(action: &VoiceFileAction) -> Option<String> {
+    non_empty_string(&action.file_path)
+}
+
+fn voice_file_uri(action: &VoiceFileAction) -> Option<String> {
+    non_empty_string(&action.id)
+        .or_else(|| non_empty_string(&action.uri))
+        .or_else(|| non_empty_string(&action.sip_address))
+}
+
 fn cloud_telemetry_command(topic_suffix: &str, payload: Value) -> RuntimeCommand {
     worker_command(
         WorkerDomain::Cloud,
@@ -1176,4 +1162,44 @@ fn normalized(value: &str) -> String {
 
 fn empty_payload() -> Value {
     json!({})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yoyopod_protocol::ui::{ListItemAction, MusicIntent, UiEvent};
+
+    #[test]
+    fn typed_music_intent_routes_to_media_command() {
+        let envelope =
+            UiEvent::Intent(UiIntent::Music(MusicIntent::LoadPlaylist(ListItemAction {
+                id: "favorites.m3u".to_string(),
+                title: "Favorites".to_string(),
+                ..ListItemAction::default()
+            })))
+            .into_envelope();
+
+        let event = runtime_event_from_worker(WorkerDomain::Ui, envelope).unwrap();
+        let commands = commands_for_event(&RuntimeState::default(), &event);
+
+        assert_eq!(commands.len(), 1);
+        let RuntimeCommand::WorkerCommand { domain, envelope } = &commands[0] else {
+            panic!("expected worker command");
+        };
+        assert_eq!(*domain, WorkerDomain::Media);
+        assert_eq!(envelope.message_type, "media.load_playlist");
+        assert_eq!(envelope.payload["path"], "favorites.m3u");
+    }
+
+    #[test]
+    fn malformed_ui_intent_becomes_worker_error() {
+        let envelope = WorkerEnvelope::event("ui.intent", json!({"domain": "music"}));
+        let event = runtime_event_from_worker(WorkerDomain::Ui, envelope).unwrap();
+
+        let RuntimeEvent::WorkerError { domain, message } = event else {
+            panic!("expected worker error");
+        };
+        assert_eq!(domain, WorkerDomain::Ui);
+        assert!(message.contains("missing UI field action"));
+    }
 }

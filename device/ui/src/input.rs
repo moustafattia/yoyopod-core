@@ -1,26 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InputAction {
-    Advance,
-    Select,
-    Back,
-    #[allow(dead_code)]
-    PttPress,
-    #[allow(dead_code)]
-    PttRelease,
-}
-
-impl InputAction {
-    #[allow(dead_code)]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            InputAction::Advance => "advance",
-            InputAction::Select => "select",
-            InputAction::Back => "back",
-            InputAction::PttPress => "ptt_press",
-            InputAction::PttRelease => "ptt_release",
-        }
-    }
-}
+pub use yoyopod_protocol::ui::InputAction;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InputEvent {

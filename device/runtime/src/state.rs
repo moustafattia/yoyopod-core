@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
+use yoyopod_protocol::ui::{UiIntent, VoiceIntent};
 
 use crate::voice::{
     match_voice_confirmation_response, normalize_voice_activation, route_voice_transcript,
@@ -1006,15 +1007,15 @@ impl RuntimeState {
         }
     }
 
-    pub fn apply_ui_intent(&mut self, domain: &str, action: &str, payload: &Value) {
-        if domain.trim().eq_ignore_ascii_case("voice") {
-            self.apply_voice_intent(action, payload);
+    pub fn apply_ui_intent(&mut self, intent: &UiIntent) {
+        if let UiIntent::Voice(intent) = intent {
+            self.apply_voice_intent(intent);
         }
     }
 
-    fn apply_voice_intent(&mut self, action: &str, payload: &Value) {
-        match normalized(action).as_str() {
-            "ask_start" | "begin_ask" => {
+    fn apply_voice_intent(&mut self, intent: &VoiceIntent) {
+        match intent {
+            VoiceIntent::AskStart => {
                 self.voice.ask_capture_active = true;
                 self.voice.ask_transcribe_requested = false;
                 self.voice.set_interaction(
@@ -1023,48 +1024,59 @@ impl RuntimeState {
                     "Say YoYo, then ask or command...",
                 );
             }
-            "ask_stop" | "finish_ask" => {
+            VoiceIntent::AskStop => {
                 self.voice.ask_capture_active = true;
                 self.voice
                     .set_interaction("thinking", "Thinking", "Just a moment...");
             }
-            "ask_cancel" => {
+            VoiceIntent::AskCancel => {
                 self.voice.ask_capture_active = false;
                 self.voice.ask_transcribe_requested = false;
                 self.voice.pending_ask_question.clear();
                 self.voice
                     .set_interaction("idle", "Ask", "Ask me anything...");
             }
-            "capture_start" | "start_recording" => {
+            VoiceIntent::CaptureStart(action) => {
                 self.voice.phase = "recording".to_string();
                 self.voice.status_text = "Recording...".to_string();
-                if let Some(file_path) = string_field(payload, "file_path") {
-                    self.voice.file_path = file_path;
+                if !action.file_path.trim().is_empty() {
+                    self.voice.file_path = action.file_path.clone();
                 }
             }
-            "capture_stop" | "stop_recording" => {
+            VoiceIntent::CaptureStop => {
                 if self.voice.phase == "recording" {
                     self.voice.phase = "review".to_string();
                     self.voice.status_text = "Ready to send".to_string();
                 }
             }
-            "send" | "send_voice_note" => {
+            VoiceIntent::Send(_) => {
                 self.voice.phase = "sending".to_string();
                 self.voice.status_text = "Sending...".to_string();
             }
-            "play" | "play_latest" => {
+            VoiceIntent::Play(action) => {
                 self.voice.playback_active = true;
                 self.voice.status_text = "Playing preview".to_string();
-                if let Some(file_path) = string_field(payload, "file_path") {
-                    self.voice.playback_file_path = file_path;
+                if let Some(action) = action {
+                    if !action.file_path.trim().is_empty() {
+                        self.voice.playback_file_path = action.file_path.clone();
+                    }
                 }
             }
-            "stop_playback" => {
+            VoiceIntent::PlayLatest(action) => {
+                self.voice.playback_active = true;
+                self.voice.status_text = "Playing preview".to_string();
+                if !action.file_path.trim().is_empty() {
+                    self.voice.playback_file_path = action.file_path.clone();
+                }
+            }
+            VoiceIntent::StopPlayback => {
                 self.voice.playback_active = false;
                 self.voice.playback_file_path.clear();
             }
-            "discard" | "again" | "reset" => self.voice.reset_draft(),
-            _ => {}
+            VoiceIntent::Discard => self.voice.reset_draft(),
+            VoiceIntent::CaptureCancel
+            | VoiceIntent::CaptureToggle(_)
+            | VoiceIntent::MarkSeen(_) => {}
         }
     }
 

@@ -1,0 +1,709 @@
+mod snapshot;
+
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+pub use snapshot::{
+    CallRuntimeSnapshot, HubCardSnapshot, HubRuntimeSnapshot, ListItemSnapshot,
+    MusicRuntimeSnapshot, NetworkRuntimeSnapshot, OverlayRuntimeSnapshot, PowerPageSnapshot,
+    PowerRuntimeSnapshot, RuntimeSnapshot, RuntimeSnapshotPatch, VoiceNoteSummarySnapshot,
+    VoiceRuntimeSnapshot,
+};
+
+use crate::{EnvelopeKind, ProtocolError, WorkerEnvelope};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputAction {
+    Advance,
+    Select,
+    Back,
+    PttPress,
+    PttRelease,
+}
+
+impl InputAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Advance => "advance",
+            Self::Select => "select",
+            Self::Back => "back",
+            Self::PttPress => "ptt_press",
+            Self::PttRelease => "ptt_release",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UiCommand {
+    SetBacklight { brightness: f32 },
+    RuntimeSnapshot(RuntimeSnapshot),
+    RuntimePatch(RuntimeSnapshotPatch),
+    InputAction(InputAction),
+    Tick,
+    PollInput,
+    Health,
+    Animate(AnimationRequest),
+    Shutdown,
+    WorkerStop,
+}
+
+impl UiCommand {
+    pub fn from_envelope(envelope: WorkerEnvelope) -> Result<Self, ProtocolError> {
+        if envelope.kind != EnvelopeKind::Command {
+            return Err(ProtocolError::InvalidEnvelope(format!(
+                "expected UI command envelope, got {:?}",
+                envelope.kind
+            )));
+        }
+
+        match envelope.message_type.as_str() {
+            "ui.set_backlight" => {
+                let payload: SetBacklightPayload = decode_payload(envelope.payload)?;
+                Ok(Self::SetBacklight {
+                    brightness: payload.brightness.clamp(0.0, 1.0),
+                })
+            }
+            "ui.runtime_snapshot" => Ok(Self::RuntimeSnapshot(RuntimeSnapshot::from_payload(
+                &envelope.payload,
+            )?)),
+            "ui.runtime_patch" => Ok(Self::RuntimePatch(RuntimeSnapshotPatch::from_payload(
+                &envelope.payload,
+            )?)),
+            "ui.input_action" => {
+                let payload: InputActionPayload = decode_payload(envelope.payload)?;
+                Ok(Self::InputAction(payload.action))
+            }
+            "ui.tick" => Ok(Self::Tick),
+            "ui.poll_input" => Ok(Self::PollInput),
+            "ui.health" => Ok(Self::Health),
+            "ui.animate" => Ok(Self::Animate(decode_payload(envelope.payload)?)),
+            "ui.shutdown" => Ok(Self::Shutdown),
+            "worker.stop" => Ok(Self::WorkerStop),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown UI command type {other}"
+            ))),
+        }
+    }
+
+    pub fn into_envelope(self) -> WorkerEnvelope {
+        match self {
+            Self::SetBacklight { brightness } => WorkerEnvelope::command(
+                "ui.set_backlight",
+                None,
+                json!({ "brightness": brightness.clamp(0.0, 1.0) }),
+            ),
+            Self::RuntimeSnapshot(snapshot) => WorkerEnvelope::command(
+                "ui.runtime_snapshot",
+                None,
+                serde_json::to_value(snapshot).expect("serializing UI runtime snapshot"),
+            ),
+            Self::RuntimePatch(patch) => WorkerEnvelope::command(
+                "ui.runtime_patch",
+                None,
+                serde_json::to_value(patch).expect("serializing UI runtime patch"),
+            ),
+            Self::InputAction(action) => {
+                WorkerEnvelope::command("ui.input_action", None, json!({ "action": action }))
+            }
+            Self::Tick => WorkerEnvelope::command("ui.tick", None, json!({})),
+            Self::PollInput => WorkerEnvelope::command("ui.poll_input", None, json!({})),
+            Self::Health => WorkerEnvelope::command("ui.health", None, json!({})),
+            Self::Animate(request) => WorkerEnvelope::command(
+                "ui.animate",
+                None,
+                serde_json::to_value(request).expect("serializing UI animation request"),
+            ),
+            Self::Shutdown => WorkerEnvelope::command("ui.shutdown", None, json!({})),
+            Self::WorkerStop => WorkerEnvelope::command("worker.stop", None, json!({})),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnimationRequest {
+    #[serde(default)]
+    pub transition_id: String,
+    #[serde(default)]
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiInputEvent {
+    pub action: InputAction,
+    pub method: String,
+    pub timestamp_ms: u64,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiReady {
+    pub display: DisplayInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DisplayInfo {
+    pub width: usize,
+    pub height: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiScreenChanged {
+    pub screen: String,
+    #[serde(default)]
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiHealth {
+    pub frames: usize,
+    pub button_events: usize,
+    #[serde(default)]
+    pub last_ui_renderer: String,
+    #[serde(default)]
+    pub active_screen: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiError {
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiEvent {
+    Ready(UiReady),
+    Input(UiInputEvent),
+    Intent(UiIntent),
+    ScreenChanged(UiScreenChanged),
+    Health(UiHealth),
+    Error(UiError),
+    ShutdownComplete,
+}
+
+impl UiEvent {
+    pub fn from_envelope(envelope: WorkerEnvelope) -> Result<Self, ProtocolError> {
+        if !matches!(envelope.kind, EnvelopeKind::Event | EnvelopeKind::Error) {
+            return Err(ProtocolError::InvalidEnvelope(format!(
+                "expected UI event envelope, got {:?}",
+                envelope.kind
+            )));
+        }
+
+        if envelope.kind == EnvelopeKind::Error {
+            return Ok(Self::Error(error_from_payload(
+                envelope.message_type,
+                &envelope.payload,
+            )));
+        }
+
+        match envelope.message_type.as_str() {
+            "ui.ready" => Ok(Self::Ready(decode_payload(envelope.payload)?)),
+            "ui.input" => Ok(Self::Input(decode_payload(envelope.payload)?)),
+            "ui.intent" => Ok(Self::Intent(UiIntent::from_event_payload(
+                &envelope.payload,
+            )?)),
+            "ui.screen_changed" => Ok(Self::ScreenChanged(decode_payload(envelope.payload)?)),
+            "ui.health" => Ok(Self::Health(decode_payload(envelope.payload)?)),
+            "ui.error" => Ok(Self::Error(decode_payload(envelope.payload)?)),
+            "ui.shutdown_complete" => Ok(Self::ShutdownComplete),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown UI event type {other}"
+            ))),
+        }
+    }
+
+    pub fn into_envelope(self) -> WorkerEnvelope {
+        match self {
+            Self::Ready(ready) => event("ui.ready", ready),
+            Self::Input(input) => event("ui.input", input),
+            Self::Intent(intent) => WorkerEnvelope::event("ui.intent", intent.to_event_payload()),
+            Self::ScreenChanged(changed) => event("ui.screen_changed", changed),
+            Self::Health(health) => event("ui.health", health),
+            Self::Error(error) => event("ui.error", error),
+            Self::ShutdownComplete => WorkerEnvelope::event("ui.shutdown_complete", json!({})),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiIntent {
+    Music(MusicIntent),
+    Call(CallIntent),
+    Voice(VoiceIntent),
+    Power(PowerIntent),
+    Navigation(NavigationIntent),
+    Runtime(RuntimeIntent),
+}
+
+impl UiIntent {
+    pub fn from_event_payload(payload: &Value) -> Result<Self, ProtocolError> {
+        let domain = required_string(payload, "domain")?;
+        let action = required_string(payload, "action")?;
+        let intent_payload = payload
+            .get("payload")
+            .cloned()
+            .unwrap_or_else(empty_payload);
+
+        match normalized(&domain).as_str() {
+            "music" => Ok(Self::Music(MusicIntent::from_parts(
+                &action,
+                &intent_payload,
+            )?)),
+            "call" => Ok(Self::Call(CallIntent::from_parts(
+                &action,
+                &intent_payload,
+            )?)),
+            "voice" => Ok(Self::Voice(VoiceIntent::from_parts(
+                &action,
+                &intent_payload,
+            )?)),
+            "power" => Ok(Self::Power(PowerIntent::from_parts(
+                &action,
+                &intent_payload,
+            )?)),
+            "navigation" => Ok(Self::Navigation(NavigationIntent::from_parts(&action)?)),
+            "runtime" => Ok(Self::Runtime(RuntimeIntent::from_parts(&action)?)),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown UI intent domain {other}"
+            ))),
+        }
+    }
+
+    pub fn to_event_payload(&self) -> Value {
+        let (domain, action, payload) = match self {
+            Self::Music(intent) => ("music", intent.action_name(), intent.payload()),
+            Self::Call(intent) => ("call", intent.action_name(), intent.payload()),
+            Self::Voice(intent) => ("voice", intent.action_name(), intent.payload()),
+            Self::Power(intent) => ("power", intent.action_name(), intent.payload()),
+            Self::Navigation(intent) => ("navigation", intent.action_name(), empty_payload()),
+            Self::Runtime(intent) => ("runtime", intent.action_name(), empty_payload()),
+        };
+        json!({
+            "domain": domain,
+            "action": action,
+            "payload": payload,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MusicIntent {
+    PlayPause,
+    NextTrack,
+    PreviousTrack,
+    ShuffleAll,
+    LoadPlaylist(ListItemAction),
+    PlayRecentTrack(ListItemAction),
+}
+
+impl MusicIntent {
+    fn from_parts(action: &str, payload: &Value) -> Result<Self, ProtocolError> {
+        match normalized(action).as_str() {
+            "play_pause" => Ok(Self::PlayPause),
+            "next" | "next_track" => Ok(Self::NextTrack),
+            "previous" | "previous_track" => Ok(Self::PreviousTrack),
+            "shuffle_all" => Ok(Self::ShuffleAll),
+            "load_playlist" => Ok(Self::LoadPlaylist(decode_payload(payload.clone())?)),
+            "play_recent_track" => Ok(Self::PlayRecentTrack(decode_payload(payload.clone())?)),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown music intent action {other}"
+            ))),
+        }
+    }
+
+    fn action_name(&self) -> &'static str {
+        match self {
+            Self::PlayPause => "play_pause",
+            Self::NextTrack => "next_track",
+            Self::PreviousTrack => "previous_track",
+            Self::ShuffleAll => "shuffle_all",
+            Self::LoadPlaylist(_) => "load_playlist",
+            Self::PlayRecentTrack(_) => "play_recent_track",
+        }
+    }
+
+    fn payload(&self) -> Value {
+        match self {
+            Self::LoadPlaylist(action) | Self::PlayRecentTrack(action) => payload(action),
+            _ => empty_payload(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallIntent {
+    Answer,
+    Reject,
+    Hangup,
+    ToggleMute,
+    Start(ContactAction),
+}
+
+impl CallIntent {
+    fn from_parts(action: &str, payload: &Value) -> Result<Self, ProtocolError> {
+        match normalized(action).as_str() {
+            "answer" => Ok(Self::Answer),
+            "reject" => Ok(Self::Reject),
+            "hangup" => Ok(Self::Hangup),
+            "toggle_mute" => Ok(Self::ToggleMute),
+            "start" => Ok(Self::Start(decode_payload(payload.clone())?)),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown call intent action {other}"
+            ))),
+        }
+    }
+
+    fn action_name(&self) -> &'static str {
+        match self {
+            Self::Answer => "answer",
+            Self::Reject => "reject",
+            Self::Hangup => "hangup",
+            Self::ToggleMute => "toggle_mute",
+            Self::Start(_) => "start",
+        }
+    }
+
+    fn payload(&self) -> Value {
+        match self {
+            Self::Start(action) => payload(action),
+            _ => empty_payload(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VoiceIntent {
+    AskStart,
+    AskStop,
+    AskCancel,
+    CaptureStart(VoiceRecipientAction),
+    CaptureStop,
+    CaptureCancel,
+    CaptureToggle(Option<VoiceRecipientAction>),
+    Send(VoiceRecipientAction),
+    Play(Option<VoiceFileAction>),
+    PlayLatest(VoiceFileAction),
+    StopPlayback,
+    MarkSeen(ContactAction),
+    Discard,
+}
+
+impl VoiceIntent {
+    fn from_parts(action: &str, payload: &Value) -> Result<Self, ProtocolError> {
+        match normalized(action).as_str() {
+            "ask_start" | "begin_ask" => Ok(Self::AskStart),
+            "ask_stop" | "finish_ask" => Ok(Self::AskStop),
+            "ask_cancel" => Ok(Self::AskCancel),
+            "capture_start" | "start_recording" => {
+                Ok(Self::CaptureStart(decode_payload(payload.clone())?))
+            }
+            "capture_stop" | "stop_recording" => Ok(Self::CaptureStop),
+            "capture_cancel" | "cancel_recording" => Ok(Self::CaptureCancel),
+            "capture_toggle" => Ok(Self::CaptureToggle(optional_payload(payload)?)),
+            "send" | "send_voice_note" => Ok(Self::Send(decode_payload(payload.clone())?)),
+            "play" | "play_voice_note" => Ok(Self::Play(optional_payload(payload)?)),
+            "play_latest" => Ok(Self::PlayLatest(decode_payload(payload.clone())?)),
+            "stop_playback" => Ok(Self::StopPlayback),
+            "mark_seen" => Ok(Self::MarkSeen(decode_payload(payload.clone())?)),
+            "discard" | "again" | "reset" => Ok(Self::Discard),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown voice intent action {other}"
+            ))),
+        }
+    }
+
+    fn action_name(&self) -> &'static str {
+        match self {
+            Self::AskStart => "ask_start",
+            Self::AskStop => "ask_stop",
+            Self::AskCancel => "ask_cancel",
+            Self::CaptureStart(_) => "capture_start",
+            Self::CaptureStop => "capture_stop",
+            Self::CaptureCancel => "capture_cancel",
+            Self::CaptureToggle(_) => "capture_toggle",
+            Self::Send(_) => "send",
+            Self::Play(_) => "play",
+            Self::PlayLatest(_) => "play_latest",
+            Self::StopPlayback => "stop_playback",
+            Self::MarkSeen(_) => "mark_seen",
+            Self::Discard => "discard",
+        }
+    }
+
+    fn payload(&self) -> Value {
+        match self {
+            Self::CaptureStart(action) | Self::Send(action) => payload(action),
+            Self::CaptureToggle(Some(action)) => payload(action),
+            Self::Play(Some(action)) | Self::PlayLatest(action) => payload(action),
+            Self::MarkSeen(action) => payload(action),
+            _ => empty_payload(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PowerIntent {
+    Refresh,
+    SyncTimeToRtc,
+    SyncTimeFromRtc,
+    SetRtcAlarm(RtcAlarmAction),
+    DisableRtcAlarm,
+}
+
+impl PowerIntent {
+    fn from_parts(action: &str, payload: &Value) -> Result<Self, ProtocolError> {
+        match normalized(action).as_str() {
+            "refresh" | "refresh_snapshot" => Ok(Self::Refresh),
+            "sync_time_to_rtc" | "sync_to_rtc" => Ok(Self::SyncTimeToRtc),
+            "sync_time_from_rtc" | "sync_from_rtc" => Ok(Self::SyncTimeFromRtc),
+            "set_rtc_alarm" | "set_alarm" => {
+                Ok(Self::SetRtcAlarm(decode_payload(payload.clone())?))
+            }
+            "disable_rtc_alarm" | "disable_alarm" => Ok(Self::DisableRtcAlarm),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown power intent action {other}"
+            ))),
+        }
+    }
+
+    fn action_name(&self) -> &'static str {
+        match self {
+            Self::Refresh => "refresh",
+            Self::SyncTimeToRtc => "sync_time_to_rtc",
+            Self::SyncTimeFromRtc => "sync_time_from_rtc",
+            Self::SetRtcAlarm(_) => "set_rtc_alarm",
+            Self::DisableRtcAlarm => "disable_rtc_alarm",
+        }
+    }
+
+    fn payload(&self) -> Value {
+        match self {
+            Self::SetRtcAlarm(action) => payload(action),
+            _ => empty_payload(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavigationIntent {
+    Back,
+}
+
+impl NavigationIntent {
+    fn from_parts(action: &str) -> Result<Self, ProtocolError> {
+        match normalized(action).as_str() {
+            "back" => Ok(Self::Back),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown navigation intent action {other}"
+            ))),
+        }
+    }
+
+    fn action_name(self) -> &'static str {
+        match self {
+            Self::Back => "back",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeIntent {
+    Shutdown,
+}
+
+impl RuntimeIntent {
+    fn from_parts(action: &str) -> Result<Self, ProtocolError> {
+        match normalized(action).as_str() {
+            "shutdown" => Ok(Self::Shutdown),
+            other => Err(ProtocolError::InvalidEnvelope(format!(
+                "unknown runtime intent action {other}"
+            ))),
+        }
+    }
+
+    fn action_name(self) -> &'static str {
+        match self {
+            Self::Shutdown => "shutdown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ListItemAction {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub track_uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ContactAction {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub sip_address: String,
+    #[serde(default)]
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct VoiceRecipientAction {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub recipient_address: String,
+    #[serde(default)]
+    pub recipient_name: String,
+    #[serde(default)]
+    pub file_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct VoiceFileAction {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub recipient_name: String,
+    #[serde(default)]
+    pub file_path: String,
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub sip_address: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RtcAlarmAction {
+    pub when: String,
+    #[serde(default = "default_repeat_mask")]
+    pub repeat_mask: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+struct SetBacklightPayload {
+    #[serde(default = "default_brightness")]
+    brightness: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+struct InputActionPayload {
+    action: InputAction,
+}
+
+fn event(message_type: &'static str, payload: impl Serialize) -> WorkerEnvelope {
+    WorkerEnvelope::event(
+        message_type,
+        serde_json::to_value(payload).expect("serializing UI event payload"),
+    )
+}
+
+fn decode_payload<T: for<'de> Deserialize<'de>>(payload: Value) -> Result<T, ProtocolError> {
+    serde_json::from_value(payload)
+        .map_err(|error| ProtocolError::InvalidEnvelope(format!("invalid UI payload: {error}")))
+}
+
+fn optional_payload<T: for<'de> Deserialize<'de> + Default>(
+    payload: &Value,
+) -> Result<Option<T>, ProtocolError> {
+    if payload.as_object().is_none_or(|object| object.is_empty()) {
+        return Ok(None);
+    }
+    Ok(Some(decode_payload(payload.clone())?))
+}
+
+fn payload(value: impl Serialize) -> Value {
+    serde_json::to_value(value).expect("serializing UI intent payload")
+}
+
+fn required_string(payload: &Value, field: &str) -> Result<String, ProtocolError> {
+    payload
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| ProtocolError::InvalidEnvelope(format!("missing UI field {field}")))
+}
+
+fn error_from_payload(message_type: String, payload: &Value) -> UiError {
+    UiError {
+        code: string_field(payload, "code").unwrap_or_else(|| message_type.clone()),
+        message: string_field(payload, "message")
+            .or_else(|| string_field(payload, "error"))
+            .unwrap_or(message_type),
+    }
+}
+
+fn string_field(payload: &Value, field: &str) -> Option<String> {
+    payload
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn normalized(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn empty_payload() -> Value {
+    json!({})
+}
+
+fn default_brightness() -> f32 {
+    0.8
+}
+
+fn default_repeat_mask() -> i64 {
+    127
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_round_trip_decodes_typed_input_action() {
+        let envelope = UiCommand::InputAction(InputAction::Back).into_envelope();
+        let decoded = UiCommand::from_envelope(envelope).unwrap();
+        assert_eq!(decoded, UiCommand::InputAction(InputAction::Back));
+    }
+
+    #[test]
+    fn event_round_trip_decodes_typed_intent() {
+        let intent = UiIntent::Music(MusicIntent::LoadPlaylist(ListItemAction {
+            id: "mix".to_string(),
+            title: "Mix".to_string(),
+            ..ListItemAction::default()
+        }));
+        let envelope = UiEvent::Intent(intent.clone()).into_envelope();
+        let decoded = UiEvent::from_envelope(envelope).unwrap();
+        assert_eq!(decoded, UiEvent::Intent(intent));
+    }
+
+    #[test]
+    fn unknown_command_type_is_rejected() {
+        let envelope = WorkerEnvelope::command("ui.nope", None, json!({}));
+        assert!(matches!(
+            UiCommand::from_envelope(envelope),
+            Err(ProtocolError::InvalidEnvelope(_))
+        ));
+    }
+
+    #[test]
+    fn malformed_intent_payload_is_rejected() {
+        let envelope = WorkerEnvelope::event("ui.intent", json!({"domain": "music"}));
+        assert!(matches!(
+            UiEvent::from_envelope(envelope),
+            Err(ProtocolError::InvalidEnvelope(_))
+        ));
+    }
+}

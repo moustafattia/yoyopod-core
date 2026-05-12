@@ -34,15 +34,19 @@ The UI host communicates over line-delimited JSON worker envelopes:
 
 - stdout is protocol-owned.
 - stderr is log-owned.
+- the outer `WorkerEnvelope` stays the shared transport container.
+- UI command/event payloads are decoded through `yoyopod_protocol::ui`
+  (`UiCommand`, `UiEvent`, `UiIntent`, and `RuntimeSnapshot`).
 - accepted commands are `ui.runtime_snapshot`, `ui.input_action`, `ui.tick`,
-  `ui.poll_input`, `ui.set_backlight`, `ui.health`, `ui.shutdown`, and
-  `worker.stop`.
+  `ui.poll_input`, `ui.set_backlight`, `ui.health`, `ui.animate`,
+  `ui.runtime_patch`, `ui.shutdown`, and `worker.stop`.
 - emitted events are `ui.ready`, `ui.input`, `ui.intent`, `ui.screen_changed`,
-  `ui.health`, and `ui.error`.
+  `ui.health`, `ui.error`, and `ui.shutdown_complete`.
 
-Runtime snapshots are decoded into `RuntimeSnapshot`. Local button or command
-input is interpreted as `InputAction`. Domain actions leave the UI worker as
-`ui.intent` events for the runtime to route.
+Runtime snapshots are shared protocol DTOs, not UI-local copies. Local button
+or command input is interpreted as typed `InputAction`. Domain actions leave
+the UI worker as typed `UiIntent` variants for the runtime to route. Unknown or
+malformed UI commands produce a typed `ui.error` event instead of being ignored.
 
 ## Render Contract
 

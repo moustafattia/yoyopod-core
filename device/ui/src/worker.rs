@@ -1,14 +1,16 @@
 use std::io::{BufRead, BufReader, Read, Write};
 
-use anyhow::{bail, Result};
-use serde_json::json;
+use anyhow::Result;
+use yoyopod_protocol::ui::{
+    DisplayInfo, UiCommand, UiError, UiEvent, UiHealth, UiInputEvent, UiReady, UiScreenChanged,
+};
 
 use crate::framebuffer::Framebuffer;
 use crate::hardware::{ButtonDevice, DisplayDevice};
-use crate::input::{ButtonTiming, InputAction, OneButtonMachine};
-use crate::protocol::{error_envelope, event_envelope, Envelope, EnvelopeKind};
+use crate::input::{ButtonTiming, OneButtonMachine};
+use crate::protocol::{monotonic_millis, Envelope};
 use crate::render::LvglRenderer;
-use crate::runtime::{RuntimeSnapshot, UiIntent, UiRuntime, UiScreen};
+use crate::runtime::{UiIntent, UiRuntime, UiScreen};
 use crate::screens::ScreenModel;
 
 pub fn run_worker<R, W, E, D, B>(
@@ -34,14 +36,14 @@ where
     let mut last_active_screen: Option<UiScreen> = None;
     let mut lvgl_renderer = LvglRenderer::open(None)?;
 
-    emit(
+    emit_event(
         output,
-        event_envelope(
-            "ui.ready",
-            json!({
-                "display": {"width": display.width(), "height": display.height()},
-            }),
-        ),
+        UiEvent::Ready(UiReady {
+            display: DisplayInfo {
+                width: display.width(),
+                height: display.height(),
+            },
+        }),
     )?;
 
     let reader = BufReader::new(input);
@@ -53,25 +55,26 @@ where
 
         match Envelope::decode(line.as_bytes()) {
             Ok(envelope) => {
-                if envelope.kind != EnvelopeKind::Command {
-                    emit(
-                        output,
-                        error_envelope("invalid_kind", "worker accepts commands only"),
-                    )?;
-                    continue;
-                }
-
-                match envelope.message_type.as_str() {
-                    "ui.set_backlight" => {
-                        let brightness = envelope
-                            .payload
-                            .get("brightness")
-                            .and_then(|value| value.as_f64())
-                            .unwrap_or(0.8) as f32;
-                        display.set_backlight(brightness.clamp(0.0, 1.0))?;
+                let command = match UiCommand::from_envelope(envelope) {
+                    Ok(command) => command,
+                    Err(err) => {
+                        writeln!(errors, "UI command decode error: {err}")?;
+                        emit_event(
+                            output,
+                            UiEvent::Error(UiError {
+                                code: "invalid_command".to_string(),
+                                message: err.to_string(),
+                            }),
+                        )?;
+                        continue;
                     }
-                    "ui.runtime_snapshot" => {
-                        let snapshot = RuntimeSnapshot::from_payload(&envelope.payload)?;
+                };
+
+                match command {
+                    UiCommand::SetBacklight { brightness } => {
+                        display.set_backlight(brightness)?;
+                    }
+                    UiCommand::RuntimeSnapshot(snapshot) => {
                         ui_runtime.apply_snapshot(snapshot);
                         if render_runtime_if_dirty(
                             output,
@@ -85,8 +88,21 @@ where
                             frames += 1;
                         }
                     }
-                    "ui.input_action" => {
-                        let action = parse_input_action(&envelope.payload)?;
+                    UiCommand::RuntimePatch(patch) => {
+                        ui_runtime.apply_patch(patch);
+                        if render_runtime_if_dirty(
+                            output,
+                            &mut display,
+                            &mut framebuffer,
+                            &mut ui_runtime,
+                            &mut last_active_screen,
+                            &mut last_ui_renderer,
+                            &mut lvgl_renderer,
+                        )? {
+                            frames += 1;
+                        }
+                    }
+                    UiCommand::InputAction(action) => {
                         ui_runtime.handle_input(action);
                         emit_intents(output, ui_runtime.take_intents())?;
                         if render_runtime_if_dirty(
@@ -101,9 +117,9 @@ where
                             frames += 1;
                         }
                     }
-                    "ui.tick" => {
+                    UiCommand::Tick => {
                         let pressed = button.pressed()?;
-                        let now_ms = crate::protocol::monotonic_millis();
+                        let now_ms = monotonic_millis();
                         let button_events = if ui_runtime.wants_ptt_passthrough() {
                             button_machine.observe_ptt_passthrough(pressed, now_ms)
                         } else {
@@ -111,17 +127,14 @@ where
                         };
                         for event in button_events {
                             input_events += 1;
-                            emit(
+                            emit_event(
                                 output,
-                                event_envelope(
-                                    "ui.input",
-                                    json!({
-                                        "action": event.action.as_str(),
-                                        "method": event.method,
-                                        "timestamp_ms": event.timestamp_ms,
-                                        "duration_ms": event.duration_ms,
-                                    }),
-                                ),
+                                UiEvent::Input(UiInputEvent {
+                                    action: event.action,
+                                    method: event.method.to_string(),
+                                    timestamp_ms: event.timestamp_ms,
+                                    duration_ms: event.duration_ms,
+                                }),
                             )?;
                             ui_runtime.handle_input(event.action);
                         }
@@ -138,9 +151,9 @@ where
                             frames += 1;
                         }
                     }
-                    "ui.poll_input" => {
+                    UiCommand::PollInput => {
                         let pressed = button.pressed()?;
-                        let now_ms = crate::protocol::monotonic_millis();
+                        let now_ms = monotonic_millis();
                         let button_events = if ui_runtime.wants_ptt_passthrough() {
                             button_machine.observe_ptt_passthrough(pressed, now_ms)
                         } else {
@@ -148,45 +161,45 @@ where
                         };
                         for event in button_events {
                             input_events += 1;
-                            emit(
+                            emit_event(
                                 output,
-                                event_envelope(
-                                    "ui.input",
-                                    json!({
-                                        "action": event.action.as_str(),
-                                        "method": event.method,
-                                        "timestamp_ms": event.timestamp_ms,
-                                        "duration_ms": event.duration_ms,
-                                    }),
-                                ),
+                                UiEvent::Input(UiInputEvent {
+                                    action: event.action,
+                                    method: event.method.to_string(),
+                                    timestamp_ms: event.timestamp_ms,
+                                    duration_ms: event.duration_ms,
+                                }),
                             )?;
                         }
                     }
-                    "ui.health" => {
+                    UiCommand::Health => {
                         let active_screen = ui_runtime.active_screen_model().screen();
-                        emit(
+                        emit_event(
                             output,
-                            event_envelope(
-                                "ui.health",
-                                json!({
-                                    "frames": frames,
-                                    "button_events": input_events,
-                                    "last_ui_renderer": last_ui_renderer,
-                                    "active_screen": active_screen.as_str(),
-                                }),
-                            ),
+                            UiEvent::Health(UiHealth {
+                                frames,
+                                button_events: input_events,
+                                last_ui_renderer: last_ui_renderer.clone(),
+                                active_screen: active_screen.as_str().to_string(),
+                            }),
                         )?;
                     }
-                    "ui.shutdown" | "worker.stop" => break,
-                    other => {
-                        writeln!(errors, "unknown UI worker command: {other}")?;
-                        emit(output, error_envelope("unknown_command", other))?;
+                    UiCommand::Animate(_) => {}
+                    UiCommand::Shutdown | UiCommand::WorkerStop => {
+                        emit_event(output, UiEvent::ShutdownComplete)?;
+                        break;
                     }
                 }
             }
             Err(err) => {
                 writeln!(errors, "protocol decode error: {err}")?;
-                emit(output, error_envelope("decode_error", err.to_string()))?;
+                emit_event(
+                    output,
+                    UiEvent::Error(UiError {
+                        code: "decode_error".to_string(),
+                        message: err.to_string(),
+                    }),
+                )?;
             }
         }
     }
@@ -200,19 +213,15 @@ fn emit<W: Write>(output: &mut W, envelope: Envelope) -> Result<()> {
     Ok(())
 }
 
+fn emit_event<W: Write>(output: &mut W, event: UiEvent) -> Result<()> {
+    let mut envelope = event.into_envelope();
+    envelope.timestamp_ms = monotonic_millis();
+    emit(output, envelope)
+}
+
 fn emit_intents<W: Write>(output: &mut W, intents: Vec<UiIntent>) -> Result<()> {
     for intent in intents {
-        emit(
-            output,
-            event_envelope(
-                "ui.intent",
-                json!({
-                    "domain": intent.domain,
-                    "action": intent.action,
-                    "payload": intent.payload,
-                }),
-            ),
-        )?;
+        emit_event(output, UiEvent::Intent(intent))?;
     }
     Ok(())
 }
@@ -253,15 +262,12 @@ fn emit_screen_changed_if_needed<W: Write>(
         .map(|screen| screen != screen_model.screen())
         .unwrap_or(true)
     {
-        emit(
+        emit_event(
             output,
-            event_envelope(
-                "ui.screen_changed",
-                json!({
-                    "screen": screen_model.screen().as_str(),
-                    "title": screen_model_title(screen_model),
-                }),
-            ),
+            UiEvent::ScreenChanged(UiScreenChanged {
+                screen: screen_model.screen().as_str().to_string(),
+                title: screen_model_title(screen_model).to_string(),
+            }),
         )?;
         *last_active_screen = Some(screen_model.screen());
     }
@@ -289,20 +295,5 @@ fn screen_model_title(model: &ScreenModel) -> &str {
         | ScreenModel::InCall(call) => &call.title,
         ScreenModel::Power(power) => &power.title,
         ScreenModel::Loading(overlay) | ScreenModel::Error(overlay) => &overlay.title,
-    }
-}
-
-fn parse_input_action(payload: &serde_json::Value) -> Result<InputAction> {
-    let action = payload
-        .get("action")
-        .and_then(|value| value.as_str())
-        .unwrap_or("");
-    match action {
-        "advance" => Ok(InputAction::Advance),
-        "select" => Ok(InputAction::Select),
-        "back" => Ok(InputAction::Back),
-        "ptt_press" => Ok(InputAction::PttPress),
-        "ptt_release" => Ok(InputAction::PttRelease),
-        value => bail!("unknown UI input action {value:?}"),
     }
 }

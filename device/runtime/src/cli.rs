@@ -8,12 +8,12 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use serde_json::json;
+use yoyopod_protocol::ui::{RuntimeSnapshot, UiCommand};
 
 use crate::config::{resolve_worker_program_for_config_dir, RuntimeConfig};
 use crate::logging::{
     log_marker, remove_pid_file, shutdown_marker, startup_marker, write_pid_file,
 };
-use crate::protocol::WorkerEnvelope;
 use crate::runtime_loop::RuntimeLoop;
 use crate::state::{RuntimeState, WorkerDomain, WorkerState};
 use crate::worker::{WorkerSpec, WorkerSupervisor};
@@ -292,10 +292,12 @@ fn install_ctrlc_handler() -> Result<Arc<AtomicBool>> {
 }
 
 fn send_startup_commands(workers: &mut WorkerSupervisor, config: &RuntimeConfig) {
-    workers.send_command(
+    let _ = workers.send_envelope(
         WorkerDomain::Ui,
-        "ui.set_backlight",
-        json!({"brightness": config.ui.brightness}),
+        UiCommand::SetBacklight {
+            brightness: config.ui.brightness as f32,
+        }
+        .into_envelope(),
     );
     workers.send_command(WorkerDomain::Cloud, "cloud.health", json!({}));
     workers.send_command(
@@ -322,7 +324,8 @@ fn send_startup_commands(workers: &mut WorkerSupervisor, config: &RuntimeConfig)
 }
 
 fn send_initial_runtime_snapshot(workers: &mut WorkerSupervisor, state: &RuntimeState) {
-    let envelope =
-        WorkerEnvelope::command("ui.runtime_snapshot", None, state.ui_snapshot_payload());
+    let snapshot = RuntimeSnapshot::from_payload(&state.ui_snapshot_payload())
+        .expect("runtime UI snapshot payload must satisfy shared protocol");
+    let envelope = UiCommand::RuntimeSnapshot(snapshot).into_envelope();
     let _ = workers.send_envelope(WorkerDomain::Ui, envelope);
 }
