@@ -54,7 +54,9 @@ or command input is interpreted as typed `InputAction`. Domain actions leave
 the UI worker as typed `UiIntent` variants for the runtime to route. Unknown or
 malformed UI commands produce a typed `ui.error` event instead of being ignored.
 Explicit `ui.input_action` commands are echoed as typed `ui.input` events with
-method `command`. Clean shutdown completion is reported through
+method `command`. Polled hardware input is also routed through `UiRuntime`, so
+button events and PTT events always surface as typed input and typed intents
+when the active screen owns an action. Clean shutdown completion is reported through
 `ui.shutdown_complete` for both explicit stop commands and runtime-manager stdin
 EOF.
 
@@ -69,6 +71,7 @@ RuntimeSnapshot
   -> app::UiRuntime navigation/preemption/focus
   -> presentation model builder
   -> ScreenModel
+  -> screen registry scene/controller metadata
   -> NativeSceneRenderer
   -> RustSceneBridge
   -> screen controller
@@ -83,13 +86,30 @@ the RGB565 target that LVGL flush callbacks write into before the display
 driver sends pixels to hardware or mock display surfaces. It is not a second
 app layout engine.
 
+`presentation::registry` is the canonical screen metadata table for model kind,
+generic controller kind, native controller kind, focus policy, navigation
+policy, and render/native scene identity. LVGL controllers are selected through
+that registry and wrapped by typed controller adapters so each controller
+declares the exact view model it accepts.
+
+`presentation::transitions` owns typed transition state. `ui.animate` starts a
+transition in `UiRuntime`, ticks advance it, and active transitions mark the UI
+dirty until they complete. Controllers continue to sync current view state
+rather than owning animation state directly.
+
+Checked-in RON assets under `device/ui/assets/` provide the current extracted
+layout/theme role data. The native facade parses and validates those assets at
+startup, rejects missing, duplicate, or unknown covered roles, and uses covered
+asset entries before falling back to the remaining legacy match tables. Full
+layout/theme extraction is still in progress.
+
 ## Native Boundary
 
 The only C dependency in this domain is upstream LVGL 9.5, built from the
 pinned source through `device/ui/native/lvgl`.
 
 - YoYoPod screen state and scene controllers are Rust.
-- YoYoPod LVGL FFI declarations are in `device/ui/src/lvgl/sys.rs`.
+- YoYoPod LVGL FFI declarations are in `device/ui/src/lvgl/ffi.rs`.
 - YoYoPod LVGL facade and unsafe native calls are contained in
   `device/ui/src/lvgl/native_backend.rs`.
 - YoYoPod-owned C scene or shim code is not part of the current UI domain.
