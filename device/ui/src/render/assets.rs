@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 use thiserror::Error;
@@ -48,6 +48,39 @@ pub struct ThemeRole {
     pub fill_rgb: Option<u32>,
     pub text_rgb: Option<u32>,
     pub opacity: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderAssets {
+    layouts: BTreeMap<String, LayoutRole>,
+    theme: BTreeMap<String, ThemeRole>,
+}
+
+impl RenderAssets {
+    pub fn layout_role(&self, role: &str) -> Option<&LayoutRole> {
+        self.layouts.get(role)
+    }
+
+    pub fn theme_role(&self, role: &str) -> Option<&ThemeRole> {
+        self.theme.get(role)
+    }
+}
+
+pub fn load_render_assets() -> Result<RenderAssets, RenderAssetError> {
+    let layouts = parse_layout_asset()?;
+    let theme = parse_theme_asset()?;
+    Ok(RenderAssets {
+        layouts: layouts
+            .roles
+            .into_iter()
+            .map(|role| (role.role.clone(), role))
+            .collect(),
+        theme: theme
+            .roles
+            .into_iter()
+            .map(|role| (role.role.clone(), role))
+            .collect(),
+    })
 }
 
 pub fn parse_layout_asset() -> Result<LayoutAsset, RenderAssetError> {
@@ -144,5 +177,20 @@ mod tests {
             .roles
             .iter()
             .any(|role| role.role == roles::OVERLAY_TITLE));
+    }
+
+    #[test]
+    fn render_assets_provide_role_lookups() {
+        let assets = load_render_assets().unwrap();
+        assert_eq!(
+            assets.layout_role(roles::OVERLAY_TITLE).map(|role| role.y),
+            Some(96)
+        );
+        assert_eq!(
+            assets
+                .theme_role(roles::OVERLAY_SUBTITLE)
+                .and_then(|role| role.text_rgb),
+            Some(crate::lvgl::theme::MUTED_RGB)
+        );
     }
 }

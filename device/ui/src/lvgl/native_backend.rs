@@ -11,6 +11,7 @@ use crate::lvgl::hub_icon_assets;
 use crate::lvgl::sys;
 use crate::lvgl::theme::{self, WidgetStyle};
 use crate::lvgl::{LvglFacade, WidgetId};
+use crate::render::assets::{self, RenderAssets};
 
 const DEFAULT_WIDTH: i32 = 240;
 const DEFAULT_HEIGHT: i32 = 280;
@@ -61,11 +62,13 @@ pub struct NativeLvglFacade {
     hub_dot_count: usize,
     list_row_count: usize,
     power_row_count: usize,
+    render_assets: RenderAssets,
 }
 
 impl NativeLvglFacade {
     pub fn open(explicit_source: Option<&Path>) -> Result<Self> {
         validate_explicit_source_dir(explicit_source)?;
+        let render_assets = assets::load_render_assets().context("loading LVGL render assets")?;
         unsafe {
             sys::lv_init();
         }
@@ -83,6 +86,7 @@ impl NativeLvglFacade {
             hub_dot_count: 0,
             list_row_count: 0,
             power_row_count: 0,
+            render_assets,
         })
     }
 
@@ -221,7 +225,7 @@ impl NativeLvglFacade {
             .map(|(width, height)| (width as i32, height as i32))
             .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
         Self::reset_style_raw(blank);
-        Self::apply_style_raw(blank, theme::style_for_role("root"));
+        Self::apply_style_raw(blank, self.style_for_role("root"));
         Self::apply_layout_raw(
             blank,
             Layout {
@@ -258,6 +262,15 @@ impl NativeLvglFacade {
             sys::lv_obj_set_pos(obj.as_ptr(), layout.x, layout.y);
             sys::lv_obj_set_size(obj.as_ptr(), layout.width.max(1), layout.height.max(1));
         }
+    }
+
+    fn layout_for_role_asset(&self, role: &'static str) -> Option<Layout> {
+        self.render_assets.layout_role(role).map(|layout| Layout {
+            x: layout.x,
+            y: layout.y,
+            width: layout.width,
+            height: layout.height,
+        })
     }
 
     fn apply_role_tuning_raw(obj: NonNull<sys::lv_obj_t>, role: &'static str) {
@@ -758,6 +771,10 @@ impl NativeLvglFacade {
         let parent_role = parent
             .and_then(|widget| self.widgets.get(&widget).map(|node| node.role))
             .unwrap_or("root");
+
+        if let Some(layout) = self.layout_for_role_asset(role) {
+            return Ok(layout);
+        }
 
         let layout = match role {
             "status_bar" => Layout {
@@ -1410,6 +1427,33 @@ impl NativeLvglFacade {
 
         Ok(layout)
     }
+
+    fn style_for_role(&self, role: &'static str) -> WidgetStyle {
+        self.render_assets
+            .theme_role(role)
+            .map(|theme_role| {
+                let mut style = theme::style_for_role(role);
+                if let Some(fill_rgb) = theme_role.fill_rgb {
+                    style.bg_color = Some(fill_rgb);
+                }
+                if let Some(text_rgb) = theme_role.text_rgb {
+                    style.text_color = Some(text_rgb);
+                }
+                if let Some(opacity) = theme_role.opacity {
+                    style.bg_opa = opacity;
+                }
+                style
+            })
+            .unwrap_or_else(|| theme::style_for_role(role))
+    }
+
+    fn style_for_selected_role(&self, role: &'static str, selected: bool) -> WidgetStyle {
+        if selected {
+            theme::style_for_selected_role(role, true)
+        } else {
+            self.style_for_role(role)
+        }
+    }
 }
 
 impl LvglFacade for NativeLvglFacade {
@@ -1418,7 +1462,7 @@ impl LvglFacade for NativeLvglFacade {
         let obj = NonNull::new(obj).ok_or_else(|| anyhow!("LVGL root widget creation failed"))?;
         let layout = self.layout_for_root();
         Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, theme::style_for_role("root"));
+        Self::apply_style_raw(obj, self.style_for_role("root"));
         Self::apply_layout_raw(obj, layout);
         unsafe {
             sys::lv_screen_load(obj.as_ptr());
@@ -1438,7 +1482,7 @@ impl LvglFacade for NativeLvglFacade {
             .ok_or_else(|| anyhow!("LVGL container creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
         Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, theme::style_for_role(role));
+        Self::apply_style_raw(obj, self.style_for_role(role));
         Self::apply_layout_raw(obj, layout);
         Self::apply_role_tuning_raw(obj, role);
         Ok(self.register_widget(obj, WidgetKind::Container, role, Some(parent), layout))
@@ -1458,7 +1502,7 @@ impl LvglFacade for NativeLvglFacade {
             NonNull::new(obj).ok_or_else(|| anyhow!("LVGL label creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
         Self::reset_style_raw(obj);
-        Self::apply_style_raw(obj, theme::style_for_role(role));
+        Self::apply_style_raw(obj, self.style_for_role(role));
         Self::apply_layout_raw(obj, layout);
         Self::apply_role_tuning_raw(obj, role);
         let kind = if is_image {
@@ -1505,12 +1549,12 @@ impl LvglFacade for NativeLvglFacade {
     }
 
     fn set_selected(&mut self, _widget: WidgetId, _selected: bool) -> Result<()> {
-        let node = self.widget_node_mut(_widget)?;
-        Self::apply_style_raw(
-            node.obj,
-            theme::style_for_selected_role(node.role, _selected),
-        );
-        Self::apply_layout_raw(node.obj, node.layout);
+        let (obj, role, layout) = {
+            let node = self.widget_node_mut(_widget)?;
+            (node.obj, node.role, node.layout)
+        };
+        Self::apply_style_raw(obj, self.style_for_selected_role(role, _selected));
+        Self::apply_layout_raw(obj, layout);
         Ok(())
     }
 
