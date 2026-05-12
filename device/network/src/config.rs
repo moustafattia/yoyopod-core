@@ -9,6 +9,9 @@ use serde_yaml::{Mapping, Value};
 const NETWORK_CELLULAR_CONFIG: &str = "network/cellular.yaml";
 const DEVICE_TREE_MODEL_PATH: &str = "/proc/device-tree/model";
 const DEVICE_TREE_COMPATIBLE_PATH: &str = "/proc/device-tree/compatible";
+const SIM7600_PORT_ALIAS_PREFIX: &str = "sim7600:";
+const SERIAL_BY_ID_DIR: &str = "/dev/serial/by-id";
+const SERIAL_BY_PATH_DIR: &str = "/dev/serial/by-path";
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -171,6 +174,8 @@ fn apply_env_overrides(config: &mut NetworkHostConfig) -> Result<()> {
             .parse()
             .with_context(|| format!("parse YOYOPOD_MODEM_PPP_TIMEOUT={value}"))?;
     }
+    config.serial_port = resolve_serial_port_alias(&config.serial_port);
+    config.ppp_port = resolve_serial_port_alias(&config.ppp_port);
     Ok(())
 }
 
@@ -189,5 +194,128 @@ fn parse_bool(name: &str, value: &str) -> Result<bool> {
         "1" | "true" | "yes" | "on" => Ok(true),
         "0" | "false" | "no" | "off" => Ok(false),
         _ => anyhow::bail!("invalid boolean for {name}: {value}"),
+    }
+}
+
+fn resolve_serial_port_alias(value: &str) -> String {
+    let value = value.trim();
+    let Some(interface) = value.strip_prefix(SIM7600_PORT_ALIAS_PREFIX) else {
+        return value.to_string();
+    };
+    resolve_sim7600_interface_port(interface).unwrap_or_else(|| value.to_string())
+}
+
+fn resolve_sim7600_interface_port(interface: &str) -> Option<String> {
+    resolve_sim7600_interface_port_with_dirs(
+        interface,
+        Path::new(SERIAL_BY_ID_DIR),
+        Path::new(SERIAL_BY_PATH_DIR),
+    )
+}
+
+fn resolve_sim7600_interface_port_with_dirs(
+    interface: &str,
+    by_id_dir: &Path,
+    by_path_dir: &Path,
+) -> Option<String> {
+    let interface = normalize_sim7600_interface(interface)?;
+    find_named_serial_port(by_id_dir, |name| {
+        name.contains("SimTech") && name.contains(&format!("-{interface}-port0"))
+    })
+    .or_else(|| {
+        let index = interface
+            .strip_prefix("if")
+            .and_then(|value| value.parse::<u8>().ok())?;
+        let suffix = format!(":1.{index}-port0");
+        find_named_serial_port(by_path_dir, |name| name.ends_with(&suffix))
+    })
+    .or_else(|| {
+        let index = interface
+            .strip_prefix("if")
+            .and_then(|value| value.parse::<u8>().ok())?;
+        Some(format!("/dev/ttyUSB{index}"))
+    })
+}
+
+fn normalize_sim7600_interface(interface: &str) -> Option<String> {
+    let interface = interface.trim().to_ascii_lowercase();
+    let numeric = interface.strip_prefix("if")?;
+    if numeric.len() != 2 || !numeric.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("if{numeric}"))
+}
+
+fn find_named_serial_port<F>(directory: &Path, matches: F) -> Option<String>
+where
+    F: Fn(&str) -> bool,
+{
+    let mut candidates = fs::read_dir(directory)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            matches(&name).then(|| entry.path())
+        })
+        .collect::<Vec<_>>();
+    candidates.sort();
+    candidates
+        .into_iter()
+        .next()
+        .map(|path| path.display().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sim7600_alias_prefers_stable_by_id_interface_link() {
+        let temp = tempfile::tempdir().unwrap();
+        let by_id = temp.path().join("by-id");
+        let by_path = temp.path().join("by-path");
+        fs::create_dir_all(&by_id).unwrap();
+        fs::create_dir_all(&by_path).unwrap();
+        fs::write(
+            by_id.join(
+                "usb-SimTech__Incorporated_SimTech__Incorporated_0123456789ABCDEF-if02-port0",
+            ),
+            "",
+        )
+        .unwrap();
+        fs::write(by_path.join("platform-3f980000.usb-usb-0:1:1.2-port0"), "").unwrap();
+
+        let resolved = resolve_sim7600_interface_port_with_dirs("if02", &by_id, &by_path).unwrap();
+
+        assert!(resolved.ends_with("0123456789ABCDEF-if02-port0"));
+    }
+
+    #[test]
+    fn sim7600_alias_falls_back_to_by_path_interface_link() {
+        let temp = tempfile::tempdir().unwrap();
+        let by_id = temp.path().join("by-id");
+        let by_path = temp.path().join("by-path");
+        fs::create_dir_all(&by_id).unwrap();
+        fs::create_dir_all(&by_path).unwrap();
+        fs::write(by_path.join("platform-3f980000.usb-usb-0:1:1.3-port0"), "").unwrap();
+
+        let resolved = resolve_sim7600_interface_port_with_dirs("if03", &by_id, &by_path).unwrap();
+
+        assert!(resolved.ends_with("1.3-port0"));
+    }
+
+    #[test]
+    fn sim7600_alias_falls_back_to_legacy_tty_index() {
+        let temp = tempfile::tempdir().unwrap();
+        let by_id = temp.path().join("by-id");
+        let by_path = temp.path().join("by-path");
+        fs::create_dir_all(&by_id).unwrap();
+        fs::create_dir_all(&by_path).unwrap();
+
+        assert_eq!(
+            resolve_sim7600_interface_port_with_dirs("if02", &by_id, &by_path).unwrap(),
+            "/dev/ttyUSB2"
+        );
     }
 }

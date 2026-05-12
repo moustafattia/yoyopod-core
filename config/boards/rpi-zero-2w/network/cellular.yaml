@@ -2,4 +2,8 @@
 
 network:
   enabled: true
+  # SIM7600 enumerates by USB interface, while ttyUSB numbers can shift after
+  # reconnects. if02 is the AT command interface; if03 is used for PPP data.
+  serial_port: sim7600:if02
+  ppp_port: sim7600:if03
   gps_enabled: true
