@@ -2,8 +2,6 @@ pub mod controllers;
 #[cfg(feature = "native-lvgl")]
 pub(crate) mod ffi;
 #[cfg(feature = "native-lvgl")]
-mod hub_icon_assets;
-#[cfg(feature = "native-lvgl")]
 mod native_backend;
 pub mod primitives;
 pub(crate) mod roles;

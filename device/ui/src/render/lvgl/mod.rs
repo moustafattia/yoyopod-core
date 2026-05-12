@@ -2,6 +2,8 @@ use std::path::Path;
 
 use anyhow::Result;
 
+#[cfg(feature = "native-lvgl")]
+pub(crate) mod icons;
 pub mod layout;
 pub mod theme;
 

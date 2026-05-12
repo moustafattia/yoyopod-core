@@ -8,10 +8,10 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::framebuffer::Framebuffer;
 use crate::lvgl::ffi;
-use crate::lvgl::hub_icon_assets;
 use crate::lvgl::theme::{self, WidgetStyle};
 use crate::lvgl::{LvglFacade, WidgetId};
 use crate::render::assets::{self, RenderAssets};
+use crate::render::lvgl::icons;
 use crate::render::lvgl::layout::LayoutResolver;
 use crate::render::lvgl::theme::ThemeResolver;
 
@@ -1546,7 +1546,7 @@ impl LvglFacade for NativeLvglFacade {
     fn set_icon(&mut self, widget: WidgetId, icon_key: &str) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
         if node._kind == WidgetKind::Image {
-            let descriptor = hub_icon_assets::descriptor_for_key(icon_key);
+            let descriptor = icons::descriptor_for_key(icon_key);
             unsafe {
                 ffi::lv_image_set_src(
                     node.obj.as_ptr(),
