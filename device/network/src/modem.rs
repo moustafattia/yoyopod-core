@@ -299,13 +299,15 @@ impl ModemController for Sim7600ModemController {
 
     fn reset(&mut self) -> Result<(), ModemError> {
         let _ = self.stop_ppp();
-        if self.transport.is_open() {
+        let reset_result = if self.transport.is_open() {
             let mut at = self.at();
-            reset_session(&mut at)?;
-        }
+            reset_session(&mut at)
+        } else {
+            Ok(())
+        };
         self.transport.close();
         self.active_ppp = None;
-        Ok(())
+        reset_result
     }
 }
 
