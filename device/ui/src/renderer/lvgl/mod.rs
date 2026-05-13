@@ -199,13 +199,24 @@ impl LvglFacade for NativeLvglFacade {
 
     fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
         let parent_obj = self.widget_obj(parent)?;
-        let (obj, kind) = factory::create_label_object(parent_obj, role)?;
+        let obj = factory::create_label_object(parent_obj, role)?;
         let layout = self.next_role_layout(Some(parent), role)?;
         styling::reset_style_raw(obj);
         styling::apply_style_raw(obj, self.style_for_role(role)?);
         Self::apply_layout_raw(obj, layout);
         styling::apply_role_tuning_raw(obj, role);
-        Ok(self.register_widget(obj, kind, role, Some(parent), layout))
+        Ok(self.register_widget(obj, WidgetKind::Label, role, Some(parent), layout))
+    }
+
+    fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+        let parent_obj = self.widget_obj(parent)?;
+        let obj = factory::create_image_object(parent_obj, role)?;
+        let layout = self.next_role_layout(Some(parent), role)?;
+        styling::reset_style_raw(obj);
+        styling::apply_style_raw(obj, self.style_for_role(role)?);
+        Self::apply_layout_raw(obj, layout);
+        styling::apply_role_tuning_raw(obj, role);
+        Ok(self.register_widget(obj, WidgetKind::Image, role, Some(parent), layout))
     }
 
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()> {

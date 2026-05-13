@@ -9,6 +9,8 @@ pub trait LvglFacade {
 
     fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId>;
 
+    fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId>;
+
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()>;
 
     fn set_selected(&mut self, widget: WidgetId, selected: bool) -> Result<()>;
@@ -88,6 +90,10 @@ where
 
     fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
         (**self).create_label(parent, role)
+    }
+
+    fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+        (**self).create_image(parent, role)
     }
 
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()> {

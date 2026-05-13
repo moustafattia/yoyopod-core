@@ -122,7 +122,8 @@ fn create_widget(
     let role = role.ok_or_else(|| anyhow!("LVGL mutation create missing widget role"))?;
     let widget = match kind {
         ElementKind::Container | ElementKind::Progress => facade.create_container(parent, role)?,
-        ElementKind::Label | ElementKind::Image => facade.create_label(parent, role)?,
+        ElementKind::Label => facade.create_label(parent, role)?,
+        ElementKind::Image => facade.create_image(parent, role)?,
     };
     registry.bind(node, widget);
     Ok(())

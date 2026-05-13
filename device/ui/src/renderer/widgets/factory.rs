@@ -4,8 +4,6 @@ use std::ptr::{self, NonNull};
 use anyhow::{anyhow, Result};
 
 use crate::renderer::lvgl::ffi;
-use crate::renderer::widgets::registry::WidgetKind;
-
 pub(crate) fn create_root_object() -> Result<NonNull<ffi::lv_obj_t>> {
     non_null(
         unsafe { ffi::lv_obj_create(ptr::null_mut()) },
@@ -26,18 +24,7 @@ pub(crate) fn create_container_object(
 pub(crate) fn create_label_object(
     parent: NonNull<ffi::lv_obj_t>,
     role: &'static str,
-) -> Result<(NonNull<ffi::lv_obj_t>, WidgetKind)> {
-    if is_image_role(role) {
-        let obj = non_null(
-            unsafe { ffi::lv_image_create(parent.as_ptr()) },
-            format!("image label for {role}"),
-        )?;
-        unsafe {
-            ffi::lv_obj_center(obj.as_ptr());
-        }
-        return Ok((obj, WidgetKind::Image));
-    }
-
+) -> Result<NonNull<ffi::lv_obj_t>> {
     let obj = non_null(
         unsafe { ffi::lv_label_create(parent.as_ptr()) },
         format!("label for {role}"),
@@ -46,11 +33,21 @@ pub(crate) fn create_label_object(
     unsafe {
         ffi::lv_label_set_text(obj.as_ptr(), empty.as_ptr());
     }
-    Ok((obj, WidgetKind::Label))
+    Ok(obj)
 }
 
-fn is_image_role(role: &'static str) -> bool {
-    matches!(role, "hub_icon" | "ask_icon")
+pub(crate) fn create_image_object(
+    parent: NonNull<ffi::lv_obj_t>,
+    role: &'static str,
+) -> Result<NonNull<ffi::lv_obj_t>> {
+    let obj = non_null(
+        unsafe { ffi::lv_image_create(parent.as_ptr()) },
+        format!("image for {role}"),
+    )?;
+    unsafe {
+        ffi::lv_obj_center(obj.as_ptr());
+    }
+    Ok(obj)
 }
 
 fn non_null(
