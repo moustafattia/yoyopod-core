@@ -1,9 +1,9 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::animation::TransitionSampler;
-use crate::presentation::view_models::{ListScreenModel, ScreenModel};
+use crate::presentation::view_models::ListScreenModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -78,19 +78,7 @@ impl ListenController {
 }
 
 impl TypedScreenController for ListenController {
-    const SUPPORTS_TRANSITIONS: bool = true;
-
     type Model<'a> = &'a ListScreenModel;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        let ScreenModel::Listen(list) = model else {
-            bail!(
-                "listen controller received non-listen screen model: {}",
-                model.screen().as_str()
-            );
-        };
-        Ok(list)
-    }
 
     fn sync_model(
         &mut self,

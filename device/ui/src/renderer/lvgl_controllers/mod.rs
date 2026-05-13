@@ -1,7 +1,6 @@
 mod ask;
 mod call;
 mod hub;
-mod list;
 mod listen;
 mod now_playing;
 mod overlay;
@@ -15,13 +14,11 @@ mod talk_actions;
 use anyhow::Result;
 
 use crate::animation::TransitionSampler;
-use crate::presentation::view_models::ScreenModel;
 use crate::renderer::widgets::LvglFacade;
 
 pub use ask::AskController;
 pub use call::{CallController, CallControllerModel};
 pub use hub::HubController;
-pub use list::ListController;
 pub use listen::ListenController;
 pub use now_playing::NowPlayingController;
 pub use overlay::OverlayController;
@@ -31,13 +28,9 @@ pub use talk::TalkController;
 pub use talk_actions::TalkActionsController;
 
 pub trait TypedScreenController {
-    const SUPPORTS_TRANSITIONS: bool = false;
-
     type Model<'a>
     where
         Self: 'a;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>>;
 
     fn sync_model(
         &mut self,

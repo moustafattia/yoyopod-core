@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::presentation::view_models::{OverlayViewModel, ScreenModel};
+use crate::presentation::view_models::OverlayViewModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -38,10 +38,6 @@ impl OverlayController {
 impl TypedScreenController for OverlayController {
     type Model<'a> = &'a OverlayViewModel;
 
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        overlay_model(model)
-    }
-
     fn sync_model(
         &mut self,
         facade: &mut dyn LvglFacade,
@@ -75,15 +71,5 @@ impl TypedScreenController for OverlayController {
             facade.destroy(root)?;
         }
         Ok(())
-    }
-}
-
-fn overlay_model(model: &ScreenModel) -> Result<&OverlayViewModel> {
-    match model {
-        ScreenModel::Loading(overlay) | ScreenModel::Error(overlay) => Ok(overlay),
-        _ => bail!(
-            "overlay controller received non-overlay screen model: {}",
-            model.screen().as_str()
-        ),
     }
 }

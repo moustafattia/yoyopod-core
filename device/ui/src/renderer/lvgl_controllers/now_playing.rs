@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::presentation::view_models::{NowPlayingViewModel, ScreenModel};
+use crate::presentation::view_models::NowPlayingViewModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -80,10 +80,6 @@ impl NowPlayingController {
 
 impl TypedScreenController for NowPlayingController {
     type Model<'a> = &'a NowPlayingViewModel;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        now_playing_model(model)
-    }
 
     fn sync_model(
         &mut self,
@@ -163,15 +159,5 @@ fn playback_state_variant(state_text: &str) -> &'static str {
         "stopped" => "now_playing_stopped",
         "offline" => "now_playing_offline",
         _ => "now_playing_playing",
-    }
-}
-
-fn now_playing_model(model: &ScreenModel) -> Result<&NowPlayingViewModel> {
-    match model {
-        ScreenModel::NowPlaying(now_playing) => Ok(now_playing),
-        _ => bail!(
-            "now-playing controller received non-now-playing screen model: {}",
-            model.screen().as_str()
-        ),
     }
 }

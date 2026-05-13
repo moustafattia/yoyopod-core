@@ -1,10 +1,10 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::listen::sync_rows;
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::animation::TransitionSampler;
-use crate::presentation::view_models::{ListScreenModel, ScreenModel};
+use crate::presentation::view_models::ListScreenModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 use yoyopod_protocol::ui::UiScreen;
 
@@ -86,13 +86,7 @@ impl PlaylistController {
 }
 
 impl TypedScreenController for PlaylistController {
-    const SUPPORTS_TRANSITIONS: bool = true;
-
     type Model<'a> = PlaylistControllerModel<'a>;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        playlist_model(model)
-    }
 
     fn sync_model(
         &mut self,
@@ -162,22 +156,6 @@ impl TypedScreenController for PlaylistController {
             facade.destroy(root)?;
         }
         Ok(())
-    }
-}
-
-fn playlist_model(model: &ScreenModel) -> Result<PlaylistControllerModel<'_>> {
-    match model {
-        ScreenModel::Playlists(list)
-        | ScreenModel::RecentTracks(list)
-        | ScreenModel::Contacts(list)
-        | ScreenModel::CallHistory(list) => Ok(PlaylistControllerModel {
-            screen: model.screen(),
-            list,
-        }),
-        _ => bail!(
-            "playlist controller received non-playlist screen model: {}",
-            model.screen().as_str()
-        ),
     }
 }
 

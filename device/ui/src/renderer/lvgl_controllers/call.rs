@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::presentation::view_models::{CallViewModel, ScreenModel};
+use crate::presentation::view_models::CallViewModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 use yoyopod_protocol::ui::UiScreen;
 
@@ -78,10 +78,6 @@ impl CallController {
 impl TypedScreenController for CallController {
     type Model<'a> = CallControllerModel<'a>;
 
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        call_model(model)
-    }
-
     fn sync_model(
         &mut self,
         facade: &mut dyn LvglFacade,
@@ -149,21 +145,6 @@ impl TypedScreenController for CallController {
             facade.destroy(root)?;
         }
         Ok(())
-    }
-}
-
-fn call_model(model: &ScreenModel) -> Result<CallControllerModel<'_>> {
-    match model {
-        ScreenModel::IncomingCall(call)
-        | ScreenModel::OutgoingCall(call)
-        | ScreenModel::InCall(call) => Ok(CallControllerModel {
-            screen: model.screen(),
-            call,
-        }),
-        _ => bail!(
-            "call controller received non-call screen model: {}",
-            model.screen().as_str()
-        ),
     }
 }
 

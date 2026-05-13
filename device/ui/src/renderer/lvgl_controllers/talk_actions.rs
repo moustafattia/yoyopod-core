@@ -1,10 +1,10 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 mod layout;
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::presentation::view_models::{ScreenModel, TalkActionsViewModel};
+use crate::presentation::view_models::TalkActionsViewModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 
 const ACCENT: u32 = 0x00D4FF;
@@ -74,10 +74,6 @@ impl TalkActionsController {
 impl TypedScreenController for TalkActionsController {
     type Model<'a> = &'a TalkActionsViewModel;
 
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        talk_actions_model(model)
-    }
-
     fn sync_model(
         &mut self,
         facade: &mut dyn LvglFacade,
@@ -127,15 +123,6 @@ impl TypedScreenController for TalkActionsController {
             facade.destroy(root)?;
         }
         Ok(())
-    }
-}
-fn talk_actions_model(model: &ScreenModel) -> Result<&TalkActionsViewModel> {
-    match model {
-        ScreenModel::TalkContact(actions) | ScreenModel::VoiceNote(actions) => Ok(actions),
-        _ => bail!(
-            "talk-actions controller received non-talk-action screen model: {}",
-            model.screen().as_str()
-        ),
     }
 }
 fn monogram(text: &str) -> String {

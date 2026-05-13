@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::presentation::view_models::{AskViewModel, ScreenModel};
+use crate::presentation::view_models::AskViewModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -52,10 +52,6 @@ impl AskController {
 
 impl TypedScreenController for AskController {
     type Model<'a> = &'a AskViewModel;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        ask_model(model)
-    }
 
     fn sync_model(
         &mut self,
@@ -128,15 +124,5 @@ fn ask_state_variant(title: &str) -> &'static str {
         "Thinking" => "ask_thinking",
         "Ask" => "ask_idle",
         _ => "ask_reply",
-    }
-}
-
-fn ask_model(model: &ScreenModel) -> Result<&AskViewModel> {
-    match model {
-        ScreenModel::Ask(ask) => Ok(ask),
-        _ => bail!(
-            "ask controller received non-ask screen model: {}",
-            model.screen().as_str()
-        ),
     }
 }

@@ -1,10 +1,10 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::animation::{TransitionProperty, TransitionSampler};
 use crate::presentation::screens::hub;
-use crate::presentation::view_models::{HubViewModel, ScreenModel};
+use crate::presentation::view_models::HubViewModel;
 use crate::renderer::widgets::roles;
 use crate::renderer::widgets::{LvglFacade, WidgetId};
 
@@ -57,19 +57,7 @@ impl HubController {
 }
 
 impl TypedScreenController for HubController {
-    const SUPPORTS_TRANSITIONS: bool = true;
-
     type Model<'a> = &'a HubViewModel;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        let ScreenModel::Hub(model) = model else {
-            bail!(
-                "hub controller received non-hub screen model: {}",
-                model.screen().as_str()
-            );
-        };
-        Ok(model)
-    }
 
     fn sync_model(
         &mut self,

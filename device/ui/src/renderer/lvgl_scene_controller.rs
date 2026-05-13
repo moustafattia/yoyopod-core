@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::animation::TransitionSampler;
 use crate::presentation::view_models::ScreenModel;
-use crate::renderer::screens::{
+use crate::renderer::lvgl_controllers::{
     AskController, CallController, CallControllerModel, HubController, ListenController,
     NowPlayingController, OverlayController, PlaylistController, PlaylistControllerModel,
     PowerController, TalkActionsController, TalkController, TypedScreenController,

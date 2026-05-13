@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::presentation::view_models::{PowerViewModel, ScreenModel};
+use crate::presentation::view_models::PowerViewModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -66,10 +66,6 @@ impl PowerController {
 
 impl TypedScreenController for PowerController {
     type Model<'a> = &'a PowerViewModel;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        power_model(model)
-    }
 
     fn sync_model(
         &mut self,
@@ -145,15 +141,5 @@ impl TypedScreenController for PowerController {
             facade.destroy(root)?;
         }
         Ok(())
-    }
-}
-
-fn power_model(model: &ScreenModel) -> Result<&PowerViewModel> {
-    match model {
-        ScreenModel::Power(power) => Ok(power),
-        _ => bail!(
-            "power controller received non-power screen model: {}",
-            model.screen().as_str()
-        ),
     }
 }

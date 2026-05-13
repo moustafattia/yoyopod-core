@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
-use crate::presentation::view_models::{ListScreenModel, ScreenModel};
+use crate::presentation::view_models::ListScreenModel;
 use crate::renderer::widgets::{roles, LvglFacade, WidgetId};
 
 #[derive(Default)]
@@ -51,16 +51,6 @@ impl TalkController {
 
 impl TypedScreenController for TalkController {
     type Model<'a> = &'a ListScreenModel;
-
-    fn model<'a>(model: &'a ScreenModel) -> Result<Self::Model<'a>> {
-        let ScreenModel::Talk(list) = model else {
-            bail!(
-                "talk controller received non-talk screen model: {}",
-                model.screen().as_str()
-            );
-        };
-        Ok(list)
-    }
 
     fn sync_model(
         &mut self,
