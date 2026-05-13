@@ -4,7 +4,11 @@ use yoyopod_protocol::ui::{
 
 use crate::animation;
 use crate::components;
+use crate::components::widgets::{footer_bar, status_bar, FooterBarProps, StatusBarProps};
+use crate::engine::{Element, Key};
 use crate::render_contract::DirtyRegion;
+use crate::render_contract::ElementKind;
+use crate::roles;
 use crate::router::history::HistoryEntry;
 use crate::scene::{defaults_for, GlobalClock, HudScene, SceneGraph, SceneId};
 
@@ -127,10 +131,7 @@ impl UiRuntime {
         chrome.status.time = elapsed_time_label(now_ms);
         let modal_stack = active.modal.clone().into_iter().collect();
         SceneGraph {
-            hud: HudScene {
-                status: chrome.status,
-                footer_text: chrome.footer_text,
-            },
+            hud: hud_scene(chrome.status, chrome.footer_text),
             active,
             history: self
                 .screen_stack
@@ -209,4 +210,22 @@ fn elapsed_time_label(now_ms: u64) -> String {
     let minutes = (total_seconds / 60).min(99);
     let seconds = total_seconds % 60;
     format!("{minutes:02}:{seconds:02}")
+}
+
+fn hud_scene(status: crate::scene::HudStatus, footer_text: String) -> HudScene {
+    HudScene::new(
+        Element::new(ElementKind::Container, Some(roles::HUD))
+            .key(Key::Static("hud"))
+            .child(status_bar(&StatusBarProps {
+                time: status.time,
+                battery_label: status.battery_label,
+                battery_percent: status.battery_percent,
+                signal_strength: status.signal_strength,
+                network_online: status.network_online,
+            }))
+            .child(footer_bar(&FooterBarProps {
+                text: footer_text,
+                accent: None,
+            })),
+    )
 }

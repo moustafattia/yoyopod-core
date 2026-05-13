@@ -1,7 +1,18 @@
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+use crate::engine::Element;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HudScene {
-    pub status: HudStatus,
-    pub footer_text: String,
+    root: Element,
+}
+
+impl HudScene {
+    pub fn new(root: Element) -> Self {
+        Self { root }
+    }
+
+    pub fn element(&self) -> Element {
+        self.root.clone()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -11,10 +22,4 @@ pub struct HudStatus {
     pub battery_percent: u8,
     pub signal_strength: u8,
     pub network_online: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct FooterBar {
-    pub text: String,
-    pub accent: Option<u32>,
 }
