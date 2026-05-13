@@ -38,7 +38,11 @@ impl Engine {
     pub fn render(&mut self, graph: &SceneGraph, now_ms: u64) -> &[Mutation] {
         self.mutations.clear();
         self.sync_scene_timelines(graph, now_ms);
-        let sampler = TimelineSampler::new(&self.timelines, now_ms, now_ms);
+        let global_ms = graph
+            .global_clock
+            .now_ms
+            .saturating_sub(graph.global_clock.started_ms);
+        let sampler = TimelineSampler::new(&self.timelines, now_ms, global_ms);
         let animation_signature = sampler.quantized_signature();
         let new_tree = flatten::flatten(graph);
         let next_ids = self.reconciler.diff(
