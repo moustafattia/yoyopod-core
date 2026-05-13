@@ -9,6 +9,7 @@ pub(crate) const CARD: &str = "card";
 pub(crate) const CARD_ICON: &str = "card_icon";
 pub(crate) const CARD_SUBTITLE: &str = "card_subtitle";
 pub(crate) const CARD_TITLE: &str = "card_title";
+pub(crate) const CURSOR_DOT: &str = "cursor_dot";
 pub(crate) const CURSOR_DOTS: &str = "cursor_dots";
 pub(crate) const CURSOR_ROW_GLOW: &str = "cursor_row_glow";
 pub(crate) const DECK_BUTTONS: &str = "deck_buttons";

@@ -115,6 +115,7 @@
         (role: "button_icon", x: 24, y: 22, width: 40, height: 24),
         (role: "button_title", x: 8, y: 56, width: 72, height: 16),
         (role: "cursor_dots", x: 94, y: 224, width: 52, height: 8),
+        (role: "cursor_dot", x: 0, y: 2, width: 4, height: 4, repeat_x: Some(10)),
         (role: "cursor_row_glow", x: 12, y: 94, width: 216, height: 40),
         (role: "modal_stack", x: 0, y: 0, width: 240, height: 280),
         (role: "modal", x: 18, y: 82, width: 204, height: 118),

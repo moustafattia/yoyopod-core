@@ -231,6 +231,7 @@ fn required_layout_roles() -> Vec<&'static str> {
         roles::CARD_ICON,
         roles::CARD_SUBTITLE,
         roles::CARD_TITLE,
+        roles::CURSOR_DOT,
         roles::CURSOR_DOTS,
         roles::CURSOR_ROW_GLOW,
         roles::DECK_BUTTONS,
@@ -355,6 +356,7 @@ fn required_theme_roles() -> Vec<&'static str> {
 fn required_selected_theme_roles() -> Vec<&'static str> {
     vec![
         roles::HUB_DOT,
+        roles::CURSOR_DOT,
         roles::LIST_ROW,
         roles::LIST_ROW_SUBTITLE,
         roles::LIST_ROW_TITLE,
