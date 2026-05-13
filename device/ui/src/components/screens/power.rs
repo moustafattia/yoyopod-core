@@ -7,23 +7,25 @@ use crate::scene::{
 };
 
 pub struct PowerProps {
+    pub defaults: SceneDefaults,
     pub pages: Vec<DeckItem>,
     pub focus: usize,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> PowerProps {
+pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize, defaults: SceneDefaults) -> PowerProps {
     PowerProps {
+        defaults,
         pages: pages(snapshot),
         focus,
     }
 }
 
-pub fn scene(props: &PowerProps, defaults: &SceneDefaults) -> Scene {
+pub fn scene(props: &PowerProps) -> Scene {
     let page_count = props.pages.len();
     Scene {
         id: SceneId::new(UiScreen::Power),
-        backdrop: defaults.backdrop(0x3ddd53),
-        stage: defaults.stage,
+        backdrop: props.defaults.backdrop(0x3ddd53),
+        stage: props.defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::Page,
             region: RegionId::ListBody,
@@ -38,9 +40,9 @@ pub fn scene(props: &PowerProps, defaults: &SceneDefaults) -> Scene {
             count: page_count,
             focus: props.focus,
         }),
-        fx: defaults.fx_layer(0x3ddd53),
+        fx: props.defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: defaults.fx_timelines(),
+        timelines: props.defaults.fx_timelines(),
     }
 }
 

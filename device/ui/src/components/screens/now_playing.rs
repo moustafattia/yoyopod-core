@@ -7,22 +7,24 @@ use crate::scene::{
 };
 
 pub struct NowPlayingProps {
+    pub defaults: SceneDefaults,
     pub title: String,
     pub body: String,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot) -> NowPlayingProps {
+pub fn props_from(snapshot: &RuntimeSnapshot, defaults: SceneDefaults) -> NowPlayingProps {
     NowPlayingProps {
+        defaults,
         title: snapshot.music.title.clone(),
         body: now_playing_body(snapshot),
     }
 }
 
-pub fn scene(props: &NowPlayingProps, defaults: &SceneDefaults) -> Scene {
+pub fn scene(props: &NowPlayingProps) -> Scene {
     Scene {
         id: SceneId::new(UiScreen::NowPlaying),
-        backdrop: defaults.backdrop(0x3ddd53),
-        stage: defaults.stage,
+        backdrop: props.defaults.backdrop(0x3ddd53),
+        stage: props.defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::Page,
             region: RegionId::ListBody,
@@ -40,9 +42,9 @@ pub fn scene(props: &NowPlayingProps, defaults: &SceneDefaults) -> Scene {
             recycle_window: None,
         }],
         cursor: None,
-        fx: defaults.fx_layer(0x3ddd53),
+        fx: props.defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: defaults.fx_timelines(),
+        timelines: props.defaults.fx_timelines(),
     }
 }
 

@@ -4,19 +4,25 @@ use crate::engine::Key;
 use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene, SceneDefaults};
 
 pub struct VoiceNoteProps {
+    pub defaults: SceneDefaults,
     pub buttons: Vec<DeckItem>,
     pub focus: usize,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> VoiceNoteProps {
+pub fn props_from(
+    snapshot: &RuntimeSnapshot,
+    focus: usize,
+    defaults: SceneDefaults,
+) -> VoiceNoteProps {
     VoiceNoteProps {
+        defaults,
         buttons: buttons(snapshot),
         focus,
     }
 }
 
-pub fn scene(props: &VoiceNoteProps, defaults: &SceneDefaults) -> Scene {
-    let mut scene = super::common::action_scene(UiScreen::VoiceNote, defaults, props.focus);
+pub fn scene(props: &VoiceNoteProps) -> Scene {
+    let mut scene = super::common::action_scene(UiScreen::VoiceNote, &props.defaults, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
         deck.items = props.buttons.clone();
     }

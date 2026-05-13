@@ -4,21 +4,27 @@ use crate::router::FocusPolicy;
 use crate::scene::{Scene, SceneDefaults};
 
 pub struct PlaylistsProps {
+    pub defaults: SceneDefaults,
     pub items: Vec<ListItemSnapshot>,
     pub focus: usize,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> PlaylistsProps {
+pub fn props_from(
+    snapshot: &RuntimeSnapshot,
+    focus: usize,
+    defaults: SceneDefaults,
+) -> PlaylistsProps {
     PlaylistsProps {
+        defaults,
         items: snapshot.music.playlists.clone(),
         focus,
     }
 }
 
-pub fn scene(props: &PlaylistsProps, defaults: &SceneDefaults) -> Scene {
+pub fn scene(props: &PlaylistsProps) -> Scene {
     super::common::list_scene(
         UiScreen::Playlists,
-        defaults,
+        &props.defaults,
         &props.items,
         props.focus,
         FocusPolicy::Clamp,

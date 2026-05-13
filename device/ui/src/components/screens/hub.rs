@@ -8,16 +8,18 @@ use crate::scene::{
 };
 
 pub struct HubProps {
+    pub defaults: SceneDefaults,
     pub card_count: usize,
     pub selected_index: usize,
     pub accent: u32,
     pub cards: Vec<DeckItem>,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> HubProps {
+pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize, defaults: SceneDefaults) -> HubProps {
     let cards = &snapshot.hub.cards;
     let selected = cards.get(focus).or_else(|| cards.first());
     HubProps {
+        defaults,
         card_count: cards.len(),
         selected_index: focus,
         accent: selected.map(|card| card.accent).unwrap_or(0x3ddd53),
@@ -36,11 +38,11 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> HubProps {
     }
 }
 
-pub fn scene(props: &HubProps, defaults: &SceneDefaults) -> Scene {
+pub fn scene(props: &HubProps) -> Scene {
     Scene {
         id: SceneId::new(UiScreen::Hub),
-        backdrop: defaults.backdrop(props.accent),
-        stage: defaults.stage,
+        backdrop: props.defaults.backdrop(props.accent),
+        stage: props.defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::CardRow,
             region: RegionId::HeroIcon,
@@ -55,8 +57,8 @@ pub fn scene(props: &HubProps, defaults: &SceneDefaults) -> Scene {
             count: props.card_count,
             focus: props.selected_index,
         }),
-        fx: defaults.fx_layer(props.accent),
+        fx: props.defaults.fx_layer(props.accent),
         modal: None,
-        timelines: defaults.fx_timelines(),
+        timelines: props.defaults.fx_timelines(),
     }
 }

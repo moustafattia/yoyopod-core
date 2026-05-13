@@ -30,36 +30,46 @@ pub fn scene_for_screen(
 ) -> Scene {
     let defaults = defaults_for(screen);
     let scene = match screen {
-        UiScreen::Hub => hub::scene(&hub::props_from(snapshot, focus), &defaults),
-        UiScreen::Listen => listen::scene(&listen::props_from(snapshot, focus), &defaults),
-        UiScreen::Playlists => playlists::scene(&playlists::props_from(snapshot, focus), &defaults),
-        UiScreen::RecentTracks => {
-            recent_tracks::scene(&recent_tracks::props_from(snapshot, focus), &defaults)
+        UiScreen::Hub => hub::scene(&hub::props_from(snapshot, focus, defaults.clone())),
+        UiScreen::Listen => listen::scene(&listen::props_from(snapshot, focus, defaults.clone())),
+        UiScreen::Playlists => {
+            playlists::scene(&playlists::props_from(snapshot, focus, defaults.clone()))
         }
-        UiScreen::NowPlaying => now_playing::scene(&now_playing::props_from(snapshot), &defaults),
-        UiScreen::Ask => ask::scene(&ask::props_from(snapshot, focus), &defaults),
-        UiScreen::Talk => talk::scene(&talk::props_from(focus), &defaults),
-        UiScreen::Contacts => contacts::scene(&contacts::props_from(snapshot, focus), &defaults),
+        UiScreen::RecentTracks => recent_tracks::scene(&recent_tracks::props_from(
+            snapshot,
+            focus,
+            defaults.clone(),
+        )),
+        UiScreen::NowPlaying => {
+            now_playing::scene(&now_playing::props_from(snapshot, defaults.clone()))
+        }
+        UiScreen::Ask => ask::scene(&ask::props_from(snapshot, focus, defaults.clone())),
+        UiScreen::Talk => talk::scene(&talk::props_from(focus, defaults.clone())),
+        UiScreen::Contacts => {
+            contacts::scene(&contacts::props_from(snapshot, focus, defaults.clone()))
+        }
         UiScreen::CallHistory => {
-            call_history::scene(&call_history::props_from(snapshot, focus), &defaults)
+            call_history::scene(&call_history::props_from(snapshot, focus, defaults.clone()))
         }
-        UiScreen::TalkContact => talk_contact::scene(
-            &talk_contact::props_from(snapshot, focus, selected_contact),
-            &defaults,
-        ),
+        UiScreen::TalkContact => talk_contact::scene(&talk_contact::props_from(
+            snapshot,
+            focus,
+            selected_contact,
+            defaults.clone(),
+        )),
         UiScreen::VoiceNote => {
-            voice_note::scene(&voice_note::props_from(snapshot, focus), &defaults)
+            voice_note::scene(&voice_note::props_from(snapshot, focus, defaults.clone()))
         }
         UiScreen::IncomingCall => {
-            incoming_call::scene(&incoming_call::props_from(snapshot), &defaults)
+            incoming_call::scene(&incoming_call::props_from(snapshot, defaults.clone()))
         }
         UiScreen::OutgoingCall => {
-            outgoing_call::scene(&outgoing_call::props_from(snapshot), &defaults)
+            outgoing_call::scene(&outgoing_call::props_from(snapshot, defaults.clone()))
         }
-        UiScreen::InCall => in_call::scene(&in_call::props_from(snapshot), &defaults),
-        UiScreen::Power => power::scene(&power::props_from(snapshot, focus), &defaults),
-        UiScreen::Loading => loading::scene(&loading::props_from(snapshot), &defaults),
-        UiScreen::Error => error::scene(&error::props_from(snapshot), &defaults),
+        UiScreen::InCall => in_call::scene(&in_call::props_from(snapshot, defaults.clone())),
+        UiScreen::Power => power::scene(&power::props_from(snapshot, focus, defaults.clone())),
+        UiScreen::Loading => loading::scene(&loading::props_from(snapshot, defaults.clone())),
+        UiScreen::Error => error::scene(&error::props_from(snapshot, defaults.clone())),
     };
     with_scene_timelines(&defaults, scene)
 }

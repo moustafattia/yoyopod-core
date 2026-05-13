@@ -4,12 +4,14 @@ use crate::engine::Key;
 use crate::scene::{CardModel, DeckItem, ItemRender, Scene, SceneDefaults};
 
 pub struct TalkProps {
+    pub defaults: SceneDefaults,
     pub cards: Vec<DeckItem>,
     pub focus: usize,
 }
 
-pub fn props_from(focus: usize) -> TalkProps {
+pub fn props_from(focus: usize, defaults: SceneDefaults) -> TalkProps {
     TalkProps {
+        defaults,
         cards: vec![
             card("contacts", "Contacts", "Call someone", "contact", 0x00d4ff),
             card(
@@ -25,8 +27,9 @@ pub fn props_from(focus: usize) -> TalkProps {
     }
 }
 
-pub fn scene(props: &TalkProps, defaults: &SceneDefaults) -> Scene {
-    let mut scene = super::common::hero_scene(UiScreen::Talk, defaults, 0x00d4ff, 3, props.focus);
+pub fn scene(props: &TalkProps) -> Scene {
+    let mut scene =
+        super::common::hero_scene(UiScreen::Talk, &props.defaults, 0x00d4ff, 3, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
         deck.items = props.cards.clone();
     }

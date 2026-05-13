@@ -3,21 +3,23 @@ use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 use crate::scene::{Scene, SceneDefaults};
 
 pub struct OutgoingCallProps {
+    pub defaults: SceneDefaults,
     pub title: String,
     pub body: String,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot) -> OutgoingCallProps {
+pub fn props_from(snapshot: &RuntimeSnapshot, defaults: SceneDefaults) -> OutgoingCallProps {
     OutgoingCallProps {
+        defaults,
         title: call_peer_name(snapshot),
         body: format!("Dialing\n{}", snapshot.call.peer_address),
     }
 }
 
-pub fn scene(props: &OutgoingCallProps, defaults: &SceneDefaults) -> Scene {
+pub fn scene(props: &OutgoingCallProps) -> Scene {
     super::common::call_scene(
         UiScreen::OutgoingCall,
-        defaults,
+        &props.defaults,
         props.title.clone(),
         props.body.clone(),
     )

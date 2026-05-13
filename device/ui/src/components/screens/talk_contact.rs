@@ -4,6 +4,7 @@ use crate::engine::Key;
 use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene, SceneDefaults};
 
 pub struct TalkContactProps {
+    pub defaults: SceneDefaults,
     pub actions: Vec<DeckItem>,
     pub focus: usize,
 }
@@ -12,15 +13,18 @@ pub fn props_from(
     snapshot: &RuntimeSnapshot,
     focus: usize,
     selected_contact: Option<&ListItemSnapshot>,
+    defaults: SceneDefaults,
 ) -> TalkContactProps {
     TalkContactProps {
+        defaults,
         actions: actions(snapshot, selected_contact),
         focus,
     }
 }
 
-pub fn scene(props: &TalkContactProps, defaults: &SceneDefaults) -> Scene {
-    let mut scene = super::common::action_scene(UiScreen::TalkContact, defaults, props.focus);
+pub fn scene(props: &TalkContactProps) -> Scene {
+    let mut scene =
+        super::common::action_scene(UiScreen::TalkContact, &props.defaults, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
         deck.items = props.actions.clone();
     }

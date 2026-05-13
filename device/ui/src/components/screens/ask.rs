@@ -4,12 +4,14 @@ use crate::engine::Key;
 use crate::scene::{CardModel, DeckItem, ItemRender, Scene, SceneDefaults};
 
 pub struct AskProps {
+    pub defaults: SceneDefaults,
     pub card: DeckItem,
     pub focus: usize,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> AskProps {
+pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize, defaults: SceneDefaults) -> AskProps {
     AskProps {
+        defaults,
         card: DeckItem {
             key: Key::Static("ask"),
             render: ItemRender::Card(CardModel {
@@ -23,8 +25,9 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> AskProps {
     }
 }
 
-pub fn scene(props: &AskProps, defaults: &SceneDefaults) -> Scene {
-    let mut scene = super::common::hero_scene(UiScreen::Ask, defaults, 0xc79bff, 1, props.focus);
+pub fn scene(props: &AskProps) -> Scene {
+    let mut scene =
+        super::common::hero_scene(UiScreen::Ask, &props.defaults, 0xc79bff, 1, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
         deck.items = vec![props.card.clone()];
     }

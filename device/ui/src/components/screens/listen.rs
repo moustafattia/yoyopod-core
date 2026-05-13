@@ -7,12 +7,18 @@ use crate::scene::{
 };
 
 pub struct ListenProps {
+    pub defaults: SceneDefaults,
     pub rows: Vec<RowModel>,
     pub focus: usize,
 }
 
-pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> ListenProps {
+pub fn props_from(
+    snapshot: &RuntimeSnapshot,
+    focus: usize,
+    defaults: SceneDefaults,
+) -> ListenProps {
     ListenProps {
+        defaults,
         rows: items(snapshot)
             .iter()
             .map(|item| RowModel {
@@ -35,7 +41,7 @@ pub fn items(_snapshot: &RuntimeSnapshot) -> Vec<ListItemSnapshot> {
     ]
 }
 
-pub fn scene(props: &ListenProps, defaults: &SceneDefaults) -> Scene {
+pub fn scene(props: &ListenProps) -> Scene {
     let deck = Deck {
         kind: DeckKind::List,
         region: RegionId::ListBody,
@@ -58,14 +64,14 @@ pub fn scene(props: &ListenProps, defaults: &SceneDefaults) -> Scene {
     let cursor_index = deck.focused_visible_index();
     Scene {
         id: SceneId::new(UiScreen::Listen),
-        backdrop: defaults.backdrop(0x3ddd53),
-        stage: defaults.stage,
+        backdrop: props.defaults.backdrop(0x3ddd53),
+        stage: props.defaults.stage,
         decks: vec![deck],
         cursor: Some(Cursor::RowGlow {
             index: cursor_index,
         }),
-        fx: defaults.fx_layer(0x3ddd53),
+        fx: props.defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: defaults.fx_timelines(),
+        timelines: props.defaults.fx_timelines(),
     }
 }
