@@ -43,22 +43,34 @@ Minimal config enabling only what YoYoPod uses:
 
 ## Building
 
+LVGL native build commands moved out of the CLI in the Round 0 rebuild
+and have not yet been ported back. For now, build LVGL via cmake directly
+or rely on the CI-built Rust artifacts that already bundle a working
+`liblvgl.a`:
+
 ```bash
-yoyopod build simulation   # prepares native LVGL used by the Rust runtime preview
-yoyopod build lvgl         # clones LVGL 9.5.0, compiles native LVGL
-yoyopod build ensure-native
+# CI route (preferred): yoyopod target deploy fetches the
+# yoyopod-rust-device-arm64-<sha> bundle which already contains the
+# linked LVGL.
+
+# Local route (rare; required only for simulation preview):
+cmake -S device/ui/native/lvgl -B device/ui/native/lvgl/build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLVGL_SOURCE_DIR=.cache/lvgl/lvgl-9.5.0 \
+    -DCONFIG_LV_BUILD_EXAMPLES=OFF -DCONFIG_LV_BUILD_DEMOS=OFF
+cmake --build device/ui/native/lvgl/build --parallel 2
 ```
 
-Do not rebuild LVGL on the Pi for normal dev/prod validation. Use CI-built Rust
-artifacts for the exact commit under test.
+Do not rebuild LVGL on the Pi for normal dev/prod validation. Use
+CI-built Rust artifacts for the exact commit under test.
 
 ## Screenshot Support
 
-- `yoyopod remote screenshot` defaults to the shadow-first path via `SIGUSR2`.
-- `yoyopod remote screenshot --readback` requests LVGL readback via `SIGUSR1`.
-- The remote helper now clears the previous remote PNG before capture and waits for a fresh file.
+- `yoyopod target screenshot` defaults to the shadow-first path via `SIGUSR2`.
+- `yoyopod target screenshot --readback` requests LVGL readback via `SIGUSR1`.
+- The CLI clears the previous remote PNG before capture and waits for a fresh file.
 - Both screenshot signals also append freeze diagnostics to `logs/yoyopod_errors.log`:
-  - an all-thread traceback dump from `faulthandler`
+  - an all-thread backtrace dump
   - a structured runtime snapshot logged before the screenshot is queued
 - To confirm which path actually succeeded, check the app log:
   - `Saved screenshot via LVGL readback` means native LVGL snapshotting succeeded.

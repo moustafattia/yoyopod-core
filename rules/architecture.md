@@ -1,7 +1,9 @@
 # Architecture
 
-YoYoPod is Rust-first. Treat the Rust runtime workspace as the app owner and the
-Python package as CLI/deploy tooling unless current code proves otherwise.
+YoYoPod is Rust-only. The runtime, the workers, and the operator CLI
+are all Rust. The Python operator CLI was retired in Round 0 of the
+CLI rebuild (`docs/operations/CLI_REBUILD_ROUNDS.md`); active code must
+not depend on it.
 
 ```text
 yoyopod_rs/runtime        (yoyopod-runtime: orchestrator, config, state, routing)
@@ -16,13 +18,14 @@ yoyopod_rs/runtime        (yoyopod-runtime: orchestrator, config, state, routing
 
 ## Runtime Ownership
 
-- `yoyopod-runtime` is the process owner for app behavior.
-- Runtime domains should run as supervised Rust hosts/workers, not Python app
-  integrations.
-- The Python CLI may build, deploy, configure, and validate the Rust stack, but
-  it should not become an app runtime or domain owner again.
-- Target validation should prove the Rust runtime stack works. Do not add new
-  validation gates that only exercise Python domain shims.
+- `yoyopod-runtime` is the process owner for app behaviour.
+- Runtime domains run as supervised Rust hosts/workers; there are no
+  Python integrations.
+- The operator CLI in `cli/` builds, deploys, configures, and validates
+  the Rust stack from the dev machine. It is orchestration only — it
+  must not own runtime state or domain behaviour.
+- Target validation should prove the Rust runtime stack works on
+  hardware. Do not add new validation gates that bypass the runtime.
 
 ## Worker Protocol
 
@@ -52,6 +55,6 @@ Prefer this direction:
 Avoid the reverse:
 
 - hosts importing runtime orchestration
-- CLI validation becoming a substitute Python runtime
+- CLI validation becoming a substitute runtime
 - domain behavior living in docs, compatibility helpers, or CLI-only checks
 - historical Python plans being treated as current architecture

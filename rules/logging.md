@@ -36,7 +36,7 @@ Written under the active lane state directory on startup:
 - prod: `/opt/yoyopod-prod/state/yoyopod.pid`
 
 `YOYOPOD_PID_FILE` is the systemd/launcher override that keeps the Rust runtime
-and `yoyopod remote ...` CLI on the same path. Do not use `/tmp/yoyopod.pid`;
+and `yoyopod target ...` CLI on the same path. Do not use `/tmp/yoyopod.pid`;
 `/tmp` sticky-bit ownership breaks cleanup when the service and SSH user differ.
 
 ## Startup/Shutdown Markers

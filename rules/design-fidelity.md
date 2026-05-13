@@ -40,11 +40,11 @@ When implementing or refining Whisplay UI from Figma, preserve the product's exi
    - preserve safe margins
    - shorten helper text if it clips on real hardware
 3. Update shared theme primitives first.
-4. Update the Python screen behavior.
+4. Update the Rust screen controller in `device/ui/`.
 5. Update the LVGL view layer.
 6. Update the native LVGL scene when hardware parity requires it.
-7. Validate locally.
-8. Sync to the Pi and validate on the device.
+7. Validate locally with cargo checks and the LVGL simulation preview.
+8. Deploy to the Pi with `yoyopod target deploy` and validate on device.
 
 ## Extraction Heuristics
 
@@ -65,23 +65,32 @@ For Whisplay UI work, the standard loop is:
 
 1. Validate locally:
    ```bash
-   uv run --extra dev python scripts/quality.py ci
+   cargo check --manifest-path device/Cargo.toml --workspace --locked
+   cargo test  --manifest-path device/Cargo.toml -p yoyopod-ui
    ```
-   For iterative UI work, run the most relevant Rust build check and target validation command for the changed surface.
 2. Commit and push the branch you want to validate:
    ```bash
    git branch --show-current
    git rev-parse HEAD
    ```
-3. Validate the committed branch or exact SHA on the Pi:
+3. Deploy the committed branch or exact SHA to the Pi:
    ```bash
-   yoyopod remote validate --branch <branch> --sha <commit>
+   yoyopod target deploy --branch <branch>          # or --sha <commit>
    ```
 4. Capture output from the Pi:
-   - single capture with `yoyopod remote screenshot`
+   ```bash
+   yoyopod target screenshot
+   yoyopod target logs --follow
+   ```
 5. Compare the captured result against Figma and adjust.
 
-Use `yoyopod remote sync` only if the user explicitly wants a dirty-tree hardware check as a one-off debugging override.
+Automated on-Pi validation (`yoyopod target validate`) is a Round 1 stub
+during the CLI rebuild. Validate manually until Round 2 restores it; see
+`docs/operations/CLI_REBUILD_ROUNDS.md`.
+
+Dirty-tree deploys are not supported by `yoyopod target deploy` — the
+CI-artifact contract requires a pushed commit. If you need to test
+uncommitted state, commit to a throwaway branch first.
 
 ## Screenshot Interpretation
 
@@ -98,7 +107,7 @@ Use all three appropriately:
 ## Native Rebuild Rule
 
 - If `device/ui/native/lvgl/lv_conf.h` or Rust LVGL binding code changes, validate with a fresh CI Rust artifact before judging the hardware result.
-- `yoyopod remote validate` and `yoyopod remote restart` must not rebuild LVGL on the Pi. Do not assume a locally compiled Pi artifact reflects the committed code under test.
+- `yoyopod target deploy` and `yoyopod target restart` must not rebuild LVGL on the Pi. Do not assume a locally compiled Pi artifact reflects the committed code under test.
 
 ## Whisplay-Specific Acceptance Criteria
 
