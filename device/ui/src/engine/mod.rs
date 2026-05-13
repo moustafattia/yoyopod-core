@@ -1,5 +1,6 @@
 pub mod dirty;
 pub mod element;
+pub mod flatten;
 pub mod mutation;
 pub mod props;
 pub mod reconciler;

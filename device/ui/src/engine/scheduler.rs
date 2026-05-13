@@ -1,7 +1,7 @@
 use crate::animation::{Timeline, TimelineSampler};
 use crate::scene::SceneGraph;
 
-use super::{Mutation, NodeIdAlloc, Reconciler, TreeCache};
+use super::{flatten, Mutation, NodeIdAlloc, Reconciler, TreeCache};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderMode {
@@ -29,7 +29,14 @@ impl Engine {
     pub fn render(&mut self, _graph: &SceneGraph, now_ms: u64) -> &[Mutation] {
         self.mutations.clear();
         let sampler = TimelineSampler::new(&self.timelines, now_ms, now_ms);
-        let _ = sampler;
+        let new_tree = flatten::flatten(_graph);
+        self.reconciler.diff(
+            self.tree_cache.previous(),
+            &new_tree,
+            &sampler,
+            &mut self.mutations,
+        );
+        self.tree_cache.replace(new_tree);
         &self.mutations
     }
 
