@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use yoyopod_protocol::ui::{UiError, UiErrorCode, UiEvent, UiHealth, UiScreen, UiScreenChanged};
 
-use crate::animation::TransitionSampler;
 use crate::application::UiRuntime;
 use crate::components;
 use crate::engine::Engine;
@@ -13,7 +12,7 @@ use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
 use crate::presentation;
 use crate::presentation::view_models::{ScreenModel, StatusBarModel};
-use crate::renderer::{Framebuffer, LvglRenderer, ScreenRenderer};
+use crate::renderer::{Framebuffer, LvglRenderer, RenderMode, Renderer};
 use crate::scene::{GlobalClock, HudScene, SceneGraph};
 use crate::transport::{codec, dispatcher, handshake, inbound, outbound};
 
@@ -24,7 +23,7 @@ const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 pub struct RenderState {
     framebuffer: Framebuffer,
     engine: Engine,
-    renderer: Box<dyn ScreenRenderer>,
+    renderer: Box<dyn Renderer>,
     frames: usize,
     last_active_screen: Option<UiScreen>,
     last_ui_renderer: String,
@@ -356,20 +355,18 @@ where
     }
 
     let scene_graph = active_scene_graph(ui_runtime, now_ms);
-    let _mutations = render.engine.render(&scene_graph, now_ms);
+    let mutations = render.engine.render(&scene_graph, now_ms);
+    render.renderer.apply(mutations)?;
     let screen_model = active_screen_model(ui_runtime);
-    let sampler = TransitionSampler::new(ui_runtime.active_transitions(), now_ms);
     let dirty_region = ui_runtime
         .dirty_state()
         .render_region(screen_model.screen());
-    let report = render.renderer.render(
-        &mut render.framebuffer,
-        &screen_model,
-        &sampler,
-        dirty_region,
-    )?;
+    let mode = dirty_region
+        .map(RenderMode::Region)
+        .unwrap_or(RenderMode::FullFrame);
+    let report = render.renderer.flush(&mut render.framebuffer, mode)?;
     render.last_ui_renderer = report.renderer.to_string();
-    if let Some(region) = report.dirty_region {
+    if let RenderMode::Region(region) = report.mode {
         display.flush_region(&render.framebuffer, region)?;
     } else {
         display.flush_full_frame(&render.framebuffer)?;

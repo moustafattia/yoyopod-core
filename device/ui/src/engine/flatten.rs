@@ -7,8 +7,8 @@ use super::{Element, ElementKind, Key};
 pub fn flatten(graph: &SceneGraph) -> Element {
     Element::new(ElementKind::Container, Some("scene_graph"))
         .key(Key::Static("scene_graph"))
-        .child(hud_element(&graph.hud))
         .child(scene_element(&graph.active))
+        .child(hud_element(&graph.hud))
         .child(modal_stack_element(&graph.modal_stack))
 }
 

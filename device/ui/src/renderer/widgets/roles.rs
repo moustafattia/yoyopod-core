@@ -2,6 +2,37 @@ pub(crate) const ROOT: &str = "root";
 pub(crate) const FOOTER_BAR: &str = "footer_bar";
 pub(crate) const FOOTER_LABEL: &str = "footer_label";
 
+pub(crate) const BUTTON: &str = "button";
+pub(crate) const BUTTON_ICON: &str = "button_icon";
+pub(crate) const BUTTON_TITLE: &str = "button_title";
+pub(crate) const CARD: &str = "card";
+pub(crate) const CARD_ICON: &str = "card_icon";
+pub(crate) const CARD_SUBTITLE: &str = "card_subtitle";
+pub(crate) const CARD_TITLE: &str = "card_title";
+pub(crate) const CURSOR_DOTS: &str = "cursor_dots";
+pub(crate) const CURSOR_ROW_GLOW: &str = "cursor_row_glow";
+pub(crate) const DECK_BUTTONS: &str = "deck_buttons";
+pub(crate) const DECK_CARD_ROW: &str = "deck_card_row";
+pub(crate) const DECK_GRID: &str = "deck_grid";
+pub(crate) const DECK_LIST: &str = "deck_list";
+pub(crate) const DECK_PAGE: &str = "deck_page";
+pub(crate) const DECK_REGION: &str = "deck_region";
+pub(crate) const HUD: &str = "hud";
+pub(crate) const MODAL: &str = "modal";
+pub(crate) const MODAL_MESSAGE: &str = "modal_message";
+pub(crate) const MODAL_STACK: &str = "modal_stack";
+pub(crate) const MODAL_TITLE: &str = "modal_title";
+pub(crate) const PAGE: &str = "page";
+pub(crate) const PAGE_BODY: &str = "page_body";
+pub(crate) const PAGE_TITLE: &str = "page_title";
+pub(crate) const PROGRESS_SWEEP: &str = "progress_sweep";
+pub(crate) const SCENE_BACKDROP: &str = "scene_backdrop";
+pub(crate) const SCENE_DECKS: &str = "scene_decks";
+pub(crate) const SCENE_GRAPH: &str = "scene_graph";
+pub(crate) const SCENE_ROOT: &str = "scene_root";
+pub(crate) const SCENE_STAGE: &str = "scene_stage";
+pub(crate) const VOICE_METER: &str = "voice_meter";
+
 pub(crate) const ASK_ICON: &str = "ask_icon";
 pub(crate) const ASK_ICON_GLOW: &str = "ask_icon_glow";
 pub(crate) const ASK_ICON_HALO: &str = "ask_icon_halo";
@@ -91,6 +122,8 @@ pub(crate) const STATUS_BATTERY_OUTLINE: &str = "status_battery_outline";
 pub(crate) const STATUS_BATTERY_FILL: &str = "status_battery_fill";
 pub(crate) const STATUS_BATTERY_TIP: &str = "status_battery_tip";
 pub(crate) const STATUS_BATTERY_LABEL: &str = "status_battery_label";
+pub(crate) const STATUS_NETWORK: &str = "status_network";
+pub(crate) const STATUS_SIGNAL: &str = "status_signal";
 
 pub(crate) const STATUS_SIGNAL_BARS: [&str; 4] = [
     STATUS_SIGNAL_BAR_0,
