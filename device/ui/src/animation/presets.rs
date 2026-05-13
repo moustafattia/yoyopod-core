@@ -1,12 +1,37 @@
 use crate::scene::RegionId;
 
-use super::{ClockSource, LoopMode, Timeline, TimelineId};
+use super::{
+    ActorRef, AnimatableProp, AnimatableValue, ClockSource, Easing, Keyframe, LoopMode, Timeline,
+    TimelineId, Track,
+};
 
-pub fn breathe_around(_region: RegionId) -> Timeline {
+pub const BREATHE_TIMELINE_ID: TimelineId = TimelineId(10);
+pub const SCENE_ENTER_TIMELINE_ID: TimelineId = TimelineId(1);
+pub const STAGGER_ENTER_TIMELINE_ID: TimelineId = TimelineId(2);
+
+pub fn breathe_around(region: RegionId) -> Timeline {
     Timeline {
-        id: TimelineId(0),
+        id: BREATHE_TIMELINE_ID,
         clock: ClockSource::GlobalTime,
-        tracks: Vec::new(),
+        tracks: vec![Track {
+            target: ActorRef::Region(region),
+            property: AnimatableProp::Opacity,
+            keyframes: vec![
+                Keyframe {
+                    at_ms: 0,
+                    value: AnimatableValue::U8(64),
+                },
+                Keyframe {
+                    at_ms: 700,
+                    value: AnimatableValue::U8(128),
+                },
+                Keyframe {
+                    at_ms: 1_400,
+                    value: AnimatableValue::U8(64),
+                },
+            ],
+            easing: Easing::EaseInOut,
+        }],
         loop_mode: LoopMode::Loop,
         on_complete: None,
         started_ms: 0,
@@ -15,7 +40,7 @@ pub fn breathe_around(_region: RegionId) -> Timeline {
 
 pub fn scene_enter() -> Timeline {
     Timeline {
-        id: TimelineId(1),
+        id: SCENE_ENTER_TIMELINE_ID,
         clock: ClockSource::SceneTime,
         tracks: Vec::new(),
         loop_mode: LoopMode::Once,
@@ -26,7 +51,7 @@ pub fn scene_enter() -> Timeline {
 
 pub fn stagger_enter() -> Timeline {
     Timeline {
-        id: TimelineId(2),
+        id: STAGGER_ENTER_TIMELINE_ID,
         clock: ClockSource::SceneTime,
         tracks: Vec::new(),
         loop_mode: LoopMode::Once,

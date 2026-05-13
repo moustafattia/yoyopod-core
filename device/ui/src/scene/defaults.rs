@@ -75,9 +75,16 @@ impl SceneDefaults {
     }
 
     pub fn timelines(&self) -> Vec<Timeline> {
-        self.on_enter
-            .map(|preset| vec![preset.timeline()])
-            .unwrap_or_default()
+        let mut timelines = Vec::new();
+        if let Some(preset) = self.on_enter {
+            timelines.push(preset.timeline());
+        }
+        for preset in &self.fx {
+            if let Some(timeline) = preset.timeline() {
+                timelines.push(timeline);
+            }
+        }
+        timelines
     }
 }
 
@@ -128,6 +135,13 @@ impl FxPreset {
                 blur: 3,
                 intensity: 80,
             }),
+        }
+    }
+
+    fn timeline(self) -> Option<Timeline> {
+        match self {
+            Self::HeroHalo => Some(presets::breathe_around(RegionId::HeroIcon)),
+            Self::ProgressSweep | Self::VoiceMeter | Self::CallPulse | Self::Spinner => None,
         }
     }
 }

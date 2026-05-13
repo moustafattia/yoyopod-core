@@ -1,4 +1,4 @@
-use crate::animation::TimelineSampler;
+use crate::animation::{AnimatableProp, AnimatableValue, TimelineSampler};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -16,7 +16,7 @@ impl Reconciler {
         previous_ids: &BTreeMap<NodePath, NodeId>,
         next: &Element,
         node_alloc: &mut NodeIdAlloc,
-        _sampler: &TimelineSampler<'_>,
+        sampler: &TimelineSampler<'_>,
         out: &mut Vec<Mutation>,
     ) -> BTreeMap<NodePath, NodeId> {
         out.clear();
@@ -30,6 +30,7 @@ impl Reconciler {
             previous_ids,
             &mut next_ids,
             node_alloc,
+            sampler,
             out,
         );
         next_ids
@@ -44,6 +45,7 @@ fn diff_element(
     previous_ids: &BTreeMap<NodePath, NodeId>,
     next_ids: &mut BTreeMap<NodePath, NodeId>,
     node_alloc: &mut NodeIdAlloc,
+    sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) -> NodeId {
     let previous_node = previous_ids.get(&path).copied();
@@ -58,16 +60,17 @@ fn diff_element(
     next_ids.insert(path.clone(), node);
 
     match previous {
-        None => create_subtree(node, parent, next, path, next_ids, node_alloc, out),
+        None => create_subtree(node, parent, next, path, next_ids, node_alloc, sampler, out),
         Some(previous) if replace => {
             if let Some(previous_node) = previous_node {
                 remove_subtree(previous, path.clone(), previous_node, previous_ids, out);
             }
-            create_subtree(node, parent, next, path, next_ids, node_alloc, out);
+            create_subtree(node, parent, next, path, next_ids, node_alloc, sampler, out);
         }
         Some(previous) => {
             emit_prop_updates(node, &previous.props, &next.props, out);
             emit_place(node, next.layout, out);
+            emit_animation_updates(node, next, sampler, out);
             diff_children(
                 previous,
                 next,
@@ -76,6 +79,7 @@ fn diff_element(
                 previous_ids,
                 next_ids,
                 node_alloc,
+                sampler,
                 out,
             );
         }
@@ -90,6 +94,7 @@ fn create_subtree(
     path: NodePath,
     next_ids: &mut BTreeMap<NodePath, NodeId>,
     node_alloc: &mut NodeIdAlloc,
+    sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) {
     next_ids.insert(path.clone(), node);
@@ -101,11 +106,12 @@ fn create_subtree(
     });
     emit_prop_updates(node, &ElementProps::default(), &element.props, out);
     emit_place(node, element.layout, out);
+    emit_animation_updates(node, element, sampler, out);
     for (index, child) in element.children.iter().enumerate() {
         let child_path = path.child(child, index);
         let child_node = node_alloc.alloc();
         create_subtree(
-            child_node, node, child, child_path, next_ids, node_alloc, out,
+            child_node, node, child, child_path, next_ids, node_alloc, sampler, out,
         );
     }
 }
@@ -118,6 +124,7 @@ fn diff_children(
     previous_ids: &BTreeMap<NodePath, NodeId>,
     next_ids: &mut BTreeMap<NodePath, NodeId>,
     node_alloc: &mut NodeIdAlloc,
+    sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) {
     let mut order = Vec::with_capacity(next.children.len());
@@ -144,6 +151,7 @@ fn diff_children(
             previous_ids,
             next_ids,
             node_alloc,
+            sampler,
             out,
         );
         order.push(node);
@@ -190,6 +198,37 @@ fn emit_prop_updates(
 fn emit_place(node: NodeId, layout: Layout, out: &mut Vec<Mutation>) {
     if let Layout::Absolute { x, y, w, h } = layout {
         out.push(Mutation::Place { node, x, y, w, h });
+    }
+}
+
+fn emit_animation_updates(
+    node: NodeId,
+    element: &Element,
+    sampler: &TimelineSampler<'_>,
+    out: &mut Vec<Mutation>,
+) {
+    let Some(anim) = element.anim else {
+        return;
+    };
+    let Some((property, value)) = sampler.slot_value(anim.timeline, anim.track) else {
+        return;
+    };
+    if let Some(prop) = prop_change_for_animation(property, value) {
+        out.push(Mutation::Update { node, prop });
+    }
+}
+
+fn prop_change_for_animation(
+    property: AnimatableProp,
+    value: AnimatableValue,
+) -> Option<PropChange> {
+    match (property, value) {
+        (AnimatableProp::Opacity, AnimatableValue::U8(value)) => Some(PropChange::Opacity(value)),
+        (AnimatableProp::ProgressPermille, AnimatableValue::I32(value)) => {
+            Some(PropChange::Progress(value))
+        }
+        (AnimatableProp::AccentMix, AnimatableValue::Rgb(value)) => Some(PropChange::Accent(value)),
+        _ => None,
     }
 }
 

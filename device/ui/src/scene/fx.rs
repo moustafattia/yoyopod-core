@@ -1,5 +1,5 @@
-use crate::animation::ActorRef;
-use crate::engine::{Element, ElementKind, Key};
+use crate::animation::{presets, ActorRef, TimelineRef, TrackIndex};
+use crate::engine::{AnimSlot, Element, ElementKind, Key};
 
 use super::RegionId;
 
@@ -80,6 +80,10 @@ fn halo_element(index: usize, halo: &Halo) -> Element {
     Element::new(ElementKind::Container, Some("fx_halo"))
         .key(Key::String(format!("fx:halo:{index}")))
         .accent(halo.color)
+        .with_anim(AnimSlot {
+            timeline: TimelineRef(presets::BREATHE_TIMELINE_ID),
+            track: TrackIndex(0),
+        })
         .with_opacity(halo.max_opacity)
 }
 
@@ -107,10 +111,16 @@ fn glow_element(index: usize, glow: &GlowBloom) -> Element {
 }
 
 trait FxElementExt {
+    fn with_anim(self, anim: AnimSlot) -> Self;
     fn with_opacity(self, opacity: u8) -> Self;
 }
 
 impl FxElementExt for Element {
+    fn with_anim(mut self, anim: AnimSlot) -> Self {
+        self.anim = Some(anim);
+        self
+    }
+
     fn with_opacity(mut self, opacity: u8) -> Self {
         self.props.opacity = Some(opacity);
         self
