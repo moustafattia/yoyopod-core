@@ -1,4 +1,4 @@
-use crate::animation::{presets, TimelineRef, TrackIndex};
+use crate::animation::{presets, Timeline, TimelineRef, TrackIndex};
 use crate::engine::{AnimSlot, Element, Key};
 use crate::render_contract::ElementKind;
 use crate::router::FocusPolicy;
@@ -129,6 +129,17 @@ impl Deck {
             start = len - window;
         }
         start..start + window
+    }
+
+    pub fn enter_timeline(&self) -> Option<Timeline> {
+        match self.item_anim {
+            DeckItemAnim::StaggerEnter { delay_per_index_ms } => {
+                Some(presets::stagger_enter(delay_per_index_ms))
+            }
+            DeckItemAnim::None
+            | DeckItemAnim::ScaleOnFocus { .. }
+            | DeckItemAnim::BreatheWhenFocused => None,
+        }
     }
 }
 

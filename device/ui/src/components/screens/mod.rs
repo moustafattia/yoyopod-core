@@ -68,9 +68,16 @@ pub fn scene_for_screen(
 
 fn with_route_timelines(screen: UiScreen, mut scene: Scene) -> Scene {
     if let Some(timeline) = router::route_for(screen).on_enter {
-        scene
-            .timelines
-            .insert(0, presets::timeline_for_ref(timeline));
+        let enter_timeline = if timeline.0 == presets::STAGGER_ENTER_TIMELINE_ID {
+            scene
+                .decks
+                .iter()
+                .find_map(|deck| deck.enter_timeline())
+                .unwrap_or_else(|| presets::timeline_for_ref(timeline))
+        } else {
+            presets::timeline_for_ref(timeline)
+        };
+        scene.timelines.insert(0, enter_timeline);
     }
     scene
 }

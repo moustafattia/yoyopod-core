@@ -84,18 +84,18 @@ pub fn scene_enter() -> Timeline {
     }
 }
 
-pub fn stagger_enter() -> Timeline {
+pub fn stagger_enter(delay_per_index_ms: u32) -> Timeline {
     let tracks = (0..4)
         .map(|index| Track {
             target: ActorRef::DeckItem { deck: 0, index },
             property: AnimatableProp::Opacity,
             keyframes: vec![
                 Keyframe {
-                    at_ms: 40 * index as u32,
+                    at_ms: delay_per_index_ms * index as u32,
                     value: AnimatableValue::U8(0),
                 },
                 Keyframe {
-                    at_ms: 160 + 40 * index as u32,
+                    at_ms: 160 + delay_per_index_ms * index as u32,
                     value: AnimatableValue::U8(255),
                 },
             ],
@@ -232,7 +232,7 @@ pub fn selection_snap(to_index: usize) -> Timeline {
 pub fn timeline_for_ref(reference: TimelineRef) -> Timeline {
     match reference.0 {
         SCENE_ENTER_TIMELINE_ID => scene_enter(),
-        STAGGER_ENTER_TIMELINE_ID => stagger_enter(),
+        STAGGER_ENTER_TIMELINE_ID => stagger_enter(40),
         SLIDE_IN_FROM_RIGHT_TIMELINE_ID => slide_in_from_right(),
         TimelineId(value) => panic!("unknown route timeline id {value}"),
     }
