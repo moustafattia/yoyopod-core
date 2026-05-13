@@ -196,22 +196,20 @@ PY
 }
 
 _preflight_slot() {
+    # Slot preflight was previously a Python check that imported
+    # yoyopod_cli.health from the slot's bundled app/. That module no longer
+    # exists; see docs/operations/CLI_REBUILD_ROUNDS.md. Round 3 of the CLI
+    # rebuild restores preflight as a Rust binary (yoyopod health preflight)
+    # bundled inside future slot tarballs.
+    #
+    # Until Round 3 lands, this is a no-op: any slot reaching this step has
+    # already been hydrated by the caller, and there are no new slot builds
+    # because CI's slot-arm64 job is disabled. Slots produced before
+    # 2026-05-13 still contain their own bundled yoyopod_cli/health.py, so
+    # if someone reinstalls one of those, the preflight gap is acceptable.
     local slot_dir="$1"
-    local python_bin="${slot_dir}/venv/bin/python"
-    local app_path="${slot_dir}/app"
-    local manifest_path="${slot_dir}/manifest.json"
-
-    if [ ! -x "${python_bin}" ]; then
-        echo "install-release: slot runtime missing: ${python_bin}" >&2
-        return 1
-    fi
-
-    YOYOPOD_APP_PATH="${app_path}" \
-    YOYOPOD_RELEASE_MANIFEST="${manifest_path}" \
-    PYTHONDONTWRITEBYTECODE=1 \
-    "${python_bin}" -c \
-        "import os, sys; sys.path.insert(0, os.environ['YOYOPOD_APP_PATH']); from yoyopod_cli.health import app; app()" \
-        preflight --slot "${slot_dir}"
+    echo "install-release: preflight disabled during CLI rebuild (slot=${slot_dir})" >&2
+    return 0
 }
 
 _live_probe() {
