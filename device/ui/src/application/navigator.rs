@@ -50,12 +50,8 @@ pub fn advance_focus(runtime: &mut UiRuntime) {
 }
 
 pub fn select_focused(runtime: &mut UiRuntime) {
-    let targets = route_for(runtime.active_screen).select;
-    let Some(target) = targets
-        .get(runtime.focus_index)
-        .or_else(|| targets.last())
-        .copied()
-    else {
+    let route = route_for(runtime.active_screen);
+    let Some(target) = router::select::selection_target(route, runtime.focus_index) else {
         return;
     };
     apply_selection_target(runtime, target);
@@ -82,10 +78,8 @@ pub fn handle_ptt_release(runtime: &mut UiRuntime) {
 }
 
 pub fn wants_ptt_passthrough(runtime: &UiRuntime) -> bool {
-    route_for(runtime.active_screen)
-        .passthrough
-        .iter()
-        .any(|policy| policy.captures_button && matches_condition(runtime, policy.when))
+    let route = route_for(runtime.active_screen);
+    router::passthrough::captures_button(route, |condition| matches_condition(runtime, condition))
 }
 
 pub fn clamp_focus(runtime: &mut UiRuntime) {
@@ -182,11 +176,9 @@ fn select_dynamic_action(runtime: &mut UiRuntime, kind: DynamicActionKind) {
 }
 
 fn apply_back_passthrough(runtime: &mut UiRuntime) -> bool {
-    let policy = route_for(runtime.active_screen)
-        .back
-        .iter()
-        .find(|policy| matches_condition(runtime, policy.when))
-        .copied();
+    let route = route_for(runtime.active_screen);
+    let policy =
+        router::back::back_policy(route, |condition| matches_condition(runtime, condition));
     if let Some(policy) = policy {
         emit_back_intent(runtime, policy);
         if policy.pop_screen {
@@ -282,11 +274,10 @@ fn select_voice_note(runtime: &mut UiRuntime) {
 }
 
 fn apply_passthrough_trigger(runtime: &mut UiRuntime, trigger: yoyopod_protocol::ui::InputAction) {
-    let policy = route_for(runtime.active_screen)
-        .passthrough
-        .iter()
-        .find(|policy| policy.trigger == trigger && matches_condition(runtime, policy.when))
-        .copied();
+    let route = route_for(runtime.active_screen);
+    let policy = router::passthrough::passthrough_policy(route, trigger, |condition| {
+        matches_condition(runtime, condition)
+    });
     if let Some(policy) = policy {
         emit_passthrough_intent(runtime, policy);
     }
