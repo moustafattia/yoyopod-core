@@ -6,7 +6,7 @@ use crate::animation;
 use crate::components;
 use crate::render_contract::DirtyRegion;
 use crate::router::history::HistoryEntry;
-use crate::scene::{GlobalClock, HudScene, SceneGraph};
+use crate::scene::{GlobalClock, HudScene, SceneGraph, SceneId};
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen};
@@ -110,6 +110,7 @@ impl UiRuntime {
             self.focus_index,
             self.selected_contact.as_ref(),
         );
+        active.id = SceneId::with_route_key(self.active_screen, self.active_route_key());
         active.timelines.extend(
             self.transitions
                 .iter()
@@ -175,6 +176,16 @@ impl UiRuntime {
 
     pub fn wants_ptt_passthrough(&self) -> bool {
         navigator::wants_ptt_passthrough(self)
+    }
+
+    fn active_route_key(&self) -> Option<&str> {
+        match self.active_screen {
+            UiScreen::TalkContact | UiScreen::VoiceNote => self
+                .selected_contact
+                .as_ref()
+                .map(|contact| contact.id.as_str()),
+            _ => None,
+        }
     }
 }
 

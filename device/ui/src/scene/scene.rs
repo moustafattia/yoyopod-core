@@ -29,4 +29,17 @@ impl SceneId {
             generation: 0,
         }
     }
+
+    pub fn with_route_key(screen: UiScreen, route_key: Option<&str>) -> Self {
+        Self {
+            screen,
+            generation: route_key.map(route_generation).unwrap_or(0),
+        }
+    }
+}
+
+fn route_generation(route_key: &str) -> u32 {
+    route_key.bytes().fold(0x811c9dc5, |hash, byte| {
+        hash.wrapping_mul(0x01000193) ^ u32::from(byte)
+    })
 }
