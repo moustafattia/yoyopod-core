@@ -1,10 +1,8 @@
-mod ask;
-mod communication;
-mod now_playing;
-
 use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
+use crate::renderer::styling::style as theme;
+use crate::scene::roles;
 
 pub(crate) fn apply_variant_raw(
     obj: NonNull<ffi::lv_obj_t>,
@@ -12,11 +10,28 @@ pub(crate) fn apply_variant_raw(
     variant: &'static str,
     accent_rgb: u32,
 ) {
-    if ask::apply(obj, role, variant, accent_rgb) {
-        return;
+    let _ = accent_rgb;
+    const SELECTOR: ffi::LvStyleSelector = 0;
+    unsafe {
+        match (role, variant) {
+            (roles::SCENE_BACKDROP, "solid" | "gradient" | "accent_drift" | "vignette") => {}
+            (roles::MODAL, "loading") => {
+                ffi::lv_obj_set_style_border_color(
+                    obj.as_ptr(),
+                    ffi::lv_color_hex(theme::MUTED_RGB),
+                    SELECTOR,
+                );
+                ffi::lv_obj_set_style_border_width(obj.as_ptr(), 1, SELECTOR);
+            }
+            (roles::MODAL, "error") => {
+                ffi::lv_obj_set_style_border_color(
+                    obj.as_ptr(),
+                    ffi::lv_color_hex(theme::ERROR_RGB),
+                    SELECTOR,
+                );
+                ffi::lv_obj_set_style_border_width(obj.as_ptr(), 1, SELECTOR);
+            }
+            _ => {}
+        }
     }
-    if communication::apply(obj, role, variant, accent_rgb) {
-        return;
-    }
-    let _ = now_playing::apply(obj, role, variant, accent_rgb);
 }
