@@ -1,5 +1,5 @@
-use crate::animation::{presets, ActorRef, TimelineRef, TrackIndex};
-use crate::engine::{AnimSlot, Element, Key};
+use crate::animation::ActorRef;
+use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
 
 use super::RegionId;
@@ -78,26 +78,29 @@ impl FxLayer {
 }
 
 fn halo_element(index: usize, halo: &Halo) -> Element {
-    Element::new(ElementKind::Container, Some("fx_halo"))
-        .key(Key::String(format!("fx:halo:{index}")))
-        .accent(halo.color)
-        .with_anim(AnimSlot {
-            timeline: TimelineRef(presets::BREATHE_TIMELINE_ID),
-            track: TrackIndex(0),
-        })
-        .with_opacity(halo.max_opacity)
+    fx_target_element(
+        "fx_halo",
+        Key::String(format!("fx:halo:{index}")),
+        halo.target,
+    )
+    .accent(halo.color)
+    .with_opacity(halo.max_opacity)
 }
 
 fn pulse_element(index: usize, pulse: &PulseRing) -> Element {
-    Element::new(ElementKind::Container, Some("fx_pulse"))
-        .key(Key::String(format!("fx:pulse:{index}")))
-        .accent(pulse.color)
-        .with_opacity(96)
+    fx_target_element(
+        "fx_pulse",
+        Key::String(format!("fx:pulse:{index}")),
+        pulse.target,
+    )
+    .accent(pulse.color)
+    .with_opacity(96)
 }
 
 fn particle_element(field_index: usize, index: u8, field: &ParticleField) -> Element {
     Element::new(ElementKind::Container, Some("fx_particle"))
         .key(Key::String(format!("fx:particle:{field_index}:{index}")))
+        .region(field.region)
         .accent(field.color)
 }
 
@@ -106,9 +109,21 @@ fn glow_element(index: usize, glow: &GlowBloom) -> Element {
         ActorRef::Screen => "fx_spinner",
         _ => "fx_glow",
     };
-    Element::new(ElementKind::Container, Some(role))
-        .key(Key::String(format!("fx:glow:{index}")))
+    fx_target_element(role, Key::String(format!("fx:glow:{index}")), glow.target)
         .with_opacity(glow.intensity)
+}
+
+fn fx_target_element(role: &'static str, key: Key, target: ActorRef) -> Element {
+    let element = Element::new(ElementKind::Container, Some(role))
+        .key(key)
+        .actor(target);
+    match target {
+        ActorRef::Region(region) => element.region(region),
+        ActorRef::Screen
+        | ActorRef::DeckItem { .. }
+        | ActorRef::FxNode { .. }
+        | ActorRef::Cursor => element,
+    }
 }
 
 trait FxElementExt {
