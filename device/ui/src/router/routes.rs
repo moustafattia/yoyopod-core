@@ -23,7 +23,7 @@ pub const fn status_bar_region() -> DirtyRegion {
     STATUS_BAR_REGION
 }
 
-pub const ROUTES: [Route; 17] = [
+pub const ROUTES: [Route; UiScreen::ALL.len()] = [
     route(UiScreen::Hub),
     route(UiScreen::Listen),
     route(UiScreen::Playlists),
