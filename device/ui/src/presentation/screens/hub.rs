@@ -1,4 +1,4 @@
-use crate::app::UiView;
+use crate::application::UiView;
 use crate::presentation::screens::{chrome, HubCardModel, HubViewModel};
 use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};

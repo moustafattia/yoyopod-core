@@ -1,4 +1,4 @@
-use crate::app::UiView;
+use crate::application::UiView;
 use crate::presentation::screens::{
     chrome, AskViewModel, TalkActionButtonModel, TalkActionsViewModel,
 };

@@ -44,7 +44,7 @@ pub struct ListRowModel {
 }
 
 /// ```compile_fail
-/// use yoyopod_ui::app::UiScreen;
+/// use yoyopod_ui::application::UiScreen;
 /// use yoyopod_ui::presentation::screens::{ChromeModel, ListRowModel, ListScreenModel, ScreenModel, StatusBarModel};
 ///
 /// let _ = ScreenModel::Listen(ListScreenModel {
@@ -93,7 +93,7 @@ pub struct NowPlayingViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// ```compile_fail
-/// use yoyopod_ui::app::UiScreen;
+/// use yoyopod_ui::application::UiScreen;
 /// use yoyopod_ui::presentation::screens::{AskViewModel, ChromeModel, StatusBarModel};
 ///
 /// let _ = AskViewModel {
@@ -126,7 +126,7 @@ pub struct AskViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// ```compile_fail
-/// use yoyopod_ui::app::UiScreen;
+/// use yoyopod_ui::application::UiScreen;
 /// use yoyopod_ui::presentation::screens::{CallViewModel, ChromeModel, StatusBarModel};
 ///
 /// let _ = CallViewModel {
@@ -192,7 +192,7 @@ pub struct PowerViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// ```compile_fail
-/// use yoyopod_ui::app::UiScreen;
+/// use yoyopod_ui::application::UiScreen;
 /// use yoyopod_ui::presentation::screens::{ChromeModel, OverlayViewModel, StatusBarModel};
 ///
 /// let _ = OverlayViewModel {

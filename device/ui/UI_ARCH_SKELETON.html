@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>YoyoPod UI — Architecture Skeleton</title>
+<style>
+  :root {
+    --bg: #0f1218;
+    --surface: #1a1f28;
+    --surface-2: #232a35;
+    --ink: #e8eaed;
+    --muted: #9aa0a6;
+    --accent: #3ddd53;
+    --accent-2: #00d4ff;
+    --accent-3: #ffd000;
+    --accent-4: #c79bff;
+    --warn: #ff675d;
+    --border: #2d3340;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 24px 80px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  .container { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  h1 .sub { display: block; font-size: 14px; font-weight: 400; color: var(--muted); margin-top: 6px; }
+  h2 { margin: 48px 0 14px; font-size: 20px; color: var(--accent); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { margin: 28px 0 10px; font-size: 16px; color: var(--accent-2); }
+  h4 { margin: 18px 0 6px; font-size: 13px; color: var(--accent-3); text-transform: uppercase; letter-spacing: 0.06em; }
+  p, li { font-size: 14px; }
+  code, pre { font-family: "JetBrains Mono", Menlo, monospace; font-size: 12.5px; }
+  code { background: var(--surface); padding: 1px 6px; border-radius: 4px; color: var(--accent-2); }
+  pre { background: var(--surface); padding: 14px 16px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); color: var(--ink); line-height: 1.5; }
+  pre.tree { color: var(--ink); }
+  pre.tree .dir { color: var(--accent-3); font-weight: 600; }
+  pre.tree .file { color: var(--ink); }
+  pre.tree .new { color: var(--accent); }
+  pre.tree .keep { color: var(--muted); }
+  pre.tree .comment { color: var(--muted); font-style: italic; }
+  .lede { background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 18px 20px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 24px; }
+  .lede p { margin: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--surface); color: var(--accent-3); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin: 12px 0 20px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .card h4 { margin-top: 0; color: var(--accent-2); }
+  .callout { background: rgba(0,212,255,0.06); border-left: 3px solid var(--accent-2); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; font-size: 13.5px; }
+  .callout.warn { background: rgba(255,103,93,0.07); border-left-color: var(--warn); }
+  .callout.good { background: rgba(61,221,83,0.07); border-left-color: var(--accent); }
+  .callout.purple { background: rgba(199,155,255,0.07); border-left-color: var(--accent-4); }
+  ul.tight { margin: 6px 0 12px; padding-left: 22px; }
+  ul.tight li { margin: 2px 0; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 20px; margin-bottom: 32px; columns: 2; column-gap: 30px; }
+  .toc a { color: var(--ink); text-decoration: none; }
+  .toc a:hover { color: var(--accent-2); }
+  .toc ol { margin: 0; padding-left: 18px; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .layer-stack { display: flex; flex-direction: column; gap: 4px; margin: 14px 0; }
+  .layer-stack .layer { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; }
+  .layer-z { background: var(--surface-2); color: var(--accent-3); font-weight: 700; padding: 2px 10px; border-radius: 4px; font-family: monospace; font-size: 11px; min-width: 36px; text-align: center; }
+  .layer-name { font-weight: 600; color: var(--accent-2); min-width: 140px; }
+  .layer-desc { color: var(--muted); font-size: 13px; flex: 1; }
+  .budget-row { display: grid; grid-template-columns: 200px 110px 1fr; gap: 12px; padding: 10px 12px; background: var(--surface); border-radius: 6px; margin: 6px 0; border-left: 3px solid var(--accent); align-items: center; }
+  .budget-row .budget-name { font-weight: 600; color: var(--accent-2); }
+  .budget-row .budget-num { color: var(--accent-3); font-family: monospace; font-size: 13px; font-weight: 600; }
+  .budget-row .budget-why { color: var(--muted); font-size: 12.5px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+  .pill.app { background: rgba(61,221,83,0.15); color: var(--accent); border: 1px solid rgba(61,221,83,0.4); }
+  .pill.engine { background: rgba(0,212,255,0.15); color: var(--accent-2); border: 1px solid rgba(0,212,255,0.4); }
+  .pill.render { background: rgba(255,208,0,0.15); color: var(--accent-3); border: 1px solid rgba(255,208,0,0.4); }
+  .pill.platform { background: rgba(199,155,255,0.15); color: var(--accent-4); border: 1px solid rgba(199,155,255,0.4); }
+  .arch-diagram { background: var(--surface); padding: 18px; border-radius: 10px; border: 1px solid var(--border); font-family: monospace; font-size: 12px; line-height: 1.6; overflow-x: auto; }
+  .arch-layer { padding: 10px 16px; margin: 4px 0; border-radius: 6px; }
+  .arch-app { background: rgba(61,221,83,0.08); border-left: 3px solid var(--accent); }
+  .arch-engine { background: rgba(0,212,255,0.08); border-left: 3px solid var(--accent-2); }
+  .arch-render { background: rgba(255,208,0,0.08); border-left: 3px solid var(--accent-3); }
+  .arch-platform { background: rgba(199,155,255,0.08); border-left: 3px solid var(--accent-4); }
+  .arch-flow { color: var(--muted); margin: 4px 0; text-align: center; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>YoyoPod UI — Architecture Skeleton
+  <span class="sub">A buildable design that combines the web-framework structure lens with the game-engine aesthetics lens. This is the blueprint: layers, folder tree, struct shapes, enum definitions, scene construction, deck contracts, and the hard limits the SPI panel imposes on what the system can do per frame.</span>
+</h1>
+
+<div class="lede">
+  <p>The first three reports were descriptive. This one is <strong>prescriptive</strong>. It is the full architectural skeleton — every layer named, every responsibility assigned, every key struct and enum sketched in Rust. You should be able to read this file and start filing the folder tree on disk; nothing here is hand-wavy.</p>
+</div>
+
+<div class="toc">
+  <ol>
+    <li><a href="#thesis">The unifying thesis</a></li>
+    <li><a href="#layers">The four architectural layers</a></li>
+    <li><a href="#constraints">Hardware constraints (the budget)</a></li>
+    <li><a href="#tree">Folder &amp; file tree</a></li>
+    <li><a href="#core-types">Core types (the language of the engine)</a></li>
+    <li><a href="#scenes">Scenes (construction &amp; lifecycle)</a></li>
+    <li><a href="#layers-z">Layer slots (the z-stack)</a></li>
+    <li><a href="#decks">Decks (the content layer)</a></li>
+    <li><a href="#components">Components (composition vocabulary)</a></li>
+    <li><a href="#stages">Stages (layout templates)</a></li>
+    <li><a href="#animation">Animation (timelines, tracks, clocks)</a></li>
+    <li><a href="#fx">Fx layer (halos, pulses, particles)</a></li>
+    <li><a href="#router">Router (navigation graph)</a></li>
+    <li><a href="#engine">Engine (reconciler + scheduler)</a></li>
+    <li><a href="#renderer">Renderer contract (LVGL host)</a></li>
+    <li><a href="#assets">Assets (theme, layout, scenes)</a></li>
+    <li><a href="#data-flow">Data flow per frame</a></li>
+    <li><a href="#invariants">Invariants &amp; tests</a></li>
+  </ol>
+</div>
+
+<h2 id="thesis">1. The unifying thesis</h2>
+
+<p>Two lenses, one architecture:</p>
+
+<div class="grid">
+  <div class="card">
+    <h4>Web-framework lens</h4>
+    <p><strong>Structure.</strong> Composition, reconciliation, declarative screens. Answers: <em>how do I build a screen out of reusable parts?</em></p>
+  </div>
+  <div class="card">
+    <h4>Game-engine lens</h4>
+    <p><strong>Aesthetics.</strong> Layers, particles, timelines. Answers: <em>how do I make a screen feel alive?</em></p>
+  </div>
+</div>
+
+<p>They map onto orthogonal parts of the architecture and do not compete:</p>
+
+<table>
+  <thead><tr><th>Concern</th><th>Owner</th><th>Lens</th></tr></thead>
+  <tbody>
+    <tr><td>How a scene is composed from components</td><td><code>scene</code> + <code>components</code></td><td>Web</td></tr>
+    <tr><td>How the tree is diffed against the previous frame</td><td><code>engine::reconciler</code></td><td>Web</td></tr>
+    <tr><td>How a scene is split into z-ordered layers</td><td><code>scene::layers</code></td><td>Game</td></tr>
+    <tr><td>How motion is described as data</td><td><code>animation</code> (timelines)</td><td>Game</td></tr>
+    <tr><td>How "look alive" effects are produced</td><td><code>scene::fx</code></td><td>Game</td></tr>
+    <tr><td>How user input becomes navigation</td><td><code>router</code></td><td>Web</td></tr>
+    <tr><td>How content is laid out as repeated items</td><td><code>scene::deck</code></td><td>Both</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>The unification.</strong> A <code>Scene</code> is both a <em>composition</em> (web) and a <em>layered, animated stage</em> (game). The same data structure carries both. We build it with component functions (web) and render it with z-ordered layer composition + timelines (game).
+</div>
+
+<h2 id="layers">2. The four architectural layers</h2>
+
+<div class="arch-diagram">
+  <div class="arch-layer arch-app">
+    <strong style="color: var(--accent);">APPLICATION</strong> &nbsp; <span class="pill app">stateful</span><br>
+    Snapshot mirror • Router (navigation history) • Focus • Intents • Watchdog<br>
+    Owns the <em>truth</em> about what should be on screen.
+  </div>
+  <div class="arch-flow">▼ props (typed) ▼</div>
+  <div class="arch-layer arch-engine">
+    <strong style="color: var(--accent-2);">ENGINE</strong> &nbsp; <span class="pill engine">stateful</span><br>
+    Component runtime (pure fns props → Scene) • Reconciler (Scene → Mutations) • Scheduler (timelines, clocks)<br>
+    Owns the <em>tree</em> and decides what changed.
+  </div>
+  <div class="arch-flow">▼ mutations (data) ▼</div>
+  <div class="arch-layer arch-render">
+    <strong style="color: var(--accent-3);">RENDERER</strong> &nbsp; <span class="pill render">stateful</span><br>
+    Node registry (NodeId → WidgetId) • LVGL facade • Asset resolver (role → style)<br>
+    Owns the <em>widgets</em> and the host SDK.
+  </div>
+  <div class="arch-flow">▼ FFI calls ▼</div>
+  <div class="arch-layer arch-platform">
+    <strong style="color: var(--accent-4);">PLATFORM</strong> &nbsp; <span class="pill platform">native</span><br>
+    LVGL C library • Framebuffer • SPI flush • Button GPIO<br>
+    Owns the <em>pixels</em> and the <em>hardware</em>.
+  </div>
+</div>
+
+<h4>Layer responsibilities, formally</h4>
+
+<table>
+  <thead><tr><th>Layer</th><th>Reads</th><th>Owns</th><th>Produces</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="pill app">application</span></td>
+      <td><code>UiCommand</code> (from manager), button events</td>
+      <td><code>UiRuntime</code> (snapshot + history + focus + intents)</td>
+      <td><code>Props</code> for the active route</td>
+    </tr>
+    <tr>
+      <td><span class="pill engine">engine</span></td>
+      <td><code>Props</code>, the previous <code>Scene</code></td>
+      <td><code>Scene</code> tree cache, active <code>Timeline</code>s, the global clock</td>
+      <td><code>Vec&lt;Mutation&gt;</code></td>
+    </tr>
+    <tr>
+      <td><span class="pill render">renderer</span></td>
+      <td><code>Vec&lt;Mutation&gt;</code></td>
+      <td><code>NodeRegistry</code>, <code>WidgetRegistry</code>, asset cache</td>
+      <td>LVGL ops; <code>RenderReport</code> back to engine</td>
+    </tr>
+    <tr>
+      <td><span class="pill platform">platform</span></td>
+      <td>LVGL ops</td>
+      <td>Framebuffer, SPI bus, button GPIO</td>
+      <td>Pixels on the panel; pressed/released bits</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="constraints">3. Hardware constraints (the budget)</h2>
+
+<p>Every design decision below is shaped by these. Optimism here is paid for with dropped frames.</p>
+
+<div class="budget-row">
+  <div class="budget-name">Display</div>
+  <div class="budget-num">240 × 280, RGB565</div>
+  <div class="budget-why">Whisplay panel. ~134 KB per full frame.</div>
+</div>
+<div class="budget-row">
+  <div class="budget-name">SPI bus</div>
+  <div class="budget-num">~40 MHz typical</div>
+  <div class="budget-why">~27 ms theoretical floor for a full-frame flush, plus overhead. <strong>~15–20 fps is the hard ceiling for full-frame redraws.</strong></div>
+</div>
+<div class="budget-row">
+  <div class="budget-name">Region flush</div>
+  <div class="budget-num">status bar = 240×32</div>
+  <div class="budget-why">~3.1 ms theoretical, ~5–8 ms real. Status bar can update at 30+ fps without touching the rest.</div>
+</div>
+<div class="budget-row">
+  <div class="budget-name">Frame budget</div>
+  <div class="budget-num">~50 ms target</div>
+  <div class="budget-why">20 fps target → 50 ms per frame for reconcile + LVGL + SPI. Engine work must fit in &lt;5 ms.</div>
+</div>
+<div class="budget-row">
+  <div class="budget-name">LVGL widget count</div>
+  <div class="budget-num">≤ 60 per scene</div>
+  <div class="budget-why">Each widget is a heap allocation + style state. Above this, LVGL layout passes get slow.</div>
+</div>
+<div class="budget-row">
+  <div class="budget-name">Active timelines</div>
+  <div class="budget-num">≤ 16</div>
+  <div class="budget-why">Each timeline is sampled per frame; keep linear scans cheap.</div>
+</div>
+<div class="budget-row">
+  <div class="budget-name">Particle count</div>
+  <div class="budget-num">≤ 8 visible</div>
+  <div class="budget-why">Each particle is one LVGL widget. Recycle aggressively.</div>
+</div>
+<div class="budget-row">
+  <div class="budget-name">Memory</div>
+  <div class="budget-num">tight</div>
+  <div class="budget-why">Embedded MCU class. Avoid <code>Box&lt;dyn Trait&gt;</code> in hot paths; prefer enums and stack values.</div>
+</div>
+
+<h4>What this forces</h4>
+
+<ul class="tight">
+  <li><strong>Two render rates.</strong> A "slow" rate (≤20 fps) for full-frame; a "fast" rate (≤30 fps) for the status-bar region. The engine separates them.</li>
+  <li><strong>Reconciliation must be cheap.</strong> The diff algorithm is keyed and positional only — no fancy heuristics, no string-matching.</li>
+  <li><strong>No closures in the tree.</strong> Owned data only.</li>
+  <li><strong>No allocator-on-every-frame.</strong> Reuse buffers (mutations, timeline samples) across frames.</li>
+  <li><strong>Looping animations should not force redraws.</strong> A breathing halo redraws only when its sampled opacity actually changed enough to matter (quantize to 8 levels).</li>
+</ul>
+
+<h2 id="tree">4. Folder &amp; file tree</h2>
+
+<p>The complete target tree. <span style="color: var(--accent);">Green</span> = new file. <span style="color: var(--muted);">Grey</span> = unchanged from today.</p>
+
+<pre class="tree">
+<span class="dir">device/ui/</span>
+├── <span class="dir">assets/</span>
+│   ├── <span class="keep">layouts.ron</span>          <span class="comment"># existing — role → absolute rect</span>
+│   ├── <span class="keep">theme.ron</span>            <span class="comment"># existing — role → style</span>
+│   └── <span class="new">scenes.ron</span>           <span class="comment"># NEW — scene definitions (FX, timelines, stage choices)</span>
+├── <span class="dir">src/</span>
+│   ├── <span class="keep">lib.rs</span>               <span class="comment"># module list + architecture tests</span>
+│   ├── <span class="keep">main.rs</span>              <span class="comment"># worker entry point</span>
+│   │
+│   ├── <span class="dir">application/</span>           <span class="comment"># renamed from app/</span>
+│   │   ├── mod.rs
+│   │   ├── runtime.rs            <span class="comment"># UiRuntime (snapshot + history + focus + intents)</span>
+│   │   ├── snapshot/             <span class="comment"># existing — patch application</span>
+│   │   │   ├── mod.rs
+│   │   │   ├── full.rs
+│   │   │   ├── patch.rs
+│   │   │   └── domains/
+│   │   ├── focus.rs
+│   │   ├── intents.rs
+│   │   └── input_router.rs
+│   │
+│   ├── <span class="dir">router/</span>                <span class="comment"># NEW — promoted from registry.rs</span>
+│   │   ├── mod.rs
+│   │   ├── route.rs              <span class="comment"># Route struct, Persistence enum</span>
+│   │   ├── routes.rs             <span class="comment"># the route table (one entry per UiScreen)</span>
+│   │   ├── guards.rs             <span class="comment"># runtime_preemption, overlay_check</span>
+│   │   ├── history.rs            <span class="comment"># navigation stack with cached params</span>
+│   │   ├── select.rs             <span class="comment"># SelectionTarget evaluation</span>
+│   │   ├── back.rs               <span class="comment"># BackPolicy evaluation</span>
+│   │   └── passthrough.rs        <span class="comment"># PassthroughPolicy evaluation</span>
+│   │
+│   ├── <span class="dir">engine/</span>                <span class="comment"># NEW — the core framework</span>
+│   │   ├── mod.rs
+│   │   ├── element.rs            <span class="comment"># Element, ElementKind, Key, NodeId</span>
+│   │   ├── props.rs              <span class="comment"># PropChange, prop diffing helpers</span>
+│   │   ├── reconciler.rs         <span class="comment"># diff Scene → Vec&lt;Mutation&gt;</span>
+│   │   ├── scheduler.rs          <span class="comment"># ticks, clocks, dirty arbitration</span>
+│   │   ├── mutation.rs           <span class="comment"># Mutation enum</span>
+│   │   ├── tree_cache.rs         <span class="comment"># keeps previous Scene for diffing</span>
+│   │   └── dirty.rs              <span class="comment"># DirtyRegion math (migrated)</span>
+│   │
+│   ├── <span class="dir">scene/</span>                 <span class="comment"># NEW — scene graph + layer types</span>
+│   │   ├── mod.rs
+│   │   ├── scene.rs              <span class="comment"># Scene struct (the 7 layers)</span>
+│   │   ├── graph.rs              <span class="comment"># SceneGraph (active + modal + hud)</span>
+│   │   ├── backdrop.rs           <span class="comment"># Backdrop enum (Solid, Gradient, AccentDrift)</span>
+│   │   ├── stage.rs              <span class="comment"># Stage enum + region maps</span>
+│   │   ├── deck.rs               <span class="comment"># Deck&lt;Item&gt;, DeckKind, DeckItemAnim</span>
+│   │   ├── cursor.rs             <span class="comment"># Cursor (selection actor)</span>
+│   │   ├── fx.rs                 <span class="comment"># FxLayer, Halo, PulseRing, ParticleField</span>
+│   │   ├── hud.rs                <span class="comment"># HudScene (persistent status + footer)</span>
+│   │   └── modal.rs              <span class="comment"># Modal (loading, error, future dialogs)</span>
+│   │
+│   ├── <span class="dir">components/</span>            <span class="comment"># NEW — composition vocabulary</span>
+│   │   ├── mod.rs
+│   │   ├── <span class="dir">primitives/</span>        <span class="comment"># thin wrappers — return Element</span>
+│   │   │   ├── mod.rs
+│   │   │   ├── container.rs
+│   │   │   ├── label.rs
+│   │   │   ├── image.rs
+│   │   │   └── progress.rs
+│   │   ├── <span class="dir">widgets/</span>           <span class="comment"># composites — return Element subtrees</span>
+│   │   │   ├── mod.rs
+│   │   │   ├── status_bar.rs
+│   │   │   ├── footer_bar.rs
+│   │   │   ├── list_row.rs
+│   │   │   ├── card.rs
+│   │   │   ├── chip.rs
+│   │   │   ├── icon_halo.rs
+│   │   │   ├── call_panel.rs
+│   │   │   ├── voice_meter.rs    <span class="comment"># mic + particle field for VoiceNote</span>
+│   │   │   └── progress_sweep.rs <span class="comment"># tweened progress bar</span>
+│   │   └── <span class="dir">screens/</span>           <span class="comment"># one file per UiScreen — returns Scene</span>
+│   │       ├── mod.rs
+│   │       ├── hub.rs
+│   │       ├── listen.rs
+│   │       ├── playlists.rs
+│   │       ├── recent_tracks.rs
+│   │       ├── now_playing.rs
+│   │       ├── ask.rs
+│   │       ├── talk.rs
+│   │       ├── contacts.rs
+│   │       ├── call_history.rs
+│   │       ├── talk_contact.rs
+│   │       ├── voice_note.rs
+│   │       ├── incoming_call.rs
+│   │       ├── outgoing_call.rs
+│   │       ├── in_call.rs
+│   │       ├── power.rs
+│   │       ├── loading.rs
+│   │       └── error.rs
+│   │
+│   ├── <span class="dir">animation/</span>             <span class="comment"># NEW — timeline system</span>
+│   │   ├── mod.rs
+│   │   ├── clock.rs              <span class="comment"># ClockSource: Scene | Global | Event</span>
+│   │   ├── timeline.rs           <span class="comment"># Timeline, Track, Keyframe, LoopMode</span>
+│   │   ├── easing.rs             <span class="comment"># Linear, EaseIn, EaseOut, EaseInOut, Bounce</span>
+│   │   ├── property.rs           <span class="comment"># AnimatableProp + AnimatableValue</span>
+│   │   ├── sampler.rs            <span class="comment"># TimelineSampler — what value now?</span>
+│   │   └── presets.rs            <span class="comment"># breathe(), pulse(), stagger_enter(), slide_in(), …</span>
+│   │
+│   ├── <span class="dir">renderer/</span>              <span class="comment"># renamed from render/</span>
+│   │   ├── mod.rs                <span class="comment"># Renderer trait, RenderReport</span>
+│   │   ├── lvgl_renderer.rs      <span class="comment"># LvglRenderer: applies Mutation list</span>
+│   │   ├── null_renderer.rs      <span class="comment"># records mutations, used in tests</span>
+│   │   ├── node_registry.rs      <span class="comment"># NodeId → WidgetId</span>
+│   │   ├── framebuffer.rs
+│   │   ├── assets.rs             <span class="comment"># RON loader + validator</span>
+│   │   ├── <span class="dir">styling/</span>           <span class="comment"># existing — role → LVGL style</span>
+│   │   │   ├── mod.rs
+│   │   │   ├── theme.rs
+│   │   │   ├── layout.rs
+│   │   │   ├── style.rs
+│   │   │   ├── accent.rs
+│   │   │   ├── icons.rs
+│   │   │   ├── base.rs
+│   │   │   ├── tuning/
+│   │   │   └── variants/
+│   │   ├── <span class="dir">widgets/</span>           <span class="comment"># existing — LvglFacade trait, factory, registry, roles</span>
+│   │   │   ├── mod.rs
+│   │   │   ├── facade.rs
+│   │   │   ├── factory.rs
+│   │   │   ├── registry.rs
+│   │   │   ├── primitives.rs
+│   │   │   └── roles.rs
+│   │   └── <span class="dir">lvgl/</span>              <span class="comment"># existing — FFI boundary</span>
+│   │       ├── mod.rs
+│   │       ├── ffi.rs
+│   │       ├── flush.rs
+│   │       ├── lifecycle.rs
+│   │       └── icons.rs
+│   │
+│   ├── <span class="dir">transport/</span>             <span class="comment"># existing — JSON envelope I/O</span>
+│   │   ├── mod.rs
+│   │   ├── codec.rs
+│   │   ├── dispatcher.rs
+│   │   ├── handshake.rs
+│   │   ├── inbound.rs
+│   │   └── outbound.rs
+│   │
+│   ├── <span class="dir">input/</span>                 <span class="comment"># existing — one-button state machine</span>
+│   │   ├── mod.rs
+│   │   ├── config.rs
+│   │   └── machine.rs
+│   │
+│   └── <span class="dir">hardware/</span>              <span class="comment"># existing — DisplayDevice, ButtonDevice traits</span>
+│       ├── mod.rs
+│       ├── mock.rs
+│       ├── whisplay.rs
+│       └── whisplay_panel.rs
+</pre>
+
+<h4>What moved, why</h4>
+
+<table>
+  <thead><tr><th>Old</th><th>New</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td><code>app/</code></td><td><code>application/</code></td><td>Distinguish app-layer state from the engine.</td></tr>
+    <tr><td><code>app/core.rs</code></td><td><code>application/runtime.rs</code></td><td>"Core" was unclear; "runtime" matches what it is.</td></tr>
+    <tr><td><code>presentation/registry.rs</code></td><td><code>router/</code> (multiple files)</td><td>The registry <em>is</em> a router; name it that way.</td></tr>
+    <tr><td><code>presentation/transitions.rs</code></td><td><code>animation/</code></td><td>Animation is a first-class concern, not a sub-concern of presentation.</td></tr>
+    <tr><td><code>presentation/view_models.rs</code></td><td><code>components/screens/*.rs</code> (Props per file)</td><td>Each screen owns its own props struct.</td></tr>
+    <tr><td><code>presentation/screens/*.rs</code></td><td><code>components/screens/*.rs</code></td><td>Screens are components that return <code>Scene</code>.</td></tr>
+    <tr><td><code>render/pipeline/</code></td><td><code>engine/</code></td><td>The pipeline becomes the engine; its dispatch logic becomes the reconciler.</td></tr>
+    <tr><td><code>render/screens/*.rs</code> (controllers)</td><td>(deleted)</td><td>Replaced by components returning Scene; engine handles widget bookkeeping.</td></tr>
+    <tr><td><code>render/</code></td><td><code>renderer/</code></td><td>It's the renderer host. The rendering pipeline lives in <code>engine/</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="core-types">5. Core types (the language of the engine)</h2>
+
+<p>These are the types that flow between layers. Everything else is built from them.</p>
+
+<h4>Identity</h4>
+
+<pre>// engine/element.rs
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(pub u32);   // assigned by engine, stable across frames
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Key {
+    Static(&amp;'static str),     // "hub_card_panel"
+    Indexed(usize),             // for rows in a deck
+    String(String),             // dynamic id from snapshot (contact.id, track.id)
+}</pre>
+
+<h4>Element (the virtual node)</h4>
+
+<pre>// engine/element.rs
+
+#[derive(Debug, Clone)]
+pub struct Element {
+    pub key:       Option&lt;Key&gt;,
+    pub kind:      ElementKind,
+    pub role:      Option&lt;&amp;'static str&gt;,   // styling lookup key
+    pub props:     ElementProps,
+    pub layout:    Layout,
+    pub anim:      Option&lt;AnimSlot&gt;,        // optional attached timeline ref
+    pub children:  Vec&lt;Element&gt;,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElementKind {
+    Container,
+    Label,
+    Image,
+    Progress,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ElementProps {
+    pub text:     Option&lt;String&gt;,
+    pub icon_key: Option&lt;String&gt;,
+    pub accent:   Option&lt;u32&gt;,
+    pub selected: Option&lt;bool&gt;,
+    pub visible:  Option&lt;bool&gt;,
+    pub opacity:  Option&lt;u8&gt;,
+    pub variant:  Option&lt;&amp;'static str&gt;,
+    pub progress: Option&lt;i32&gt;,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layout {
+    Absolute { x: i32, y: i32, w: i32, h: i32 },
+    Region(RegionId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AnimSlot {
+    pub timeline: TimelineRef,
+    pub track:    TrackIndex,
+}</pre>
+
+<h4>Mutation (the wire to the renderer)</h4>
+
+<pre>// engine/mutation.rs
+
+#[derive(Debug, Clone)]
+pub enum Mutation {
+    Create  { node: NodeId, parent: NodeId, kind: ElementKind, role: Option&lt;&amp;'static str&gt; },
+    Update  { node: NodeId, prop: PropChange },
+    Place   { node: NodeId, x: i32, y: i32, w: i32, h: i32 },
+    Reorder { parent: NodeId, order: Vec&lt;NodeId&gt; },
+    Remove  { node: NodeId },
+}
+
+#[derive(Debug, Clone)]
+pub enum PropChange {
+    Text(String),
+    Icon(String),
+    Accent(u32),
+    Selected(bool),
+    Visible(bool),
+    Opacity(u8),
+    Variant(&amp;'static str),
+    Progress(i32),
+}</pre>
+
+<h2 id="scenes">6. Scenes (construction &amp; lifecycle)</h2>
+
+<p>A <strong>Scene</strong> is the unified type: it's both a component composition (web) and a layered render description (game).</p>
+
+<pre>// scene/scene.rs
+
+pub struct Scene {
+    pub id:         SceneId,            // UiScreen + a generation counter
+    pub backdrop:   Backdrop,
+    pub stage:      Stage,
+    pub decks:      Vec&lt;Deck&gt;,
+    pub cursor:     Option&lt;Cursor&gt;,
+    pub fx:         FxLayer,
+    pub modal:      Option&lt;Modal&gt;,
+    pub timelines:  Vec&lt;Timeline&gt;,      // scene-local timelines (SceneTime clock)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SceneId {
+    pub screen:     UiScreen,
+    pub generation: u32,                // for invalidation if route params change
+}</pre>
+
+<p>Note what the Scene type does <strong>not</strong> contain:</p>
+<ul class="tight">
+  <li>No <code>hud</code> — the HUD is a separate persistent scene (see <code>SceneGraph</code> below).</li>
+  <li>No component state — scenes are pure data, regenerated from props each render.</li>
+  <li>No widget handles — those live in the renderer's <code>NodeRegistry</code>.</li>
+</ul>
+
+<h4>SceneGraph (lifecycle owner)</h4>
+
+<pre>// scene/graph.rs
+
+pub struct SceneGraph {
+    pub hud:           HudScene,                   // persistent — survives navigations
+    pub active:        Scene,                      // currently visible world scene
+    pub history:       Vec&lt;ScenePushFrame&gt;,        // for back navigation
+    pub modal_stack:   Vec&lt;Modal&gt;,                 // drawn on top of active
+    pub global_clock:  GlobalClock,                // ticks at GlobalTime
+}
+
+pub struct ScenePushFrame {
+    pub route:       UiScreen,
+    pub params:      RouteParams,
+    pub cached_state: SceneCacheEntry,             // for KeepAlive scenes
+}
+
+pub enum SceneCacheEntry {
+    Discarded,                                     // recompute on return
+    Retained { actor_state: ActorState },          // bring back without re-init
+}</pre>
+
+<h4>Component contract (how a screen builds its scene)</h4>
+
+<pre>// components/screens/hub.rs
+
+pub struct HubProps {
+    pub cards:          Vec&lt;HubCardModel&gt;,
+    pub selected_index: usize,
+    pub chrome:         ChromeProps,
+}
+
+pub fn props_from(snapshot: &amp;RuntimeSnapshot, focus: usize) -&gt; HubProps { ... }
+
+pub fn scene(props: &amp;HubProps) -&gt; Scene {
+    Scene {
+        id:        SceneId::new(UiScreen::Hub),
+        backdrop:  Backdrop::AccentDrift { accent: focused_accent(props), speed_ms: 800 },
+        stage:     Stage::CenteredHeroIcon,
+        decks:     vec![ hub_deck(props) ],
+        cursor:    Some(Cursor::UnderlineDots {
+                       count: props.cards.len(),
+                       focus: props.selected_index,
+                   }),
+        fx:        FxLayer {
+                       halos: vec![ presets::breathe_around(RegionId::HeroIcon) ],
+                       particles: vec![ presets::backdrop_drift(focused_accent(props)) ],
+                       ..Default::default()
+                   },
+        modal:     None,
+        timelines: vec![ presets::scene_enter() ],
+    }
+}</pre>
+
+<p>That's the entire contract: <code>props_from(snapshot, focus) → Props</code>, then <code>scene(&amp;props) → Scene</code>. No state, no widget handles, no LVGL.</p>
+
+<h2 id="layers-z">7. Layer slots (the z-stack)</h2>
+
+<p>Every <code>Scene</code> has exactly 7 z-ordered slots. The engine flattens them into a single Element tree in z-order for the reconciler. Layers below in the table are drawn behind layers above.</p>
+
+<div class="layer-stack">
+  <div class="layer">
+    <span class="layer-z">z=0</span>
+    <span class="layer-name">Backdrop</span>
+    <span class="layer-desc">Solid color, gradient, or accent drift. One enum: <code>Backdrop</code>.</span>
+  </div>
+  <div class="layer">
+    <span class="layer-z">z=1</span>
+    <span class="layer-name">Stage</span>
+    <span class="layer-desc">Layout template (fixed geometry). Defines named regions (<code>HeroIcon</code>, <code>ListBody</code>, etc.) that decks slot into.</span>
+  </div>
+  <div class="layer">
+    <span class="layer-z">z=2</span>
+    <span class="layer-name">Decks</span>
+    <span class="layer-desc">Vec of <code>Deck</code>. Data-driven content (cards, rows, pages).</span>
+  </div>
+  <div class="layer">
+    <span class="layer-z">z=3</span>
+    <span class="layer-name">Cursor</span>
+    <span class="layer-desc">Optional. The selection actor that tweens between deck positions.</span>
+  </div>
+  <div class="layer">
+    <span class="layer-z">z=4</span>
+    <span class="layer-name">FxLayer</span>
+    <span class="layer-desc">Halos, pulse rings, particle fields. Driven by timelines.</span>
+  </div>
+  <div class="layer">
+    <span class="layer-z">z=5</span>
+    <span class="layer-name">HUD</span>
+    <span class="layer-desc">Persistent across scenes. Status bar + footer. Owned by <code>SceneGraph</code>, not <code>Scene</code>.</span>
+  </div>
+  <div class="layer">
+    <span class="layer-z">z=6</span>
+    <span class="layer-name">Modal</span>
+    <span class="layer-desc">Optional pop-ups. Loading, Error, future dialogs. Owned by <code>SceneGraph::modal_stack</code>.</span>
+  </div>
+</div>
+
+<h4>Backdrop</h4>
+
+<pre>// scene/backdrop.rs
+
+#[derive(Debug, Clone, Copy)]
+pub enum Backdrop {
+    Solid(u32),                                          // base color
+    Gradient { from: u32, to: u32, angle_deg: i16 },
+    AccentDrift { accent: u32, speed_ms: u32 },          // slow tween toward accent
+    Vignette { base: u32, falloff: u8 },
+}</pre>
+
+<h2 id="decks">8. Decks (the content layer)</h2>
+
+<p>A deck is the single abstraction for "repeated items in a region". Every list, card row, and pager in the worker is a deck.</p>
+
+<pre>// scene/deck.rs
+
+pub struct Deck {
+    pub kind:           DeckKind,
+    pub region:         RegionId,            // where on stage
+    pub items:          Vec&lt;DeckItem&gt;,
+    pub focus_index:    usize,
+    pub focus_policy:   FocusPolicy,         // None | Wrap | Clamp
+    pub item_anim:      DeckItemAnim,
+    pub swap_anim:      Option&lt;Transition&gt;,  // when items change
+    pub recycle_window: Option&lt;usize&gt;,       // virtualize beyond N
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeckKind {
+    CardRow,     // Hub: 4 horizontal cards, one visible at a time
+    List,        // Listen/Talk/Contacts: vertical rows
+    Page,        // Power: full-screen pages, advance to cycle
+    Grid,        // future: e.g. 2x2 quick-actions
+    Buttons,     // VoiceNote/TalkContact: row of action buttons
+}
+
+#[derive(Debug, Clone)]
+pub struct DeckItem {
+    pub key:      Key,                       // stable identity (contact.id, etc.)
+    pub render:   ItemRender,                // how to draw this item
+}
+
+#[derive(Debug, Clone)]
+pub enum ItemRender {
+    Card    (CardModel),
+    Row     (RowModel),
+    Page    (PageModel),
+    Button  (ButtonModel),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DeckItemAnim {
+    None,
+    ScaleOnFocus { from_permille: u16, to_permille: u16 },
+    BreatheWhenFocused,
+    StaggerEnter { delay_per_index_ms: u32 },
+}</pre>
+
+<h4>How a deck becomes Elements</h4>
+
+<p>Each <code>DeckKind</code> has a deterministic layout: <code>CardRow</code> shows the focused item full-size with side-peeks; <code>List</code> stacks rows vertically clipped to the region; <code>Page</code> shows one item at a time; <code>Buttons</code> arranges items horizontally. The deck-to-element conversion lives in <code>scene/deck.rs</code> and is shared across all screens.</p>
+
+<h2 id="components">9. Components (composition vocabulary)</h2>
+
+<p>Three tiers, with strict rules about who calls whom:</p>
+
+<table>
+  <thead><tr><th>Tier</th><th>Returns</th><th>Can call</th><th>Examples</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Primitives</strong></td><td><code>Element</code></td><td>Nothing — leaf builders.</td><td><code>label()</code>, <code>container()</code>, <code>image()</code>, <code>progress()</code></td></tr>
+    <tr><td><strong>Widgets</strong></td><td><code>Element</code> subtree</td><td>Primitives, other widgets.</td><td><code>status_bar()</code>, <code>list_row()</code>, <code>card()</code>, <code>icon_halo()</code>, <code>chip()</code></td></tr>
+    <tr><td><strong>Screens</strong></td><td><code>Scene</code></td><td>Widgets, primitives, deck builders.</td><td><code>hub::scene()</code>, <code>now_playing::scene()</code></td></tr>
+  </tbody>
+</table>
+
+<h4>Primitive (example)</h4>
+
+<pre>// components/primitives/label.rs
+
+pub fn label(role: &amp;'static str) -&gt; Element {
+    Element {
+        key: None,
+        kind: ElementKind::Label,
+        role: Some(role),
+        props: ElementProps::default(),
+        layout: Layout::Region(RegionId::Auto),
+        anim: None,
+        children: vec![],
+    }
+}
+
+impl Element {
+    pub fn text(mut self, t: impl Into&lt;String&gt;) -&gt; Self { self.props.text = Some(t.into()); self }
+    pub fn icon(mut self, k: impl Into&lt;String&gt;) -&gt; Self { self.props.icon_key = Some(k.into()); self }
+    pub fn accent(mut self, rgb: u32) -&gt; Self { self.props.accent = Some(rgb); self }
+    pub fn selected(mut self, b: bool) -&gt; Self { self.props.selected = Some(b); self }
+    pub fn child(mut self, e: Element) -&gt; Self { self.children.push(e); self }
+    pub fn key(mut self, k: impl Into&lt;Key&gt;) -&gt; Self { self.key = Some(k.into()); self }
+}</pre>
+
+<h4>Widget (example)</h4>
+
+<pre>// components/widgets/list_row.rs
+
+pub fn list_row(row: &amp;ListRowModel, accent: u32) -&gt; Element {
+    container("list_row")
+        .key(Key::String(row.id.clone()))
+        .selected(row.selected)
+        .accent(accent)
+        .child(label("list_row_icon").icon(&amp;row.icon_key).accent(accent))
+        .child(label("list_row_title").text(&amp;row.title))
+        .child(label("list_row_subtitle").text(&amp;row.subtitle))
+}</pre>
+
+<h4>Screen (example, abridged)</h4>
+
+<pre>// components/screens/listen.rs
+
+pub fn scene(props: &amp;ListenProps) -&gt; Scene {
+    Scene {
+        id: SceneId::new(UiScreen::Listen),
+        backdrop: Backdrop::Solid(theme::BACKGROUND_RGB),
+        stage: Stage::ListWithChrome,
+        decks: vec![
+            Deck {
+                kind: DeckKind::List,
+                region: RegionId::ListBody,
+                items: props.rows.iter()
+                    .map(|r| DeckItem {
+                        key: Key::String(r.id.clone()),
+                        render: ItemRender::Row(r.into()),
+                    })
+                    .collect(),
+                focus_index: props.focus,
+                focus_policy: FocusPolicy::Wrap,
+                item_anim: DeckItemAnim::StaggerEnter { delay_per_index_ms: 40 },
+                swap_anim: None,
+                recycle_window: Some(4),
+            },
+        ],
+        cursor: Some(Cursor::RowGlow),
+        fx: FxLayer::default(),
+        modal: None,
+        timelines: vec![presets::scene_enter()],
+    }
+}</pre>
+
+<h2 id="stages">10. Stages (layout templates)</h2>
+
+<p>A <code>Stage</code> is a named layout template — the fixed geometry that backdrop sits on and decks slot into. It defines a small set of named regions.</p>
+
+<pre>// scene/stage.rs
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    CenteredHeroIcon,    // Hub, Ask, VoiceNote-ready — big icon + title + subtitle + dots
+    ListWithChrome,      // Listen, Talk, Contacts, CallHistory, Playlists, Recents
+    NowPlayingPanel,     // NowPlaying — icon halo + title + artist + progress
+    CallPanel,           // Incoming, Outgoing, InCall
+    TalkActionsGrid,     // TalkContact, VoiceNote-review — header + button row
+    PagedDetail,         // Power — multi-page detail
+    OverlayCenter,       // Loading, Error
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RegionId {
+    Auto,           // let the stage decide
+    Backdrop,
+    Header,
+    HeroIcon,
+    ListBody,
+    ButtonRow,
+    Dots,
+    Progress,
+    Title,
+    Subtitle,
+    Footer,
+    StatusBar,
+}
+
+pub fn region_rect(stage: Stage, region: RegionId) -&gt; Option&lt;LayoutRect&gt; {
+    // table-driven — every (stage, region) pair has an absolute rect
+    // backed by stages.ron or a const table.
+}</pre>
+
+<p>Stages compile down to today's <code>layouts.ron</code> — a single role's rect is just the region rect plus any inset rules. Existing absolute layouts keep working unchanged; new code uses regions.</p>
+
+<h2 id="animation">11. Animation (timelines, tracks, clocks)</h2>
+
+<p>The animation module is where motion lives as <strong>data</strong>. The current <code>Transition</code> type is generalized to multi-track timelines, three clock sources, and a small library of presets.</p>
+
+<h4>Timeline + Track + Keyframe</h4>
+
+<pre>// animation/timeline.rs
+
+pub struct Timeline {
+    pub id:          TimelineId,
+    pub clock:       ClockSource,
+    pub tracks:      Vec&lt;Track&gt;,
+    pub loop_mode:   LoopMode,
+    pub on_complete: Option&lt;OnCompleteAction&gt;,
+    pub started_ms:  u64,
+}
+
+pub struct Track {
+    pub target:    ActorRef,
+    pub property:  AnimatableProp,
+    pub keyframes: Vec&lt;Keyframe&gt;,
+    pub easing:    Easing,
+}
+
+pub struct Keyframe {
+    pub at_ms: u32,
+    pub value: AnimatableValue,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum LoopMode { Once, Loop, PingPong, RepeatN(u16) }
+
+#[derive(Debug, Clone, Copy)]
+pub enum ClockSource { SceneTime, GlobalTime, EventTime(EventId) }
+
+#[derive(Debug, Clone, Copy)]
+pub enum Easing { Linear, EaseIn, EaseOut, EaseInOut, Bounce, Spring }</pre>
+
+<h4>Animatable properties</h4>
+
+<pre>// animation/property.rs
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnimatableProp {
+    Opacity, X, Y, Width, Height,
+    Scale, AccentMix, BorderWidth, ShadowRadius,
+    SelectionOffset, ProgressPermille,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AnimatableValue {
+    I32(i32),
+    U8(u8),
+    Rgb(u32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActorRef {
+    Screen,
+    Region(RegionId),
+    DeckItem { deck: usize, index: usize },
+    FxNode  { layer: FxLayerId, index: usize },
+    Cursor,
+}</pre>
+
+<h4>Sampler (what does the renderer ask?)</h4>
+
+<pre>// animation/sampler.rs
+
+pub struct TimelineSampler&lt;'a&gt; {
+    timelines: &amp;'a [Timeline],
+    now_ms:    u64,
+    global_ms: u64,
+}
+
+impl&lt;'a&gt; TimelineSampler&lt;'a&gt; {
+    pub fn value(&amp;self, target: ActorRef, prop: AnimatableProp) -&gt; Option&lt;AnimatableValue&gt; { ... }
+    pub fn is_animating(&amp;self, target: ActorRef) -&gt; bool { ... }
+}</pre>
+
+<h4>Presets (shared motion vocabulary)</h4>
+
+<pre>// animation/presets.rs
+
+pub fn breathe_around(region: RegionId) -&gt; Timeline { ... }      // GlobalTime, Loop, opacity 60↔120 over 1400ms
+pub fn pulse_one_shot(actor: ActorRef) -&gt; Timeline { ... }       // EventTime, Once, ring + fade over 600ms
+pub fn stagger_enter() -&gt; Timeline { ... }                       // SceneTime, Once, 40ms per index
+pub fn slide_in_from_right() -&gt; Timeline { ... }                 // SceneTime, Once, X tween
+pub fn scene_enter() -&gt; Timeline { ... }                         // SceneTime, opacity + Y combined
+pub fn progress_sweep(from: i32, to: i32) -&gt; Timeline { ... }    // EventTime, Once, smooth progress fill
+pub fn selection_snap(to_index: usize) -&gt; Timeline { ... }       // EventTime, Once, cursor X tween</pre>
+
+<div class="callout">
+  <strong>Why three clocks.</strong> Looping FX (breathing halo) needs to keep going across scene swaps — that's <strong>GlobalTime</strong>. Scene-intro stagger needs to reset when the scene mounts — that's <strong>SceneTime</strong>. One-shot ripples need to start when an event fires (not when the scene mounted) — that's <strong>EventTime</strong>. Same primitive, three different "when does t=0 happen?" answers.
+</div>
+
+<h2 id="fx">12. Fx layer (halos, pulses, particles)</h2>
+
+<pre>// scene/fx.rs
+
+#[derive(Debug, Clone, Default)]
+pub struct FxLayer {
+    pub halos:     Vec&lt;Halo&gt;,
+    pub pulses:    Vec&lt;PulseRing&gt;,
+    pub particles: Vec&lt;ParticleField&gt;,
+    pub glows:     Vec&lt;GlowBloom&gt;,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Halo {
+    pub target: ActorRef,
+    pub color: u32,
+    pub period_ms: u32,
+    pub min_opacity: u8,
+    pub max_opacity: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PulseRing {
+    pub target: ActorRef,
+    pub color: u32,
+    pub duration_ms: u32,
+    pub max_radius: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParticleField {
+    pub region: RegionId,
+    pub count: u8,                // ≤ 8 enforced
+    pub color: u32,
+    pub drift_speed_ms: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GlowBloom {
+    pub target: ActorRef,
+    pub blur: u8,
+    pub intensity: u8,
+}</pre>
+
+<p>The FX layer is data-only — it does not contain Elements. The engine expands FX entries into Elements (+ timelines) at reconcile time, so the reconciler still sees a flat tree.</p>
+
+<h2 id="router">13. Router (navigation graph)</h2>
+
+<pre>// router/route.rs
+
+#[derive(Debug, Clone, Copy)]
+pub struct Route {
+    pub screen:        UiScreen,
+    pub title:         &amp;'static str,
+    pub focus_policy:  FocusPolicy,
+    pub nav_policy:    NavigationPolicy,
+    pub persistence:   Persistence,
+    pub select:        &amp;'static [SelectionTarget],
+    pub back:          &amp;'static [BackPolicy],
+    pub passthrough:   &amp;'static [PassthroughPolicy],
+    pub on_enter:      Option&lt;TimelineRef&gt;,    // animation preset to play on push
+    pub on_exit:       Option&lt;TimelineRef&gt;,    // animation preset to play on pop
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Persistence {
+    Ephemeral,      // destroyed on exit (default for list screens)
+    KeepAlive,      // hidden but retained when something else pushes (NowPlaying)
+    Singleton,      // created once per worker (Loading, Error)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum NavigationPolicy { Root, Stack, Overlay, Call }</pre>
+
+<p>The router's job is unchanged from today's <code>presentation/registry.rs</code>; the difference is organizational. <code>router/routes.rs</code> contains a single <code>const ROUTES: &amp;[Route]</code> table, indexed by <code>UiScreen</code>. Guards (<code>runtime_preemption</code>, overlay check) live in <code>router/guards.rs</code> and run after every snapshot apply.</p>
+
+<h2 id="engine">14. Engine (reconciler + scheduler)</h2>
+
+<pre>// engine/mod.rs
+
+pub struct Engine {
+    pub tree_cache:  TreeCache,      // last Scene → Element tree
+    pub node_alloc:  NodeIdAlloc,    // monotonic NodeId counter
+    pub mutations:   Vec&lt;Mutation&gt;,  // reused buffer; cleared per frame
+    pub timelines:   ActiveTimelines,
+}
+
+impl Engine {
+    pub fn render(&amp;mut self, graph: &amp;SceneGraph, now_ms: u64) -&gt; &amp;[Mutation] {
+        self.mutations.clear();
+        let new_tree = flatten(graph);                       // 7 layers → one Element tree
+        self.reconciler.diff(
+            self.tree_cache.previous(),
+            &amp;new_tree,
+            &amp;self.timelines.sampler(now_ms),
+            &amp;mut self.mutations,
+        );
+        self.tree_cache.replace(new_tree);
+        &amp;self.mutations
+    }
+
+    pub fn schedule_timeline(&amp;mut self, t: Timeline) { ... }
+    pub fn tick_clocks(&amp;mut self, now_ms: u64) { ... }
+}</pre>
+
+<h4>Reconciler algorithm (sketch)</h4>
+
+<ol class="tight">
+  <li>Walk old and new trees in parallel.</li>
+  <li>At each position: same key + same kind → reuse <code>NodeId</code>, diff props, emit <code>Update</code>s.</li>
+  <li>Different key or kind → emit <code>Remove</code> for old subtree, <code>Create</code>+recurse for new.</li>
+  <li>If parent's child order changed → emit <code>Reorder</code>.</li>
+  <li>Layout: each Element's <code>Region</code> resolves to a rect via <code>region_rect(stage, region)</code>; emit <code>Place</code> if it changed.</li>
+  <li>For each animating Element (has <code>AnimSlot</code>), sample the timeline and emit a <code>Update</code> with the interpolated value.</li>
+</ol>
+
+<h4>Scheduler — what does it do per tick?</h4>
+
+<pre>fn tick(graph: &amp;mut SceneGraph, engine: &amp;mut Engine, now_ms: u64) -&gt; FrameOutcome {
+    // 1. Advance clocks (GlobalTime always; SceneTime if scene is active)
+    engine.tick_clocks(now_ms);
+
+    // 2. Decide frame rate. If only the status bar dirty bit is set → fast path.
+    let mode = if hud_only_dirty(graph) { RenderMode::HudRegion } else { RenderMode::FullFrame };
+
+    // 3. Reconcile.
+    let mutations = engine.render(graph, now_ms);
+
+    // 4. Hand to renderer.
+    FrameOutcome { mode, mutations }
+}</pre>
+
+<h2 id="renderer">15. Renderer contract (LVGL host)</h2>
+
+<pre>// renderer/mod.rs
+
+pub trait Renderer {
+    fn apply(&amp;mut self, mutations: &amp;[Mutation]) -&gt; Result&lt;()&gt;;
+    fn flush(&amp;mut self, fb: &amp;mut Framebuffer, mode: RenderMode) -&gt; Result&lt;RenderReport&gt;;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RenderMode {
+    FullFrame,
+    HudRegion,            // 240 × 32, the status bar only
+    Region(DirtyRegion),
+}
+
+pub struct RenderReport {
+    pub renderer:    &amp;'static str,    // "lvgl" | "null"
+    pub mode:        RenderMode,
+    pub widget_count: usize,
+}</pre>
+
+<p>The renderer is now <em>dumb</em>: it does not know about screens, view-models, or controllers. It only knows how to translate mutations into LVGL ops. All the existing styling (theme, layout, accent, tuning, variants) stays untouched and is consulted when a mutation's <code>role</code> is resolved.</p>
+
+<h2 id="assets">16. Assets (theme, layout, scenes)</h2>
+
+<p>Three asset files at startup; all validated and cached in memory.</p>
+
+<table>
+  <thead><tr><th>File</th><th>Owns</th><th>Schema (top-level)</th></tr></thead>
+  <tbody>
+    <tr><td><code>theme.ron</code></td><td>role → style (fill, text, border, radius, shadow, etc.) + selected variant.</td><td>existing</td></tr>
+    <tr><td><code>layouts.ron</code></td><td>role → absolute rect (x, y, w, h, optional repeat).</td><td>existing</td></tr>
+    <tr><td><code>scenes.ron</code></td><td>Per-screen scene defaults: backdrop kind, stage choice, FX preset list, timeline overrides.</td><td>NEW</td></tr>
+  </tbody>
+</table>
+
+<pre>// scenes.ron sketch
+Scenes(
+    hub: Scene(
+        backdrop: AccentDrift(speed_ms: 800),
+        stage: CenteredHeroIcon,
+        fx: [
+            Halo(target: HeroIcon, period_ms: 1400),
+            ParticleField(region: Backdrop, count: 6, drift_ms: 4000),
+        ],
+        on_enter: "scene_enter",
+    ),
+    listen: Scene(
+        backdrop: Solid(0x2A2D35),
+        stage: ListWithChrome,
+        fx: [],
+        on_enter: "stagger_enter",
+    ),
+    // …one per UiScreen
+)</pre>
+
+<h2 id="data-flow">17. Data flow per frame</h2>
+
+<p>Putting it all together — what happens between a button press and a pixel change:</p>
+
+<pre>1. button → transport::handle_button_input
+2. transport::dispatcher → application::UiRuntime::handle_input(action)
+3. UiRuntime delegates to router (select / back / passthrough policies)
+4. Router updates active_screen + screen_stack; may emit UiIntent
+5. UiIntent → outbound::emit_event → manager (over JSON)
+6. UiRuntime marks DirtyState (focus + input bits)
+7. main loop calls UiRuntime::render_if_dirty
+       │
+       ▼
+8. props_from(snapshot, focus) for the active route
+9. components::screens::&lt;active&gt;::scene(&amp;props)              → Scene
+10. SceneGraph.update(active = scene, modal = …, hud = unchanged)
+11. engine.tick_clocks(now_ms)
+12. engine.render(&amp;graph, now_ms)                            → &amp;[Mutation]
+13. renderer.apply(&amp;mutations)                               → LVGL ops
+14. renderer.flush(fb, mode)
+       │
+       ▼
+15. hardware::flush_region(fb, region) over SPI
+16. UiRuntime.mark_clean()</pre>
+
+<h2 id="invariants">18. Invariants &amp; tests</h2>
+
+<p>The architecture tests in <code>lib.rs</code> grow from 7 to 12. They are the only thing that prevents drift back into today's monoliths.</p>
+
+<table>
+  <thead><tr><th>#</th><th>Invariant</th><th>How tested</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Transport never imports renderer.</td><td>grep <code>use crate::renderer</code> in <code>transport/</code></td></tr>
+    <tr><td>2</td><td>Application never imports renderer.</td><td>grep <code>use crate::renderer</code> in <code>application/</code></td></tr>
+    <tr><td>3</td><td>Components never import renderer.</td><td>grep <code>use crate::renderer</code> in <code>components/</code></td></tr>
+    <tr><td>4</td><td>Engine never imports renderer.</td><td>grep <code>use crate::renderer</code> in <code>engine/</code></td></tr>
+    <tr><td>5</td><td>Renderer never imports application, engine, components, or router.</td><td>grep in <code>renderer/</code></td></tr>
+    <tr><td>6</td><td>LVGL FFI only inside <code>renderer/{lvgl,widgets,styling}/</code>.</td><td>grep <code>use crate::renderer::lvgl::ffi</code></td></tr>
+    <tr><td>7</td><td>Screens are pure: <code>scene(&amp;props)</code> never reads global state.</td><td>function-signature lint (no <code>&amp;mut</code>, no <code>'static</code> mut)</td></tr>
+    <tr><td>8</td><td>Every <code>UiScreen</code> has exactly one route in <code>router::routes::ROUTES</code>.</td><td>compile-time check</td></tr>
+    <tr><td>9</td><td>Every <code>UiScreen</code> has a screen module under <code>components/screens/</code>.</td><td>const array lookup test</td></tr>
+    <tr><td>10</td><td>Active timelines ≤ 16 at all times.</td><td>runtime assert in <code>engine::schedule_timeline</code></td></tr>
+    <tr><td>11</td><td>Active widgets ≤ 60 per scene.</td><td>runtime assert in <code>renderer::apply</code></td></tr>
+    <tr><td>12</td><td>HUD survives scene swaps (its widget IDs do not change across renders).</td><td>integration test with <code>NullRenderer</code></td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>Summary</h2>
+
+<p>Four layers (application → engine → renderer → platform). Seven scene layer slots (backdrop → stage → decks → cursor → fx → hud → modal). Three component tiers (primitives → widgets → screens). Three animation clocks (SceneTime / GlobalTime / EventTime). One hardware budget (~20 fps full-frame, ~30 fps HUD region, ≤60 widgets per scene).</p>
+
+<p>Components return Scenes; the engine reconciles them into Mutations; the renderer plays Mutations into LVGL widgets; the platform flushes pixels over SPI. Web and game lenses unify at the Scene type: it's a composition (web) <em>and</em> a layered animated stage (game), built by a pure function from props.</p>
+
+<p>The folder tree maps one-to-one onto the architecture. The struct sketches in this report compile (modulo a handful of small types I omitted for brevity). Build it stage by stage following the roadmap from the previous two reports; each stage delivers value independently.</p>
+
+<p style="color: var(--muted); font-size: 12px; margin-top: 32px;">Generated 2026-05-13. The buildable spec. Companion to <code>UI_VOCAB.html</code> (today), <code>UI_FRAMEWORK_VISION.html</code> (structural future), and <code>UI_GAME_ENGINE_VISION.html</code> (aesthetic future). Together: where we are, two ways to look forward, and how to actually build the synthesis.</p>
+
+</div>
+</body>
+</html>

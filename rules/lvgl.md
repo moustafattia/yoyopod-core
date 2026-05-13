@@ -22,14 +22,14 @@ For the Figma-to-Whisplay implementation workflow, screen extraction order, and 
 LVGL object tree
   -> partial render (40-line draw buffer)
   -> flush callback (RGB565_SWAPPED)
-  -> Rust display bridge in `device/ui/src/render/lvgl/`
+  -> Rust display bridge in `device/ui/src/renderer/lvgl/`
   -> hardware SPI + RGB565 framebuffer/browser preview
 ```
 
 ## Native Boundary
 
 Rust owns the scene controllers and calls upstream LVGL directly through
-`device/ui/src/render/lvgl/ffi.rs`. The only C dependency in this path is
+`device/ui/src/renderer/lvgl/ffi.rs`. The only C dependency in this path is
 upstream LVGL itself, built from the pinned 9.5.0 source using
 `device/ui/native/lvgl`.
 

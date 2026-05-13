@@ -1,4 +1,4 @@
-use crate::app::UiView;
+use crate::application::UiView;
 use crate::presentation::screens::{chrome, ListScreenModel, NowPlayingViewModel};
 use yoyopod_protocol::ui::RuntimeSnapshot;
 use yoyopod_protocol::ui::UiScreen;

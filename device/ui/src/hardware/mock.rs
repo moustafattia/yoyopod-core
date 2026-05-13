@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::hardware::{ButtonDevice, DisplayDevice};
-use crate::presentation::registry::DirtyRegion;
-use crate::render::Framebuffer;
+use crate::renderer::Framebuffer;
+use crate::router::DirtyRegion;
 
 #[derive(Debug)]
 pub struct MockDisplay {

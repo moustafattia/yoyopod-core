@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use yoyopod_protocol::ui::{UiError, UiErrorCode, UiEvent};
 
-use crate::app::{RenderState, UiRuntime};
+use crate::application::{RenderState, UiRuntime};
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
 
