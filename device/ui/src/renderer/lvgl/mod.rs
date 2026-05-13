@@ -415,19 +415,6 @@ impl LvglFacade for NativeLvglFacade {
         Ok(())
     }
 
-    fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {
-        let node = self.widget_node_mut(widget)?;
-        node.layout.y = y;
-        Self::apply_node_layout_raw(
-            node.obj,
-            node.layout,
-            node.x_offset,
-            node.y_offset,
-            node.scale_permille,
-        );
-        Ok(())
-    }
-
     fn set_geometry(
         &mut self,
         widget: WidgetId,

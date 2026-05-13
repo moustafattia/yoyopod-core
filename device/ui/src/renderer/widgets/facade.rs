@@ -43,11 +43,6 @@ pub trait LvglFacade {
         Ok(())
     }
 
-    fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {
-        let _ = (widget, y);
-        Ok(())
-    }
-
     fn set_geometry(
         &mut self,
         widget: WidgetId,
@@ -136,10 +131,6 @@ where
 
     fn set_scale(&mut self, widget: WidgetId, scale_permille: i32) -> Result<()> {
         (**self).set_scale(widget, scale_permille)
-    }
-
-    fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {
-        (**self).set_y(widget, y)
     }
 
     fn set_geometry(
