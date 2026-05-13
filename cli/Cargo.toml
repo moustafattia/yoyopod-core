@@ -18,6 +18,14 @@ missing_panics_doc = "allow"
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
 too_many_lines = "allow"
+# Pedantic-level lints we explicitly accept in this CLI's style:
+unnecessary_debug_formatting = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+doc_markdown = "allow"
+uninlined_format_args = "allow"
+struct_field_names = "allow"
+case_sensitive_file_extension_comparisons = "allow"
 
 [profile.release]
 lto = "thin"

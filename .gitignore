@@ -34,9 +34,11 @@ uv.lock
 
 # Rust
 target/
+!cli/yoyopod/src/commands/target/
 Cargo.lock
 !device/Cargo.lock
 !workers/ui/rust/Cargo.lock
+!cli/Cargo.lock
 
 # Web/app packages
 node_modules/
