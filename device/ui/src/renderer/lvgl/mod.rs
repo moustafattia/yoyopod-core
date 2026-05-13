@@ -240,15 +240,7 @@ impl LvglFacade for NativeLvglFacade {
         })?;
         unsafe {
             ffi::lv_label_set_text(node.obj.as_ptr(), text.as_ptr());
-            if matches!(
-                node.role,
-                roles::NOW_PLAYING_ICON_LABEL
-                    | roles::NOW_PLAYING_STATE_LABEL
-                    | roles::TALK_ACTIONS_HEADER_LABEL
-                    | roles::TALK_ACTIONS_BUTTON_LABEL
-                    | roles::CALL_STATE_LABEL
-                    | roles::CALL_MUTE_LABEL
-            ) {
+            if matches!(node.role, roles::CALL_STATE_LABEL | roles::CALL_MUTE_LABEL) {
                 ffi::lv_obj_center(node.obj.as_ptr());
             }
         }
@@ -291,21 +283,6 @@ impl LvglFacade for NativeLvglFacade {
     fn set_progress(&mut self, widget: WidgetId, value: i32) -> Result<()> {
         let value = value.clamp(0, 1000);
         let node = self.widget_node_mut(widget)?;
-        if node.role == roles::NOW_PLAYING_PROGRESS_FILL {
-            let fill_width = (168 * value) / 1000;
-            if fill_width <= 0 {
-                styling::hide_widget_raw(node.obj);
-            } else {
-                Self::apply_layout_raw(
-                    node.obj,
-                    Layout {
-                        width: fill_width,
-                        ..node.layout
-                    },
-                );
-            }
-            return Ok(());
-        }
         if node.role == roles::STATUS_BATTERY_FILL {
             let fill_width = (12 * value) / 100;
             if fill_width <= 0 {

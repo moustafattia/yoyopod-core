@@ -36,21 +36,15 @@ pub type LvDisplayFlushCb = unsafe extern "C" fn(*mut lv_display_t, *const lv_ar
 pub type LvStyleSelector = u32;
 
 pub const LV_DISPLAY_RENDER_MODE_PARTIAL: i32 = 0;
-pub const LV_ALIGN_CENTER: i32 = 9;
-pub const LV_LABEL_LONG_MODE_WRAP: i32 = 0;
 pub const LV_LABEL_LONG_MODE_DOTS: i32 = 1;
 pub const LV_LABEL_LONG_MODE_CLIP: i32 = 4;
 pub const LV_SCROLLBAR_MODE_OFF: i32 = 0;
-pub const LV_TEXT_ALIGN_LEFT: i32 = 1;
 pub const LV_TEXT_ALIGN_CENTER: i32 = 2;
 pub const LV_RADIUS_CIRCLE: i32 = 0x7FFF;
 
 unsafe extern "C" {
     pub static lv_font_montserrat_12: lv_font_t;
-    pub static lv_font_montserrat_14: lv_font_t;
-    pub static lv_font_montserrat_16: lv_font_t;
     pub static lv_font_montserrat_18: lv_font_t;
-    pub static lv_font_montserrat_24: lv_font_t;
 
     pub fn lv_init();
     pub fn lv_deinit();
@@ -112,35 +106,17 @@ unsafe extern "C" {
         value: lv_color_t,
         selector: LvStyleSelector,
     );
-    pub fn lv_obj_set_style_shadow_opa(obj: *mut lv_obj_t, value: u8, selector: LvStyleSelector);
-    pub fn lv_obj_set_style_image_recolor(
-        obj: *mut lv_obj_t,
-        value: lv_color_t,
-        selector: LvStyleSelector,
-    );
-    pub fn lv_obj_set_style_image_recolor_opa(
-        obj: *mut lv_obj_t,
-        value: u8,
-        selector: LvStyleSelector,
-    );
-    pub fn lv_obj_set_style_image_opa(obj: *mut lv_obj_t, value: u8, selector: LvStyleSelector);
     pub fn lv_obj_set_style_text_font(
         obj: *mut lv_obj_t,
         value: *const lv_font_t,
         selector: LvStyleSelector,
     );
     pub fn lv_obj_set_style_text_align(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
-    pub fn lv_obj_set_style_text_line_space(
-        obj: *mut lv_obj_t,
-        value: i32,
-        selector: LvStyleSelector,
-    );
     pub fn lv_obj_set_style_pad_top(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
     pub fn lv_obj_set_style_pad_bottom(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
     pub fn lv_obj_set_style_pad_left(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
     pub fn lv_obj_set_style_pad_right(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
     pub fn lv_obj_set_scrollbar_mode(obj: *mut lv_obj_t, mode: i32);
-    pub fn lv_obj_align(obj: *mut lv_obj_t, align: i32, x_ofs: i32, y_ofs: i32);
     pub fn lv_obj_center(obj: *mut lv_obj_t);
 
     pub fn lv_label_create(parent: *mut lv_obj_t) -> *mut lv_obj_t;
