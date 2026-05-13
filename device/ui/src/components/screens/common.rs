@@ -4,8 +4,8 @@ use crate::animation::presets;
 use crate::engine::Key;
 use crate::router::FocusPolicy;
 use crate::scene::{
-    Backdrop, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FxLayer, ItemRender, RegionId,
-    RowModel, Scene, SceneId, Stage,
+    Backdrop, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FxLayer, ItemRender, PageModel,
+    RegionId, RowModel, Scene, SceneId, Stage,
 };
 
 pub fn hero_scene(screen: UiScreen, accent: u32, item_count: usize, focus: usize) -> Scene {
@@ -100,12 +100,24 @@ pub fn action_scene(screen: UiScreen, focus: usize) -> Scene {
     }
 }
 
-pub fn call_scene(screen: UiScreen) -> Scene {
+pub fn call_scene(screen: UiScreen, title: String, body: String) -> Scene {
     Scene {
         id: SceneId::new(screen),
         backdrop: Backdrop::Solid(0x2a2d35),
         stage: Stage::CallPanel,
-        decks: Vec::new(),
+        decks: vec![Deck {
+            kind: DeckKind::Page,
+            region: RegionId::ListBody,
+            items: vec![DeckItem {
+                key: Key::Static("call"),
+                render: ItemRender::Page(PageModel { title, body }),
+            }],
+            focus_index: 0,
+            focus_policy: FocusPolicy::None,
+            item_anim: DeckItemAnim::None,
+            swap_anim: None,
+            recycle_window: None,
+        }],
         cursor: None,
         fx: FxLayer::default(),
         modal: None,

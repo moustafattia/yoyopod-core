@@ -57,32 +57,35 @@ fn deck_element(index: usize, deck: &Deck) -> Element {
             Element::new(ElementKind::Container, Some("deck_region"))
                 .text(format!("{:?}", deck.region)),
         );
-    for item in &deck.items {
-        element = element.child(deck_item_element(item));
+    for (item_index, item) in deck.items.iter().enumerate() {
+        element = element.child(deck_item_element(item, item_index == deck.focus_index));
     }
     element
 }
 
-fn deck_item_element(item: &DeckItem) -> Element {
+fn deck_item_element(item: &DeckItem, selected: bool) -> Element {
     match &item.render {
         ItemRender::Card(card) => Element::new(ElementKind::Container, Some("card"))
             .key(item.key.clone())
+            .selected(selected)
             .accent(card.accent)
             .child(Element::new(ElementKind::Label, Some("card_title")).text(&card.title))
             .child(Element::new(ElementKind::Label, Some("card_subtitle")).text(&card.subtitle))
             .child(Element::new(ElementKind::Image, Some("card_icon")).icon(&card.icon_key)),
         ItemRender::Row(row) => Element::new(ElementKind::Container, Some("list_row"))
             .key(item.key.clone())
-            .selected(row.selected)
+            .selected(row.selected || selected)
             .child(Element::new(ElementKind::Image, Some("list_row_icon")).icon(&row.icon_key))
             .child(Element::new(ElementKind::Label, Some("list_row_title")).text(&row.title))
             .child(Element::new(ElementKind::Label, Some("list_row_subtitle")).text(&row.subtitle)),
         ItemRender::Page(page) => Element::new(ElementKind::Container, Some("page"))
             .key(item.key.clone())
+            .selected(selected)
             .child(Element::new(ElementKind::Label, Some("page_title")).text(&page.title))
             .child(Element::new(ElementKind::Label, Some("page_body")).text(&page.body)),
         ItemRender::Button(button) => Element::new(ElementKind::Container, Some("button"))
             .key(item.key.clone())
+            .selected(selected)
             .child(Element::new(ElementKind::Image, Some("button_icon")).icon(&button.icon_key))
             .child(Element::new(ElementKind::Label, Some("button_title")).text(&button.title)),
     }

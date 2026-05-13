@@ -379,6 +379,7 @@ fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
         ui_runtime.active_screen(),
         ui_runtime.snapshot(),
         ui_runtime.focus_index(),
+        ui_runtime.selected_contact(),
     );
     let mut chrome = components::screens::chrome::chrome_for_screen(
         ui_runtime.active_screen(),

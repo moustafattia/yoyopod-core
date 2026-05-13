@@ -18,27 +18,32 @@ pub mod talk;
 pub mod talk_contact;
 pub mod voice_note;
 
-use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::scene::Scene;
 
-pub fn scene_for_screen(screen: UiScreen, snapshot: &RuntimeSnapshot, focus: usize) -> Scene {
+pub fn scene_for_screen(
+    screen: UiScreen,
+    snapshot: &RuntimeSnapshot,
+    focus: usize,
+    selected_contact: Option<&ListItemSnapshot>,
+) -> Scene {
     match screen {
         UiScreen::Hub => hub::scene(&hub::props_from(snapshot, focus)),
         UiScreen::Listen => listen::scene(&listen::props_from(snapshot, focus)),
         UiScreen::Playlists => playlists::scene(snapshot, focus),
         UiScreen::RecentTracks => recent_tracks::scene(snapshot, focus),
         UiScreen::NowPlaying => now_playing::scene(snapshot),
-        UiScreen::Ask => ask::scene(focus),
+        UiScreen::Ask => ask::scene(snapshot, focus),
         UiScreen::Talk => talk::scene(focus),
         UiScreen::Contacts => contacts::scene(snapshot, focus),
         UiScreen::CallHistory => call_history::scene(snapshot, focus),
-        UiScreen::TalkContact => talk_contact::scene(focus),
-        UiScreen::VoiceNote => voice_note::scene(focus),
-        UiScreen::IncomingCall => incoming_call::scene(),
-        UiScreen::OutgoingCall => outgoing_call::scene(),
-        UiScreen::InCall => in_call::scene(),
-        UiScreen::Power => power::scene(focus),
+        UiScreen::TalkContact => talk_contact::scene(snapshot, focus, selected_contact),
+        UiScreen::VoiceNote => voice_note::scene(snapshot, focus),
+        UiScreen::IncomingCall => incoming_call::scene(snapshot),
+        UiScreen::OutgoingCall => outgoing_call::scene(snapshot),
+        UiScreen::InCall => in_call::scene(snapshot),
+        UiScreen::Power => power::scene(snapshot, focus),
         UiScreen::Loading => loading::scene(snapshot),
         UiScreen::Error => error::scene(snapshot),
     }
