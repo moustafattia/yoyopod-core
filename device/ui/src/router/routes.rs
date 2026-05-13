@@ -18,7 +18,31 @@ const STATUS_BAR_REGION: DirtyRegion = DirtyRegion {
     h: 32,
 };
 
+pub const ROUTES: [Route; 17] = [
+    route(UiScreen::Hub),
+    route(UiScreen::Listen),
+    route(UiScreen::Playlists),
+    route(UiScreen::RecentTracks),
+    route(UiScreen::NowPlaying),
+    route(UiScreen::Ask),
+    route(UiScreen::Talk),
+    route(UiScreen::Contacts),
+    route(UiScreen::CallHistory),
+    route(UiScreen::TalkContact),
+    route(UiScreen::VoiceNote),
+    route(UiScreen::IncomingCall),
+    route(UiScreen::OutgoingCall),
+    route(UiScreen::InCall),
+    route(UiScreen::Power),
+    route(UiScreen::Loading),
+    route(UiScreen::Error),
+];
+
 pub const fn route_for(screen: UiScreen) -> Route {
+    ROUTES[screen_index(screen)]
+}
+
+const fn route(screen: UiScreen) -> Route {
     Route {
         screen,
         title: screen.as_str(),
@@ -33,6 +57,28 @@ pub const fn route_for(screen: UiScreen) -> Route {
         select: select_targets(screen),
         passthrough: passthrough_policies(screen),
         back: back_policies(screen),
+    }
+}
+
+const fn screen_index(screen: UiScreen) -> usize {
+    match screen {
+        UiScreen::Hub => 0,
+        UiScreen::Listen => 1,
+        UiScreen::Playlists => 2,
+        UiScreen::RecentTracks => 3,
+        UiScreen::NowPlaying => 4,
+        UiScreen::Ask => 5,
+        UiScreen::Talk => 6,
+        UiScreen::Contacts => 7,
+        UiScreen::CallHistory => 8,
+        UiScreen::TalkContact => 9,
+        UiScreen::VoiceNote => 10,
+        UiScreen::IncomingCall => 11,
+        UiScreen::OutgoingCall => 12,
+        UiScreen::InCall => 13,
+        UiScreen::Power => 14,
+        UiScreen::Loading => 15,
+        UiScreen::Error => 16,
     }
 }
 

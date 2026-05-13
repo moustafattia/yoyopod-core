@@ -14,5 +14,5 @@ pub use route::{
 };
 pub use routes::{
     controller_kind_for_native_scene, dirty_region_for, route_for, screen_capabilities,
-    static_intent_template,
+    static_intent_template, ROUTES,
 };
