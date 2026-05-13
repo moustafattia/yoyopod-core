@@ -1,54 +1,65 @@
 ---
 name: yoyopod-sync
-description: Rare-case dirty-tree sync escape hatch for Raspberry Pi debugging
+description: Sync a committed branch / SHA to the Raspberry Pi dev lane
 disable-model-invocation: true
 allowed-tools:
   - Read
-  - Bash(yoyopod remote:*)
+  - Bash(yoyopod target:*)
 ---
+
+## What this skill does now
+
+This skill is kept for muscle memory. It is a thin wrapper around
+`yoyopod target deploy`, which is the committed-code sync command.
+
+The Python-era `yoyopod remote sync --dirty-tree` escape hatch was
+deleted in the Round 0 CLI rebuild. The Rust CLI does not support
+syncing uncommitted local state — `target deploy` requires a pushed
+commit so the matching CI artifact (`yoyopod-rust-device-arm64-<sha>`)
+can be downloaded and installed. If you need to test uncommitted work,
+commit to a throwaway branch first, push, then deploy.
 
 ## Config
 
-Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, and the dev lane checkout. The tracked dev default is `project_dir: /opt/yoyopod-dev/checkout`; prod slots live under `/opt/yoyopod-prod`. `yoyopod remote` merges the files directly, and `yoyopod remote config edit` is the preferred way to create or update the local override.
+Use `deploy/pi-deploy.yaml` as the shared deploy contract and
+`deploy/pi-deploy.local.yaml` for machine-specific overrides such as
+host, SSH user, and the dev lane checkout. The tracked dev default is
+`project_dir: /opt/yoyopod-dev/checkout`; prod slots live under
+`/opt/yoyopod-prod`. `yoyopod target` merges the files directly, and
+`yoyopod target config edit` is the preferred way to create or update
+the local override.
 
-If the file does not exist yet, run `yoyopod remote config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
+If the file does not exist yet, run `yoyopod target config edit` first.
+That command creates `deploy/pi-deploy.local.yaml` automatically before
+opening it.
 
 ## Steps
 
-1. **Confirm this is really a dirty-tree override.** Only use this skill if the user explicitly wants to validate uncommitted local state or asks for a dirty-tree debugging shortcut. Otherwise stop and recommend `/yoyopod-deploy`.
-
-2. **Switch the board into the dev lane.** Run:
+1. **Switch the board into the dev lane.** Run:
    ```bash
-   yoyopod remote mode status
-   yoyopod remote mode activate dev
+   yoyopod target mode status
+   yoyopod target mode activate dev
    ```
 
-3. **Sync the dirty working tree into `/opt/yoyopod-dev/checkout`.** Run:
+2. **Deploy the committed branch (and optionally exact SHA).** Run:
    ```bash
-   yoyopod remote sync
+   yoyopod target deploy --branch <branch>            # current commit
+   # or:
+   yoyopod target deploy --sha <commit>
    ```
 
-4. **Remember what sync does not do.** Dirty sync can update Python, config,
-   docs, and native C shim sources. It does not create trustworthy Rust
-   binaries for Pi validation. For Rust runtime/worker binaries, use exact-SHA
-   CI artifacts from `skills/yoyopod-rust-artifact/SKILL.md`.
+   Add `--wait-for-ci` if the CI run for that commit is still queued or
+   in-progress.
 
-5. **If branch switching may have stale native CMake caches,** run:
-   ```bash
-   yoyopod remote sync --clean-native
-   ```
+   Add `--clean-native` after native LVGL / CMake input changes so the
+   Pi-side build dir gets cleared.
 
-6. **If the user explicitly wants sync without restart,** run:
+3. **Handle failures.** If deploy fails, run:
    ```bash
-   yoyopod remote sync --skip-restart
-   ```
-
-7. **Handle failures.** If the sync or restart step fails, run:
-   ```bash
-   yoyopod remote logs --lines 20
+   yoyopod target logs --lines 20
    ```
    Include the relevant error output in your response.
 
-8. **Report the result clearly.** Say that this mutated the dev lane checkout,
-   was a dirty-tree validation override, was not the normal committed branch/SHA
-   workflow, and did not replace the exact-artifact Rust validation path.
+4. **Report the result clearly.** Include the branch, SHA, CI run ID,
+   artifact name, Pi host, and whether `yoyopod-dev.service` came up
+   cleanly.

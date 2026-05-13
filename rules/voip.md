@@ -1,23 +1,26 @@
 # Communication (Liblinphone)
 
-Applies to: `yoyopod/integrations/call/**`, `yoyopod/integrations/contacts/**`, `yoyopod/backends/voip/**`
+Applies to: `device/voip/**`, `device/liblinphone-shim/**`, and any
+runtime code that consumes VoIP state snapshots.
 
 ## Overview
 
-The production VoIP path is Rust-owned Liblinphone:
+The VoIP path is fully Rust-owned:
 
 - Rust VoIP host under `device/voip/`
 - Rust Liblinphone shim under `device/liblinphone-shim/`
-- Python `RustHostBackend` only supervises the worker process and forwards commands
-- `VoIPManager` only exposes command helpers and Rust runtime snapshots to the app
+- The runtime supervises the host process and forwards commands over
+  the standard NDJSON worker protocol
+- Runtime VoIP state is sourced from the host's published snapshots
 
-Do not reintroduce `linphonec` subprocess control or `.linphonerc`-driven runtime behavior.
+Do not reintroduce `linphonec` subprocess control or `.linphonerc`-driven runtime behaviour.
 
 ## Integration Rules
 
-- Liblinphone iteration is owned by the Rust VoIP host, not the Python app loop.
-- Python must not expose live call-state or incoming-call callback ownership.
-- Rust runtime snapshots are the contract into the Python app layer for:
+- Liblinphone iteration is owned by the Rust VoIP host.
+- Live call-state and incoming-call callback ownership stays inside the
+  host.
+- Rust runtime snapshots are the contract into the app state for:
   - registration state
   - call/session state
   - message summaries

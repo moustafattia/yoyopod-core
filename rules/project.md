@@ -7,39 +7,32 @@ Three display/input surfaces are supported today: PiSugar Whisplay hardware, Pim
 ## Common Commands
 
 ```bash
-# Install dev dependencies
-uv run yoyopod setup host
-uv run yoyopod setup verify-host
+# Build the Rust operator CLI (single binary `yoyopod`):
+cargo build --manifest-path cli/Cargo.toml --release
+# Optional: install into ~/.cargo/bin/
+cargo install --path cli/yoyopod
 
-# Build and run the Rust runtime
-uv run yoyopod build rust-runtime
-device/runtime/build/yoyopod-runtime --config-dir config
-yoyopod build simulation
+# Build and run the Rust runtime locally:
+cargo build --manifest-path device/Cargo.toml --release -p yoyopod-runtime
+device/target/release/yoyopod-runtime --config-dir config
 
-# Local CI mirror
-uv run --extra dev python scripts/quality.py ci
+# Rust workspace checks:
+cargo check --manifest-path device/Cargo.toml --workspace --locked
+cargo test  --manifest-path cli/Cargo.toml
 
-# Repo-owned code quality gate
-uv run --extra dev python scripts/quality.py gate
-
-# Full quality debt audit
-uv run --extra dev python scripts/quality.py audit
-
-# Baseline Pi setup contract
-uv run yoyopod setup pi
-uv run yoyopod setup verify-pi
-
-# Focused target-side validation
-yoyopod pi validate deploy
-yoyopod pi validate smoke
-yoyopod pi validate voip
-yoyopod pi validate navigation
-yoyopod pi validate stability
+# Daily Pi loop:
+yoyopod target mode status
+yoyopod target mode activate dev
+yoyopod target deploy --branch <branch>           # or --sha <commit>
+yoyopod target logs --follow
 ```
 
-`yoyopod setup *` is the baseline executable contract, not the finished setup story.
-It does not yet provision external service credentials, validate every native
-artifact deeply, or cover every board/modem-specific edge.
+Host setup, Pi bootstrap, code quality gates, and per-stage on-Pi
+validation (`pi validate deploy/smoke/voip/navigation/stability`) are
+all part of the CLI rebuild roadmap; see
+`docs/operations/CLI_REBUILD_ROUNDS.md`. Until they return, set up host
+dependencies manually and validate Rust changes after `target deploy`
+via `journalctl -u yoyopod-dev.service -f`.
 
 ## Configuration
 

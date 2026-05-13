@@ -15,15 +15,19 @@ If you are new here, read these first:
 When docs disagree, trust sources in this order:
 
 1. Current Rust runtime and host code in `device/`
-2. Current deploy/runtime tooling in `deploy/` and `yoyopod_cli/`
-3. Current runtime, operations, hardware, feature, and design docs under the folders below
-4. Rules and agent guidance in `rules/`, `AGENTS.md`, and `skills/`
-5. Current rules and agent guidance in `rules/`, `AGENTS.md`, and `skills/`
+2. Current Rust operator CLI in `cli/` and deploy tooling under `deploy/`
+3. [`operations/CLI_REBUILD_ROUNDS.md`](operations/CLI_REBUILD_ROUNDS.md)
+   for what's currently broken or paused during the CLI rebuild
+4. Current runtime, operations, hardware, feature, and design docs
+   under the folders below
+5. Rules and agent guidance in `../rules/`, `../AGENTS.md`, and
+   `../skills/`
 
-The retired Python app runtime has been deleted. Python remains only for
-operations CLI, deploy, release, and validation orchestration.
+The retired Python app runtime and the Python operator CLI have both
+been deleted. The repo is Rust-only.
 
-Plan docs are useful context, but they are not automatically the current implementation contract.
+Plan docs are useful context, but they are not automatically the
+current implementation contract.
 
 ## Folder Map
 
@@ -60,11 +64,12 @@ Plan docs are useful context, but they are not automatically the current impleme
 ### Working On Raspberry Pi Deployment
 
 1. [`operations/CONTRIBUTOR_WORKFLOW.md`](operations/CONTRIBUTOR_WORKFLOW.md)
-2. [`operations/SETUP_CONTRACT.md`](operations/SETUP_CONTRACT.md)
-3. [`operations/DEV_PROD_LANES.md`](operations/DEV_PROD_LANES.md)
-4. [`operations/SLOT_DEPLOY.md`](operations/SLOT_DEPLOY.md)
+2. [`operations/CLI_REBUILD_ROUNDS.md`](operations/CLI_REBUILD_ROUNDS.md) — current rebuild state
+3. [`operations/SETUP_CONTRACT.md`](operations/SETUP_CONTRACT.md)
+4. [`operations/DEV_PROD_LANES.md`](operations/DEV_PROD_LANES.md)
 5. [`operations/PI_DEV_WORKFLOW.md`](operations/PI_DEV_WORKFLOW.md)
 6. [`operations/RPI_SMOKE_VALIDATION.md`](operations/RPI_SMOKE_VALIDATION.md)
+7. [`operations/SLOT_DEPLOY.md`](operations/SLOT_DEPLOY.md) — paused; Round 3
 
 ### Working On UI Or Design
 
@@ -86,6 +91,7 @@ Plan docs are useful context, but they are not automatically the current impleme
 
 These docs describe current implementation contracts:
 
+- [`operations/CLI_REBUILD_ROUNDS.md`](operations/CLI_REBUILD_ROUNDS.md)
 - [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
 - [`architecture/WORK_AREAS.md`](architecture/WORK_AREAS.md)
 - [`architecture/CANONICAL_STRUCTURE.md`](architecture/CANONICAL_STRUCTURE.md)
@@ -95,7 +101,8 @@ These docs describe current implementation contracts:
 - [`operations/SETUP_CONTRACT.md`](operations/SETUP_CONTRACT.md)
 - [`operations/QUALITY_GATES.md`](operations/QUALITY_GATES.md)
 - [`operations/DEV_PROD_LANES.md`](operations/DEV_PROD_LANES.md)
-- [`operations/SLOT_DEPLOY.md`](operations/SLOT_DEPLOY.md)
+- [`operations/PI_DEV_WORKFLOW.md`](operations/PI_DEV_WORKFLOW.md)
+- [`operations/SLOT_DEPLOY.md`](operations/SLOT_DEPLOY.md) (paused; Round 3)
 - [`hardware/POWER_MODULE.md`](hardware/POWER_MODULE.md)
 - [`hardware/AUDIO_STACK.md`](hardware/AUDIO_STACK.md)
 - [`features/CLOUD_PROVISIONING_AND_BACKEND.md`](features/CLOUD_PROVISIONING_AND_BACKEND.md)

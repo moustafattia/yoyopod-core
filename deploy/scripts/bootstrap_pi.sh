@@ -172,18 +172,24 @@ Prod lane root: ${ROOT}
 Dev lane root:  ${DEV_ROOT}
 
 Next steps on the dev machine:
-  uv run yoyopod remote release build-pi --output ./build/releases --channel dev
-  yoyopod remote release push ./build/releases/<version>.tar.gz --first-deploy
 
-Or install a published CI/release artifact directly:
-  yoyopod remote release install-url <artifact-url> --first-deploy
+  # For the dev lane (PR testing):
+  yoyopod target config edit
+  yoyopod target mode activate dev
+  yoyopod target deploy --branch <branch>
+
+  # For prod slot installs:
+  # The prod release CLI (yoyopod target release ...) returns in Round 3
+  # of the CLI rebuild; see docs/operations/CLI_REBUILD_ROUNDS.md.
+  # Reinstalling a previously-shipped slot still works manually via
+  # SSH + /opt/yoyopod-prod/bin/install-release.sh.
 
 Then on the Pi:
   sudo systemctl enable --now yoyopod-prod.service
 
-After bootstrap, 'yoyopod remote release ...' talks directly to the prod
-lane at ${ROOT}. The dev lane uses ${DEV_ROOT}/checkout for 'remote sync',
-'remote validate', and 'remote setup'.
+After bootstrap, the dev lane uses ${DEV_ROOT}/checkout for
+'yoyopod target deploy' and the prod lane at ${ROOT} runs whichever
+slot is symlinked at current/.
 
 NOTE: the running app does not yet honour YOYOPOD_STATE_DIR/config/ -
 the config loader still reads from the slot's relative ./config dir.

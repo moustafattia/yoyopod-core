@@ -1,6 +1,7 @@
 # Development Guide
 
-This guide holds the operational detail that does not belong on the repo landing page.
+This guide holds the operational detail that does not belong on the
+repo landing page.
 
 If you are new here, read these first:
 
@@ -8,52 +9,46 @@ If you are new here, read these first:
 2. [`README.md`](../README.md)
 3. [`CONTRIBUTOR_WORKFLOW.md`](CONTRIBUTOR_WORKFLOW.md)
 4. [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md)
+5. [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md)
 
 ## Source of truth
 
-For current behavior, trust:
-- current Rust runtime and host code in `device/`
-- current operations tooling in `yoyopod_cli/`
+For current behaviour, trust:
+
+- current Rust runtime and worker code in `device/`
+- current operator CLI source in `cli/`
 - this guide for setup and workflow
-- [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md) for runtime topology
+- [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md) for
+  runtime topology
+- [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md) for what's broken
+  during the CLI rebuild
 - [`../AGENTS.md`](../../AGENTS.md) and `rules/` for repo guidance
 
-Treat plan docs and checklists as supporting context unless they explicitly state they are current.
+Treat plan docs and checklists as supporting context unless they
+explicitly state they are current.
 
-## Python Environment
-
-```bash
-uv run yoyopod setup host
-uv run yoyopod setup verify-host
-```
-
-These commands define the baseline executable setup contract. They do not yet
-cover external service credentials or every board/modem-specific setup edge.
-If `yoyopod` reports that the contributor CLI dependencies are missing, run
-`uv sync --extra dev` and retry.
-
-If you plan to use the remote Pi workflow from your dev machine, verify the
-extra host tools explicitly:
+## Toolchain
 
 ```bash
-uv run yoyopod setup verify-host --with-remote-tools
+# Stable Rust via rustup
+rustup default stable
+rustup component add rustfmt clippy
+
+# Build the operator CLI:
+cargo build --manifest-path cli/Cargo.toml --release
+cargo install --path cli/yoyopod          # optional, into ~/.cargo/bin
+
+# Build the runtime locally (optional; CI artifacts are normally used):
+cargo build --manifest-path device/Cargo.toml --release -p yoyopod-runtime
 ```
 
-If you plan to use GitHub CLI helpers for branch or PR work, verify that too:
-
-```bash
-uv run yoyopod setup verify-host --with-github
-```
-
-Combine both flags when you need both surfaces.
+`gh` (GitHub CLI) must be authenticated for `yoyopod target deploy`.
 
 ## System Dependencies
 
-The current repo-owned setup contract lives in [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md).
+The full setup contract lives in [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md).
 
-Short version:
-
-Core Raspberry Pi packages and services expected by the active stack:
+Core Raspberry Pi packages and services:
 
 - `mpv`
 - `ffmpeg`
@@ -63,22 +58,11 @@ Core Raspberry Pi packages and services expected by the active stack:
 - `alsa-utils`
 - `i2c-tools`
 - `pisugar-server` on PiSugar-based targets
+- `ppp` for the cellular modem path
 
-Feature-gated extras are documented there too, including:
-
-- `ppp` for the modem PPP path
-
-Example:
-
-```bash
-uv run yoyopod setup pi --with-pisugar
-uv run yoyopod setup verify-pi --with-pisugar
-```
-
-Treat those commands as the baseline package/build verifier, not proof that all
-feature assets and hardware-specific setup are complete.
-
-Add `--with-voice` and/or `--with-network` when the target uses the TTS or modem paths. For PiSugar-based hardware, `--with-pisugar` is what makes `pisugar-server` part of the verified contract.
+Automated host/Pi setup commands (`yoyopod setup …`) were deleted in
+Round 0 of the CLI rebuild; install manually until they return. See
+[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
 
 ## Configuration
 
@@ -102,15 +86,20 @@ Key settings:
 - `config/app/core.yaml`
   - `app.*`, `ui.*`, `logging.*`, `diagnostics.*`
 - `config/audio/music.yaml`
-  - `audio.music_dir`, `audio.recent_tracks_file`, `audio.mpv_*`, `audio.default_volume`
+  - `audio.music_dir`, `audio.recent_tracks_file`, `audio.mpv_*`,
+    `audio.default_volume`
 - `config/device/hardware.yaml`
-  - `input.*`, `display.*`, `communication_audio.*`, `media_audio.*`, `voice_audio.*`
+  - `input.*`, `display.*`, `communication_audio.*`, `media_audio.*`,
+    `voice_audio.*`
 - `config/power/backend.yaml`
-  - `power.*` PiSugar backend transport, watchdog, polling, warning, and shutdown policy
+  - `power.*` PiSugar backend transport, watchdog, polling, warning,
+    and shutdown policy
 - `config/network/cellular.yaml`
-  - `network.*` cellular modem enablement, ports, APN, GPS, and PPP timeout
+  - `network.*` cellular modem enablement, ports, APN, GPS, and PPP
+    timeout
 - `config/voice/assistant.yaml`
-  - `assistant.*` voice commands, cloud-worker STT/TTS, prompt policy, and command routing
+  - `assistant.*` voice commands, cloud-worker STT/TTS, prompt policy,
+    and command routing
 - `config/communication/calling.yaml`
   - SIP identity, transport, STUN, call policy, call-history path
 - `config/communication/messaging.yaml`
@@ -118,19 +107,20 @@ Key settings:
 - `config/people/directory.yaml`
   - paths for mutable people data under `data/people/`
 
-Local SIP credentials belong in `config/communication/calling.secrets.yaml` or
-env vars. Mutable contacts live in `data/people/contacts.yaml`, optionally
-bootstrapped from `config/people/contacts.seed.yaml`. Mutable media history
-lives in `data/media/recent_tracks.json`.
+Local SIP credentials belong in
+`config/communication/calling.secrets.yaml` or env vars. Mutable
+contacts live in `data/people/contacts.yaml`, optionally bootstrapped
+from `config/people/contacts.seed.yaml`. Mutable media history lives in
+`data/media/recent_tracks.json`.
 
-Current approved-contacts behavior:
+Current approved-contacts behaviour:
 
 - contacts may include both `sip_address` and `phone_number`
 - the runtime prefers SIP for calling while GSM remains disabled
-- backend config sync can replace the cloud-managed subset while preserving
-  local-only contacts
-- a claimed device may upload prestored local contacts once when backend
-  authority is still empty for that household
+- backend config sync can replace the cloud-managed subset while
+  preserving local-only contacts
+- a claimed device may upload prestored local contacts once when
+  backend authority is still empty for that household
 
 ## Running
 
@@ -140,23 +130,22 @@ Rust runtime dry run:
 cargo run --manifest-path device/Cargo.toml -p yoyopod-runtime -- --config-dir config --dry-run
 ```
 
-Rust runtime:
+Rust runtime (after a local build):
 
 ```bash
-device/runtime/build/yoyopod-runtime --config-dir config
+device/target/release/yoyopod-runtime --config-dir config
 ```
 
 Installed console entrypoint:
 
 ```bash
-yoyopod
+yoyopod                # Rust operator CLI; does NOT launch the runtime
 ```
 
-The installed `yoyopod` command is the operations CLI. It does not launch the
-app runtime.
-
-Legacy Python runtime demos have been deleted. The Rust runtime is the only
-supported app runtime workflow.
+The installed `yoyopod` command is the operator CLI for dev-machine to
+Pi orchestration. It does not launch the app runtime — that runs on the
+Pi via `yoyopod-dev.service` (dev lane) or `yoyopod-prod.service`
+(prod lane).
 
 ## Validation
 
@@ -164,83 +153,46 @@ Local validation:
 
 ```bash
 cargo check --manifest-path device/Cargo.toml --workspace --locked
+cargo test  --manifest-path cli/Cargo.toml
+cargo clippy --manifest-path cli/Cargo.toml --all-targets
 ```
 
-Run Python lint/type checks only when Python CLI/deploy/compatibility files
-change:
+See [`QUALITY_GATES.md`](QUALITY_GATES.md).
 
-```bash
-uv run --extra dev python scripts/quality.py gate
-```
+Profiling tooling (`yoyopod dev profile …`) was retired with the rest
+of the Python CLI in Round 0. For ad-hoc profiling, use the standard
+Rust tools (`cargo flamegraph`, `samply`, `perf` on the Pi) directly
+against `yoyopod-runtime` and worker binaries.
 
-Optional extra syntax/import smoke for broad Python tree changes:
-
-```bash
-python -m compileall yoyopod_cli scripts
-```
-
-Full quality audit of the current repo debt:
-
-```bash
-uv run --extra dev python scripts/quality.py audit
-```
-
-The staged gate contract and exact target set live in [`QUALITY_GATES.md`](QUALITY_GATES.md).
-
-Profiling and bounded branch-to-branch benchmarks:
-
-```bash
-uv run yoyopod dev profile tools
-uv run yoyopod dev profile targets
-uv run yoyopod dev profile cprofile --target simulate-bootstrap
-uv run yoyopod dev profile pyinstrument --target simulate-loop --iterations 300 --html
-uv run yoyopod dev profile pyperf --target scaffold-loop --fast
-```
-
-For the full Pi-focused profiling path, including `py-spy`, `perf`, and the
-repo's coordinator-loop diagnostics, see [`PI_PROFILING_WORKFLOW.md`](PI_PROFILING_WORKFLOW.md).
-
-Target-side validation suite:
-
-```bash
-yoyopod pi validate deploy
-yoyopod pi validate smoke
-yoyopod pi validate voip
-yoyopod pi validate navigation
-yoyopod pi validate stability
-```
+Automated on-Pi validation (`yoyopod target validate …` /
+`yoyopod pi validate …`) is on the CLI rebuild roadmap and is not yet
+available. Until then, validate manually after `yoyopod target deploy`
+via `systemd` and `journalctl`.
 
 ## Raspberry Pi Workflow
 
-Preferred remote helper:
-
 ```bash
-uv run yoyopod setup verify-host --with-remote-tools
-yoyopod remote config edit
-uv run yoyopod remote setup --with-pisugar
-uv run yoyopod remote verify-setup --with-pisugar
-yoyopod remote config show
-yoyopod remote status
-git branch --show-current
-git rev-parse HEAD
-yoyopod remote validate --branch <branch> --sha <commit> --with-voip --with-lvgl-soak
-yoyopod remote validate --branch <branch> --sha <commit> --with-navigation
-yoyopod remote preflight --branch <branch>
-yoyopod remote logs --lines 200
+yoyopod target config edit                       # one-time per machine
+yoyopod target mode status
+yoyopod target mode activate dev
+yoyopod target deploy --branch <branch>          # or --sha <commit>
+yoyopod target status
+yoyopod target logs --lines 200
+yoyopod target logs --follow --filter ERROR
 ```
 
-That remote flow mirrors the same baseline contract. You still need feature-specific
-follow-through for external credentials and unusual board/modem bringup.
-Add `--with-voice` and/or `--with-network` to the setup commands when the target depends on those paths.
+`yoyopod target deploy` pushes, finds the CI artifact for the exact
+commit, syncs the Pi, installs the worker binaries, restarts the
+service, and verifies startup in one step.
 
-If a GitHub fetch or push fails with a short-lived connectivity error, retry it
-several times before treating it as a real failure. This environment has seen
-brief `github.com` reachability blips.
+If a GitHub fetch or push fails with a short-lived connectivity error,
+retry it several times before treating it as a real failure. This
+environment has seen brief `github.com` reachability blips.
 
 The detailed deploy and validation flows live in:
 
-- `docs/operations/PI_DEV_WORKFLOW.md`
-- `docs/operations/RPI_SMOKE_VALIDATION.md`
+- [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md)
+- [`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md)
 - `rules/deploy.md`
 
 ## Logging
@@ -253,15 +205,15 @@ The app writes:
 Pi deploy defaults live in:
 
 - `deploy/pi-deploy.yaml`
-- `deploy/pi-deploy.local.yaml` for gitignored machine-local overrides
+- `deploy/pi-deploy.local.yaml` (gitignored, machine-local)
 
 Useful remote log commands:
 
 ```bash
-yoyopod remote logs --lines 200
-yoyopod remote logs --errors
-yoyopod remote logs --filter comm
-yoyopod remote logs --follow --filter ERROR
+yoyopod target logs --lines 200
+yoyopod target logs --errors
+yoyopod target logs --filter comm
+yoyopod target logs --follow --filter ERROR
 ```
 
 ## Package Layout
@@ -279,15 +231,15 @@ device/
   speech/
   ui/
   voip/
-yoyopod_cli/
-  main.py
-  pi/
-  config/
-  contracts/
-scripts/
-  quality.py
-legacy/
-  python-runtime/
+cli/
+  yoyopod/
+    src/
+      commands/
+        target/
+deploy/
+  pi-deploy.yaml
+  scripts/
+  systemd/
 ```
 
 ## Current Active Docs
@@ -295,15 +247,17 @@ legacy/
 Start with [`README.md`](../README.md) for the full docs map.
 
 Current contributor, runtime, and setup docs:
+
 - `docs/operations/CONTRIBUTOR_WORKFLOW.md`
 - `docs/operations/QUALITY_GATES.md`
 - `docs/operations/SETUP_CONTRACT.md`
+- `docs/operations/CLI_REBUILD_ROUNDS.md`
+- `docs/operations/PI_DEV_WORKFLOW.md`
+- `docs/operations/RPI_SMOKE_VALIDATION.md`
 - `docs/architecture/SYSTEM_ARCHITECTURE.md`
 - `docs/hardware/POWER_MODULE.md`
 - `docs/features/LOCAL_FIRST_MUSIC_PLAN.md`
 - `docs/features/MPV_DEPENDENCIES.md`
-- `docs/operations/PI_DEV_WORKFLOW.md`
-- `docs/operations/RPI_SMOKE_VALIDATION.md`
 
-Old plan and migration archives were removed from the tracked repo. Current code
-and current operation docs are the source of truth.
+Old plan and migration archives were removed from the tracked repo.
+Current code and current operation docs are the source of truth.

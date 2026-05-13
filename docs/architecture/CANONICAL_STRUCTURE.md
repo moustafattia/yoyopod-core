@@ -170,13 +170,14 @@ Core package exports should follow the same rule:
 
 ## Validation Layout
 
-The repo no longer carries unit-test trees. Validation ownership should mirror
-the runtime ownership split:
+The repo no longer carries unit-test trees. Validation ownership mirrors
+the runtime/CLI ownership split:
 
-- Rust build checks stay with `device/Cargo.toml`
-- target hardware validation stays behind `yoyopod pi validate ...`
-- remote committed-code validation stays behind `yoyopod remote validate ...`
-- Python CLI/deploy verification stays in `scripts/quality.py`
+- Rust workspace checks stay with `device/Cargo.toml` and `cli/Cargo.toml`
+- target hardware deploy + manual exercise stays behind `yoyopod target deploy`
+- automated on-Pi validation (`yoyopod target validate`) is a Round 2
+  deliverable of the CLI rebuild; see
+  [`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md)
 
 ## Exemplar: Call + Contacts
 

@@ -70,9 +70,9 @@ Notes:
 ## Validation
 
 ```bash
-pgrep -af mpv
-yoyopod remote validate --branch <branch> --sha <commit>
-yoyopod remote logs --filter music --lines 100
+yoyopod target deploy --branch <branch>           # or --sha <commit>
+yoyopod target logs --filter music --lines 100
+ssh <user>@<host> 'pgrep -af mpv'
 ```
 
 Expected checks:

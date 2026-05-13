@@ -1,15 +1,15 @@
 # Raspberry Pi deploy contract for YoYoPod.
-# This is the shared source of truth for `yoyopod remote` and the Pi skills.
+# This is the shared source of truth for `yoyopod target` (Rust CLI) and the Pi skills.
 # Dev lane checkouts live under /opt/yoyopod-dev; prod slots live under /opt/yoyopod-prod.
 # Machine-specific connection overrides belong in deploy/pi-deploy.local.yaml.
 # Leave host/user blank in the tracked file; do not commit personal Pi values here.
 # Create or edit that file with:
-#   yoyopod remote config edit
-# Default board validation flow:
+#   yoyopod target config edit
+# Default board deploy flow:
 #   git branch --show-current
 #   git rev-parse HEAD
-#   yoyopod remote validate --branch <branch>
-# Dirty-tree `yoyopod remote sync` is a rare debugging escape hatch only.
+#   yoyopod target deploy --branch <branch>
+# Dirty-tree deploys are not supported; `target deploy` always uses a CI artifact.
 
 host: ""
 user: ""

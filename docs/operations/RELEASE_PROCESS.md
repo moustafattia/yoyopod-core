@@ -1,125 +1,54 @@
 # Release Process
 
-YoYoPod now uses one explicit release contract:
+**Status: paused as of 2026-05-13.**
 
-- package version source: `yoyopod/_version.py`
-- release tag format: `vMAJOR.MINOR.PATCH`
-- release artifacts: Python package distributions, full repo bundles, and an ARM64 slot tarball
-- release automation: `.github/workflows/release.yml`
+The Python release pipeline was deleted in Round 0 of the CLI rebuild
+([`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md)). New prod slot builds
+are blocked until Round 3 reintroduces the Rust slot builder, manifest
+schema, and preflight tooling. CI's `slot-arm64` and `release` jobs are
+disabled (`if: ${{ false }}`) until then.
 
-## Versioning
+## What still works
 
-YoYoPod uses semantic versioning:
+- Previously-shipped slots continue to run on the Pi.
+- Reinstalling a previously-shipped slot via SSH +
+  `deploy/scripts/install_release.sh` still works (preflight is a no-op
+  during the gap; see the `_preflight_slot()` comment in that file).
+- The dev lane (`yoyopod target deploy`) is unaffected and remains the
+  daily workflow for hardware testing.
 
-- `major` for breaking or externally visible contract changes
-- `minor` for backward-compatible feature releases
-- `patch` for backward-compatible fixes and polish
+## What does NOT work yet
 
-Check the current version:
+- `yoyopod release {current,bump,set-version,build}` — deleted; not yet
+  ported to Rust.
+- `scripts/build_release.py` — deleted.
+- `deploy/docker/slot-builder.Dockerfile` — deprecated stub.
+- `yoyopod target release {push, install-url, status, rollback,
+  build-pi}` — not in the Round 1 MVP; returns in Round 3.
 
-```bash
-uv run yoyopod release current
-```
+## Round 3 sketch
 
-Bump the version source:
+Round 3 reintroduces:
 
-```bash
-uv run yoyopod release bump patch
-uv run yoyopod release bump minor
-uv run yoyopod release bump major
-```
+1. A Rust manifest type that mirrors the previous `release_manifest`
+   schema (version, channel, artifacts, signatures, requires).
+2. A Rust slot-contract module replacing the previous `slot_contract`
+   (required dirs, runtime files, config files).
+3. A Rust slot builder (replacing `scripts/build_release.py`) that
+   produces the same `app/`, `bin/`, `config/`, `venv/`,
+   `manifest.json`, and embedded native shims layout.
+4. A `yoyopod health {preflight, live}` command bundled inside slots so
+   `install_release.sh` can call `<slot>/bin/yoyopod health preflight`.
+5. Re-enabled `slot-arm64` and `release` CI jobs.
+6. Re-enabled `release.yml` workflow for tag-driven publishing.
 
-Or set it explicitly:
+## Versioning notes (for when the work resumes)
 
-```bash
-uv run yoyopod release set-version 0.2.0
-```
+Semantic versioning: `major` for externally visible contract changes,
+`minor` for backward-compatible features, `patch` for fixes. Tag format
+`vMAJOR.MINOR.PATCH`.
 
-## Local Release Build
-
-Build the release artifacts locally:
-
-```bash
-uv run yoyopod release build
-```
-
-That command builds:
-
-- Python wheel
-- Python source distribution
-- full repo bundle as `.tar.gz`
-- full repo bundle as `.zip`
-- `release-metadata.json`
-- `SHA256SUMS.txt`
-
-By default it refuses to build from a dirty tracked worktree. For local-only experiments, you can override that:
-
-```bash
-uv run yoyopod release build --allow-dirty
-```
-
-## GitHub Release Pipeline
-
-The release workflow runs on:
-
-- push of a tag like `v0.2.0`
-- manual dispatch with an existing release tag
-
-The workflow currently:
-
-1. checks out the tagged revision
-2. installs the dev environment with `uv`
-3. runs the configured CI jobs, including legacy Python CLI/deploy checks while they still exist
-5. runs `uv run yoyopod release build --check-tag <tag>`
-6. builds a Linux ARM64 self-contained slot artifact via `deploy/docker/slot-builder.Dockerfile`
-7. uploads the built artifacts
-8. creates or updates the matching GitHub Release
-
-On pull requests, the expensive ARM64 slot build is label-gated. Add the
-`build-arm-slot` label when you need a PR commit to produce a slot artifact.
-Normal PR commits still run the `quality` and `test` jobs, but they skip the
-roughly 20-minute ARM builder unless that label is present. Tagged releases and
-`main` pushes continue to build the ARM64 slot automatically.
-
-The published ARM64 slot artifact is intended to be installed directly under
-`/opt/yoyopod-prod/releases/<version>/` and consumed by:
-
-- `deploy/scripts/install_release.sh`
-- `yoyopod remote release install-url <artifact-url>`
-
-## Recommended Release Flow
-
-1. Bump the version:
-
-   ```bash
-   uv run yoyopod release bump patch
-   ```
-
-2. Run the relevant Rust checks:
-
-   ```bash
-   cargo check --manifest-path device/Cargo.toml --workspace --locked
-   ```
-
-   Add targeted Python CLI/deploy quality checks only if that surface changed.
-
-3. Commit and merge the version bump.
-4. Tag the release from the merged commit:
-
-   ```bash
-   git tag v0.1.1
-   git push origin v0.1.1
-   ```
-
-5. Let the release workflow build and publish the artifacts.
-
-## Notes
-
-- The Python package artifacts are useful for packaging and inspection.
-- The repo bundles are the more complete release asset for hardware-oriented YoYoPod workflows because they include the broader repo surface the device and deploy tooling rely on.
-- The ARM64 slot tarball is the OTA-style deploy asset. It already contains the
-  bundled config tree, native `.so` shims, launcher, manifest, and slot-local
-  runtime venv expected by the slot installer.
-- The slot tarball is published with a `.sha256` sidecar for the archive bytes.
-  The embedded `manifest.json` records the unpacked slot payload digest instead
-  of the digest of the tarball that contains the manifest.
+The version source is no longer in tree (the Python `_version.py` was
+deleted with the rest of `yoyopod_cli/`). Round 3 should decide whether
+to put the version into `cli/yoyopod/Cargo.toml` only, a plain `VERSION`
+file at repo root readable by both CLI and slot builder, or both.

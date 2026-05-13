@@ -1,104 +1,118 @@
 # Deploy Workflow
 
-Applies to: `deploy/pi-deploy.yaml`, `yoyopod remote`, Raspberry Pi validation, and Pi-facing agent skills
+Applies to: `deploy/pi-deploy.yaml`, `yoyopod target`, Raspberry Pi
+deploy and validation, and Pi-facing agent skills.
 
 ## Default Contract
 
-The normal target-hardware workflow validates committed code only.
+The normal target-hardware workflow deploys committed code only.
 
 Use this order:
 
 1. finish implementation locally
-2. run local checks as needed
+2. run local Rust checks as needed (`cargo check` / `cargo test`)
 3. commit the intended changes
-4. push the branch
-5. deploy the committed branch and preferably the exact commit SHA to the Raspberry Pi
-6. run smoke validation
-7. launch or restart the app
-8. verify startup with the PID file, startup marker, and recent logs
-9. leave the app running for manual testing
+4. push the branch (CI must finish the `rust-device-arm64` build for the
+   exact commit)
+5. deploy the committed branch / commit SHA to the Raspberry Pi via the
+   Rust CLI
+6. verify the runtime started cleanly and exercise the change manually
 
 The repo-owned command for that flow is:
 
 ```bash
 git branch --show-current
 git rev-parse HEAD
-yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip --with-navigation
+yoyopod target deploy --branch <branch>           # or --sha <commit>
 ```
 
-`yoyopod remote validate` is the default because it:
+`yoyopod target deploy` is the default because it:
 
 - stops on uncommitted local changes
-- requires a pushed branch/SHA
-- syncs one stable checkout path on the board
-- runs the target-side deploy, smoke, and requested service/stability checks before launch
-- waits for the startup marker after restart
-- prints recent logs and leaves the app running
+- requires a pushed branch / SHA
+- finds the successful `CI` workflow run for the exact commit and
+  downloads `yoyopod-rust-device-arm64-<sha>` via `gh run download`
+- syncs the dev-lane checkout to the same commit on the Pi
+- `scp`s and extracts the worker binaries into `device/*/build/`
+- restarts `yoyopod-dev.service` and waits for the startup marker
+
+Add `--wait-for-ci` when CI is still queued or in-progress.
+
+## Validation gap
+
+Automated on-Pi validation (`yoyopod target validate`) is a Round 1 stub
+that returns exit 2. Until Round 2 of the CLI rebuild lands, validate
+manually after `target deploy`:
+
+```bash
+yoyopod target status
+yoyopod target logs --follow
+journalctl -u yoyopod-dev.service -f
+```
+
+Exercise the changed surface on the device. Don't claim a hardware pass
+without a real human-eyes check of the running app.
+
+See `docs/operations/CLI_REBUILD_ROUNDS.md`.
 
 ## Stable Pi Checkout Path
 
-The board must reuse one stable checkout path, configured by `project_dir` in `deploy/pi-deploy.yaml`.
+The board reuses one stable checkout path per lane:
 
-Why this is the normal contract:
+- Dev lane: `/opt/yoyopod-dev/checkout` (mutable, used by `target deploy`)
+- Prod lane: `/opt/yoyopod-prod/current/...` (immutable slots; release
+  tooling is on Round 3 and currently disabled)
 
-- dependency installs are expensive on Pi Zero hardware
-- native LVGL and Liblinphone rebuilds can be expensive
+Why one stable path:
+
+- dependency installs and native LVGL rebuilds are expensive on Pi Zero
+- the systemd unit, log paths, PID file, and CLI shell builders all
+  expect this fixed layout
 - repeated fresh copies waste time and introduce drift
-- the fixed path is what the service unit, logs, PID file, and agent skills expect
 
-Do not normalize ad hoc per-branch directories on the board.
+Do not normalise ad-hoc per-branch directories on the board.
 
 ## Command Map
 
-The `rpi-deploy` Claude Code plugin is still the high-level integration surface, but in this repo `yoyopod remote` is the executable implementation and the skills should stay thin wrappers around it.
+The Rust CLI binary is `yoyopod`. Skills are thin wrappers around it.
 
 | Command | Purpose |
 |---|---|
-| `/yoyopod-deploy` | Commit-safe branch/SHA validation on the Pi |
-| `/yoyopod-sync` | Rare-case dirty-tree rsync escape hatch for debugging only |
+| `/yoyopod-deploy` | Push, fetch CI artifact, sync Pi, install, restart, verify |
 | `/yoyopod-logs [N] [--errors] [--filter <sub>]` | Tail app logs from the Pi |
-| `/yoyopod-restart` | Restart the already-synced app |
-| `/yoyopod-status` | Health check dashboard |
+| `/yoyopod-restart` | Restart the dev runtime and verify startup |
+| `/yoyopod-status` | Lane / process / log dashboard |
 | `/yoyopod-screenshot [--readback]` | Capture display output as PNG |
-Lower-level `yoyopod remote` commands:
+| `/yoyopod-sync` | Same `target deploy` flow; kept for muscle memory |
+| `/yoyopod-rust-artifact` | Manual CI-artifact deploy reference (rarely needed now) |
 
-- `yoyopod remote validate` is the default branch/SHA validation flow (use `--with-navigation` for the navigation soak, `--with-lvgl-soak` for the LVGL soak)
-- `yoyopod remote sync` is the committed-code sync primitive
-- `yoyopod remote restart` restarts the synced app and verifies startup
+Direct CLI commands:
 
-Target-side `yoyopod pi validate` commands:
+- `yoyopod target deploy` — push + CI artifact + Pi sync + restart + verify (the everyday command)
+- `yoyopod target mode {status, activate}` — confirm or switch lane (dev/prod)
+- `yoyopod target {status, restart, logs, screenshot}` — runtime introspection
+- `yoyopod target config edit` — open `deploy/pi-deploy.local.yaml` in `$EDITOR`
+- `yoyopod target validate` — stub; returns in Round 2
 
-- `yoyopod pi validate deploy` checks the deploy contract, config files, runtime paths, and entrypoints without launching the app
-- `yoyopod pi validate smoke` checks environment, display, input, and optional PiSugar telemetry
-- `yoyopod pi validate music` checks the mpv backend in isolation
-- `yoyopod pi validate voip` checks Liblinphone startup and SIP registration in isolation
-- `yoyopod pi validate navigation` runs the one-button navigation, idle, and playback stress path used for freeze repro
-- `yoyopod pi validate stability` runs the repeated LVGL transition and sleep/wake stability pass
+## Config
 
-Config lives in `deploy/pi-deploy.yaml` plus optional `deploy/pi-deploy.local.yaml` for machine-specific host and user overrides. Preferred edit flow:
+`deploy/pi-deploy.yaml` is the tracked baseline. `deploy/pi-deploy.local.yaml`
+is the gitignored per-machine override (host, user, custom paths). Edit
+with `yoyopod target config edit`.
 
-```bash
-yoyopod remote config show
-yoyopod remote config edit
-uv run yoyopod remote setup
-uv run yoyopod remote verify-setup
-```
+## No dirty-tree escape hatch
 
-## Escape Hatch Only
-
-Dirty-tree deploys are still allowed as a rare debugging override, but they are not the default validation story.
-
-Use `yoyopod remote sync` with caution for dirty-tree debugging only when:
-
-- the user explicitly asks to validate uncommitted local state
-- you are doing one-off hardware debugging and have called out that the Pi is not running committed code
-
-Do not present dirty-tree sync as the normal way to validate a branch or PR.
+The Python-era `yoyopod remote sync` allowed a dirty-tree rsync escape
+hatch. The Rust `target deploy` does **not**. If you need to test
+uncommitted local state, commit to a throwaway branch, push, and
+deploy that. The CI-artifact contract requires it.
 
 ## Target Hardware
 
 - Raspberry Pi Zero 2W (416 MB RAM)
-- SSH host, user, and stable project-dir defaults come from `deploy/pi-deploy.yaml` plus gitignored `deploy/pi-deploy.local.yaml`
-- Machine-local hostnames, usernames, and path overrides must stay out of tracked files
-- Default project dir on Pi: `/home/pi/yoyopod-core`
-- Default venv on Pi: `/home/pi/yoyopod-core/.venv`
+- SSH host, user, and stable project-dir defaults come from
+  `deploy/pi-deploy.yaml` plus gitignored `deploy/pi-deploy.local.yaml`
+- Machine-local hostnames, usernames, and path overrides must stay out
+  of tracked files
+- Default dev project dir on Pi: `/opt/yoyopod-dev/checkout`
+- Default dev state dir on Pi: `/opt/yoyopod-dev/state`

@@ -2,8 +2,9 @@
 # deploy/scripts/install_release.sh
 #
 # Install one self-contained slot artifact into /opt/yoyopod-prod and flip it live.
-# The artifact is expected to be the tar.gz emitted by scripts/build_release.py
-# in a Linux/aarch64 build environment or by the CI slot build pipeline.
+# The artifact is the tar.gz that Round 3 of the CLI rebuild will produce
+# (see docs/operations/CLI_REBUILD_ROUNDS.md). Until then, only
+# previously-shipped slot tarballs can be reinstalled with this script.
 
 set -euo pipefail
 

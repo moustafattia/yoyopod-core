@@ -1,38 +1,33 @@
 # Setup and System Dependency Contract
 
-This document defines the baseline repo-owned setup and verification contract for YoYoPod Core.
-
-Issue [`#87`](https://github.com/moustafattia/yoyopod-core/issues/87) is the work that turned this from wishful docs into executable commands. This file documents the contract those commands implement.
+This document defines the baseline setup contract for YoYoPod Core. As
+of 2026-05-13, automated setup commands (`yoyopod setup …`,
+`yoyopod target setup …`) were deleted in Round 0 of the CLI rebuild;
+see [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md). Until the
+relevant rounds restore them, follow the manual steps below.
 
 ## Why this exists
 
-The repo already owns a lot of runtime behavior, but setup still has too much implicit machine knowledge.
+The repo should let any contributor answer these questions from the
+repo itself:
 
-That is a foundation risk.
-
-For this repo to be the real base of the system, a contributor should be able to answer these questions from the repo itself:
-
-- what Python and system dependencies are required
+- which system dependencies are required
 - which dependencies are core vs feature-gated
 - which files are repo-owned vs machine-local
 - how to bring up a dev machine
 - how to bring up a target Pi
-- how to verify the setup before debugging product code
 
 ## Setup ownership rules
 
-The repo should own:
+The repo owns:
 
-- the Python dependency graph in `pyproject.toml`
+- the Rust dependency graph (in each workspace's `Cargo.toml` /
+  `Cargo.lock`)
 - the shared Pi deploy contract in `deploy/pi-deploy.yaml`
 - the tracked app config in `config/`
 - the documented system dependency list in this file
-- the validation commands in `docs/operations/DEVELOPMENT_GUIDE.md` and `docs/operations/RPI_SMOKE_VALIDATION.md`
-- the remote workflow exposed through `yoyopod remote`
 
-Machine-local values should stay out of tracked files.
-
-Examples of machine-local state:
+Machine-local values stay out of tracked files:
 
 - Pi hostname or SSH alias
 - Pi username
@@ -40,57 +35,40 @@ Examples of machine-local state:
 - secrets and account credentials
 - local audio paths or removable-media contents
 
-## Supported setup surfaces
+## Dev machine
 
-### 1. CI-safe developer machine
+Manual prereqs:
 
-Minimum expectation:
+- a Rust stable toolchain via `rustup`
+- `gh` (GitHub CLI) authenticated, used by `yoyopod target deploy`
+- standard Pi-side prereqs (`ssh`, `scp`, `git`)
+- `cmake` if you need to build LVGL locally (rare; CI artifacts
+  normally cover this)
 
-- Python `3.12+`
-- `uv`
-- Git
-
-Current repo-owned bootstrap baseline:
-
-```bash
-uv run yoyopod setup host
-```
-
-This is the executable baseline, not full setup ownership. It does not provision
-external service credentials or cover every board-specific edge.
-If `yoyopod` is invoked before the contributor CLI stack is present, it should
-now exit with a short bootstrap hint instead of crashing during import.
-
-Current repo-owned validation baseline:
+Build and install the CLI:
 
 ```bash
-uv run yoyopod setup verify-host
+cargo build --manifest-path cli/Cargo.toml --release
+cargo install --path cli/yoyopod   # puts `yoyopod` in ~/.cargo/bin/
 ```
 
-Optional but expected for Pi workflows:
-
-- `ssh`
-- `rsync`
-
-Optional but useful for repo operations:
-
-- `gh`
-
-Workflow-specific host verification:
+Local workspace check:
 
 ```bash
-uv run yoyopod setup verify-host --with-remote-tools
-uv run yoyopod setup verify-host --with-github
-uv run yoyopod setup verify-host --with-remote-tools --with-github
+cargo check --manifest-path device/Cargo.toml --workspace --locked
+cargo test  --manifest-path cli/Cargo.toml
 ```
 
-Use the baseline command for local-only work. Add `--with-remote-tools` before using `yoyopod remote`, `--with-github` before relying on `gh`, and combine them when you need both.
+Configure the Pi target:
 
-### 2. Target Raspberry Pi runtime
+```bash
+yoyopod target config edit
+```
 
-Current core system packages and services expected by the active stack:
+## Target Raspberry Pi (manual until CLI setup returns)
 
-- `python3-venv`
+Required system packages on the Pi:
+
 - `mpv`
 - `ffmpeg`
 - `liblinphone-dev`
@@ -99,66 +77,40 @@ Current core system packages and services expected by the active stack:
 - `alsa-utils`
 - `i2c-tools`
 - `pisugar-server` running on PiSugar-based targets
+- `ppp` for the modem PPP data path (cellular)
 
-Current repo-owned bootstrap baseline:
-
-```bash
-uv run yoyopod setup pi
-```
-
-This bootstraps the baseline package/build contract only. It does not yet solve
-cloud voice credential provisioning, board/modem permissions, or non-Debian portability.
-On the Pi, this flow now creates or refreshes the repo checkout `.venv` with
-`python3 -m venv` and `pip install -e '.[dev]'`, so the board does not need
-`uv` installed locally.
-
-Feature extras are opt-in:
-
-- `yoyopod setup pi --with-voice`
-- `yoyopod setup pi --with-network`
-- `yoyopod setup pi --with-pisugar`
-
-Current repo-owned verification baseline:
+Install on Raspberry Pi OS / Debian-based:
 
 ```bash
-uv run yoyopod setup verify-pi
+sudo apt-get update
+sudo apt-get install -y mpv ffmpeg liblinphone-dev pkg-config cmake \
+    alsa-utils i2c-tools
+# optional, depending on hardware:
+sudo apt-get install -y pisugar-server ppp
 ```
 
-This verifies presence and basic build state. It does not perform deeper
-artifact health checks for every native/runtime dependency. The current baseline
-checks the tracked config files, `python3`, the checkout venv Python, required
-apt packages, and the built native runtime artifacts.
-
-Use flags that match the actual target you are bringing up:
+Bootstrap lane directories and systemd units (one-shot per board):
 
 ```bash
-uv run yoyopod setup pi --with-pisugar
-uv run yoyopod setup verify-pi --with-pisugar
+ssh <user>@<pi>
+curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s --
 ```
 
-Add `--with-voice` and/or `--with-network` when the target depends on the TTS or modem paths. `--with-pisugar` is the normal Whisplay/PiSugar hardware path because it adds the `pisugar-server` package and service check.
+Seed the dev lane checkout:
 
-### 3. Feature-gated or hardware-specific extras
+```bash
+sudo chown -R <user>:<user> /opt/yoyopod-dev
+sudo -u <user> git clone <repo-url> /opt/yoyopod-dev/checkout
+```
 
-These are not universal for every contributor machine, but the repo should still name them explicitly when a feature depends on them.
+Activate the dev lane and deploy:
 
-#### Voice path
+```bash
+yoyopod target mode activate dev
+yoyopod target deploy --branch <branch>
+```
 
-- cloud voice worker binary built from `workers/voice/go/`
-- provider credentials supplied outside tracked config
-
-#### Cellular / GPS path
-
-- `ppp` for the modem PPP data path
-- board- and modem-specific serial/device access
-
-#### Board bringup variants
-
-See:
-
-- `docs/hardware/CUBIE_A7Z_BRINGUP.md`
-
-## Repo-owned configuration contract
+## Repo-owned configuration
 
 Tracked config lives in:
 
@@ -188,75 +140,35 @@ The tracked deploy contract must stay generic:
 - no secrets
 - no machine-specific absolute paths unless they are intended defaults
 
-## Current bringup contract
+## What will come back
 
-### Local developer bringup baseline
+| When | Restores |
+|---|---|
+| Round 2 | Automated on-Pi validation (`yoyopod target validate …`) |
+| Round 3 | Prod slot install + release tooling |
+| Round 4+ | `yoyopod target setup` / `verify-setup` style one-shot bootstrap |
 
-```bash
-uv run yoyopod setup host
-uv run yoyopod setup verify-host
-cargo run --manifest-path device/Cargo.toml -p yoyopod-runtime -- --config-dir config --dry-run
-cargo check --manifest-path device/Cargo.toml --workspace --locked
-```
-
-This is the minimum executable contract for contributors. Feature assets and
-hardware-specific extras still need follow-through when the feature requires them.
-
-### Target Pi bringup baseline
-
-```bash
-uv run yoyopod setup pi --with-pisugar
-uv run yoyopod setup verify-pi --with-pisugar
-yoyopod pi validate deploy
-yoyopod pi validate smoke
-yoyopod pi validate smoke
-/opt/yoyopod-dev/checkout/device/runtime/build/yoyopod-runtime --config-dir /opt/yoyopod-dev/checkout/config --hardware whisplay
-```
-
-This does not yet provision external credentials or encode every
-board/modem-specific permission step. Add `--with-voice` and/or `--with-network`
-when the target needs those feature paths.
-
-### Remote Pi workflow baseline
-
-```bash
-uv run yoyopod setup verify-host --with-remote-tools
-yoyopod remote config edit
-uv run yoyopod remote setup --with-pisugar
-uv run yoyopod remote verify-setup --with-pisugar
-yoyopod remote status
-yoyopod remote validate --branch <branch> --sha <commit> --with-voip
-```
-
-These remote helpers mirror the same baseline contract. They still rely on
-feature-specific follow-up for assets and unusual hardware bringup. Add
-`--with-voice` and/or `--with-network` to the setup commands when the target
-needs those feature paths. They now invoke the checkout-local `.venv/bin/python`
-instead of requiring `uv` on the board.
+See [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
 
 ## Verification before blaming product code
 
-Before treating a failure as an app bug, verify the setup layer first.
+Before treating a failure as an app bug, verify the setup layer first:
 
-Checklist:
-
-- local bootstrap completes with `uv run yoyopod setup host`
-- local verification passes with `uv run yoyopod setup verify-host`
-- remote Pi workflows use `uv run yoyopod setup verify-host --with-remote-tools`
-- GitHub CLI workflows use `uv run yoyopod setup verify-host --with-github`
-- tracked config files are present under `config/`
-- required system packages are verified with `uv run yoyopod setup verify-pi`
-- target feature extras are verified with the matching `--with-pisugar`, `--with-voice`, and `--with-network` flags
-- native artifacts have been built when the feature requires them
-- `yoyopod pi validate smoke` passes for the requested hardware path
-- remote config values come from `deploy/pi-deploy.yaml` plus local overrides, not tribal knowledge
+- local `cargo build` of the CLI succeeds
+- `yoyopod target config edit` shows host/user populated
+- `yoyopod target mode status` reports the expected lane
+- required system packages are installed on the Pi
+- the dev lane checkout exists at `/opt/yoyopod-dev/checkout`
+- `yoyopod target deploy` returns successfully
+- `journalctl -u yoyopod-dev.service -f` shows the runtime alive
+- remote config values come from `deploy/pi-deploy.yaml` plus the local
+  override, not tribal knowledge
 
 ## Current gaps
 
-This repo is still missing some setup hardening that a foundation-grade repo should have:
-
 - provisioning of external voice provider credentials
-- board- and modem-specific device-permission setup for every bringup variant
+- board- and modem-specific device-permission setup for every bringup
+  variant
 - portability beyond the current Debian-based Raspberry Pi package flow
-
-The contract is now executable, but those remaining edges are still real.
+- automated host/Pi setup CLI (deleted in Round 0; returns in later
+  rebuild rounds)

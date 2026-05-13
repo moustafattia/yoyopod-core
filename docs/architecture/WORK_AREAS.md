@@ -24,12 +24,13 @@ where a change belongs.
 - Device runtime code must not depend on `apps/`.
 - Shared contracts should flow through `packages/contracts/` when that package exists.
 
-## Python Still-Owned Areas
+## Operator CLI And Deploy Areas
 
-- `yoyopod_cli/` owns local and Pi operations tooling.
-- `deploy/` owns systemd, installer, slot, and release packaging scripts.
-- Python code is CLI/deploy/compatibility tooling only; it is not the device
-  runtime owner.
+- `cli/` owns the Rust operator CLI (`yoyopod target …`). See
+  [`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md)
+  for the current rebuild status.
+- `deploy/` owns systemd unit files, installer scripts, and slot/release
+  packaging primitives.
 
 ## Local Build Output
 
@@ -37,8 +38,7 @@ Do not work from generated output directories. These are disposable:
 
 - `device/target/`
 - `device/*/build/`
-- `.venv/`
-- `__pycache__/`
+- `cli/target/`
 - `logs/`
 - local `data/`
 
