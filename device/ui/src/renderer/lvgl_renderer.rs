@@ -13,7 +13,7 @@ use crate::animation::TransitionSampler;
 use crate::presentation::view_models::ScreenModel;
 #[cfg(feature = "native-lvgl")]
 use crate::renderer::lvgl::NativeLvglFacade;
-use crate::renderer::{Framebuffer, RenderReport, Renderer};
+use crate::renderer::{Framebuffer, ScreenRenderReport, ScreenRenderer};
 #[cfg(feature = "native-lvgl")]
 use scene::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
 
@@ -44,16 +44,16 @@ impl LvglRenderer {
 }
 
 #[cfg(feature = "native-lvgl")]
-impl Renderer for LvglRenderer {
+impl ScreenRenderer for LvglRenderer {
     fn render(
         &mut self,
         framebuffer: &mut Framebuffer,
         model: &ScreenModel,
         transitions: &TransitionSampler<'_>,
         dirty_region: Option<crate::engine::DirtyRegion>,
-    ) -> Result<RenderReport> {
+    ) -> Result<ScreenRenderReport> {
         self.render_screen_model(framebuffer, model, transitions)?;
-        Ok(RenderReport {
+        Ok(ScreenRenderReport {
             renderer: "lvgl",
             screen: model.screen(),
             dirty_region,
@@ -133,14 +133,14 @@ impl LvglRenderer {
 }
 
 #[cfg(not(feature = "native-lvgl"))]
-impl Renderer for LvglRenderer {
+impl ScreenRenderer for LvglRenderer {
     fn render(
         &mut self,
         _framebuffer: &mut Framebuffer,
         _model: &ScreenModel,
         _transitions: &TransitionSampler<'_>,
         _dirty_region: Option<crate::engine::DirtyRegion>,
-    ) -> Result<RenderReport> {
+    ) -> Result<ScreenRenderReport> {
         anyhow::bail!("native-lvgl feature is disabled for this build")
     }
 }

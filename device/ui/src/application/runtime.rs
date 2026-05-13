@@ -8,14 +8,14 @@ use crate::animation::{self, TransitionSampler};
 use crate::hardware::DisplayDevice;
 use crate::presentation;
 use crate::presentation::view_models::ScreenModel;
-use crate::renderer::{Framebuffer, LvglRenderer, Renderer};
+use crate::renderer::{Framebuffer, LvglRenderer, ScreenRenderer};
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen, UiView};
 
 pub struct RenderState {
     framebuffer: Framebuffer,
-    renderer: Box<dyn Renderer>,
+    renderer: Box<dyn ScreenRenderer>,
     frames: usize,
     last_active_screen: Option<UiScreen>,
     last_ui_renderer: String,
@@ -32,7 +32,7 @@ impl RenderState {
         })
     }
 
-    pub fn with_renderer(width: usize, height: usize, renderer: Box<dyn Renderer>) -> Self {
+    pub fn with_renderer(width: usize, height: usize, renderer: Box<dyn ScreenRenderer>) -> Self {
         Self {
             framebuffer: Framebuffer::new(width, height),
             renderer,
