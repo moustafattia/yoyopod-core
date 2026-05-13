@@ -6,10 +6,9 @@ Current target hardware:
 - Raspberry Pi Zero 2W
 - PiSugar 3 battery HAT
 
-Board-specific overrides can now live under `config/boards/<board>/`.
-Known hardware boards:
+Board-specific overrides can live under `config/boards/<board>/`.
+The only supported board is:
 - `rpi-zero-2w` -> PiSugar watchdog on `i2c-1`
-- `radxa-cubie-a7z` -> PiSugar watchdog on `i2c-7`
 
 This module is responsible for:
 - UPS-style telemetry

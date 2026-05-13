@@ -4,7 +4,6 @@
 app:
   name: "YoYoPod"
   version: "1.0.0"
-  simulate: false
 
 ui:
   theme: "dark"
