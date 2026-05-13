@@ -1,9 +1,9 @@
 use anyhow::Result;
 
 use crate::animation::TransitionSampler;
+use crate::engine::DirtyRegion;
 use crate::presentation::view_models::ScreenModel;
 use crate::renderer::{Framebuffer, RenderReport, Renderer};
-use crate::router::DirtyRegion;
 
 #[derive(Debug, Default)]
 pub struct NullRenderer {

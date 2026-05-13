@@ -6,8 +6,8 @@ pub mod whisplay;
 
 use anyhow::Result;
 
+use crate::engine::DirtyRegion;
 use crate::renderer::Framebuffer;
-use crate::router::DirtyRegion;
 
 pub trait DisplayDevice {
     fn width(&self) -> usize;

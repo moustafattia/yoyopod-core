@@ -12,8 +12,8 @@ use anyhow::Result;
 use yoyopod_protocol::ui::UiScreen;
 
 use crate::animation::TransitionSampler;
+use crate::engine::DirtyRegion;
 use crate::presentation::view_models::ScreenModel;
-use crate::router::DirtyRegion;
 
 pub use framebuffer::Framebuffer;
 pub use pipeline::LvglRenderer;

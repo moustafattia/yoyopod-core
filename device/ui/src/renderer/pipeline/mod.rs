@@ -47,7 +47,7 @@ impl Renderer for LvglRenderer {
         framebuffer: &mut Framebuffer,
         model: &ScreenModel,
         transitions: &TransitionSampler<'_>,
-        dirty_region: Option<crate::router::DirtyRegion>,
+        dirty_region: Option<crate::engine::DirtyRegion>,
     ) -> Result<RenderReport> {
         self.render_screen_model(framebuffer, model, transitions)?;
         Ok(RenderReport {
@@ -136,7 +136,7 @@ impl Renderer for LvglRenderer {
         _framebuffer: &mut Framebuffer,
         _model: &ScreenModel,
         _transitions: &TransitionSampler<'_>,
-        _dirty_region: Option<crate::router::DirtyRegion>,
+        _dirty_region: Option<crate::engine::DirtyRegion>,
     ) -> Result<RenderReport> {
         anyhow::bail!("native-lvgl feature is disabled for this build")
     }

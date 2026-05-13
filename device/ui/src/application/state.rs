@@ -1,5 +1,6 @@
 use crate::animation::Transition;
-use crate::router::{self, DirtyRegion};
+use crate::engine::DirtyRegion;
+use crate::router;
 use std::collections::BTreeMap;
 
 use yoyopod_protocol::ui::{
