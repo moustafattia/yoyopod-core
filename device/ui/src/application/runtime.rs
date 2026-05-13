@@ -4,11 +4,18 @@ use yoyopod_protocol::ui::{
 
 use crate::animation;
 use crate::components;
+use crate::render_contract::DirtyRegion;
 use crate::router::history::HistoryEntry;
 use crate::scene::{GlobalClock, HudScene, SceneGraph};
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen};
+
+#[derive(Debug, Clone)]
+pub struct FrameRequest {
+    pub scene_graph: SceneGraph,
+    pub dirty_region: Option<DirtyRegion>,
+}
 
 impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
@@ -96,14 +103,6 @@ impl UiRuntime {
         self.dirty.navigation = true;
     }
 
-    pub fn is_dirty(&self) -> bool {
-        self.dirty.any()
-    }
-
-    pub fn dirty_state(&self) -> DirtyState {
-        self.dirty
-    }
-
     pub fn scene_graph(&self, now_ms: u64) -> SceneGraph {
         let mut active = components::screens::scene_for_screen(
             self.active_screen,
@@ -147,6 +146,13 @@ impl UiRuntime {
                 now_ms,
             },
         }
+    }
+
+    pub fn frame_request(&self, now_ms: u64) -> Option<FrameRequest> {
+        self.dirty.any().then(|| FrameRequest {
+            scene_graph: self.scene_graph(now_ms),
+            dirty_region: self.dirty.render_region(self.active_screen),
+        })
     }
 
     pub fn active_title(&self) -> String {

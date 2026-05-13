@@ -356,17 +356,12 @@ fn render_if_dirty<D>(
 where
     D: DisplayDevice,
 {
-    if !ui_runtime.is_dirty() {
+    let Some(frame) = ui_runtime.frame_request(now_ms) else {
         return Ok(None);
-    }
-
-    let scene_graph = ui_runtime.scene_graph(now_ms);
-    let dirty_region = ui_runtime
-        .dirty_state()
-        .render_region(ui_runtime.active_screen());
+    };
     let outcome = render.engine.tick(
-        &scene_graph,
-        dirty_region,
+        &frame.scene_graph,
+        frame.dirty_region,
         router::status_bar_region(),
         now_ms,
     );
