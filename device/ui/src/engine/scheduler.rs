@@ -95,10 +95,11 @@ impl Engine {
                 .any(|timeline| timeline.id == active.id)
         });
 
-        for mut timeline in graph.active.timelines.clone() {
+        for timeline in &graph.active.timelines {
             if self.timelines.contains_id(timeline.id) {
                 continue;
             }
+            let mut timeline = timeline.clone();
             if matches!(timeline.clock, ClockSource::SceneTime) {
                 timeline.started_ms = now_ms;
             }
