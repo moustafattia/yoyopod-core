@@ -54,6 +54,11 @@ jobs:
           fi
 
   quality:
+    # DISABLED 2026-05-13 during CLI rebuild Round 0.
+    # The Python quality gate targeted yoyopod_cli/, now deleted.
+    # If a future round reintroduces Python, restore appropriate checks.
+    # See docs/operations/CLI_REBUILD_ROUNDS.md.
+    if: ${{ false }}
     runs-on: ubuntu-latest
 
     steps:
@@ -166,24 +171,16 @@ jobs:
           if-no-files-found: error
 
   slot-arm64:
+    # DISABLED 2026-05-13 during CLI rebuild Round 0.
+    # Depended on scripts/build_release.py and deploy/docker/slot-builder.Dockerfile,
+    # both removed or deprecated in this PR. Round 3 reintroduces a Rust-based
+    # slot builder and re-enables this job.
+    # See docs/operations/CLI_REBUILD_ROUNDS.md.
+    if: ${{ false }}
     runs-on: ubuntu-latest
-    needs: [changes, quality, rust-device-arm64]
+    needs: [changes, rust-device-arm64]
     env:
       RUST_ARTIFACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          needs.changes.outputs.slot_arm64 == 'true' &&
-          (
-            github.event_name == 'push' ||
-            (
-              github.event_name == 'pull_request' &&
-              contains(github.event.pull_request.labels.*.name, 'build-arm-slot')
-            )
-          )
-        )
-      }}
 
     steps:
       - name: Check out repository
