@@ -36,10 +36,8 @@ fn backdrop_element(backdrop: Backdrop) -> Element {
     element
 }
 
-fn stage_element(stage: crate::scene::Stage) -> Element {
-    Element::new(ElementKind::Container, Some("scene_stage"))
-        .key(Key::Static("stage"))
-        .text(format!("{stage:?}"))
+fn stage_element(_stage: crate::scene::Stage) -> Element {
+    Element::new(ElementKind::Container, Some("scene_stage")).key(Key::Static("stage"))
 }
 
 fn decks_element(decks: &[Deck]) -> Element {
@@ -55,7 +53,7 @@ fn deck_element(index: usize, deck: &Deck) -> Element {
         .selected(!deck.items.is_empty())
         .child(
             Element::new(ElementKind::Container, Some("deck_region"))
-                .text(format!("{:?}", deck.region)),
+                .key(Key::Static("deck_region")),
         );
     for (item_index, item) in deck.items.iter().enumerate() {
         element = element.child(deck_item_element(item, item_index == deck.focus_index));
