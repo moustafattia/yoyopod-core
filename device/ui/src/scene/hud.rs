@@ -12,6 +12,7 @@ pub struct HudScene {
 pub struct HudStatus {
     pub time: String,
     pub battery_label: String,
+    pub battery_percent: u8,
     pub signal_strength: u8,
     pub network_online: bool,
 }
@@ -39,19 +40,20 @@ impl HudScene {
 
 impl HudStatus {
     pub fn element(&self) -> Element {
-        Element::new(ElementKind::Container, Some("status_bar"))
+        let mut status_bar = Element::new(ElementKind::Container, Some("status_bar"))
             .key(Key::Static("status_bar"))
-            .region(RegionId::StatusBar)
-            .child(
-                Element::new(ElementKind::Label, Some("status_signal"))
-                    .key(Key::Static("status_signal"))
-                    .text(self.signal_strength.to_string()),
-            )
-            .child(
-                Element::new(ElementKind::Label, Some("status_network"))
-                    .key(Key::Static("status_network"))
-                    .selected(self.network_online),
-            )
+            .region(RegionId::StatusBar);
+
+        for bar in signal_bars(self.signal_strength) {
+            status_bar = status_bar.child(bar);
+        }
+
+        status_bar
+            .child(Element::new(ElementKind::Label, Some("status_wifi")).icon("network"))
+            .child(gps_ring(self.network_online))
+            .child(gps_center(self.network_online))
+            .child(gps_tail(self.network_online))
+            .child(voip_indicator(self.network_online))
             .child(
                 Element::new(ElementKind::Label, Some("status_time"))
                     .key(Key::Static("status_time"))
@@ -62,6 +64,62 @@ impl HudStatus {
                     .key(Key::Static("status_battery_label"))
                     .text(&self.battery_label),
             )
+            .child(battery_outline(self.battery_percent))
+            .child(
+                Element::new(ElementKind::Container, Some("status_battery_tip"))
+                    .key(Key::Static("battery_tip")),
+            )
+    }
+}
+
+fn signal_bars(strength: u8) -> [Element; 4] {
+    core::array::from_fn(|index| {
+        Element::new(ElementKind::Container, Some(signal_bar_role(index)))
+            .key(Key::Indexed(index))
+            .visible(index < usize::from(strength.min(4)))
+    })
+}
+
+fn gps_ring(active: bool) -> Element {
+    Element::new(ElementKind::Container, Some("status_gps_ring"))
+        .key(Key::Static("gps_ring"))
+        .selected(active)
+}
+
+fn gps_center(active: bool) -> Element {
+    Element::new(ElementKind::Container, Some("status_gps_center"))
+        .key(Key::Static("gps_center"))
+        .visible(active)
+}
+
+fn gps_tail(active: bool) -> Element {
+    Element::new(ElementKind::Container, Some("status_gps_tail"))
+        .key(Key::Static("gps_tail"))
+        .visible(active)
+}
+
+fn voip_indicator(active: bool) -> Element {
+    Element::new(ElementKind::Container, Some("status_voip_dot_after_gps"))
+        .key(Key::Static("voip_dot"))
+        .visible(active)
+}
+
+fn battery_outline(percent: u8) -> Element {
+    Element::new(ElementKind::Container, Some("status_battery_outline"))
+        .key(Key::Static("battery_outline"))
+        .child(
+            Element::new(ElementKind::Container, Some("status_battery_fill"))
+                .key(Key::Static("battery_fill"))
+                .progress(i32::from(percent.min(100))),
+        )
+}
+
+const fn signal_bar_role(index: usize) -> &'static str {
+    match index {
+        0 => "status_signal_bar_0",
+        1 => "status_signal_bar_1",
+        2 => "status_signal_bar_2",
+        _ => "status_signal_bar_3",
     }
 }
 

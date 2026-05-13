@@ -83,9 +83,11 @@ fn footer_for_screen(screen: UiScreen, snapshot: &RuntimeSnapshot) -> String {
 }
 
 fn status_from_snapshot(snapshot: &RuntimeSnapshot) -> HudStatus {
+    let battery_percent = snapshot.power.battery_percent.clamp(0, 100) as u8;
     HudStatus {
         time: "00:00".to_string(),
-        battery_label: format!("{}%", snapshot.power.battery_percent.clamp(0, 100)),
+        battery_label: format!("{battery_percent}%"),
+        battery_percent,
         signal_strength: signal_strength(snapshot.network.signal_strength),
         network_online: snapshot.network.connected,
     }

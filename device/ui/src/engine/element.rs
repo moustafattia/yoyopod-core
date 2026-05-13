@@ -55,6 +55,16 @@ impl Element {
         self
     }
 
+    pub fn visible(mut self, visible: bool) -> Self {
+        self.props.visible = Some(visible);
+        self
+    }
+
+    pub fn progress(mut self, progress: i32) -> Self {
+        self.props.progress = Some(progress);
+        self
+    }
+
     pub fn scale_permille(mut self, scale_permille: i32) -> Self {
         self.props.scale_permille = Some(scale_permille);
         self
