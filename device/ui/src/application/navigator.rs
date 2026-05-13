@@ -1,28 +1,12 @@
 use crate::presentation::screens;
 use crate::router::{
-    route_for, static_intent_template, BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate,
-    ListKind, NavigationPolicy, PassthroughPolicy, SelectionTarget, SnapshotCondition,
+    is_call_screen, is_overlay_screen, route_for, runtime_preemption, static_intent_template,
+    BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind, NavigationPolicy,
+    PassthroughPolicy, SelectionTarget, SnapshotCondition,
 };
-use yoyopod_protocol::ui::{
-    CallIntent, ListItemSnapshot, MusicIntent, RuntimeSnapshot, UiIntent, VoiceIntent,
-};
+use yoyopod_protocol::ui::{CallIntent, ListItemSnapshot, MusicIntent, UiIntent, VoiceIntent};
 
 use super::{focus, intents, UiRuntime, UiScreen};
-
-pub fn runtime_preemption(snapshot: &RuntimeSnapshot) -> Option<UiScreen> {
-    if !snapshot.overlay.error.trim().is_empty() {
-        return Some(UiScreen::Error);
-    }
-    if snapshot.overlay.loading {
-        return Some(UiScreen::Loading);
-    }
-    match snapshot.call.state.as_str() {
-        "incoming" => Some(UiScreen::IncomingCall),
-        "outgoing" => Some(UiScreen::OutgoingCall),
-        "active" => Some(UiScreen::InCall),
-        _ => None,
-    }
-}
 
 pub fn apply_runtime_preemption(runtime: &mut UiRuntime) {
     if let Some(screen) = runtime_preemption(&runtime.snapshot) {
@@ -107,17 +91,6 @@ pub fn wants_ptt_passthrough(runtime: &UiRuntime) -> bool {
 pub fn clamp_focus(runtime: &mut UiRuntime) {
     let count = focus_count(runtime);
     runtime.focus_index = focus::clamp(runtime.focus_index, count);
-}
-
-pub fn is_call_screen(screen: UiScreen) -> bool {
-    matches!(
-        screen,
-        UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall
-    )
-}
-
-pub fn is_overlay_screen(screen: UiScreen) -> bool {
-    matches!(screen, UiScreen::Loading | UiScreen::Error)
 }
 
 fn apply_selection_target(runtime: &mut UiRuntime, target: SelectionTarget) {
