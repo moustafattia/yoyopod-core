@@ -42,7 +42,21 @@ pub fn scene_enter() -> Timeline {
     Timeline {
         id: SCENE_ENTER_TIMELINE_ID,
         clock: ClockSource::SceneTime,
-        tracks: Vec::new(),
+        tracks: vec![Track {
+            target: ActorRef::Screen,
+            property: AnimatableProp::Opacity,
+            keyframes: vec![
+                Keyframe {
+                    at_ms: 0,
+                    value: AnimatableValue::U8(0),
+                },
+                Keyframe {
+                    at_ms: 220,
+                    value: AnimatableValue::U8(255),
+                },
+            ],
+            easing: Easing::EaseOut,
+        }],
         loop_mode: LoopMode::Once,
         on_complete: None,
         started_ms: 0,
@@ -50,10 +64,27 @@ pub fn scene_enter() -> Timeline {
 }
 
 pub fn stagger_enter() -> Timeline {
+    let tracks = (0..4)
+        .map(|index| Track {
+            target: ActorRef::DeckItem { deck: 0, index },
+            property: AnimatableProp::Opacity,
+            keyframes: vec![
+                Keyframe {
+                    at_ms: 40 * index as u32,
+                    value: AnimatableValue::U8(0),
+                },
+                Keyframe {
+                    at_ms: 160 + 40 * index as u32,
+                    value: AnimatableValue::U8(255),
+                },
+            ],
+            easing: Easing::EaseOut,
+        })
+        .collect();
     Timeline {
         id: STAGGER_ENTER_TIMELINE_ID,
         clock: ClockSource::SceneTime,
-        tracks: Vec::new(),
+        tracks,
         loop_mode: LoopMode::Once,
         on_complete: None,
         started_ms: 0,

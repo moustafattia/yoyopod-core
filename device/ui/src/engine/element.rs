@@ -62,6 +62,11 @@ impl Element {
         self.children.push(element);
         self
     }
+
+    pub fn with_anim(mut self, anim: AnimSlot) -> Self {
+        self.anim = Some(anim);
+        self
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -1,7 +1,8 @@
+use crate::animation::{presets, TimelineRef, TrackIndex};
 use crate::render_contract::ElementKind;
 use crate::scene::{Deck, HudScene, Modal, Scene, SceneGraph};
 
-use super::{Element, Key};
+use super::{AnimSlot, Element, Key};
 
 pub fn flatten(graph: &SceneGraph) -> Element {
     Element::new(ElementKind::Container, Some("scene_graph"))
@@ -13,7 +14,11 @@ pub fn flatten(graph: &SceneGraph) -> Element {
 
 pub fn scene_element(scene: &Scene) -> Element {
     let mut root = Element::new(ElementKind::Container, Some("scene_root"))
-        .key(Key::String(format!("scene:{}", scene.id.screen.as_str())));
+        .key(Key::String(format!("scene:{}", scene.id.screen.as_str())))
+        .with_anim(AnimSlot {
+            timeline: TimelineRef(presets::SCENE_ENTER_TIMELINE_ID),
+            track: TrackIndex(0),
+        });
     root = root.child(scene.backdrop.element());
     root = root.child(stage_element(scene.stage));
     if let Some(fx) = scene.fx.element() {

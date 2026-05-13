@@ -1,4 +1,5 @@
-use crate::engine::{Element, Key};
+use crate::animation::{presets, TimelineRef, TrackIndex};
+use crate::engine::{AnimSlot, Element, Key};
 use crate::render_contract::ElementKind;
 use crate::router::FocusPolicy;
 
@@ -89,8 +90,13 @@ impl Deck {
                 Element::new(ElementKind::Container, Some("deck_region"))
                     .key(Key::Static("deck_region")),
             );
-        for (item_index, item) in self.visible_items() {
-            element = element.child(deck_item_element(item, item_index == self.focus_index));
+        for (visible_index, (item_index, item)) in self.visible_items().enumerate() {
+            element = element.child(deck_item_element(
+                item,
+                item_index == self.focus_index,
+                self.item_anim,
+                visible_index,
+            ));
         }
         element
     }
@@ -125,8 +131,13 @@ impl Deck {
     }
 }
 
-fn deck_item_element(item: &DeckItem, selected: bool) -> Element {
-    match &item.render {
+fn deck_item_element(
+    item: &DeckItem,
+    selected: bool,
+    item_anim: DeckItemAnim,
+    visible_index: usize,
+) -> Element {
+    let element = match &item.render {
         ItemRender::Card(card) => Element::new(ElementKind::Container, Some("card"))
             .key(item.key.clone())
             .accent(card.accent)
@@ -147,6 +158,15 @@ fn deck_item_element(item: &DeckItem, selected: bool) -> Element {
             .key(item.key.clone())
             .child(Element::new(ElementKind::Image, Some("button_icon")).icon(&button.icon_key))
             .child(Element::new(ElementKind::Label, Some("button_title")).text(&button.title)),
+    };
+    match item_anim {
+        DeckItemAnim::StaggerEnter { .. } => element.with_anim(AnimSlot {
+            timeline: TimelineRef(presets::STAGGER_ENTER_TIMELINE_ID),
+            track: TrackIndex(visible_index.min(3)),
+        }),
+        DeckItemAnim::None
+        | DeckItemAnim::ScaleOnFocus { .. }
+        | DeckItemAnim::BreatheWhenFocused => element,
     }
 }
 

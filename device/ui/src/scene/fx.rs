@@ -112,16 +112,10 @@ fn glow_element(index: usize, glow: &GlowBloom) -> Element {
 }
 
 trait FxElementExt {
-    fn with_anim(self, anim: AnimSlot) -> Self;
     fn with_opacity(self, opacity: u8) -> Self;
 }
 
 impl FxElementExt for Element {
-    fn with_anim(mut self, anim: AnimSlot) -> Self {
-        self.anim = Some(anim);
-        self
-    }
-
     fn with_opacity(mut self, opacity: u8) -> Self {
         self.props.opacity = Some(opacity);
         self
