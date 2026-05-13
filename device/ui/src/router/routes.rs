@@ -49,6 +49,24 @@ pub fn route_for(screen: UiScreen) -> Route {
         .unwrap_or_else(|| panic!("missing route for {}", screen.as_str()))
 }
 
+pub fn validate_routes() -> anyhow::Result<()> {
+    let mut seen = Vec::with_capacity(ROUTES.len());
+    for route in ROUTES {
+        if seen.contains(&route.screen) {
+            anyhow::bail!("duplicate UI route for {}", route.screen.as_str());
+        }
+        seen.push(route.screen);
+    }
+
+    for screen in UiScreen::ALL {
+        if !seen.contains(&screen) {
+            anyhow::bail!("missing UI route for {}", screen.as_str());
+        }
+    }
+
+    Ok(())
+}
+
 const fn route(screen: UiScreen) -> Route {
     Route {
         screen,

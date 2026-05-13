@@ -30,6 +30,7 @@ pub struct RenderState {
 
 impl RenderState {
     pub fn open(width: usize, height: usize) -> Result<Self> {
+        router::validate_routes()?;
         load_scene_defaults()?;
         let framebuffer = Framebuffer::new(width, height);
         let mut renderer = Box::new(LvglRenderer::open(None)?);
