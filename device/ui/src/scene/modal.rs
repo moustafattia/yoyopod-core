@@ -1,5 +1,6 @@
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
+use crate::roles;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Modal {
@@ -17,9 +18,10 @@ impl Modal {
 }
 
 fn modal_content(index: usize, variant: &'static str, title: &str, message: &str) -> Element {
-    let mut element = Element::new(ElementKind::Container, Some("modal")).key(Key::Indexed(index));
+    let mut element =
+        Element::new(ElementKind::Container, Some(roles::MODAL)).key(Key::Indexed(index));
     element.props.variant = Some(variant);
     element
-        .child(Element::new(ElementKind::Label, Some("modal_title")).text(title))
-        .child(Element::new(ElementKind::Label, Some("modal_message")).text(message))
+        .child(Element::new(ElementKind::Label, Some(roles::MODAL_TITLE)).text(title))
+        .child(Element::new(ElementKind::Label, Some(roles::MODAL_MESSAGE)).text(message))
 }

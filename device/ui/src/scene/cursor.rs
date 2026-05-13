@@ -1,6 +1,7 @@
 use crate::animation::ActorRef;
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
+use crate::roles;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cursor {
@@ -14,12 +15,12 @@ impl Cursor {
             Self::UnderlineDots { count, focus } => {
                 let selected = (*focus).min(count.saturating_sub(1));
                 (0..*count).fold(
-                    Element::new(ElementKind::Container, Some("cursor_dots"))
+                    Element::new(ElementKind::Container, Some(roles::CURSOR_DOTS))
                         .key(Key::Static("cursor"))
                         .actor(ActorRef::Cursor),
                     |element, index| {
                         element.child(
-                            Element::new(ElementKind::Container, Some("cursor_dot"))
+                            Element::new(ElementKind::Container, Some(roles::CURSOR_DOT))
                                 .key(Key::Indexed(index))
                                 .selected(index == selected),
                         )
@@ -27,7 +28,7 @@ impl Cursor {
                 )
             }
             Self::RowGlow { index } => {
-                Element::new(ElementKind::Container, Some("cursor_row_glow"))
+                Element::new(ElementKind::Container, Some(roles::CURSOR_ROW_GLOW))
                     .key(Key::Static("cursor"))
                     .actor(ActorRef::Cursor)
                     .offset_y((*index as i32) * 36)

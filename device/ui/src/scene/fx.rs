@@ -1,6 +1,7 @@
 use crate::animation::ActorRef;
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
+use crate::roles;
 
 use super::RegionId;
 
@@ -57,8 +58,8 @@ impl FxLayer {
             return None;
         }
 
-        let mut element =
-            Element::new(ElementKind::Container, Some("scene_fx")).key(Key::Static("scene_fx"));
+        let mut element = Element::new(ElementKind::Container, Some(roles::SCENE_FX))
+            .key(Key::Static("scene_fx"));
         for (index, halo) in self.halos.iter().enumerate() {
             element = element.child(halo_element(index, halo));
         }
@@ -79,7 +80,7 @@ impl FxLayer {
 
 fn halo_element(index: usize, halo: &Halo) -> Element {
     fx_target_element(
-        "fx_halo",
+        roles::FX_HALO,
         Key::String(format!("fx:halo:{index}")),
         halo.target,
     )
@@ -89,7 +90,7 @@ fn halo_element(index: usize, halo: &Halo) -> Element {
 
 fn pulse_element(index: usize, pulse: &PulseRing) -> Element {
     fx_target_element(
-        "fx_pulse",
+        roles::FX_PULSE,
         Key::String(format!("fx:pulse:{index}")),
         pulse.target,
     )
@@ -98,7 +99,7 @@ fn pulse_element(index: usize, pulse: &PulseRing) -> Element {
 }
 
 fn particle_element(field_index: usize, index: u8, field: &ParticleField) -> Element {
-    Element::new(ElementKind::Container, Some("fx_particle"))
+    Element::new(ElementKind::Container, Some(roles::FX_PARTICLE))
         .key(Key::String(format!("fx:particle:{field_index}:{index}")))
         .region(field.region)
         .accent(field.color)
@@ -106,8 +107,8 @@ fn particle_element(field_index: usize, index: u8, field: &ParticleField) -> Ele
 
 fn glow_element(index: usize, glow: &GlowBloom) -> Element {
     let role = match glow.target {
-        ActorRef::Screen => "fx_spinner",
-        _ => "fx_glow",
+        ActorRef::Screen => roles::FX_SPINNER,
+        _ => roles::FX_GLOW,
     };
     fx_target_element(role, Key::String(format!("fx:glow:{index}")), glow.target)
         .with_opacity(glow.intensity)

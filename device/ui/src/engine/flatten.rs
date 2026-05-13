@@ -1,5 +1,6 @@
 use crate::animation::{presets, ActorRef, TimelineRef, TrackIndex};
 use crate::render_contract::ElementKind;
+use crate::roles;
 use crate::scene::{Deck, HudScene, LayerSlot, Modal, Scene, SceneGraph, LAYER_ORDER};
 
 use super::{AnimSlot, Element, Key};
@@ -9,7 +10,7 @@ pub fn flatten(graph: &SceneGraph) -> Element {
         .into_iter()
         .filter(|slot| slot.is_graph_overlay())
         .fold(
-            Element::new(ElementKind::Container, Some("scene_graph"))
+            Element::new(ElementKind::Container, Some(roles::SCENE_GRAPH))
                 .key(Key::Static("scene_graph"))
                 .child(scene_element(&graph.active)),
             |element, slot| match graph_overlay_element(graph, slot) {
@@ -20,7 +21,7 @@ pub fn flatten(graph: &SceneGraph) -> Element {
 }
 
 pub fn scene_element(scene: &Scene) -> Element {
-    let root = Element::new(ElementKind::Container, Some("scene_root"))
+    let root = Element::new(ElementKind::Container, Some(roles::SCENE_ROOT))
         .key(Key::String(format!("scene:{}", scene.id.screen.as_str())))
         .actor(ActorRef::Screen)
         .with_anim(AnimSlot {
@@ -62,12 +63,12 @@ fn graph_overlay_element(graph: &SceneGraph, slot: LayerSlot) -> Option<Element>
 }
 
 fn stage_element(_stage: crate::scene::Stage) -> Element {
-    Element::new(ElementKind::Container, Some("scene_stage")).key(Key::Static("stage"))
+    Element::new(ElementKind::Container, Some(roles::SCENE_STAGE)).key(Key::Static("stage"))
 }
 
 fn decks_element(decks: &[Deck]) -> Element {
     decks.iter().enumerate().fold(
-        Element::new(ElementKind::Container, Some("scene_decks")).key(Key::Static("decks")),
+        Element::new(ElementKind::Container, Some(roles::SCENE_DECKS)).key(Key::Static("decks")),
         |element, (index, deck)| element.child(deck.element(index)),
     )
 }
@@ -78,7 +79,8 @@ fn hud_element(hud: &HudScene) -> Element {
 
 fn modal_stack_element(modal_stack: &[Modal]) -> Element {
     modal_stack.iter().enumerate().fold(
-        Element::new(ElementKind::Container, Some("modal_stack")).key(Key::Static("modal_stack")),
+        Element::new(ElementKind::Container, Some(roles::MODAL_STACK))
+            .key(Key::Static("modal_stack")),
         |element, (index, modal)| element.child(modal.element(index)),
     )
 }
