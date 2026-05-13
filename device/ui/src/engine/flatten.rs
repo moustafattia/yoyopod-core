@@ -1,4 +1,5 @@
 use crate::animation::{presets, ActorRef, TimelineRef, TrackIndex};
+use crate::components::widgets::{footer_bar, status_bar, FooterBarProps, StatusBarProps};
 use crate::render_contract::ElementKind;
 use crate::roles;
 use crate::scene::{Deck, HudScene, LayerSlot, Modal, Scene, SceneGraph, LAYER_ORDER};
@@ -74,7 +75,19 @@ fn decks_element(decks: &[Deck]) -> Element {
 }
 
 fn hud_element(hud: &HudScene) -> Element {
-    hud.element()
+    Element::new(ElementKind::Container, Some(roles::HUD))
+        .key(Key::Static("hud"))
+        .child(status_bar(&StatusBarProps {
+            time: hud.status.time.clone(),
+            battery_label: hud.status.battery_label.clone(),
+            battery_percent: hud.status.battery_percent,
+            signal_strength: hud.status.signal_strength,
+            network_online: hud.status.network_online,
+        }))
+        .child(footer_bar(&FooterBarProps {
+            text: hud.footer_text.clone(),
+            accent: None,
+        }))
 }
 
 fn modal_stack_element(modal_stack: &[Modal]) -> Element {
