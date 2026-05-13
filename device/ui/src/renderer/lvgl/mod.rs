@@ -219,6 +219,17 @@ impl LvglFacade for NativeLvglFacade {
         Ok(self.register_widget(obj, WidgetKind::Image, role, Some(parent), layout))
     }
 
+    fn reorder_children(&mut self, parent: WidgetId, order: &[WidgetId]) -> Result<()> {
+        self.widgets.reorder_children(parent, order)?;
+        for (index, child) in order.iter().copied().enumerate() {
+            let obj = self.widget_obj(child)?;
+            unsafe {
+                ffi::lv_obj_move_to_index(obj.as_ptr(), index as i32);
+            }
+        }
+        Ok(())
+    }
+
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
         let text = CString::new(text).with_context(|| {

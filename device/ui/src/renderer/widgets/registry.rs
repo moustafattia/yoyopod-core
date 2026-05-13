@@ -92,6 +92,17 @@ impl WidgetRegistry {
         }
     }
 
+    pub fn reorder_children(&mut self, parent: WidgetId, order: &[WidgetId]) -> Result<()> {
+        for child in order {
+            if !self.widgets.contains_key(child) {
+                anyhow::bail!("unknown child widget {}", child.raw());
+            }
+        }
+        let parent = self.node_mut(parent)?;
+        parent.children = order.to_vec();
+        Ok(())
+    }
+
     pub fn clear(&mut self) {
         self.widgets.clear();
     }

@@ -90,7 +90,14 @@ fn apply_mutation(
             let widget = widget_for(registry, *node)?;
             facade.set_geometry(widget, *x, *y, *w, *h)
         }
-        Mutation::Reorder { .. } => Ok(()),
+        Mutation::Reorder { parent, order } => {
+            let parent = widget_for(registry, *parent)?;
+            let order = order
+                .iter()
+                .map(|node| widget_for(registry, *node))
+                .collect::<Result<Vec<_>>>()?;
+            facade.reorder_children(parent, &order)
+        }
         Mutation::Remove { node } => {
             if let Some(widget) = registry.remove(*node) {
                 facade.destroy(widget)?;

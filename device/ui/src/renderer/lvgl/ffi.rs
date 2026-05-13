@@ -77,6 +77,7 @@ unsafe extern "C" {
 
     pub fn lv_obj_create(parent: *mut lv_obj_t) -> *mut lv_obj_t;
     pub fn lv_obj_delete(obj: *mut lv_obj_t);
+    pub fn lv_obj_move_to_index(obj: *mut lv_obj_t, index: i32);
     pub fn lv_obj_set_pos(obj: *mut lv_obj_t, x: i32, y: i32);
     pub fn lv_obj_set_size(obj: *mut lv_obj_t, width: i32, height: i32);
     pub fn lv_obj_invalidate(obj: *mut lv_obj_t);

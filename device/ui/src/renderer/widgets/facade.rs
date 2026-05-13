@@ -11,6 +11,8 @@ pub trait LvglFacade {
 
     fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId>;
 
+    fn reorder_children(&mut self, parent: WidgetId, order: &[WidgetId]) -> Result<()>;
+
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()>;
 
     fn set_selected(&mut self, widget: WidgetId, selected: bool) -> Result<()>;
@@ -94,6 +96,10 @@ where
 
     fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
         (**self).create_image(parent, role)
+    }
+
+    fn reorder_children(&mut self, parent: WidgetId, order: &[WidgetId]) -> Result<()> {
+        (**self).reorder_children(parent, order)
     }
 
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()> {
