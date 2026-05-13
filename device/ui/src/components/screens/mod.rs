@@ -20,8 +20,6 @@ pub mod voice_note;
 
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
-use crate::animation::presets;
-use crate::router;
 use crate::scene::{defaults_for, Scene};
 
 pub fn scene_for_screen(
@@ -63,22 +61,12 @@ pub fn scene_for_screen(
         UiScreen::Loading => loading::scene(&loading::props_from(snapshot), &defaults),
         UiScreen::Error => error::scene(&error::props_from(snapshot), &defaults),
     };
-    with_route_timelines(screen, scene)
+    with_scene_timelines(&defaults, scene)
 }
 
-fn with_route_timelines(screen: UiScreen, mut scene: Scene) -> Scene {
-    if let Some(timeline) = router::route_for(screen).on_enter {
-        let enter_timeline = if timeline.0 == presets::STAGGER_ENTER_TIMELINE_ID {
-            scene
-                .decks
-                .iter()
-                .find_map(|deck| deck.enter_timeline())
-                .unwrap_or_else(|| presets::timeline_for_ref(timeline))
-        } else {
-            presets::timeline_for_ref(timeline)
-        };
-        scene.timelines.insert(0, enter_timeline);
-    }
+fn with_scene_timelines(defaults: &crate::scene::SceneDefaults, mut scene: Scene) -> Scene {
+    let scene_timelines = defaults.scene_timelines(&scene.decks);
+    scene.timelines.splice(0..0, scene_timelines);
     let item_timelines = scene
         .decks
         .iter()

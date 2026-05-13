@@ -2,7 +2,7 @@ use crate::scene::RegionId;
 
 use super::{
     ActorRef, AnimatableProp, AnimatableValue, ClockSource, Easing, EventId, Keyframe, LoopMode,
-    Timeline, TimelineId, TimelineRef, Track,
+    Timeline, TimelineId, Track,
 };
 
 pub const BREATHE_TIMELINE_ID: TimelineId = TimelineId(10);
@@ -255,14 +255,5 @@ pub fn selection_snap(to_index: usize) -> Timeline {
         loop_mode: LoopMode::Once,
         on_complete: None,
         started_ms: 0,
-    }
-}
-
-pub fn timeline_for_ref(reference: TimelineRef) -> Timeline {
-    match reference.0 {
-        SCENE_ENTER_TIMELINE_ID => scene_enter(),
-        STAGGER_ENTER_TIMELINE_ID => stagger_enter(40),
-        SLIDE_IN_FROM_RIGHT_TIMELINE_ID => slide_in_from_right(),
-        TimelineId(value) => panic!("unknown route timeline id {value}"),
     }
 }

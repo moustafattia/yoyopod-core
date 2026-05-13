@@ -7,7 +7,7 @@ use yoyopod_protocol::ui::UiScreen;
 
 use crate::animation::{presets, ActorRef, Timeline};
 
-use super::{Backdrop, FxLayer, GlowBloom, Halo, ParticleField, PulseRing, RegionId, Stage};
+use super::{Backdrop, Deck, FxLayer, GlowBloom, Halo, ParticleField, PulseRing, RegionId, Stage};
 
 const SCENES_RON: &str = include_str!("../../assets/scenes.ron");
 const DEFAULT_SOLID_RGB: u32 = 0x2a2d35;
@@ -33,6 +33,8 @@ pub enum SceneDefaultsError {
     UnknownStage { screen: String, value: String },
     #[error("scenes.ron screen {screen} has unknown fx preset {value}")]
     UnknownFx { screen: String, value: String },
+    #[error("scenes.ron screen {screen} has unknown timeline preset {value}")]
+    UnknownTimeline { screen: String, value: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +54,7 @@ pub struct SceneDefaults {
     pub backdrop: BackdropPreset,
     pub stage: Stage,
     pub fx: Vec<FxPreset>,
+    pub timelines: Vec<SceneTimelinePreset>,
 }
 
 impl SceneDefaults {
@@ -91,6 +94,13 @@ impl SceneDefaults {
         }
         timelines
     }
+
+    pub fn scene_timelines(&self, decks: &[Deck]) -> Vec<Timeline> {
+        self.timelines
+            .iter()
+            .map(|preset| preset.timeline(decks))
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +118,26 @@ pub enum FxPreset {
     VoiceMeter,
     CallPulse,
     Spinner,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SceneTimelinePreset {
+    SceneEnter,
+    StaggerEnter,
+    SlideInFromRight,
+}
+
+impl SceneTimelinePreset {
+    fn timeline(self, decks: &[Deck]) -> Timeline {
+        match self {
+            Self::SceneEnter => presets::scene_enter(),
+            Self::StaggerEnter => decks
+                .iter()
+                .find_map(|deck| deck.enter_timeline())
+                .unwrap_or_else(|| presets::stagger_enter(40)),
+            Self::SlideInFromRight => presets::slide_in_from_right(),
+        }
+    }
 }
 
 impl FxPreset {
@@ -165,6 +195,8 @@ struct RawSceneDefaults {
     stage: String,
     #[serde(default)]
     fx: Vec<String>,
+    #[serde(default)]
+    timelines: Vec<String>,
 }
 
 pub fn load_scene_defaults() -> Result<&'static SceneDefaultsCatalog, SceneDefaultsError> {
@@ -198,6 +230,11 @@ fn parse_scene_defaults() -> Result<SceneDefaultsCatalog, SceneDefaultsError> {
                 .fx
                 .iter()
                 .map(|preset| fx_from_key(&raw.screen, preset))
+                .collect::<Result<Vec<_>, _>>()?,
+            timelines: raw
+                .timelines
+                .iter()
+                .map(|preset| timeline_from_key(&raw.screen, preset))
                 .collect::<Result<Vec<_>, _>>()?,
         });
     }
@@ -287,6 +324,18 @@ fn fx_from_key(screen: &str, key: &str) -> Result<FxPreset, SceneDefaultsError> 
         "call_pulse" => Ok(FxPreset::CallPulse),
         "spinner" => Ok(FxPreset::Spinner),
         value => Err(SceneDefaultsError::UnknownFx {
+            screen: screen.to_string(),
+            value: value.to_string(),
+        }),
+    }
+}
+
+fn timeline_from_key(screen: &str, key: &str) -> Result<SceneTimelinePreset, SceneDefaultsError> {
+    match key {
+        "scene_enter" => Ok(SceneTimelinePreset::SceneEnter),
+        "stagger_enter" => Ok(SceneTimelinePreset::StaggerEnter),
+        "slide_in_from_right" => Ok(SceneTimelinePreset::SlideInFromRight),
+        value => Err(SceneDefaultsError::UnknownTimeline {
             screen: screen.to_string(),
             value: value.to_string(),
         }),
