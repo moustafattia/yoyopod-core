@@ -20,50 +20,34 @@ If you are new here, read in this order:
 
 ## Baseline local setup
 
-Use the repo-owned setup contract first:
+Automated host setup tooling (`yoyopod setup host` / `verify-host`) was
+deleted in Round 0 of the CLI rebuild and has not yet been ported back.
+See [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md). Until then, install
+dependencies manually:
+
+- a Rust stable toolchain via `rustup`
+- `gh` (GitHub CLI) authenticated for `yoyopod target deploy`
+- standard Pi-side prereqs (`ssh`, `scp`, `git`)
+
+Then build the Rust CLI and (optionally) install it into PATH:
 
 ```bash
-uv run yoyopod setup host
-uv run yoyopod setup verify-host
+cargo build --manifest-path cli/Cargo.toml --release
+cargo install --path cli/yoyopod
 ```
-
-This is the baseline executable setup contract.
-
-It is not the same thing as complete setup ownership. Feature-specific assets and unusual hardware edges can still need extra follow-through.
-
-Before you start a workflow that depends on more than local simulation and CI-safe checks, verify the extra host prerequisites explicitly:
-
-```bash
-uv run yoyopod setup verify-host --with-remote-tools
-uv run yoyopod setup verify-host --with-github
-```
-
-Use `--with-remote-tools --with-github` together when you plan to both validate on a Raspberry Pi over SSH and use GitHub CLI helpers for branch or PR work.
 
 ## Fast local loop
 
-Legacy Python simulation run:
-
-```bash
-yoyopod build simulation
-device/runtime/build/yoyopod-runtime --config-dir config
-```
-
-Core Rust validation loop:
+Rust workspace check (preferred):
 
 ```bash
 cargo check --manifest-path device/Cargo.toml --workspace --locked
+cargo test  --manifest-path cli/Cargo.toml
 ```
 
-Legacy Python quality debt audit:
-
-```bash
-uv run --extra dev python scripts/quality.py audit
-```
-
-Use `scripts/quality.py` when changing Python CLI/deploy surfaces or fixing
-Python CI. Do not treat Python checks as the default gate for Rust runtime
-iteration.
+Run targeted crate checks during iteration on a specific worker
+(`-p yoyopod-runtime`, `-p yoyopod-ui`, etc.). See
+[`QUALITY_GATES.md`](QUALITY_GATES.md).
 
 ## Choose the right doc path for the work
 
@@ -79,9 +63,9 @@ Read:
 
 Current reality:
 
-- `yoyopod-runtime` is the target top-level owner for runtime state and worker supervision
-- Python code is operations CLI, deploy, release, validation, or compatibility tooling unless current code proves otherwise
-- runtime/state/model cleanup should prefer Rust ownership over broad Python rewrites
+- `yoyopod-runtime` owns top-level runtime state and worker supervision.
+- The operator CLI is Rust (`cli/`), currently rebuilding in rounds.
+- No Python code remains in tree.
 
 ### Raspberry Pi and setup work
 
@@ -96,16 +80,19 @@ Read:
 Baseline commands:
 
 ```bash
-uv run yoyopod setup verify-host --with-remote-tools
-yoyopod remote config edit
-uv run yoyopod remote setup --with-pisugar
-uv run yoyopod remote verify-setup --with-pisugar
-yoyopod remote validate --branch <branch> --sha <commit> --with-voip
+yoyopod target config edit
+yoyopod target mode activate dev
+yoyopod target deploy --branch <branch>           # or --sha <commit>
+yoyopod target logs --follow
 ```
 
-These are the canonical contributor-path commands.
-Add `--with-voice` and/or `--with-network` when the target needs the TTS or modem paths.
-For direct on-Pi validation commands such as `yoyopod pi validate smoke`, use [`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md).
+`yoyopod target deploy` is the everyday command — it pushes, fetches
+the CI artifact, syncs the Pi, installs binaries, restarts, and
+verifies startup in one step.
+
+Automated on-Pi validation (`yoyopod target validate`) is a Round 1
+stub during the CLI rebuild; validate manually after deploy. See
+[`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md).
 
 ### Docs and contributor guidance work
 
@@ -125,20 +112,23 @@ When updating docs:
 
 ## Before opening a PR
 
-At minimum for Rust runtime work, run the relevant Rust build check:
+At minimum, run the relevant Rust build check:
 
 ```bash
 cargo check --manifest-path device/Cargo.toml --workspace --locked
+cargo test  --manifest-path cli/Cargo.toml      # if you touched cli/
 ```
 
-Then add any focused commands relevant to your area, for example:
+For hardware-touching work, run a deploy and a manual eyes-on check:
 
 ```bash
-python -m compileall yoyopod_cli scripts
-yoyopod remote validate --branch <branch> --sha <commit>
+yoyopod target deploy --branch <branch>
+yoyopod target status
+yoyopod target logs --follow
 ```
 
-If your change is outside the currently gated surface, say so plainly in the PR instead of pretending CI covered more than it did.
+If your change is outside the currently gated surface, say so plainly
+in the PR instead of pretending CI covered more than it did.
 
 ## What a good PR looks like here
 
@@ -164,13 +154,12 @@ Watch for these recurring mistakes:
 
 These are good places to be extra careful:
 
-- `yoyopod/core/bootstrap/`
-- `yoyopod/core/application.py`
-- `yoyopod/core/bus.py`
-- `yoyopod/core/scheduler.py`
-- `yoyopod/core/app_context.py`
-- duplicated domain/state models that drift across layers
-- setup/docs wording that can overstate what the new commands guarantee
+- `device/runtime/` — top-level runtime supervision
+- `device/ui/` + LVGL scene controllers — visual fidelity on real hardware
+- `cli/yoyopod/` — operator surface (under active rebuild; see
+  CLI_REBUILD_ROUNDS.md)
+- duplicated domain/state models that drift across `device/` crates
+- setup/docs wording that overstates what the rebuilt CLI guarantees today
 
 ## If you only remember one thing
 

@@ -20,8 +20,9 @@ Unsupported runtime launch surfaces:
 - imports from the retired Python app package
 - any `yoyopod.*` Python app-runtime package
 
-The installed `yoyopod` console entrypoint in `pyproject.toml` belongs to
-`yoyopod_cli`. It is the operations CLI, not the app runtime.
+The installed `yoyopod` console entrypoint comes from the Rust CLI at
+`cli/`. It is the operator CLI for dev-machine to Pi orchestration, not
+the app runtime.
 
 ## Rust Workspace
 
@@ -64,29 +65,28 @@ yoyopod-runtime
 Each host is a sidecar process with a narrow domain owner. The runtime owns
 orchestration and policy; hosts own hardware/backend integration details.
 
-## Python Surface
+## Operator CLI Surface
 
-Python remains in the repo for:
+The operator CLI lives in `cli/` as a separate Cargo workspace. It
+produces a single binary, `yoyopod`, used from the dev machine for
+target orchestration (deploy, restart, logs, screenshot, mode).
 
-- `yoyopod_cli/` operations commands
-- deploy, release, slot, and Pi validation helpers
-- compatibility support modules that the CLI still uses
-
-The retired Python app runtime has been deleted. Active code must not import a
-`yoyopod.*` Python app-runtime package.
+The Python CLI was retired in Round 0 of the CLI rebuild; see
+[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).
+Active code must not depend on a `yoyopod_cli` Python package.
 
 ## Packaging
 
-The Python package wheel contains `yoyopod_cli` only. Release slots copy the
-active application sources under `app/device` and `app/yoyopod_cli`; they do not
-package a Python app-runtime package.
+Slot tarballs (Round 3 work) package the runtime workers under
+`app/device/.../build/`. No Python is included.
 
 ## Source Of Truth
 
 When docs disagree, trust sources in this order:
 
 1. Current Rust runtime and hosts under `device/`
-2. Current deploy/runtime tooling in `deploy/` and `yoyopod_cli/`
-3. Current operations and architecture docs
+2. Current operator CLI under `cli/` and deploy tooling under `deploy/`
+3. Current operations and architecture docs (especially
+   [`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md))
 4. `rules/`, `AGENTS.md`, and `skills/`
 5. Historical plans and archived material

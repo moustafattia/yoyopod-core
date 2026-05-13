@@ -28,7 +28,12 @@ Main files:
 - `device/power/`
 - `device/runtime/`
 - `device/ui/`
-- `yoyopod_cli/pi/power.py` (`yoyopod pi power battery`, `yoyopod pi power rtc`)
+
+CLI diagnostics for the power module (`yoyopod pi power battery`,
+`yoyopod pi power rtc …`) were deleted in Round 0 of the CLI rebuild
+and return in Round 4. Until then, query PiSugar state via the
+PiSugar server directly. See
+[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).
 
 Runtime flow:
 
@@ -202,21 +207,11 @@ Supported RTC operations:
 - set a wake alarm
 - disable the wake alarm
 
-Primary helper:
-
-```bash
-yoyopod pi power rtc status
-yoyopod pi power rtc sync-to
-yoyopod pi power rtc sync-from
-yoyopod pi power rtc set-alarm --time 2026-04-06T07:30:00+02:00
-yoyopod pi power rtc disable-alarm
-```
-
-Remote helper:
-
-```bash
-yoyopod remote rtc status --host rpi-zero
-```
+CLI helpers for RTC operations (`yoyopod pi power rtc …`,
+`yoyopod target rtc …`) were deleted in Round 0 and return in Round 4
+of the CLI rebuild. Until then, drive the PiSugar RTC directly via the
+`pisugar-server` daemon or the device file under `/dev/`. See
+[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).
 
 ## Watchdog Support
 
@@ -270,41 +265,27 @@ Note:
 
 ## Diagnostics And Validation
 
-Focused power helper:
+Power-module CLI diagnostics (`yoyopod pi power battery`,
+`yoyopod target power`, `yoyopod pi power rtc status`) were deleted in
+Round 0 of the CLI rebuild. Until they return in Round 4, use the
+PiSugar server directly:
 
 ```bash
-yoyopod pi power battery
+ssh <user>@<host> 'pisugar-shell ls'         # list available fields
+ssh <user>@<host> 'pisugar-shell get battery'
+ssh <user>@<host> 'pisugar-shell get model'
 ```
 
-This prints:
-- availability
-- model
-- battery percent
-- voltage
-- temperature
-- charging state
-- external power state
-- RTC state
-- safe-shutdown values
-- watchdog configuration
+Or query the socket / TCP transport that `pisugar-server` exposes (see
+the Dependencies section).
 
-Remote power helper:
+Smoke validation (`yoyopod pi validate smoke`) returns in Round 2. Until
+then, after `yoyopod target deploy`:
 
-```bash
-yoyopod remote power --host rpi-zero
-```
-
-Smoke validation:
-
-```bash
-yoyopod pi validate smoke
-```
-
-Recommended hardware sequence:
-1. `uv run pytest -q`
-2. `yoyopod pi validate smoke`
-3. `yoyopod pi power battery`
-4. `yoyopod pi power rtc status`
+1. `yoyopod target status`
+2. `yoyopod target logs --follow --filter power`
+3. exercise the device and confirm battery / charging telemetry
+   reaches the UI Power Status screen
 
 ## Dependencies On The Pi
 
@@ -321,7 +302,8 @@ The PiSugar server should expose at least one of:
 If power telemetry fails:
 - check `pisugar-server` is running
 - check `/tmp/pisugar-server.sock` exists or TCP `8423` is listening
-- run `yoyopod pi power battery`
+- run `ssh <user>@<host> 'pisugar-shell get battery'` to query the
+  PiSugar server directly
 - run `i2cdetect -y 1` on Raspberry Pi Zero 2W hardware
 - run `i2cdetect -y 7` on Radxa Cubie A7Z hardware
 
@@ -330,7 +312,7 @@ If PiSugar is not visible on the expected I2C bus:
 - if `0x57` disappears but other bus devices still respond, suspect physical contact between the PiSugar pogo pins and the underside of the Raspberry Pi GPIO header
 - clean the underside GPIO pads, reseat the PiSugar carefully, and re-run `i2cdetect`
 - if needed, add a small amount of solder to the underside GPIO pads to improve pogo-pin contact, then power-cycle and retest
-- once the PiSugar device reappears on I2C, restart `pisugar-server` and confirm `yoyopod pi power battery` returns real battery values again
+- once the PiSugar device reappears on I2C, restart `pisugar-server` and confirm `pisugar-shell get battery` returns real battery values again
 
 Expected PiSugar 3 visibility usually includes:
 - `0x57`
@@ -342,7 +324,7 @@ If watchdog commands fail:
 - confirm passwordless `sudo` is not required for your chosen flow, because the watchdog uses direct I2C tools
 
 If RTC sync behaves strangely:
-- validate with `yoyopod pi power rtc status`
+- query the PiSugar server directly: `pisugar-shell get rtc_time`
 - check whether the distro image has a working `hwclock` path
 
 If the app shuts down too aggressively:

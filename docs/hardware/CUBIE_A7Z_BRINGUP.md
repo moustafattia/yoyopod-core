@@ -47,24 +47,25 @@ sudo apt install -y mpv espeak-ng unzip
 
 Install `uv` and Python `3.12`:
 
+Cubie-side Python installation is no longer required. The runtime and
+operator CLI are Rust-only; install a stable Rust toolchain instead if
+you need to build locally:
+
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.bashrc
-uv python install 3.12
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ```
-
-Important note:
-
-- Debian system `python3` remains `3.9.2`
-- YoYoPod should use `uv` / `.venv`, not replace `/usr/bin/python3`
 
 Project setup on the board:
 
 ```bash
-cd ~/yoyopod-core
-~/.local/bin/uv venv --python 3.12 .venv
-~/.local/bin/uv sync --extra dev
+sudo mkdir -p /opt/yoyopod-dev
+sudo chown -R $USER:$USER /opt/yoyopod-dev
+git clone <repo-url> /opt/yoyopod-dev/checkout
 ```
+
+The Rust workers are delivered as CI-built artifacts via
+`yoyopod target deploy` from a dev machine; you do not need to build
+them on the Cubie.
 
 ## 3. Hostname and timezone
 
@@ -183,7 +184,8 @@ And a simple playlist was created:
 
 The Cubie A7Z is currently able to run YoYoPod with:
 
-- Python `3.12` in the project `.venv`
+- the Rust runtime (`yoyopod-runtime`) and worker hosts deployed from
+  CI artifacts
 - working SPI display path
 - working Whisplay display
 - working WM8960 playback/capture path
@@ -252,21 +254,7 @@ If one-button input is needed later, preferred next options are:
 - use the PiSugar custom function button as a semantic input source
 - or add an external button wired to a known-safe `3.3V` GPIO path
 
-### 5. System Python should not be replaced
-
-The Cubie image still uses Debian Bullseye system Python:
-
-- `python3 = 3.9.2`
-
-YoYoPod uses:
-
-- `uv`
-- Python `3.12`
-- project `.venv`
-
-Do not change `/usr/bin/python3` on this image.
-
-### 6. ALSA card index ordering is not stable
+### 5. ALSA card index ordering is not stable
 
 ALSA card numbering can vary after reboot.
 
@@ -275,7 +263,7 @@ Recommendation:
 - target playback/capture devices by device name
 - avoid assuming a fixed card index for `wm8960-soundcard`
 
-### 7. Avoid casual kernel upgrades
+### 6. Avoid casual kernel upgrades
 
 The current working state depends on the Radxa vendor BSP kernel and overlays.
 
@@ -331,7 +319,8 @@ For immediate development:
 1. use Cubie A7Z powered directly by USB
 2. keep PiSugar detached unless specifically testing PiSugar features
 3. do not press the Whisplay physical button on Cubie A7Z
-4. use SSH plus service restarts for app validation
-5. use the Cubie board config override and the project `.venv`
+4. deploy via `yoyopod target deploy` from a dev machine
+5. use the Cubie board config override (`YOYOPOD_CONFIG_BOARD=radxa-cubie-a7z`)
+   and SSH plus `yoyopod target {restart, logs, status}` for app validation
 
 This is the safest current path while keeping the board productive for display, audio, VoIP, music, and local voice-command development.

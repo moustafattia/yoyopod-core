@@ -12,7 +12,8 @@ The Pimoroni HAT was designed for the Raspberry Pi. On the Cubie, the Pi-specifi
 
 - Radxa Cubie A7Z with Debian Bullseye and vendor BSP kernel `5.15.147-18-a733`
 - SPI1 enabled via `sun60iw2p1-spi1-spidev.dtbo` overlay (see `docs/hardware/CUBIE_A7Z_BRINGUP.md`)
-- YoYoPod project deployed at `~/yoyopod-core` with Python 3.12 venv
+- YoYoPod dev lane deployed at `/opt/yoyopod-dev/checkout` with worker
+  binaries installed via `yoyopod target deploy`
 - `dtc` (device tree compiler) installed: `sudo apt install device-tree-compiler`
 
 ## Pin Mapping
@@ -205,8 +206,9 @@ config changes are needed.
 ### Launch with Pimoroni display
 
 ```bash
-cd ~/yoyopod-core
-YOYOPOD_DISPLAY=pimoroni YOYOPOD_CONFIG_BOARD=radxa-cubie-a7z .venv/bin/device/runtime/build/yoyopod-runtime --config-dir config
+cd /opt/yoyopod-dev/checkout
+YOYOPOD_DISPLAY=pimoroni YOYOPOD_CONFIG_BOARD=radxa-cubie-a7z \
+  device/runtime/build/yoyopod-runtime --config-dir config
 ```
 
 ### Set as the default systemd service display
@@ -214,7 +216,7 @@ YOYOPOD_DISPLAY=pimoroni YOYOPOD_CONFIG_BOARD=radxa-cubie-a7z .venv/bin/device/r
 To make the systemd service use Pimoroni, create or update the local deploy override:
 
 ```bash
-yoyopod remote config edit --host cubie-a7z
+yoyopod target --host cubie-a7z config edit
 ```
 
 Or manually add to `deploy/pi-deploy.local.yaml`:
@@ -243,7 +245,7 @@ The following has been validated on-device:
 - **Button X requires I2S0 disabled.** Re-enabling I2S0 (for WM8960 audio) will block Button X.
 - **SPI `no_cs` not supported** by the Allwinner SPI driver. The driver uses hardware CS on PIN_24 (CS0) which does not reach the Pimoroni HAT's CE1 trace (PIN_26). Software CS via GPIO on PIN_26 is used as a fallback.
 - **Whisplay adapter import side effects.** The Whisplay vendor driver claims GPIO pins at import time. Display adapter imports are lazy to prevent this, but importing the Whisplay adapter module (e.g., for testing) while Pimoroni is active will cause GPIO conflicts.
-- **gpiod 1.x API.** The Cubie runs gpiod 1.6.2 (lowercase `gpiod.chip()`). Current Pi-facing compatibility helpers live under `yoyopod_cli/pi/support/`.
+- **gpiod 1.x API.** The Cubie runs gpiod 1.6.2 (lowercase `gpiod.chip()`). Any Cubie-specific gpiod compatibility belongs in the relevant Rust worker crate under `device/`.
 
 ## Switching Back to Whisplay
 

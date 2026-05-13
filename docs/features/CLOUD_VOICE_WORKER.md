@@ -86,29 +86,30 @@ keeps local controls usable.
 
 ## Live Worker Smoke Test
 
-From the Pi checkout, source the lane environment and run the worker with the
-OpenAI provider:
+The voice worker binary (`yoyopod-speech-host`) is built and shipped
+alongside the other Rust workers via the
+`yoyopod-rust-device-arm64-<sha>` CI artifact. From the Pi checkout,
+source the lane environment and run the worker directly:
 
 ```bash
 cd /opt/yoyopod-dev/checkout
-/opt/yoyopod-dev/venv/bin/python -m yoyopod_cli.main build voice-worker
 set -a
 . /etc/default/yoyopod-dev
 set +a
 YOYOPOD_VOICE_WORKER_PROVIDER=openai \
-  workers/voice/go/build/yoyopod-voice-worker
+  device/speech/build/yoyopod-speech-host
 ```
 
-The worker reads newline-delimited JSON command envelopes on stdin and writes
-JSON envelopes on stdout. For normal hardware validation, prefer the app-level
-smoke route:
+The worker reads newline-delimited JSON command envelopes on stdin and
+writes JSON envelopes on stdout.
+
+For normal hardware validation, prefer the dev-machine deploy:
 
 ```bash
-yoyopod pi validate stability
+yoyopod target deploy --branch <branch>           # or --sha <commit>
+yoyopod target logs --follow --filter speech
 ```
 
-or from the dev machine:
-
-```bash
-uv run yoyopod remote --host rpi-zero --branch <branch> validate --sha <commit>
-```
+Automated on-Pi voice validation (`yoyopod target validate
+--with-cloud-voice`) returns in Round 2 of the CLI rebuild. See
+[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).

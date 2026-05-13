@@ -1,49 +1,38 @@
 # OTA Roadmap
 
-The slot-deploy foundation (`docs/operations/SLOT_DEPLOY.md`) is designed so a future
-OTA daemon can be added without changing any of the core deploy pieces.
-This doc lists the exact extension points.
+The slot-deploy foundation was originally designed so a future OTA
+daemon could be added without changing the core deploy pieces. As of
+2026-05-13, slot-deploy itself is paused while the CLI is rebuilt in
+Rust; see
+[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md). Round 3 restores the
+slot pipeline. The OTA work below sits on top of Round 3.
 
-## What is already OTA-shaped
+## Recommended build order for OTA (once Round 3 lands)
 
-- **Manifest schema** (`yoyopod_cli/release_manifest.py`): already has
-  `signature`, `channel`, `requires`, and diff-artifact fields. When OTA
-  signing goes live, only the signing and verification paths change —
-  the schema is stable.
-- **Atomic slot flip**: `yoyopod_cli/atomic_symlink.py` + `rollback.sh`
-  are the only state-mutating primitives. An OTA daemon calls the same
-  primitives after downloading an artifact.
-- **Rollback on failure**: `yoyopod-prod.service` has `OnFailure=`
-  pointing at `yoyopod-prod-rollback.service`. An OTA-applied update that
-  crash-loops triggers rollback without daemon involvement.
-- **Health probes**: `yoyopod health preflight` + `yoyopod health live`
-  are the same entry points the deploy CLI uses.
-
-## What is NOT yet built
-
-- **Update checker**: a systemd timer that polls an HTTPS manifest URL,
-  diffs against the current version, and downloads when a match is found.
-- **Signature verification**: manifest signing + on-device public-key
-  verification before applying.
-- **Diff patch application**: the manifest's `diff` artifact type is
-  defined but the `zstd --patch-from` apply path isn't wired.
-- **Per-device channel rollout**: server-side gating (canary 10% → 50%
-  → 100%) based on device ID hashes.
-
-## Recommended build order for OTA
-
-1. **Manifest signing** — minisign/ed25519, CI-only signing key. Add
-   `verify_manifest(path, pubkey)` to `release_manifest.py`.
-2. **Static OTA bucket** — Cloudflare R2 / S3. Upload `manifest.json`
+1. **Manifest schema** — re-introduce a release-manifest type in Rust
+   (the Python equivalent shipped under `yoyopod_cli/release_manifest.py`
+   and was deleted in Round 0). The schema should keep `signature`,
+   `channel`, `requires`, and diff-artifact fields ready.
+2. **Atomic slot flip + rollback** — re-port the atomic symlink primitive
+   into the new Rust slot tooling. `yoyopod-prod.service`'s
+   `OnFailure=yoyopod-prod-rollback.service` wiring is preserved and
+   already triggers rollback when a flipped slot crash-loops.
+3. **Health probes** — `yoyopod target health preflight` and
+   `... health live` (also in Round 3) are the entry points the OTA
+   daemon will share with the CLI.
+4. **Manifest signing** — minisign/ed25519, CI-only signing key. Verify
+   on device before applying.
+5. **Static OTA bucket** — Cloudflare R2 / S3. Upload `manifest.json`
    + release tarballs + diff patches on every CI release tag.
-3. **`yoyopod ota check` command** — fetches the manifest, compares
+6. **`yoyopod ota check` command** — fetches the manifest, compares
    versions, prints the update. No side effects yet.
-4. **`yoyopod ota apply`** — downloads, verifies signature, runs
-   preflight, flips symlinks. Reuses `atomic_symlink`.
-5. **systemd timer** — runs `yoyopod ota check && yoyopod ota apply`
+7. **`yoyopod ota apply`** — downloads, verifies signature, runs
+   preflight, flips symlinks.
+8. **systemd timer** — runs `yoyopod ota check && yoyopod ota apply`
    every 6 h on the stable channel.
-6. **Diff patches** — cut tarball size by 10–50× for small changes.
-7. **Channel rollout** — server-side manifest variants + a device-ID
-   hash check on the client.
+9. **Diff patches** — cut tarball size by 10–50× for small changes.
+10. **Channel rollout** — server-side manifest variants + a device-ID
+    hash check on the client.
 
-See `docs/operations/SLOT_DEPLOY.md` for the current ops flow.
+See [`SLOT_DEPLOY.md`](SLOT_DEPLOY.md) for the ops flow as it stood
+before the rebuild; that doc is being updated alongside Round 3.

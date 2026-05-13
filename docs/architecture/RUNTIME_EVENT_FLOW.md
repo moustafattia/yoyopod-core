@@ -110,5 +110,5 @@ domain-specific hardware/backend details.
 - Shared envelope behavior lives in `device/protocol/`.
 - Host-specific protocol payloads and snapshots stay in their domain crate.
 
-Python under `yoyopod_cli/` is operations and validation tooling. It is not in
-the runtime event path.
+The Rust operator CLI under `cli/` is dev-machine orchestration only.
+It is not in the runtime event path.

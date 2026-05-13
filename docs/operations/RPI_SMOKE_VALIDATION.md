@@ -1,297 +1,94 @@
 # Raspberry Pi Smoke Validation
 
-This guide separates local Rust checks from the target-hardware checks that
-still require a Raspberry Pi, CI-built Rust device artifacts, and a reachable
-SIP account when VoIP validation is requested.
+**Status: in transition.**
 
-The default board-validation path from the dev machine is now committed-code validation through `yoyopod remote validate`.
+Automated hardware validation commands (`yoyopod target validate` and
+the `yoyopod pi validate …` suite) were deleted in Round 0 of the CLI
+rebuild and have not yet been ported back. See
+[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
 
-## Validation Layers
+Until Round 2 restores `yoyopod target validate`, validation is split
+between local Rust checks and a manual hardware exercise loop.
 
-### 1. Local Rust checks
+## 1. Local Rust checks
 
 Run these anywhere:
 
 ```bash
 cargo check --manifest-path device/Cargo.toml --workspace --locked
+cargo test  --manifest-path cli/Cargo.toml
+cargo clippy --manifest-path cli/Cargo.toml --all-targets
 ```
 
-Use Python CLI/deploy quality checks only when that surface changed.
-
-### 2. Default dev-machine-to-board validation
-
-Use this for feature branches and PR validation on target hardware:
+For targeted iteration on a single worker:
 
 ```bash
-git status --short
+cargo check --manifest-path device/Cargo.toml -p yoyopod-runtime --locked
+cargo check --manifest-path device/Cargo.toml -p yoyopod-ui --locked
+# … etc
+```
+
+If native LVGL or Whisplay hardware features are involved, use the
+CI-built ARM artifact (`yoyopod-rust-device-arm64-<sha>`) for the exact
+commit under test before claiming hardware parity.
+
+## 2. Deploy and manually exercise on the Pi
+
+```bash
+git status --short             # must be clean
 git branch --show-current
 git rev-parse HEAD
 git push
-yoyopod remote validate --branch <branch> --sha <commit>
+yoyopod target mode activate dev
+yoyopod target deploy --branch <branch>         # or --sha <commit>
+yoyopod target status
+yoyopod target logs --follow                    # leave running while you exercise
 ```
 
-Useful variations:
-
-```bash
-yoyopod remote validate --branch <branch> --sha <commit> --with-voip
-yoyopod remote validate --branch <branch> --sha <commit> --with-navigation
-yoyopod remote validate --branch <branch> --sha <commit> --with-voip --with-lvgl-soak
-```
-
-What it checks:
-
-- the branch is committed locally
-- the branch and exact SHA are pushed
-- the stable Pi checkout is synced to committed code only
-- the target-side deploy validation passes
-- the requested Rust runtime, UI, cloud voice, VoIP, and stability checks pass
-- the app restarts cleanly
-- the PID file and startup marker agree
-- recent logs look sane before handoff
-
-Expected result:
-
-- the app stays running on the Pi after validation
-- the Pi reflects the requested committed branch/SHA, not dirty local state
-- the startup marker matches the active PID
-
-### 3. On-Pi target validation suite
-
-Run these directly on the target Raspberry Pi when you want focused, repeated-safe validation without the remote orchestration layer:
-
-```bash
-yoyopod pi validate deploy
-yoyopod pi validate smoke
-yoyopod pi validate voip
-yoyopod pi validate navigation
-yoyopod pi validate stability
-```
-
-What each command checks:
-
-- `deploy`: deploy contract files, tracked runtime config, runtime path parents, and app entrypoints without launching the app
-- `smoke`: target environment plus Rust runtime dry-run and Rust UI worker health through the runtime protocol
-- `voip`: quick Liblinphone startup and SIP registration smoke using `config/communication/calling.yaml` plus local secrets/env
-- `navigation`: repeatable one-button routed navigation through the Rust UI worker protocol
-- `stability`: repeated Rust UI navigation and idle health checks
-
-Useful flags:
-
-- `yoyopod pi validate voip --timeout 15`
-- `yoyopod pi validate navigation --cycles 3 --idle-seconds 5 --tail-idle-seconds 20`
-- `yoyopod remote validate --branch <branch> --sha <commit> --with-navigation`
-- `yoyopod pi validate stability --cycles 3 --hold-seconds 0.3`
-- `--verbose` on any suite command
-
-## Manual Follow-Up Checks
-
-### Full application startup on the Pi
-
-```bash
-/opt/yoyopod-dev/checkout/device/runtime/build/yoyopod-runtime \
-  --config-dir /opt/yoyopod-dev/checkout/config \
-  --hardware whisplay
-```
-
-Verify:
-
-- the home and menu UI render on the target display
-- button input navigates screens correctly
-- the app returns cleanly on `Ctrl+C`
-
-### VoIP registration drill
-
-```bash
-yoyopod pi voip check
-```
-
-Use this when you want a registration-only pass with detailed logs.
-
-### VoIP reliability drills
-
-These are the deeper real-hardware VoIP checks. They intentionally stay as a few focused commands instead of one giant wrapper, and each run writes a timestamped artifact bundle under `logs/voip-validation/` by default:
-
-- `summary.json` — pass/fail, timings, final status, and the exact thresholds used
-- `timeline.jsonl` — state changes, periodic status samples, and any network drop/restore hook results
-
-Use them after `yoyopod pi validate voip` passes, not instead of it.
-
-#### Registration stability
-
-```bash
-yoyopod pi validate voip --soak registration
-yoyopod pi validate voip --soak registration --hold-seconds 120
-```
-
-What it proves:
-
-- SIP registration reached `ok`
-- SIP registration stayed `ok` for the requested hold window instead of flapping immediately after startup
-
-Fail the run if registration never reaches `ok` or if it leaves `ok` during the hold.
-
-#### Reconnect drill
-
-```bash
-yoyopod pi validate voip --soak reconnect
-yoyopod pi validate voip --soak reconnect --disconnect-seconds 12
-```
-
-If you can automate the outage on the Pi, keep it explicit. The drill executes `--drop-command` and `--restore-command` with a shell, so treat them as trusted operator input for your own device only:
-
-```bash
-yoyopod pi validate voip --soak reconnect \
-  --drop-command "nmcli networking off" \
-  --restore-command "nmcli networking on"
-```
-
-What it proves:
-
-- the manager reached `ok` before the outage
-- registration actually left `ok` during the wobble or temporary loss
-- registration returned to `ok` within the recovery timeout
-
-Fail the run if the drill never sees registration leave `ok` or if recovery does not happen. That usually means the outage was too mild to prove reconnect behavior, or the backend failed to recover honestly.
-
-#### Call soak
-
-```bash
-yoyopod pi validate voip --soak call --target sip:echo@example.com
-yoyopod pi validate voip --soak call --target sip:echo@example.com --soak-seconds 900
-```
-
-Use a target that will actually answer, such as an echo bot or a second endpoint you control.
-
-What it proves:
-
-- registration reached `ok`
-- the outbound call connected
-- the call stayed in a connected media state for the requested soak duration
-
-Fail the run if the call never connects, if registration drops during the soak, or if the call leaves the connected media states before the soak finishes.
-
-#### Reading the artifacts
-
-- A passing reconnect drill should show an initial `registration=ok`, a later non-`ok` registration event during the outage, and then a final return to `registration=ok`.
-- A passing call soak should show the expected connect transition followed by periodic connected samples for the full soak duration.
-- If a run fails, compare `summary.json` across runs first. It makes timing drift, last seen state, and the exact failure point obvious without reading the whole timeline.
-
-When the full app is running, the coordinator-thread timing signals land in
-`logs/yoyopod.log` and through `yoyopod remote logs --follow`.
-
-- `VoIP iterate timing drift` is the per-keep-alive warning. `schedule_delay_ms` shows how late the iterate ran, `iterate_ms` shows how long the Liblinphone keep-alive took on the coordinator thread, and `native_events` shows how many backend events were drained during that pass.
-- `VoIP timing window` is the low-frequency summary for target-hardware runs. Use it to spot repeated delay or duration spikes without reading every keep-alive warning. `max_blocking_span` and `max_blocking_span_ms` point at the worst nearby coordinator step seen in that summary window.
-- `Runtime loop blocked` means the whole coordinator loop stalled between iterations.
-- `Coordinator blocking span` names the specific runtime step that blocked long enough to threaten keep-alive cadence or UI responsiveness.
-- `Runtime iteration slow` means the total loop iteration stayed on the coordinator thread too long even if the exact hot span was not obvious from a single callback.
-- `runtime_cadence_mode`, `runtime_target_sleep_seconds`, `runtime_requested_sleep_seconds`, and `voip_effective_iterate_interval_seconds` in `app.get_status()` snapshots tell you whether the loop is in a fast interactive path, awake idle, or screen-off idle and what sleep / VoIP cadence it actually requested.
-- Freeze snapshots also include `runtime_blocking_span_name`, `runtime_blocking_span_seconds`, and `runtime_blocking_span_age_seconds` so a `SIGUSR1` dump can tell you whether the last blocking span is still fresh or already stale.
-- When `diagnostics.responsiveness_watchdog_enabled=true`, the app also writes automatic evidence bundles under `logs/responsiveness/` once the loop heartbeat stops advancing past the configured threshold.
-- Those bundles include `input_activity_age_seconds` and `handled_input_activity_age_seconds` so you can tell whether input was still arriving while the coordinator/UI side stopped responding.
-
-### Incoming call debug drill
-
-```bash
-yoyopod pi voip debug
-```
-
-Use this when SIP registration works but incoming-call parsing or callback delivery looks wrong.
-
-### Whisplay display-only debug
-
-```bash
-yoyopod build lvgl
-yoyopod pi validate lvgl
-```
-
-Use this only on a Pi with the Whisplay hardware attached. It validates the display/LVGL path without starting the full app and is not part of CI.
-
-### Whisplay gesture tuning
-
-This tooling (`pi tune`) was removed in the 2026-04 CLI polish. Use hardware-manual testing with the running app for gesture feel adjustment, or edit `config/device/hardware.yaml` timing overrides directly.
-
-```bash
-### LVGL Whisplay soak
-
-```bash
-yoyopod pi validate lvgl
-yoyopod pi validate lvgl --cycles 3 --hold-seconds 0.3
-```
-
-Use this when Whisplay rendering feels fast but you still want a hardware pass for:
-
-- repeated routed screen transitions
-- sleep/wake recovery
-- LVGL-only corruption or stuck redraw issues
-
-### Navigation and idle stability soak
-
-```bash
-yoyopod pi validate navigation
-yoyopod pi validate navigation --cycles 3 --idle-seconds 5 --tail-idle-seconds 20
-yoyopod remote validate --branch <branch> --sha <commit> --with-navigation
-```
-
-Use this when you want a reproducible freeze-repro path that keeps the app mostly idle but still exercises:
-
-- routed one-button navigation from the real input dispatcher
-- click-driven transitions into `Listen`, `Talk`, `Ask`, and `Setup`
-- playlist and shuffle playback navigation while mpv is active
-- explicit idle dwell windows between actions
-- a final tail-idle and sleep/wake pass on the hub
-
-### PiSugar RTC drill
-
-```bash
-yoyopod pi power rtc status
-yoyopod pi power rtc sync-to
-```
-
-Use this when you want a focused RTC read or sync pass without running the full app.
-
-### PiSugar power drill
-
-```bash
-yoyopod pi power battery
-```
-
-Use this when you want a focused battery, charging, RTC, shutdown-threshold, and watchdog readout without the full smoke flow.
-
-## Suggested Order On Hardware
-
-1. Run focused Rust build checks for the changed crates.
-2. Commit the intended change.
-3. `git push`
-4. `git rev-parse HEAD`
-5. Install exact-SHA Rust artifacts when testing the Rust runtime owner.
-6. `yoyopod remote validate --branch <branch> --sha <commit> --with-voip`
-7. manual follow-up on the still-running app
-
-## Dirty-Tree Escape Hatch
-
-`yoyopod remote sync` is a debugging escape hatch and is not the default validation contract.
-
-Only use it when:
-
-- you explicitly need to validate uncommitted local state
-- you have called out that the board is not running committed branch/SHA code
-
-## Failure Triage
-
-- `deploy` fails: verify the checkout still has `deploy/pi-deploy.yaml`, `deploy/systemd/yoyopod-dev.service`, `deploy/systemd/yoyopod-prod.service`, the configured virtualenv, and writable runtime path parents
-- `display` fails: check attached HAT, driver and library install, and `display.hardware` config
-- `input` fails: check the matching display adapter initialized correctly first
-- `voip` fails: verify the CI-built Rust VoIP host artifact, `config/communication/integrations/liblinphone_factory.conf`, SIP credentials, network reachability, and audio device configuration
-- `voip --soak registration` fails: compare `logs/voip-validation/*/summary.json` across runs and look for whether startup never reached `ok` or whether `ok` flapped during the hold window
-- `voip --soak reconnect` fails: check whether the run ever recorded a non-`ok` registration state, whether the outage lasted long enough to force a drop, and whether recovery returned before the timeout
-- `voip --soak call` fails: check whether the target endpoint actually answered, whether registration stayed `ok`, and which non-connected call state ended the soak
-- `navigation` fails: rerun `yoyopod pi validate navigation --verbose` or `yoyopod remote validate --with-navigation --verbose` and inspect which expected screen or playback transition stalled
-- `stability` fails: rerun `yoyopod pi validate stability --verbose` or `yoyopod pi validate lvgl` for a deeper LVGL-only pass
-- `validate` fails before launch: check whether the branch was actually pushed and whether the Pi checkout is reachable over SSH
-
-## Notes
-
-- each `yoyopod pi validate <command>` exits non-zero if its requested check fails
-- CI intentionally does not run hardware-in-the-loop checks
-- `yoyopod remote validate` is the normal branch and PR validation path
-- the target validation suite is meant to stay small and composable; use the manual drills above when you need deeper debugging
+Use the device:
+
+- power on / off
+- navigate the main scene set with the button
+- play / pause local music
+- attempt an outbound SIP call
+- attempt an inbound SIP call (when relevant)
+- exercise the cellular path if testing modem changes
+- watch for UI freezes, audio dropouts, restart loops, or runtime
+  crashes
+
+Take screenshots with `yoyopod target screenshot` (or `--readback` for
+the LVGL native path) and compare against design intent.
+
+## 3. What you must report
+
+For every hardware validation, report:
+
+- branch + exact commit SHA
+- CI artifact name and run ID
+- Pi host
+- deploy result (success / failure + stderr)
+- manual exercise steps performed
+- visible issues found, with timestamps so logs can be cross-referenced
+- whether the dev service was left running for further testing
+
+If the change touches a specific worker (UI / media / VoIP / network /
+cloud / power / speech), call out that worker's behaviour explicitly
+in the report.
+
+## What returns when
+
+| Round | Restores |
+|---|---|
+| Round 2 | `yoyopod target validate --branch <b> --sha <s>` orchestration |
+| Round 2 | Per-stage on-Pi validation entrypoints (deploy / smoke / navigation / stability / voip / cloud-voice / lvgl) |
+| Round 3 | Slot install preflight (`yoyopod health preflight`) |
+| Round 4+ | Diagnostics (`yoyopod pi voip check`, `pi power battery`, etc.) |
+
+See [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+
+## Related Docs
+
+- [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md) for the daily deploy loop
+- [`DEV_PROD_LANES.md`](DEV_PROD_LANES.md) for lane structure
+- [`QUALITY_GATES.md`](QUALITY_GATES.md) for verification policy
+- `rules/deploy.md` for the policy that backs hardware validation
