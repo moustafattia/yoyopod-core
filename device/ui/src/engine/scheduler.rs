@@ -1,5 +1,5 @@
-use crate::animation::{Timeline, TimelineSampler};
-use crate::scene::SceneGraph;
+use crate::animation::{ClockSource, Timeline, TimelineSampler};
+use crate::scene::{SceneGraph, SceneId};
 
 use super::{flatten, Mutation, NodeIdAlloc, Reconciler, TreeCache};
 
@@ -22,14 +22,16 @@ pub struct Engine {
     pub node_alloc: NodeIdAlloc,
     pub mutations: Vec<Mutation>,
     pub timelines: Vec<Timeline>,
+    active_scene: Option<SceneId>,
     reconciler: Reconciler,
 }
 
 impl Engine {
-    pub fn render(&mut self, _graph: &SceneGraph, now_ms: u64) -> &[Mutation] {
+    pub fn render(&mut self, graph: &SceneGraph, now_ms: u64) -> &[Mutation] {
         self.mutations.clear();
+        self.sync_scene_timelines(graph, now_ms);
         let sampler = TimelineSampler::new(&self.timelines, now_ms, now_ms);
-        let new_tree = flatten::flatten(_graph);
+        let new_tree = flatten::flatten(graph);
         self.reconciler.diff(
             self.tree_cache.previous(),
             &new_tree,
@@ -50,5 +52,20 @@ impl Engine {
 
     pub fn tick_clocks(&mut self, _now_ms: u64) {
         let _ = &mut self.reconciler;
+    }
+
+    fn sync_scene_timelines(&mut self, graph: &SceneGraph, now_ms: u64) {
+        if self.active_scene == Some(graph.active.id) {
+            return;
+        }
+
+        self.timelines.clear();
+        self.active_scene = Some(graph.active.id);
+        for mut timeline in graph.active.timelines.clone() {
+            if matches!(timeline.clock, ClockSource::SceneTime) {
+                timeline.started_ms = now_ms;
+            }
+            self.schedule_timeline(timeline);
+        }
     }
 }
