@@ -9,3 +9,4 @@ pub mod renderer;
 pub mod router;
 pub mod scene;
 pub mod transport;
+pub mod worker;

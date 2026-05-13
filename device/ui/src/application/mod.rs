@@ -6,6 +6,5 @@ pub mod runtime;
 pub mod snapshot;
 pub mod state;
 
-pub use runtime::RenderState;
 pub use state::{UiRuntime, UiView};
 pub use yoyopod_protocol::ui::UiScreen;

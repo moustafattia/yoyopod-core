@@ -4,7 +4,7 @@ use std::thread;
 
 use yoyopod_protocol::{ProtocolError, WorkerEnvelope};
 
-pub(super) fn spawn_line_reader<R>(input: R) -> Receiver<io::Result<String>>
+pub(crate) fn spawn_line_reader<R>(input: R) -> Receiver<io::Result<String>>
 where
     R: Read + Send + 'static,
 {
@@ -20,10 +20,10 @@ where
     receiver
 }
 
-pub(super) fn decode_envelope(line: &str) -> Result<WorkerEnvelope, ProtocolError> {
+pub(crate) fn decode_envelope(line: &str) -> Result<WorkerEnvelope, ProtocolError> {
     WorkerEnvelope::decode(line.as_bytes())
 }
 
-pub(super) fn encode_envelope(envelope: &WorkerEnvelope) -> Result<Vec<u8>, ProtocolError> {
+pub(crate) fn encode_envelope(envelope: &WorkerEnvelope) -> Result<Vec<u8>, ProtocolError> {
     envelope.encode()
 }

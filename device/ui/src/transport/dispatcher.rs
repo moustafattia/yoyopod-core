@@ -1,7 +1,7 @@
 use yoyopod_protocol::ui::{AnimationRequest, InputAction, RuntimeSnapshot, RuntimeSnapshotPatch};
 
 #[derive(Debug, Clone, PartialEq)]
-pub(super) enum AppEvent {
+pub(crate) enum AppEvent {
     SetBacklight { brightness: f32 },
     RuntimeSnapshot(RuntimeSnapshot),
     RuntimePatch(RuntimeSnapshotPatch),
@@ -14,11 +14,11 @@ pub(super) enum AppEvent {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(super) struct DispatchOutcome {
+pub(crate) struct DispatchOutcome {
     pub event: AppEvent,
 }
 
-pub(super) fn dispatch_command(command: yoyopod_protocol::ui::UiCommand) -> DispatchOutcome {
+pub(crate) fn dispatch_command(command: yoyopod_protocol::ui::UiCommand) -> DispatchOutcome {
     let event = match command {
         yoyopod_protocol::ui::UiCommand::SetBacklight { brightness } => {
             AppEvent::SetBacklight { brightness }

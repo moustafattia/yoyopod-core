@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use yoyopod_ui::{hardware, transport};
+use yoyopod_ui::{hardware, worker};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum HardwareMode {
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
             let stdin = std::io::stdin();
             let mut stdout = std::io::stdout();
             let mut stderr = std::io::stderr();
-            transport::run_worker(stdin, &mut stdout, &mut stderr, display, button)
+            worker::run_worker(stdin, &mut stdout, &mut stderr, display, button)
         }
         HardwareMode::Whisplay => {
             #[cfg(all(target_os = "linux", feature = "whisplay-hardware"))]
@@ -34,7 +34,7 @@ fn main() -> Result<()> {
                 let stdin = std::io::stdin();
                 let mut stdout = std::io::stdout();
                 let mut stderr = std::io::stderr();
-                return transport::run_worker(stdin, &mut stdout, &mut stderr, display, button);
+                return worker::run_worker(stdin, &mut stdout, &mut stderr, display, button);
             }
             #[cfg(not(all(target_os = "linux", feature = "whisplay-hardware")))]
             {

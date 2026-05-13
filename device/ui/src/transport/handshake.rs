@@ -10,7 +10,7 @@ use crate::router;
 
 use super::outbound::emit_event;
 
-pub(super) fn emit_ready<W: Write>(output: &mut W, width: usize, height: usize) -> Result<()> {
+pub(crate) fn emit_ready<W: Write>(output: &mut W, width: usize, height: usize) -> Result<()> {
     emit_event(
         output,
         UiEvent::Ready(UiReady {
@@ -21,11 +21,11 @@ pub(super) fn emit_ready<W: Write>(output: &mut W, width: usize, height: usize) 
     )
 }
 
-pub(super) fn emit_shutdown_complete<W: Write>(output: &mut W) -> Result<()> {
+pub(crate) fn emit_shutdown_complete<W: Write>(output: &mut W) -> Result<()> {
     emit_event(output, UiEvent::ShutdownComplete)
 }
 
-pub(super) fn emit_manager_timeout<W, E>(
+pub(crate) fn emit_manager_timeout<W, E>(
     output: &mut W,
     errors: &mut E,
     timeout: Duration,

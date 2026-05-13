@@ -1,61 +1,13 @@
-use anyhow::Result;
 use yoyopod_protocol::ui::{
-    AnimationRequest, InputAction, RuntimeSnapshot, RuntimeSnapshotPatch, UiEvent, UiHealth,
-    UiIntent, UiScreenChanged,
+    AnimationRequest, InputAction, RuntimeSnapshot, RuntimeSnapshotPatch, UiIntent,
 };
 
-use crate::animation::{self, TransitionSampler};
-use crate::components;
-use crate::engine::Engine;
-use crate::hardware::DisplayDevice;
+use crate::animation;
 use crate::presentation;
-use crate::presentation::view_models::{ScreenModel, StatusBarModel};
-use crate::renderer::{Framebuffer, LvglRenderer, ScreenRenderer};
-use crate::scene::{GlobalClock, HudScene, SceneGraph};
+use crate::presentation::view_models::ScreenModel;
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen, UiView};
-
-pub struct RenderState {
-    framebuffer: Framebuffer,
-    engine: Engine,
-    renderer: Box<dyn ScreenRenderer>,
-    frames: usize,
-    last_active_screen: Option<UiScreen>,
-    last_ui_renderer: String,
-}
-
-impl RenderState {
-    pub fn open(width: usize, height: usize) -> Result<Self> {
-        Ok(Self {
-            framebuffer: Framebuffer::new(width, height),
-            engine: Engine::default(),
-            renderer: Box::new(LvglRenderer::open(None)?),
-            frames: 0,
-            last_active_screen: None,
-            last_ui_renderer: String::new(),
-        })
-    }
-
-    pub fn with_renderer(width: usize, height: usize, renderer: Box<dyn ScreenRenderer>) -> Self {
-        Self {
-            framebuffer: Framebuffer::new(width, height),
-            engine: Engine::default(),
-            renderer,
-            frames: 0,
-            last_active_screen: None,
-            last_ui_renderer: String::new(),
-        }
-    }
-
-    pub fn frames(&self) -> usize {
-        self.frames
-    }
-
-    pub fn last_ui_renderer(&self) -> &str {
-        &self.last_ui_renderer
-    }
-}
 
 impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
@@ -189,143 +141,7 @@ impl UiRuntime {
         )
     }
 
-    pub fn active_scene_graph(&self, now_ms: u64) -> SceneGraph {
-        let active = components::screens::scene_for_screen(
-            self.active_screen,
-            &self.snapshot,
-            self.focus_index,
-        );
-        let chrome = self.active_screen_model().chrome().clone();
-        let modal_stack = active.modal.clone().into_iter().collect();
-        SceneGraph {
-            hud: HudScene {
-                status_text: status_text(&chrome.status),
-                footer_text: chrome.footer,
-            },
-            active,
-            history: self
-                .screen_stack
-                .iter()
-                .copied()
-                .map(|route| crate::scene::ScenePushFrame {
-                    route,
-                    params: crate::scene::RouteParams::default(),
-                    cached_state: crate::scene::SceneCacheEntry::Discarded,
-                })
-                .collect(),
-            modal_stack,
-            global_clock: GlobalClock {
-                started_ms: 0,
-                now_ms,
-            },
-        }
-    }
-
     pub fn wants_ptt_passthrough(&self) -> bool {
         navigator::wants_ptt_passthrough(self)
-    }
-
-    pub fn health_event(&self, render: &RenderState, button_events: usize) -> UiEvent {
-        UiEvent::Health(UiHealth {
-            frames: render.frames(),
-            button_events,
-            last_ui_renderer: render.last_ui_renderer().to_string(),
-            active_screen: self.active_screen_model().screen(),
-            full_snapshots: self.full_snapshots,
-            patches_per_domain: self.patches_per_domain.clone(),
-        })
-    }
-
-    pub fn render_if_dirty<D>(
-        &mut self,
-        display: &mut D,
-        render: &mut RenderState,
-        now_ms: u64,
-    ) -> Result<Option<UiEvent>>
-    where
-        D: DisplayDevice,
-    {
-        if !self.is_dirty() {
-            return Ok(None);
-        }
-
-        let scene_graph = self.active_scene_graph(now_ms);
-        let _mutations = render.engine.render(&scene_graph, now_ms);
-        let screen_model = self.active_screen_model();
-        let sampler = TransitionSampler::new(&self.transitions, now_ms);
-        let dirty_region = self.dirty.render_region(screen_model.screen());
-        let report = render.renderer.render(
-            &mut render.framebuffer,
-            &screen_model,
-            &sampler,
-            dirty_region,
-        )?;
-        render.last_ui_renderer = report.renderer.to_string();
-        if let Some(region) = report.dirty_region {
-            display.flush_region(&render.framebuffer, region)?;
-        } else {
-            display.flush_full_frame(&render.framebuffer)?;
-        }
-        let screen_changed =
-            screen_changed_if_needed(&mut render.last_active_screen, &screen_model);
-        self.mark_clean();
-        render.frames += 1;
-        Ok(screen_changed)
-    }
-}
-
-fn screen_changed_if_needed(
-    last_active_screen: &mut Option<UiScreen>,
-    screen_model: &ScreenModel,
-) -> Option<UiEvent> {
-    if last_active_screen
-        .map(|screen| screen != screen_model.screen())
-        .unwrap_or(true)
-    {
-        let event = Some(UiEvent::ScreenChanged(UiScreenChanged {
-            screen: screen_model.screen(),
-            title: screen_model_title(screen_model).to_string(),
-        }));
-        *last_active_screen = Some(screen_model.screen());
-        return event;
-    }
-    None
-}
-
-fn status_text(status: &StatusBarModel) -> String {
-    let network = if status.network_connected {
-        status.connection_type.as_str()
-    } else if status.network_enabled {
-        "offline"
-    } else {
-        "disabled"
-    };
-    format!(
-        "{} {}% sig:{}",
-        network, status.battery_percent, status.signal_strength
-    )
-}
-
-fn screen_model_title(model: &ScreenModel) -> &str {
-    match model {
-        ScreenModel::Hub(hub) => hub
-            .cards
-            .get(hub.selected_index)
-            .map(|card| card.title.as_str())
-            .unwrap_or("Listen"),
-        ScreenModel::Listen(list)
-        | ScreenModel::Playlists(list)
-        | ScreenModel::RecentTracks(list)
-        | ScreenModel::Talk(list)
-        | ScreenModel::Contacts(list)
-        | ScreenModel::CallHistory(list) => &list.title,
-        ScreenModel::NowPlaying(now_playing) => &now_playing.title,
-        ScreenModel::Ask(ask) => &ask.title,
-        ScreenModel::TalkContact(actions) | ScreenModel::VoiceNote(actions) => &actions.title,
-        ScreenModel::IncomingCall(call)
-        | ScreenModel::OutgoingCall(call)
-        | ScreenModel::InCall(call) => &call.title,
-        ScreenModel::Power(power) => &power.title,
-        ScreenModel::Loading(overlay) | ScreenModel::Error(overlay) => &overlay.title,
     }
 }

@@ -12,20 +12,20 @@ fn emit<W: Write>(output: &mut W, envelope: WorkerEnvelope) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn emit_event<W: Write>(output: &mut W, event: UiEvent) -> Result<()> {
+pub(crate) fn emit_event<W: Write>(output: &mut W, event: UiEvent) -> Result<()> {
     let mut envelope = event.into_envelope();
     envelope.timestamp_ms = monotonic_millis();
     emit(output, envelope)
 }
 
-pub(super) fn emit_intents<W: Write>(output: &mut W, intents: Vec<UiIntent>) -> Result<()> {
+pub(crate) fn emit_intents<W: Write>(output: &mut W, intents: Vec<UiIntent>) -> Result<()> {
     for intent in intents {
         emit_event(output, UiEvent::Intent(intent))?;
     }
     Ok(())
 }
 
-pub(super) fn emit_input_action<W: Write>(
+pub(crate) fn emit_input_action<W: Write>(
     output: &mut W,
     action: InputAction,
     method: impl Into<String>,
@@ -43,7 +43,7 @@ pub(super) fn emit_input_action<W: Write>(
     )
 }
 
-pub(super) fn monotonic_millis() -> u64 {
+pub(crate) fn monotonic_millis() -> u64 {
     use std::sync::OnceLock;
     use std::time::Instant;
 
