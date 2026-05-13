@@ -1,7 +1,7 @@
 use crate::animation::{TimelineRef, TrackIndex};
 use crate::scene::RegionId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
