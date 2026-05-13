@@ -6,6 +6,10 @@ use crate::scene::RegionId;
 pub enum Key {
     Static(&'static str),
     Indexed(usize),
+    Scene {
+        screen: &'static str,
+        generation: u32,
+    },
     String(String),
 }
 

@@ -22,7 +22,10 @@ pub fn flatten(graph: &SceneGraph) -> Element {
 
 pub fn scene_element(scene: &Scene) -> Element {
     let root = Element::new(ElementKind::Container, Some(roles::SCENE_ROOT))
-        .key(Key::String(format!("scene:{}", scene.id.screen.as_str())))
+        .key(Key::Scene {
+            screen: scene.id.screen.as_str(),
+            generation: scene.id.generation,
+        })
         .actor(ActorRef::Screen)
         .with_anim(AnimSlot {
             timeline: TimelineRef(presets::SCENE_ENTER_TIMELINE_ID),
