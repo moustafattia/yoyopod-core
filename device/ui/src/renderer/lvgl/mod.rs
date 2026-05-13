@@ -231,13 +231,13 @@ impl LvglFacade for NativeLvglFacade {
             ffi::lv_label_set_text(node.obj.as_ptr(), text.as_ptr());
             if matches!(
                 node.role,
-                "now_playing_icon_label"
-                    | "now_playing_state_label"
-                    | "talk_actions_header_label"
-                    | "talk_actions_button_label"
-                    | "call_state_icon"
-                    | "call_state_label"
-                    | "call_mute_label"
+                roles::NOW_PLAYING_ICON_LABEL
+                    | roles::NOW_PLAYING_STATE_LABEL
+                    | roles::TALK_ACTIONS_HEADER_LABEL
+                    | roles::TALK_ACTIONS_BUTTON_LABEL
+                    | roles::CALL_STATE_ICON
+                    | roles::CALL_STATE_LABEL
+                    | roles::CALL_MUTE_LABEL
             ) {
                 ffi::lv_obj_center(node.obj.as_ptr());
             }
