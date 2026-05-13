@@ -21,30 +21,16 @@ impl Framebuffer {
         }
     }
 
-    #[allow(dead_code)]
     pub fn width(&self) -> usize {
         self.width
     }
 
-    #[allow(dead_code)]
     pub fn height(&self) -> usize {
         self.height
     }
 
     pub fn clear(&mut self, color: u16) {
         self.pixels.fill(color);
-    }
-
-    #[allow(dead_code)]
-    pub fn pixel(&self, x: usize, y: usize) -> u16 {
-        self.pixels[y * self.width + x]
-    }
-
-    #[allow(dead_code)]
-    pub fn set_pixel(&mut self, x: usize, y: usize, color: u16) {
-        if x < self.width && y < self.height {
-            self.pixels[y * self.width + x] = color;
-        }
     }
 
     pub fn fill_rect(&mut self, x: usize, y: usize, width: usize, height: usize, color: u16) {
@@ -83,7 +69,6 @@ impl Framebuffer {
         }
     }
 
-    #[allow(dead_code)]
     pub fn as_be_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.pixels.len() * 2);
         for pixel in &self.pixels {

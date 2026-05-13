@@ -101,15 +101,6 @@ impl OneButtonMachine {
         events
     }
 
-    #[allow(dead_code)]
-    pub fn tick(&mut self, now_ms: u64) -> Vec<InputEvent> {
-        self.advance(now_ms)
-    }
-
-    pub fn tick_ptt_passthrough(&mut self, now_ms: u64) -> Vec<InputEvent> {
-        self.advance_ptt_passthrough(now_ms)
-    }
-
     fn advance(&mut self, now_ms: u64) -> Vec<InputEvent> {
         let mut events = Vec::new();
 

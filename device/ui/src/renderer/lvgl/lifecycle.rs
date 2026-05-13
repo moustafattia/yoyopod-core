@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::ptr;
 use std::time::Instant;
 
@@ -153,6 +153,3 @@ fn validate_explicit_source_dir(explicit_source: Option<&Path>) -> Result<()> {
 
     Ok(())
 }
-
-#[allow(dead_code)]
-fn _normalize_for_doc(_: PathBuf) {}
