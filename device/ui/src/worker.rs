@@ -10,8 +10,6 @@ use crate::components;
 use crate::engine::Engine;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
-use crate::presentation;
-use crate::presentation::view_models::{ScreenModel, StatusBarModel};
 use crate::renderer::{Framebuffer, LvglRenderer, RenderMode, Renderer};
 use crate::scene::{GlobalClock, HudScene, SceneGraph};
 use crate::transport::{codec, dispatcher, handshake, inbound, outbound};
@@ -357,10 +355,9 @@ where
     let scene_graph = active_scene_graph(ui_runtime, now_ms);
     let mutations = render.engine.render(&scene_graph, now_ms);
     render.renderer.apply(mutations)?;
-    let screen_model = active_screen_model(ui_runtime);
     let dirty_region = ui_runtime
         .dirty_state()
-        .render_region(screen_model.screen());
+        .render_region(ui_runtime.active_screen());
     let mode = dirty_region
         .map(RenderMode::Region)
         .unwrap_or(RenderMode::FullFrame);
@@ -371,7 +368,7 @@ where
     } else {
         display.flush_full_frame(&render.framebuffer)?;
     }
-    let screen_changed = screen_changed_if_needed(&mut render.last_active_screen, &screen_model);
+    let screen_changed = screen_changed_if_needed(&mut render.last_active_screen, ui_runtime);
     ui_runtime.mark_clean();
     render.frames += 1;
     Ok(screen_changed)
@@ -383,12 +380,17 @@ fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
         ui_runtime.snapshot(),
         ui_runtime.focus_index(),
     );
-    let chrome = active_screen_model(ui_runtime).chrome().clone();
+    let chrome = components::screens::chrome::chrome_for_screen(
+        ui_runtime.active_screen(),
+        ui_runtime.snapshot(),
+        ui_runtime.focus_index(),
+        ui_runtime.selected_contact(),
+    );
     let modal_stack = active.modal.clone().into_iter().collect();
     SceneGraph {
         hud: HudScene {
-            status_text: status_text(&chrome.status),
-            footer_text: chrome.footer,
+            status_text: chrome.status_text,
+            footer_text: chrome.footer_text,
         },
         active,
         history: ui_runtime
@@ -414,7 +416,7 @@ fn health_event(ui_runtime: &UiRuntime, render: &RenderState, button_events: usi
         frames: render.frames(),
         button_events,
         last_ui_renderer: render.last_ui_renderer().to_string(),
-        active_screen: active_screen_model(ui_runtime).screen(),
+        active_screen: ui_runtime.active_screen(),
         full_snapshots: ui_runtime.full_snapshots,
         patches_per_domain: ui_runtime.patches_per_domain.clone(),
     })
@@ -422,65 +424,25 @@ fn health_event(ui_runtime: &UiRuntime, render: &RenderState, button_events: usi
 
 fn screen_changed_if_needed(
     last_active_screen: &mut Option<UiScreen>,
-    screen_model: &ScreenModel,
+    ui_runtime: &UiRuntime,
 ) -> Option<UiEvent> {
+    let active_screen = ui_runtime.active_screen();
     if last_active_screen
-        .map(|screen| screen != screen_model.screen())
+        .map(|screen| screen != active_screen)
         .unwrap_or(true)
     {
+        let chrome = components::screens::chrome::chrome_for_screen(
+            active_screen,
+            ui_runtime.snapshot(),
+            ui_runtime.focus_index(),
+            ui_runtime.selected_contact(),
+        );
         let event = Some(UiEvent::ScreenChanged(UiScreenChanged {
-            screen: screen_model.screen(),
-            title: screen_model_title(screen_model).to_string(),
+            screen: active_screen,
+            title: chrome.title,
         }));
-        *last_active_screen = Some(screen_model.screen());
+        *last_active_screen = Some(active_screen);
         return event;
     }
     None
-}
-
-fn active_screen_model(ui_runtime: &UiRuntime) -> ScreenModel {
-    presentation::screen_model_for_screen(
-        ui_runtime.active_screen(),
-        ui_runtime.snapshot(),
-        ui_runtime.focus_index(),
-        ui_runtime.selected_contact(),
-    )
-}
-
-fn status_text(status: &StatusBarModel) -> String {
-    let network = if status.network_connected {
-        status.connection_type.as_str()
-    } else if status.network_enabled {
-        "offline"
-    } else {
-        "disabled"
-    };
-    format!(
-        "{} {}% sig:{}",
-        network, status.battery_percent, status.signal_strength
-    )
-}
-
-fn screen_model_title(model: &ScreenModel) -> &str {
-    match model {
-        ScreenModel::Hub(hub) => hub
-            .cards
-            .get(hub.selected_index)
-            .map(|card| card.title.as_str())
-            .unwrap_or("Listen"),
-        ScreenModel::Listen(list)
-        | ScreenModel::Playlists(list)
-        | ScreenModel::RecentTracks(list)
-        | ScreenModel::Talk(list)
-        | ScreenModel::Contacts(list)
-        | ScreenModel::CallHistory(list) => &list.title,
-        ScreenModel::NowPlaying(now_playing) => &now_playing.title,
-        ScreenModel::Ask(ask) => &ask.title,
-        ScreenModel::TalkContact(actions) | ScreenModel::VoiceNote(actions) => &actions.title,
-        ScreenModel::IncomingCall(call)
-        | ScreenModel::OutgoingCall(call)
-        | ScreenModel::InCall(call) => &call.title,
-        ScreenModel::Power(power) => &power.title,
-        ScreenModel::Loading(overlay) | ScreenModel::Error(overlay) => &overlay.title,
-    }
 }

@@ -1,5 +1,6 @@
 pub mod ask;
 pub mod call_history;
+pub mod chrome;
 pub mod common;
 pub mod contacts;
 pub mod error;

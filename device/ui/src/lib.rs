@@ -4,7 +4,6 @@ pub mod components;
 pub mod engine;
 pub mod hardware;
 pub mod input;
-pub mod presentation;
 pub mod renderer;
 pub mod router;
 pub mod scene;
