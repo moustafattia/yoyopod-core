@@ -1,4 +1,3 @@
-use crate::presentation::screens;
 use crate::router::{
     self, is_call_screen, is_overlay_screen, route_for, runtime_preemption, static_intent_template,
     BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind, NavigationPolicy,
@@ -6,7 +5,7 @@ use crate::router::{
 };
 use yoyopod_protocol::ui::{CallIntent, ListItemSnapshot, MusicIntent, UiIntent, VoiceIntent};
 
-use super::{focus, intents, UiRuntime, UiScreen};
+use super::{focus, intents, options, UiRuntime, UiScreen};
 
 pub fn apply_runtime_preemption(runtime: &mut UiRuntime) {
     if let Some(screen) = runtime_preemption(&runtime.snapshot) {
@@ -213,7 +212,7 @@ fn emit_call_start(runtime: &mut UiRuntime, item: &ListItemSnapshot) {
 
 fn select_talk_contact_action(runtime: &mut UiRuntime) {
     let actions =
-        screens::call::talk_contact_actions(&runtime.snapshot, runtime.selected_contact.as_ref());
+        options::talk_contact_actions(&runtime.snapshot, runtime.selected_contact.as_ref());
     let Some(action) = actions.get(runtime.focus_index) else {
         return;
     };

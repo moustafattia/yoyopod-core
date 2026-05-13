@@ -3,11 +3,9 @@ use yoyopod_protocol::ui::{
 };
 
 use crate::animation;
-use crate::presentation;
-use crate::presentation::view_models::ScreenModel;
 
 use super::state::{DirtyState, UiRuntime};
-use super::{input_router, navigator, snapshot, UiScreen, UiView};
+use super::{input_router, navigator, snapshot, UiScreen};
 
 impl UiRuntime {
     pub fn apply_snapshot(&mut self, snapshot: RuntimeSnapshot) {
@@ -103,6 +101,10 @@ impl UiRuntime {
         self.focus_index
     }
 
+    pub fn selected_contact(&self) -> Option<&yoyopod_protocol::ui::ListItemSnapshot> {
+        self.selected_contact.as_ref()
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.dirty.any()
     }
@@ -121,24 +123,6 @@ impl UiRuntime {
 
     pub fn take_intents(&mut self) -> Vec<UiIntent> {
         std::mem::take(&mut self.intents)
-    }
-
-    pub fn active_view(&self) -> UiView {
-        presentation::view_for_screen(
-            self.active_screen,
-            &self.snapshot,
-            self.focus_index,
-            self.selected_contact.as_ref(),
-        )
-    }
-
-    pub fn active_screen_model(&self) -> ScreenModel {
-        presentation::screen_model_for_screen(
-            self.active_screen,
-            &self.snapshot,
-            self.focus_index,
-            self.selected_contact.as_ref(),
-        )
     }
 
     pub fn wants_ptt_passthrough(&self) -> bool {

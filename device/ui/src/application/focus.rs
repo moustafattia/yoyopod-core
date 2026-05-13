@@ -1,6 +1,6 @@
-use crate::presentation::screens;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
+use super::options;
 use super::UiScreen;
 
 pub fn advance(current: usize, count: usize) -> usize {
@@ -36,17 +36,15 @@ pub fn focus_count(
 ) -> usize {
     match screen {
         UiScreen::Hub => snapshot.hub.cards.len().max(1),
-        UiScreen::Listen => screens::listen::items(snapshot).len(),
+        UiScreen::Listen => options::listen_items(snapshot).len(),
         UiScreen::Playlists => snapshot.music.playlists.len(),
         UiScreen::RecentTracks => snapshot.music.recent_tracks.len(),
-        UiScreen::Talk => screens::talk::items().len(),
+        UiScreen::Talk => options::talk_items().len(),
         UiScreen::Contacts => snapshot.call.contacts.len(),
         UiScreen::CallHistory => snapshot.call.history.len(),
-        UiScreen::TalkContact => {
-            screens::call::talk_contact_actions(snapshot, selected_contact).len()
-        }
-        UiScreen::VoiceNote => screens::ask::voice_note_action_count(snapshot),
-        UiScreen::Power => screens::power::page_count(snapshot),
+        UiScreen::TalkContact => options::talk_contact_actions(snapshot, selected_contact).len(),
+        UiScreen::VoiceNote => options::voice_note_action_count(snapshot),
+        UiScreen::Power => options::power_page_count(snapshot),
         _ => 0,
     }
 }

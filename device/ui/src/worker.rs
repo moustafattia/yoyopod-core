@@ -11,6 +11,7 @@ use crate::components;
 use crate::engine::Engine;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
+use crate::presentation;
 use crate::presentation::view_models::{ScreenModel, StatusBarModel};
 use crate::renderer::{Framebuffer, LvglRenderer, ScreenRenderer};
 use crate::scene::{GlobalClock, HudScene, SceneGraph};
@@ -356,7 +357,7 @@ where
 
     let scene_graph = active_scene_graph(ui_runtime, now_ms);
     let _mutations = render.engine.render(&scene_graph, now_ms);
-    let screen_model = ui_runtime.active_screen_model();
+    let screen_model = active_screen_model(ui_runtime);
     let sampler = TransitionSampler::new(ui_runtime.active_transitions(), now_ms);
     let dirty_region = ui_runtime
         .dirty_state()
@@ -385,7 +386,7 @@ fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
         ui_runtime.snapshot(),
         ui_runtime.focus_index(),
     );
-    let chrome = ui_runtime.active_screen_model().chrome().clone();
+    let chrome = active_screen_model(ui_runtime).chrome().clone();
     let modal_stack = active.modal.clone().into_iter().collect();
     SceneGraph {
         hud: HudScene {
@@ -416,7 +417,7 @@ fn health_event(ui_runtime: &UiRuntime, render: &RenderState, button_events: usi
         frames: render.frames(),
         button_events,
         last_ui_renderer: render.last_ui_renderer().to_string(),
-        active_screen: ui_runtime.active_screen_model().screen(),
+        active_screen: active_screen_model(ui_runtime).screen(),
         full_snapshots: ui_runtime.full_snapshots,
         patches_per_domain: ui_runtime.patches_per_domain.clone(),
     })
@@ -438,6 +439,15 @@ fn screen_changed_if_needed(
         return event;
     }
     None
+}
+
+fn active_screen_model(ui_runtime: &UiRuntime) -> ScreenModel {
+    presentation::screen_model_for_screen(
+        ui_runtime.active_screen(),
+        ui_runtime.snapshot(),
+        ui_runtime.focus_index(),
+        ui_runtime.selected_contact(),
+    )
 }
 
 fn status_text(status: &StatusBarModel) -> String {
