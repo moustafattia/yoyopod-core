@@ -87,8 +87,7 @@ impl TypedScreenController for HubController {
 
         if let Some(root) = self.root {
             self.status.sync(facade, root, &model.chrome.status, true)?;
-            self.footer
-                .sync(facade, root, roles::HUB_FOOTER, &model.chrome.footer)?;
+            self.footer.sync(facade, root, &model.chrome.footer)?;
         }
         if let Some(icon_glow) = self.icon_glow {
             facade.set_accent(icon_glow, accent)?;

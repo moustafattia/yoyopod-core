@@ -94,8 +94,7 @@ impl TypedScreenController for CallController {
 
         if let Some(root) = self.root {
             self.status.sync(facade, root, &call.chrome.status, true)?;
-            self.footer
-                .sync(facade, root, roles::CALL_FOOTER, &call.chrome.footer)?;
+            self.footer.sync(facade, root, &call.chrome.footer)?;
         }
         if let Some(icon_halo) = self.icon_halo {
             facade.set_variant(icon_halo, "call_halo", accent)?;

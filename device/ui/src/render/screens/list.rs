@@ -85,8 +85,7 @@ impl TypedScreenController for ListController {
         }
         if let Some(root) = self.root {
             self.status.sync(facade, root, &list.chrome.status, false)?;
-            self.footer
-                .sync(facade, root, roles::LIST_FOOTER, &list.chrome.footer)?;
+            self.footer.sync(facade, root, &list.chrome.footer)?;
         }
 
         let accent = accent_for_list(list);

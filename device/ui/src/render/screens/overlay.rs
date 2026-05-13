@@ -52,8 +52,7 @@ impl TypedScreenController for OverlayController {
         if let Some(root) = self.root {
             self.status
                 .sync(facade, root, &overlay.chrome.status, true)?;
-            self.footer
-                .sync(facade, root, roles::OVERLAY_FOOTER, &overlay.chrome.footer)?;
+            self.footer.sync(facade, root, &overlay.chrome.footer)?;
         }
 
         if let Some(title) = self.title {

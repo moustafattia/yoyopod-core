@@ -88,12 +88,7 @@ impl TypedScreenController for TalkActionsController {
         if let Some(root) = self.root {
             self.status
                 .sync(facade, root, &actions.chrome.status, true)?;
-            self.footer.sync(
-                facade,
-                root,
-                roles::TALK_ACTIONS_FOOTER,
-                &actions.chrome.footer,
-            )?;
+            self.footer.sync(facade, root, &actions.chrome.footer)?;
         }
         if let Some(header_box) = self.header_box {
             facade.set_accent(header_box, ACCENT)?;

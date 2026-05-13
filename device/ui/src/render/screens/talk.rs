@@ -78,8 +78,7 @@ impl TypedScreenController for TalkController {
         self.ensure_widgets(facade)?;
         if let Some(root) = self.root {
             self.status.sync(facade, root, &list.chrome.status, true)?;
-            self.footer
-                .sync(facade, root, roles::TALK_FOOTER, &list.chrome.footer)?;
+            self.footer.sync(facade, root, &list.chrome.footer)?;
         }
         if let Some(card_glow) = self.card_glow {
             facade.set_accent(card_glow, accent)?;

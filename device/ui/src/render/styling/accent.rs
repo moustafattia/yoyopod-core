@@ -141,14 +141,7 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
             "status_gps_ring" | "status_battery_outline" => {
                 ffi::lv_obj_set_style_border_color(obj.as_ptr(), accent, SELECTOR);
             }
-            "now_playing_footer" => {
-                ffi::lv_obj_set_style_text_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(mix_u24(rgb, theme::SURFACE_RGB, 55)),
-                    SELECTOR,
-                );
-            }
-            "listen_footer" | "power_footer" => {
+            "footer_label" => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 65)),

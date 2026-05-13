@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 
-use super::shared::{FooterLabel, StatusBarWidgets};
+use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::presentation::view_models::{PowerViewModel, ScreenModel};
 use crate::render::widgets::{roles, LvglFacade, WidgetId};
@@ -12,7 +12,7 @@ pub struct PowerController {
     icon_halo: Option<WidgetId>,
     icon: Option<WidgetId>,
     title: Option<WidgetId>,
-    footer: FooterLabel,
+    footer: FooterBar,
     row_containers: Vec<WidgetId>,
     row_titles: Vec<WidgetId>,
     dots: Vec<WidgetId>,
@@ -84,13 +84,8 @@ impl TypedScreenController for PowerController {
         if let Some(root) = self.root {
             self.status
                 .sync(facade, root, &power.chrome.status, false)?;
-            self.footer.sync_with_accent(
-                facade,
-                root,
-                roles::POWER_FOOTER,
-                &power.chrome.footer,
-                accent,
-            )?;
+            self.footer
+                .sync_with_accent(facade, root, &power.chrome.footer, accent)?;
         }
         if let Some(icon_halo) = self.icon_halo {
             facade.set_accent(icon_halo, accent)?;

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 
-use super::shared::{FooterLabel, StatusBarWidgets};
+use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::presentation::transitions::TransitionSampler;
 use crate::presentation::view_models::{ListScreenModel, ScreenModel};
@@ -13,7 +13,7 @@ pub struct ListenController {
     title: Option<WidgetId>,
     subtitle: Option<WidgetId>,
     panel: Option<WidgetId>,
-    footer: FooterLabel,
+    footer: FooterBar,
     row_containers: Vec<WidgetId>,
     row_icons: Vec<WidgetId>,
     row_titles: Vec<WidgetId>,
@@ -103,13 +103,8 @@ impl TypedScreenController for ListenController {
         self.ensure_widgets(facade, 4)?;
         if let Some(root) = self.root {
             self.status.sync(facade, root, &list.chrome.status, false)?;
-            self.footer.sync_with_accent(
-                facade,
-                root,
-                roles::LISTEN_FOOTER,
-                &list.chrome.footer,
-                accent,
-            )?;
+            self.footer
+                .sync_with_accent(facade, root, &list.chrome.footer, accent)?;
         }
         if let Some(title) = self.title {
             facade.set_text(title, "Your Music")?;

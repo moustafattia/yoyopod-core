@@ -106,8 +106,7 @@ impl TypedScreenController for PlaylistController {
         self.ensure_widgets(facade, 4)?;
         if let Some(root) = self.root {
             self.status.sync(facade, root, &list.chrome.status, false)?;
-            self.footer
-                .sync(facade, root, roles::PLAYLIST_FOOTER, &list.chrome.footer)?;
+            self.footer.sync(facade, root, &list.chrome.footer)?;
         }
         if let Some(title) = self.title {
             facade.set_text(title, &list.title)?;

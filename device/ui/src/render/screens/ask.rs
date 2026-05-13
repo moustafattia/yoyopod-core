@@ -70,8 +70,7 @@ impl TypedScreenController for AskController {
         let is_reply = state_variant == "ask_reply";
         if let Some(root) = self.root {
             self.status.sync(facade, root, &ask.chrome.status, true)?;
-            self.footer
-                .sync(facade, root, roles::ASK_FOOTER, &ask.chrome.footer)?;
+            self.footer.sync(facade, root, &ask.chrome.footer)?;
         }
         if let Some(icon_halo) = self.icon_halo {
             facade.set_visible(icon_halo, !is_reply)?;

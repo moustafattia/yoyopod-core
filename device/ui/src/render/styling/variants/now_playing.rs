@@ -131,21 +131,21 @@ pub(crate) fn apply(
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            ("now_playing_footer", "now_playing_playing") => {
+            ("footer_label", "now_playing_playing") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::SURFACE_RGB, 55)),
                     SELECTOR,
                 );
             }
-            ("now_playing_footer", "now_playing_paused" | "now_playing_stopped") => {
+            ("footer_label", "now_playing_paused" | "now_playing_stopped") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(theme::MUTED_RGB),
                     SELECTOR,
                 );
             }
-            ("now_playing_footer", "now_playing_offline") => {
+            ("footer_label", "now_playing_offline") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(theme::MUTED_DIM_RGB),

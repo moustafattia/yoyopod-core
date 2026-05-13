@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 
-use super::shared::{FooterLabel, StatusBarWidgets};
+use super::shared::{FooterBar, StatusBarWidgets};
 use super::TypedScreenController;
 use crate::presentation::view_models::{NowPlayingViewModel, ScreenModel};
 use crate::render::widgets::{roles, LvglFacade, WidgetId};
@@ -18,7 +18,7 @@ pub struct NowPlayingController {
     artist: Option<WidgetId>,
     progress_track: Option<WidgetId>,
     progress_fill: Option<WidgetId>,
-    footer: FooterLabel,
+    footer: FooterBar,
 }
 
 impl NowPlayingController {
@@ -103,7 +103,6 @@ impl TypedScreenController for NowPlayingController {
             self.footer.sync_with_variant(
                 facade,
                 root,
-                roles::NOW_PLAYING_FOOTER,
                 &now_playing.chrome.footer,
                 state_variant,
                 accent,
