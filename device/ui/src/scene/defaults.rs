@@ -7,7 +7,9 @@ use yoyopod_protocol::ui::UiScreen;
 
 use crate::animation::{presets, ActorRef, Timeline};
 
-use super::{Backdrop, Deck, FxLayer, GlowBloom, Halo, ParticleField, PulseRing, RegionId, Stage};
+use super::{
+    Backdrop, Deck, FxLayer, GlowBloom, Halo, ProgressSweep, PulseRing, RegionId, Stage, VoiceMeter,
+};
 
 const SCENES_RON: &str = include_str!("../../assets/scenes.ron");
 const DEFAULT_SOLID_RGB: u32 = 0x2a2d35;
@@ -150,16 +152,12 @@ impl FxPreset {
                 min_opacity: 48,
                 max_opacity: 128,
             }),
-            Self::ProgressSweep => layer.glows.push(GlowBloom {
-                target: ActorRef::Region(RegionId::Progress),
-                blur: 4,
-                intensity: 96,
+            Self::ProgressSweep => layer.progress_sweeps.push(ProgressSweep {
+                progress_permille: 640,
             }),
-            Self::VoiceMeter => layer.particles.push(ParticleField {
-                region: RegionId::ButtonRow,
-                count: 6,
-                color: accent,
-                drift_speed_ms: 900,
+            Self::VoiceMeter => layer.voice_meters.push(VoiceMeter {
+                level_permille: 700,
+                recording: true,
             }),
             Self::CallPulse => layer.pulses.push(PulseRing {
                 target: ActorRef::Region(RegionId::HeroIcon),
