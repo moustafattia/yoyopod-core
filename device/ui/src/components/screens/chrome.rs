@@ -1,6 +1,10 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
-use crate::scene::HudStatus;
+use crate::components::widgets::{footer_bar, status_bar, FooterBarProps, StatusBarProps};
+use crate::engine::{Element, Key};
+use crate::render_contract::ElementKind;
+use crate::roles;
+use crate::scene::{HudScene, HudStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScreenChrome {
@@ -20,6 +24,24 @@ pub fn chrome_for_screen(
         status: status_from_snapshot(snapshot),
         footer_text: footer_for_screen(screen, snapshot),
     }
+}
+
+pub fn hud_scene(chrome: ScreenChrome) -> HudScene {
+    HudScene::new(
+        Element::new(ElementKind::Container, Some(roles::HUD))
+            .key(Key::Static("hud"))
+            .child(status_bar(&StatusBarProps {
+                time: chrome.status.time,
+                battery_label: chrome.status.battery_label,
+                battery_percent: chrome.status.battery_percent,
+                signal_strength: chrome.status.signal_strength,
+                network_online: chrome.status.network_online,
+            }))
+            .child(footer_bar(&FooterBarProps {
+                text: chrome.footer_text,
+                accent: None,
+            })),
+    )
 }
 
 fn title_for_screen(
