@@ -89,10 +89,39 @@ impl Deck {
                 Element::new(ElementKind::Container, Some("deck_region"))
                     .key(Key::Static("deck_region")),
             );
-        for (item_index, item) in self.items.iter().enumerate() {
+        for (item_index, item) in self.visible_items() {
             element = element.child(deck_item_element(item, item_index == self.focus_index));
         }
         element
+    }
+
+    fn visible_items(&self) -> impl Iterator<Item = (usize, &DeckItem)> {
+        let range = self.visible_range();
+        self.items
+            .iter()
+            .enumerate()
+            .skip(range.start)
+            .take(range.end.saturating_sub(range.start))
+    }
+
+    fn visible_range(&self) -> std::ops::Range<usize> {
+        let len = self.items.len();
+        if len == 0 {
+            return 0..0;
+        }
+
+        let focus = self.focus_index.min(len.saturating_sub(1));
+        let window = match self.kind {
+            DeckKind::Page => 1,
+            _ => self.recycle_window.unwrap_or(len),
+        }
+        .clamp(1, len);
+
+        let mut start = focus.saturating_sub(window / 2);
+        if start + window > len {
+            start = len - window;
+        }
+        start..start + window
     }
 }
 
