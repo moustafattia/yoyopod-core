@@ -84,14 +84,25 @@ impl Engine {
     }
 
     fn sync_scene_timelines(&mut self, graph: &SceneGraph, now_ms: u64) {
-        if self.active_scene == Some(graph.active.id) {
-            return;
+        let scene_changed = self.active_scene != Some(graph.active.id);
+        if scene_changed {
+            self.timelines.clear();
+            self.animation_signature = None;
+            self.active_scene = Some(graph.active.id);
         }
 
-        self.timelines.clear();
-        self.animation_signature = None;
-        self.active_scene = Some(graph.active.id);
+        self.timelines.retain(|active| {
+            graph
+                .active
+                .timelines
+                .iter()
+                .any(|timeline| timeline.id == active.id)
+        });
+
         for mut timeline in graph.active.timelines.clone() {
+            if self.timelines.iter().any(|active| active.id == timeline.id) {
+                continue;
+            }
             if matches!(timeline.clock, ClockSource::SceneTime) {
                 timeline.started_ms = now_ms;
             }

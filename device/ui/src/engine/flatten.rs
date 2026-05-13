@@ -1,4 +1,4 @@
-use crate::animation::{presets, TimelineRef, TrackIndex};
+use crate::animation::{presets, ActorRef, TimelineRef, TrackIndex};
 use crate::render_contract::ElementKind;
 use crate::scene::{Deck, HudScene, LayerSlot, Modal, Scene, SceneGraph, LAYER_ORDER};
 
@@ -22,6 +22,7 @@ pub fn flatten(graph: &SceneGraph) -> Element {
 pub fn scene_element(scene: &Scene) -> Element {
     let root = Element::new(ElementKind::Container, Some("scene_root"))
         .key(Key::String(format!("scene:{}", scene.id.screen.as_str())))
+        .actor(ActorRef::Screen)
         .with_anim(AnimSlot {
             timeline: TimelineRef(presets::SCENE_ENTER_TIMELINE_ID),
             track: TrackIndex(0),

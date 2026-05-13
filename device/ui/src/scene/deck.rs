@@ -1,4 +1,4 @@
-use crate::animation::{presets, Timeline, TimelineRef, TrackIndex};
+use crate::animation::{presets, ActorRef, Timeline, TimelineRef, TrackIndex};
 use crate::engine::{AnimSlot, Element, Key};
 use crate::render_contract::ElementKind;
 use crate::router::FocusPolicy;
@@ -96,6 +96,7 @@ impl Deck {
                 item,
                 item_index == self.focus_index,
                 self.item_anim,
+                index,
                 visible_index,
             ));
         }
@@ -154,6 +155,7 @@ fn deck_item_element(
     item: &DeckItem,
     selected: bool,
     item_anim: DeckItemAnim,
+    deck_index: usize,
     visible_index: usize,
 ) -> Element {
     let element = match &item.render {
@@ -177,7 +179,11 @@ fn deck_item_element(
             .key(item.key.clone())
             .child(Element::new(ElementKind::Image, Some("button_icon")).icon(&button.icon_key))
             .child(Element::new(ElementKind::Label, Some("button_title")).text(&button.title)),
-    };
+    }
+    .actor(ActorRef::DeckItem {
+        deck: deck_index,
+        index: visible_index,
+    });
     match item_anim {
         DeckItemAnim::StaggerEnter { .. } => element.with_anim(AnimSlot {
             timeline: TimelineRef(presets::STAGGER_ENTER_TIMELINE_ID),

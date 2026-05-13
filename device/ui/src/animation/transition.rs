@@ -2,6 +2,11 @@ use yoyopod_protocol::ui::AnimationRequest;
 
 use yoyopod_protocol::ui::UiScreen;
 
+use super::{
+    ActorRef, AnimatableProp, AnimatableValue, ClockSource, EventId, Keyframe, LoopMode, Timeline,
+    TimelineId, Track,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransitionTarget {
     Screen(UiScreen),
@@ -34,93 +39,6 @@ pub struct Transition {
     pub to: i32,
     pub duration_ms: u64,
     pub started_at_ms: u64,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct TransitionSampler<'a> {
-    transitions: &'a [Transition],
-    now_ms: u64,
-}
-
-impl<'a> TransitionSampler<'a> {
-    pub const fn empty() -> Self {
-        Self {
-            transitions: &[],
-            now_ms: 0,
-        }
-    }
-
-    pub const fn new(transitions: &'a [Transition], now_ms: u64) -> Self {
-        Self {
-            transitions,
-            now_ms,
-        }
-    }
-
-    pub fn screen(&self, screen: UiScreen, property: TransitionProperty) -> Option<i32> {
-        self.transitions.iter().find_map(|transition| {
-            if transition.property == property
-                && matches!(transition.target, TransitionTarget::Screen(target) if target == screen)
-            {
-                Some(transition.interpolated_value(self.now_ms))
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn screen_any(&self, property: TransitionProperty) -> Option<i32> {
-        self.transitions.iter().find_map(|transition| {
-            if transition.property == property
-                && matches!(transition.target, TransitionTarget::Screen(_))
-            {
-                Some(transition.interpolated_value(self.now_ms))
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn selection(
-        &self,
-        screen: UiScreen,
-        index: usize,
-        property: TransitionProperty,
-    ) -> Option<i32> {
-        self.transitions.iter().find_map(|transition| {
-            if transition.property == property
-                && matches!(
-                    transition.target,
-                    TransitionTarget::Selection {
-                        screen: target_screen,
-                        index: target_index,
-                    } if target_screen == screen && target_index == index
-                )
-            {
-                Some(transition.interpolated_value(self.now_ms))
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn selection_any(&self, index: usize, property: TransitionProperty) -> Option<i32> {
-        self.transitions.iter().find_map(|transition| {
-            if transition.property == property
-                && matches!(
-                    transition.target,
-                    TransitionTarget::Selection {
-                        screen: _,
-                        index: target_index,
-                    } if target_index == index
-                )
-            {
-                Some(transition.interpolated_value(self.now_ms))
-            } else {
-                None
-            }
-        })
-    }
 }
 
 impl Transition {
@@ -175,31 +93,76 @@ impl Transition {
         now_ms.saturating_sub(self.started_at_ms) >= self.duration_ms
     }
 
-    pub fn interpolated_value(&self, now_ms: u64) -> i32 {
-        let elapsed = now_ms
-            .saturating_sub(self.started_at_ms)
-            .min(self.duration_ms);
-        let progress_permille = if self.duration_ms == 0 {
-            1000
-        } else {
-            ((elapsed * 1000) / self.duration_ms) as i32
-        };
-        let eased = eased_progress(progress_permille, self.easing);
-        self.from + (((self.to - self.from) * eased) / 1000)
+    pub fn timeline(&self) -> Timeline {
+        Timeline {
+            id: TimelineId(timeline_id(&self.id)),
+            clock: ClockSource::EventTime(EventId(event_id(&self.id))),
+            tracks: vec![Track {
+                target: actor_ref(self.target.clone()),
+                property: animatable_property(self.property),
+                keyframes: vec![
+                    Keyframe {
+                        at_ms: 0,
+                        value: animatable_value(self.property, self.from),
+                    },
+                    Keyframe {
+                        at_ms: self.duration_ms.min(u64::from(u32::MAX)) as u32,
+                        value: animatable_value(self.property, self.to),
+                    },
+                ],
+                easing: easing(self.easing),
+            }],
+            loop_mode: LoopMode::Once,
+            on_complete: None,
+            started_ms: self.started_at_ms,
+        }
     }
 }
 
-fn eased_progress(progress_permille: i32, easing: Easing) -> i32 {
-    let t = progress_permille.clamp(0, 1000);
-    match easing {
-        Easing::Linear => t,
-        Easing::EaseOut => 1000 - (((1000 - t) * (1000 - t)) / 1000),
-        Easing::EaseInOut => {
-            if t < 500 {
-                (2 * t * t) / 1000
-            } else {
-                1000 - (2 * (1000 - t) * (1000 - t)) / 1000
-            }
-        }
+fn actor_ref(target: TransitionTarget) -> ActorRef {
+    match target {
+        TransitionTarget::Screen(_) | TransitionTarget::Runtime => ActorRef::Screen,
+        TransitionTarget::Selection { .. } => ActorRef::Cursor,
     }
+}
+
+fn animatable_property(property: TransitionProperty) -> AnimatableProp {
+    match property {
+        TransitionProperty::Opacity => AnimatableProp::Opacity,
+        TransitionProperty::OffsetY => AnimatableProp::Y,
+        TransitionProperty::ScalePermille => AnimatableProp::Scale,
+        TransitionProperty::SelectionOffset => AnimatableProp::SelectionOffset,
+    }
+}
+
+fn animatable_value(property: TransitionProperty, value: i32) -> AnimatableValue {
+    match property {
+        TransitionProperty::Opacity => AnimatableValue::U8(value.clamp(0, 255) as u8),
+        TransitionProperty::OffsetY
+        | TransitionProperty::ScalePermille
+        | TransitionProperty::SelectionOffset => AnimatableValue::I32(value),
+    }
+}
+
+fn easing(easing: Easing) -> super::Easing {
+    match easing {
+        Easing::Linear => super::Easing::Linear,
+        Easing::EaseOut => super::Easing::EaseOut,
+        Easing::EaseInOut => super::Easing::EaseInOut,
+    }
+}
+
+fn timeline_id(id: &str) -> u32 {
+    10_000 + (stable_hash(id) % 50_000) as u32
+}
+
+fn event_id(id: &str) -> u64 {
+    10_000 + stable_hash(id)
+}
+
+fn stable_hash(id: &str) -> u64 {
+    id.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        hash.wrapping_mul(0x100_0000_01b3)
+            .wrapping_add(u64::from(byte))
+    })
 }

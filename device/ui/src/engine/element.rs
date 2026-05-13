@@ -1,4 +1,4 @@
-use crate::animation::{TimelineRef, TrackIndex};
+use crate::animation::{ActorRef, TimelineRef, TrackIndex};
 use crate::render_contract::ElementKind;
 use crate::scene::RegionId;
 
@@ -16,6 +16,7 @@ pub struct Element {
     pub role: Option<&'static str>,
     pub props: ElementProps,
     pub layout: Layout,
+    pub actor: Option<ActorRef>,
     pub anim: Option<AnimSlot>,
     pub children: Vec<Element>,
 }
@@ -28,6 +29,7 @@ impl Element {
             role,
             props: ElementProps::default(),
             layout: Layout::Region(RegionId::Auto),
+            actor: None,
             anim: None,
             children: Vec::new(),
         }
@@ -80,6 +82,11 @@ impl Element {
 
     pub fn with_anim(mut self, anim: AnimSlot) -> Self {
         self.anim = Some(anim);
+        self
+    }
+
+    pub fn actor(mut self, actor: ActorRef) -> Self {
+        self.actor = Some(actor);
         self
     }
 }

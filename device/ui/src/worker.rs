@@ -390,11 +390,17 @@ where
 }
 
 fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
-    let active = components::screens::scene_for_screen(
+    let mut active = components::screens::scene_for_screen(
         ui_runtime.active_screen(),
         ui_runtime.snapshot(),
         ui_runtime.focus_index(),
         ui_runtime.selected_contact(),
+    );
+    active.timelines.extend(
+        ui_runtime
+            .active_transitions()
+            .iter()
+            .map(|transition| transition.timeline()),
     );
     let mut chrome = components::screens::chrome::chrome_for_screen(
         ui_runtime.active_screen(),

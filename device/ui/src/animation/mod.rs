@@ -14,5 +14,5 @@ pub use timeline::{
     Keyframe, LoopMode, OnCompleteAction, Timeline, TimelineId, TimelineRef, Track, TrackIndex,
 };
 pub use transition::{
-    Easing as TransitionEasing, Transition, TransitionProperty, TransitionSampler, TransitionTarget,
+    Easing as TransitionEasing, Transition, TransitionProperty, TransitionTarget,
 };

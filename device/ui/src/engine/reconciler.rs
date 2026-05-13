@@ -237,15 +237,37 @@ fn emit_animation_updates(
     sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) {
-    let Some(anim) = element.anim else {
-        return;
-    };
-    let Some((property, value)) = sampler.slot_value(anim.timeline, anim.track) else {
-        return;
-    };
-    if let Some(prop) = prop_change_for_animation(property, value) {
-        out.push(Mutation::Update { node, prop });
+    if let Some(anim) = element.anim {
+        if let Some((property, value)) = sampler.slot_value(anim.timeline, anim.track) {
+            if let Some(prop) = prop_change_for_animation(property, value) {
+                out.push(Mutation::Update { node, prop });
+            }
+        }
     }
+
+    if let Some(actor) = element.actor {
+        for property in actor_properties() {
+            let Some(value) = sampler.value(actor, property) else {
+                continue;
+            };
+            if let Some(prop) = prop_change_for_animation(property, value) {
+                out.push(Mutation::Update { node, prop });
+            }
+        }
+    }
+}
+
+fn actor_properties() -> [AnimatableProp; 8] {
+    [
+        AnimatableProp::Opacity,
+        AnimatableProp::X,
+        AnimatableProp::Y,
+        AnimatableProp::Scale,
+        AnimatableProp::SelectionOffset,
+        AnimatableProp::ProgressPermille,
+        AnimatableProp::AccentMix,
+        AnimatableProp::BorderWidth,
+    ]
 }
 
 fn prop_change_for_animation(

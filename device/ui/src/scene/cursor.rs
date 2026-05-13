@@ -1,3 +1,4 @@
+use crate::animation::ActorRef;
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
 
@@ -14,7 +15,8 @@ impl Cursor {
                 let selected = (*focus).min(count.saturating_sub(1));
                 (0..*count).fold(
                     Element::new(ElementKind::Container, Some("cursor_dots"))
-                        .key(Key::Static("cursor")),
+                        .key(Key::Static("cursor"))
+                        .actor(ActorRef::Cursor),
                     |element, index| {
                         element.child(
                             Element::new(ElementKind::Container, Some("cursor_dot"))
@@ -27,6 +29,7 @@ impl Cursor {
             Self::RowGlow { index } => {
                 Element::new(ElementKind::Container, Some("cursor_row_glow"))
                     .key(Key::Static("cursor"))
+                    .actor(ActorRef::Cursor)
                     .offset_y((*index as i32) * 36)
             }
         }
