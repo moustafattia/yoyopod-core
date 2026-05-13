@@ -3,12 +3,17 @@ use yoyopod_protocol::ui::{ListItemSnapshot, UiScreen};
 use crate::engine::Key;
 use crate::router::FocusPolicy;
 use crate::scene::{
-    defaults_for, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId,
-    RowModel, Scene, SceneId,
+    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId, RowModel,
+    Scene, SceneDefaults, SceneId,
 };
 
-pub fn hero_scene(screen: UiScreen, accent: u32, item_count: usize, focus: usize) -> Scene {
-    let defaults = defaults_for(screen);
+pub fn hero_scene(
+    screen: UiScreen,
+    defaults: &SceneDefaults,
+    accent: u32,
+    item_count: usize,
+    focus: usize,
+) -> Scene {
     Scene {
         id: SceneId::new(screen),
         backdrop: defaults.backdrop(accent),
@@ -38,11 +43,11 @@ pub fn hero_scene(screen: UiScreen, accent: u32, item_count: usize, focus: usize
 
 pub fn list_scene(
     screen: UiScreen,
+    defaults: &SceneDefaults,
     items: &[ListItemSnapshot],
     focus: usize,
     focus_policy: FocusPolicy,
 ) -> Scene {
-    let defaults = defaults_for(screen);
     let rows = items.iter().map(row_model).collect::<Vec<_>>();
     Scene {
         id: SceneId::new(screen),
@@ -73,8 +78,7 @@ pub fn list_scene(
     }
 }
 
-pub fn action_scene(screen: UiScreen, focus: usize) -> Scene {
-    let defaults = defaults_for(screen);
+pub fn action_scene(screen: UiScreen, defaults: &SceneDefaults, focus: usize) -> Scene {
     Scene {
         id: SceneId::new(screen),
         backdrop: defaults.backdrop(0x00d4ff),
@@ -99,8 +103,12 @@ pub fn action_scene(screen: UiScreen, focus: usize) -> Scene {
     }
 }
 
-pub fn call_scene(screen: UiScreen, title: String, body: String) -> Scene {
-    let defaults = defaults_for(screen);
+pub fn call_scene(
+    screen: UiScreen,
+    defaults: &SceneDefaults,
+    title: String,
+    body: String,
+) -> Scene {
     Scene {
         id: SceneId::new(screen),
         backdrop: defaults.backdrop(0x3ddd53),
@@ -125,8 +133,11 @@ pub fn call_scene(screen: UiScreen, title: String, body: String) -> Scene {
     }
 }
 
-pub fn overlay_scene(screen: UiScreen, modal: crate::scene::Modal) -> Scene {
-    let defaults = defaults_for(screen);
+pub fn overlay_scene(
+    screen: UiScreen,
+    defaults: &SceneDefaults,
+    modal: crate::scene::Modal,
+) -> Scene {
     Scene {
         id: SceneId::new(screen),
         backdrop: defaults.backdrop(0x3ddd53),

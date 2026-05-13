@@ -1,7 +1,7 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
 use crate::engine::Key;
-use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene};
+use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene, SceneDefaults};
 
 pub struct VoiceNoteProps {
     pub buttons: Vec<DeckItem>,
@@ -15,8 +15,8 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> VoiceNoteProps {
     }
 }
 
-pub fn scene(props: &VoiceNoteProps) -> Scene {
-    let mut scene = super::common::action_scene(UiScreen::VoiceNote, props.focus);
+pub fn scene(props: &VoiceNoteProps, defaults: &SceneDefaults) -> Scene {
+    let mut scene = super::common::action_scene(UiScreen::VoiceNote, defaults, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
         deck.items = props.buttons.clone();
     }

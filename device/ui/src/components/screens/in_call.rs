@@ -1,6 +1,6 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
-use crate::scene::Scene;
+use crate::scene::{Scene, SceneDefaults};
 
 pub struct InCallProps {
     pub title: String,
@@ -18,8 +18,13 @@ pub fn props_from(snapshot: &RuntimeSnapshot) -> InCallProps {
     }
 }
 
-pub fn scene(props: &InCallProps) -> Scene {
-    super::common::call_scene(UiScreen::InCall, props.title.clone(), props.body.clone())
+pub fn scene(props: &InCallProps, defaults: &SceneDefaults) -> Scene {
+    super::common::call_scene(
+        UiScreen::InCall,
+        defaults,
+        props.title.clone(),
+        props.body.clone(),
+    )
 }
 
 fn call_peer_name(snapshot: &RuntimeSnapshot) -> String {

@@ -1,6 +1,6 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
-use crate::scene::Scene;
+use crate::scene::{Scene, SceneDefaults};
 
 pub struct OutgoingCallProps {
     pub title: String,
@@ -14,9 +14,10 @@ pub fn props_from(snapshot: &RuntimeSnapshot) -> OutgoingCallProps {
     }
 }
 
-pub fn scene(props: &OutgoingCallProps) -> Scene {
+pub fn scene(props: &OutgoingCallProps, defaults: &SceneDefaults) -> Scene {
     super::common::call_scene(
         UiScreen::OutgoingCall,
+        defaults,
         props.title.clone(),
         props.body.clone(),
     )

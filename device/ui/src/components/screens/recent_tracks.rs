@@ -1,7 +1,7 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::router::FocusPolicy;
-use crate::scene::Scene;
+use crate::scene::{Scene, SceneDefaults};
 
 pub struct RecentTracksProps {
     pub items: Vec<ListItemSnapshot>,
@@ -15,9 +15,10 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> RecentTracksProps
     }
 }
 
-pub fn scene(props: &RecentTracksProps) -> Scene {
+pub fn scene(props: &RecentTracksProps, defaults: &SceneDefaults) -> Scene {
     super::common::list_scene(
         UiScreen::RecentTracks,
+        defaults,
         &props.items,
         props.focus,
         FocusPolicy::Clamp,

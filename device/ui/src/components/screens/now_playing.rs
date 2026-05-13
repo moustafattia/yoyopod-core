@@ -2,7 +2,7 @@ use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
 use crate::engine::Key;
 use crate::scene::{
-    defaults_for, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId, Scene,
+    Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId, Scene, SceneDefaults,
     SceneId,
 };
 
@@ -18,8 +18,7 @@ pub fn props_from(snapshot: &RuntimeSnapshot) -> NowPlayingProps {
     }
 }
 
-pub fn scene(props: &NowPlayingProps) -> Scene {
-    let defaults = defaults_for(UiScreen::NowPlaying);
+pub fn scene(props: &NowPlayingProps, defaults: &SceneDefaults) -> Scene {
     Scene {
         id: SceneId::new(UiScreen::NowPlaying),
         backdrop: defaults.backdrop(0x3ddd53),

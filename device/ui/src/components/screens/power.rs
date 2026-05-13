@@ -2,8 +2,8 @@ use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
 use crate::engine::Key;
 use crate::scene::{
-    defaults_for, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId,
-    Scene, SceneId,
+    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId, Scene,
+    SceneDefaults, SceneId,
 };
 
 pub struct PowerProps {
@@ -18,8 +18,7 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> PowerProps {
     }
 }
 
-pub fn scene(props: &PowerProps) -> Scene {
-    let defaults = defaults_for(UiScreen::Power);
+pub fn scene(props: &PowerProps, defaults: &SceneDefaults) -> Scene {
     let page_count = props.pages.len();
     Scene {
         id: SceneId::new(UiScreen::Power),

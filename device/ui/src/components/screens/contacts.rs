@@ -1,7 +1,7 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::router::FocusPolicy;
-use crate::scene::Scene;
+use crate::scene::{Scene, SceneDefaults};
 
 pub struct ContactsProps {
     pub items: Vec<ListItemSnapshot>,
@@ -15,9 +15,10 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> ContactsProps {
     }
 }
 
-pub fn scene(props: &ContactsProps) -> Scene {
+pub fn scene(props: &ContactsProps, defaults: &SceneDefaults) -> Scene {
     super::common::list_scene(
         UiScreen::Contacts,
+        defaults,
         &props.items,
         props.focus,
         FocusPolicy::Clamp,

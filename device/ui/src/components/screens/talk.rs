@@ -1,7 +1,7 @@
 use yoyopod_protocol::ui::UiScreen;
 
 use crate::engine::Key;
-use crate::scene::{CardModel, DeckItem, ItemRender, Scene};
+use crate::scene::{CardModel, DeckItem, ItemRender, Scene, SceneDefaults};
 
 pub struct TalkProps {
     pub cards: Vec<DeckItem>,
@@ -25,8 +25,8 @@ pub fn props_from(focus: usize) -> TalkProps {
     }
 }
 
-pub fn scene(props: &TalkProps) -> Scene {
-    let mut scene = super::common::hero_scene(UiScreen::Talk, 0x00d4ff, 3, props.focus);
+pub fn scene(props: &TalkProps, defaults: &SceneDefaults) -> Scene {
+    let mut scene = super::common::hero_scene(UiScreen::Talk, defaults, 0x00d4ff, 3, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
         deck.items = props.cards.clone();
     }

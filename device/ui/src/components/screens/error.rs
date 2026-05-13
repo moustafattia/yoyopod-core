@@ -1,6 +1,6 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
-use crate::scene::{Modal, Scene};
+use crate::scene::{Modal, Scene, SceneDefaults};
 
 pub struct ErrorProps {
     pub message: String,
@@ -12,9 +12,10 @@ pub fn props_from(snapshot: &RuntimeSnapshot) -> ErrorProps {
     }
 }
 
-pub fn scene(props: &ErrorProps) -> Scene {
+pub fn scene(props: &ErrorProps, defaults: &SceneDefaults) -> Scene {
     super::common::overlay_scene(
         UiScreen::Error,
+        defaults,
         Modal::Error {
             title: "Error".to_string(),
             message: props.message.clone(),

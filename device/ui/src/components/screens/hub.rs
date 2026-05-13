@@ -3,8 +3,8 @@ use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 use crate::engine::Key;
 use crate::router::FocusPolicy;
 use crate::scene::{
-    defaults_for, CardModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, RegionId,
-    Scene, SceneId,
+    CardModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, RegionId, Scene,
+    SceneDefaults, SceneId,
 };
 
 pub struct HubProps {
@@ -36,8 +36,7 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> HubProps {
     }
 }
 
-pub fn scene(props: &HubProps) -> Scene {
-    let defaults = defaults_for(UiScreen::Hub);
+pub fn scene(props: &HubProps, defaults: &SceneDefaults) -> Scene {
     Scene {
         id: SceneId::new(UiScreen::Hub),
         backdrop: defaults.backdrop(props.accent),

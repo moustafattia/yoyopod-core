@@ -1,7 +1,7 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::engine::Key;
-use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene};
+use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene, SceneDefaults};
 
 pub struct TalkContactProps {
     pub actions: Vec<DeckItem>,
@@ -19,8 +19,8 @@ pub fn props_from(
     }
 }
 
-pub fn scene(props: &TalkContactProps) -> Scene {
-    let mut scene = super::common::action_scene(UiScreen::TalkContact, props.focus);
+pub fn scene(props: &TalkContactProps, defaults: &SceneDefaults) -> Scene {
+    let mut scene = super::common::action_scene(UiScreen::TalkContact, defaults, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
         deck.items = props.actions.clone();
     }

@@ -1,7 +1,7 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::router::FocusPolicy;
-use crate::scene::Scene;
+use crate::scene::{Scene, SceneDefaults};
 
 pub struct CallHistoryProps {
     pub items: Vec<ListItemSnapshot>,
@@ -15,9 +15,10 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> CallHistoryProps 
     }
 }
 
-pub fn scene(props: &CallHistoryProps) -> Scene {
+pub fn scene(props: &CallHistoryProps, defaults: &SceneDefaults) -> Scene {
     super::common::list_scene(
         UiScreen::CallHistory,
+        defaults,
         &props.items,
         props.focus,
         FocusPolicy::Clamp,

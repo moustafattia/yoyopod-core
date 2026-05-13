@@ -2,8 +2,8 @@ use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::router::FocusPolicy;
 use crate::scene::{
-    defaults_for, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, RegionId, RowModel,
-    Scene, SceneId,
+    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, RegionId, RowModel, Scene,
+    SceneDefaults, SceneId,
 };
 
 pub struct ListenProps {
@@ -35,8 +35,7 @@ pub fn items(_snapshot: &RuntimeSnapshot) -> Vec<ListItemSnapshot> {
     ]
 }
 
-pub fn scene(props: &ListenProps) -> Scene {
-    let defaults = defaults_for(UiScreen::Listen);
+pub fn scene(props: &ListenProps, defaults: &SceneDefaults) -> Scene {
     Scene {
         id: SceneId::new(UiScreen::Listen),
         backdrop: defaults.backdrop(0x3ddd53),
