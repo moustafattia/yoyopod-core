@@ -1,5 +1,5 @@
-use crate::components::primitives::{container, label};
 use crate::engine::Element;
+use crate::scene::FooterBar;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FooterBarProps {
@@ -8,9 +8,9 @@ pub struct FooterBarProps {
 }
 
 pub fn footer_bar(props: &FooterBarProps) -> Element {
-    let mut text = label("footer_label").text(&props.text);
-    if let Some(accent) = props.accent {
-        text = text.accent(accent);
+    FooterBar {
+        text: props.text.clone(),
+        accent: props.accent,
     }
-    container("footer_bar").child(text)
+    .element()
 }

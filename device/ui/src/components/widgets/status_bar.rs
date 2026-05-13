@@ -1,5 +1,5 @@
-use crate::components::primitives::{container, label};
 use crate::engine::Element;
+use crate::scene::HudStatus;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusBarProps {
@@ -10,9 +10,11 @@ pub struct StatusBarProps {
 }
 
 pub fn status_bar(props: &StatusBarProps) -> Element {
-    container("status_bar")
-        .child(label("status_time").text(&props.time))
-        .child(label("status_battery_label").text(&props.battery_label))
-        .child(label("status_signal").text(props.signal_strength.to_string()))
-        .child(label("status_network").selected(props.network_online))
+    HudStatus {
+        time: props.time.clone(),
+        battery_label: props.battery_label.clone(),
+        signal_strength: props.signal_strength,
+        network_online: props.network_online,
+    }
+    .element()
 }

@@ -16,28 +16,29 @@ pub struct HudStatus {
     pub network_online: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FooterBar {
+    pub text: String,
+    pub accent: Option<u32>,
+}
+
 impl HudScene {
     pub fn element(&self) -> Element {
         Element::new(ElementKind::Container, Some("hud"))
             .key(Key::Static("hud"))
             .child(self.status.element())
-            .child(self.footer_element())
-    }
-
-    fn footer_element(&self) -> Element {
-        Element::new(ElementKind::Container, Some("footer_bar"))
-            .key(Key::Static("footer_bar"))
-            .region(RegionId::Footer)
             .child(
-                Element::new(ElementKind::Label, Some("footer_label"))
-                    .key(Key::Static("footer_label"))
-                    .text(&self.footer_text),
+                FooterBar {
+                    text: self.footer_text.clone(),
+                    accent: None,
+                }
+                .element(),
             )
     }
 }
 
 impl HudStatus {
-    fn element(&self) -> Element {
+    pub fn element(&self) -> Element {
         Element::new(ElementKind::Container, Some("status_bar"))
             .key(Key::Static("status_bar"))
             .region(RegionId::StatusBar)
@@ -61,5 +62,20 @@ impl HudStatus {
                     .key(Key::Static("status_battery_label"))
                     .text(&self.battery_label),
             )
+    }
+}
+
+impl FooterBar {
+    pub fn element(&self) -> Element {
+        let mut label = Element::new(ElementKind::Label, Some("footer_label"))
+            .key(Key::Static("footer_label"))
+            .text(&self.text);
+        if let Some(accent) = self.accent {
+            label = label.accent(accent);
+        }
+        Element::new(ElementKind::Container, Some("footer_bar"))
+            .key(Key::Static("footer_bar"))
+            .region(RegionId::Footer)
+            .child(label)
     }
 }
