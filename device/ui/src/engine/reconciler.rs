@@ -76,7 +76,9 @@ fn diff_element(
         }
         Some(previous) => {
             emit_prop_updates(node, &previous.props, &next.props, out);
-            emit_place(node, next.layout, stage, out);
+            if previous.layout != next.layout {
+                emit_place(node, next.layout, stage, out);
+            }
             emit_animation_updates(node, next, sampler, out);
             diff_children(
                 previous,
@@ -137,6 +139,12 @@ fn diff_children(
     sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) {
+    let previous_order = previous
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, child)| previous_ids.get(&parent_path.child(child, index)).copied())
+        .collect::<Vec<_>>();
     let mut order = Vec::with_capacity(next.children.len());
     let mut matched_previous = BTreeSet::new();
     for (index, child) in next.children.iter().enumerate() {
@@ -176,7 +184,7 @@ fn diff_children(
             remove_subtree(child, child_path, node, previous_ids, out);
         }
     }
-    if !order.is_empty() {
+    if !order.is_empty() && order != previous_order {
         out.push(Mutation::Reorder { parent, order });
     }
 }
