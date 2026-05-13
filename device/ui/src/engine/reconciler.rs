@@ -195,11 +195,9 @@ fn emit_prop_updates(
     next: &ElementProps,
     out: &mut Vec<Mutation>,
 ) {
-    let mut changes = Vec::new();
-    props::diff_props(previous, next, &mut changes);
-    for prop in changes {
+    props::diff_props(previous, next, |prop| {
         out.push(Mutation::Update { node, prop });
-    }
+    });
     if next.text.is_none() && previous.text.is_some() {
         out.push(Mutation::Update {
             node,
