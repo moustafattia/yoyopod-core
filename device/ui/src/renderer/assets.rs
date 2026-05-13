@@ -2,10 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 use thiserror::Error;
+use yoyopod_protocol::ui::UiScreen;
 
 use crate::renderer::widgets::roles;
 
 const LAYOUTS_RON: &str = include_str!("../../assets/layouts.ron");
+const SCENES_RON: &str = include_str!("../../assets/scenes.ron");
 const THEME_RON: &str = include_str!("../../assets/theme.ron");
 
 #[derive(Debug, Error)]
@@ -30,6 +32,21 @@ pub enum RenderAssetError {
     DuplicateRoles {
         asset: &'static str,
         roles: Vec<String>,
+    },
+    #[error("{asset} missing screen coverage: {screens:?}")]
+    MissingScreens {
+        asset: &'static str,
+        screens: Vec<&'static str>,
+    },
+    #[error("{asset} has unknown screens: {screens:?}")]
+    UnknownScreens {
+        asset: &'static str,
+        screens: Vec<String>,
+    },
+    #[error("{asset} has duplicate screens: {screens:?}")]
+    DuplicateScreens {
+        asset: &'static str,
+        screens: Vec<String>,
     },
 }
 
@@ -79,9 +96,26 @@ pub struct ThemeRole {
     pub shadow_width: i32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SceneAsset {
+    pub scenes: Vec<SceneDefaults>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SceneDefaults {
+    pub screen: String,
+    pub backdrop: String,
+    pub stage: String,
+    #[serde(default)]
+    pub fx: Vec<String>,
+    #[serde(default)]
+    pub on_enter: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderAssets {
     layouts: BTreeMap<String, LayoutRole>,
+    scenes: BTreeMap<String, SceneDefaults>,
     theme: BTreeMap<String, ThemeRole>,
     selected_theme: BTreeMap<String, ThemeRole>,
 }
@@ -98,16 +132,26 @@ impl RenderAssets {
     pub fn selected_theme_role(&self, role: &str) -> Option<&ThemeRole> {
         self.selected_theme.get(role)
     }
+
+    pub fn scene_defaults(&self, screen: UiScreen) -> Option<&SceneDefaults> {
+        self.scenes.get(screen.as_str())
+    }
 }
 
 pub fn load_render_assets() -> Result<RenderAssets, RenderAssetError> {
     let layouts = parse_layout_asset()?;
+    let scenes = parse_scene_asset()?;
     let theme = parse_theme_asset()?;
     Ok(RenderAssets {
         layouts: layouts
             .roles
             .into_iter()
             .map(|role| (role.role.clone(), role))
+            .collect(),
+        scenes: scenes
+            .scenes
+            .into_iter()
+            .map(|scene| (scene.screen.clone(), scene))
             .collect(),
         theme: theme
             .roles
@@ -131,6 +175,15 @@ pub fn parse_layout_asset() -> Result<LayoutAsset, RenderAssetError> {
     Ok(asset)
 }
 
+pub fn parse_scene_asset() -> Result<SceneAsset, RenderAssetError> {
+    let asset = ron::from_str(SCENES_RON).map_err(|source| RenderAssetError::Parse {
+        asset: "scenes.ron",
+        source,
+    })?;
+    validate_scene_asset(&asset)?;
+    Ok(asset)
+}
+
 pub fn parse_theme_asset() -> Result<ThemeAsset, RenderAssetError> {
     let asset = ron::from_str(THEME_RON).map_err(|source| RenderAssetError::Parse {
         asset: "theme.ron",
@@ -138,6 +191,52 @@ pub fn parse_theme_asset() -> Result<ThemeAsset, RenderAssetError> {
     })?;
     validate_theme_asset(&asset)?;
     Ok(asset)
+}
+
+pub fn validate_scene_asset(asset: &SceneAsset) -> Result<(), RenderAssetError> {
+    let mut screens: BTreeSet<&str> = BTreeSet::new();
+    let mut duplicates = BTreeSet::new();
+    for scene in &asset.scenes {
+        if !screens.insert(scene.screen.as_str()) {
+            duplicates.insert(scene.screen.clone());
+        }
+    }
+    if !duplicates.is_empty() {
+        return Err(RenderAssetError::DuplicateScreens {
+            asset: "scenes.ron",
+            screens: duplicates.into_iter().collect(),
+        });
+    }
+
+    let required = UiScreen::ALL
+        .iter()
+        .map(|screen| screen.as_str())
+        .collect::<BTreeSet<_>>();
+    let missing = required
+        .iter()
+        .copied()
+        .filter(|screen| !screens.contains(screen))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(RenderAssetError::MissingScreens {
+            asset: "scenes.ron",
+            screens: missing,
+        });
+    }
+
+    let unknown = screens
+        .into_iter()
+        .filter(|screen| !required.contains(screen))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(RenderAssetError::UnknownScreens {
+            asset: "scenes.ron",
+            screens: unknown,
+        });
+    }
+
+    Ok(())
 }
 
 pub fn validate_layout_asset(asset: &LayoutAsset) -> Result<(), RenderAssetError> {
