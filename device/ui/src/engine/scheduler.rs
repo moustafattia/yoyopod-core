@@ -2,7 +2,7 @@ use crate::animation::{ClockSource, Timeline, TimelineSampler};
 use crate::render_contract::{DirtyRegion, Mutation, RenderMode};
 use crate::scene::{SceneGraph, SceneId};
 
-use super::{dirty, flatten, NodeIdAlloc, Reconciler, TreeCache};
+use super::{dirty, flatten, ActiveTimelines, NodeIdAlloc, Reconciler, TreeCache};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameOutcome<'a> {
@@ -15,7 +15,7 @@ pub struct Engine {
     pub tree_cache: TreeCache,
     pub node_alloc: NodeIdAlloc,
     pub mutations: Vec<Mutation>,
-    pub timelines: Vec<Timeline>,
+    pub timelines: ActiveTimelines,
     animation_signature: Option<u64>,
     active_scene: Option<SceneId>,
     reconciler: Reconciler,
@@ -42,7 +42,7 @@ impl Engine {
             .global_clock
             .now_ms
             .saturating_sub(graph.global_clock.started_ms);
-        let sampler = TimelineSampler::new(&self.timelines, now_ms, global_ms);
+        let sampler = TimelineSampler::new(self.timelines.as_slice(), now_ms, global_ms);
         let animation_signature = sampler.quantized_signature();
         let new_tree = flatten::flatten(graph);
         let next_ids = self.reconciler.diff(
@@ -60,11 +60,7 @@ impl Engine {
     }
 
     pub fn schedule_timeline(&mut self, timeline: Timeline) {
-        assert!(
-            self.timelines.len() < 16,
-            "active UI timelines must stay within the Whisplay frame budget"
-        );
-        self.timelines.push(timeline);
+        self.timelines.schedule(timeline);
     }
 
     pub fn tick_clocks(&mut self, _now_ms: u64) {
@@ -76,7 +72,7 @@ impl Engine {
             self.animation_signature = None;
             return false;
         }
-        let sampler = TimelineSampler::new(&self.timelines, now_ms, now_ms);
+        let sampler = TimelineSampler::new(self.timelines.as_slice(), now_ms, now_ms);
         let next_signature = sampler.quantized_signature();
         let dirty = next_signature.is_some() && next_signature != self.animation_signature;
         self.animation_signature = next_signature;
@@ -100,7 +96,7 @@ impl Engine {
         });
 
         for mut timeline in graph.active.timelines.clone() {
-            if self.timelines.iter().any(|active| active.id == timeline.id) {
+            if self.timelines.contains_id(timeline.id) {
                 continue;
             }
             if matches!(timeline.clock, ClockSource::SceneTime) {
