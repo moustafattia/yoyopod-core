@@ -13,6 +13,4 @@ pub use sampler::TimelineSampler;
 pub use timeline::{
     Keyframe, LoopMode, OnCompleteAction, Timeline, TimelineId, TimelineRef, Track, TrackIndex,
 };
-pub use transition::{
-    Easing as TransitionEasing, Transition, TransitionProperty, TransitionTarget,
-};
+pub use transition::{Transition, TransitionProperty, TransitionTarget};

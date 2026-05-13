@@ -225,8 +225,11 @@ pub enum AnimationProperty {
 #[serde(rename_all = "snake_case")]
 pub enum AnimationEasing {
     Linear,
+    EaseIn,
     EaseOut,
     EaseInOut,
+    Bounce,
+    Spring,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

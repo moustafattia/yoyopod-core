@@ -3,8 +3,8 @@ use yoyopod_protocol::ui::{AnimationEasing, AnimationProperty, AnimationRequest,
 use yoyopod_protocol::ui::UiScreen;
 
 use super::{
-    ActorRef, AnimatableProp, AnimatableValue, ClockSource, EventId, Keyframe, LoopMode, Timeline,
-    TimelineId, Track,
+    ActorRef, AnimatableProp, AnimatableValue, ClockSource, Easing, EventId, Keyframe, LoopMode,
+    Timeline, TimelineId, Track,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,13 +20,6 @@ pub enum TransitionProperty {
     OffsetY,
     ScalePermille,
     SelectionOffset,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Easing {
-    Linear,
-    EaseOut,
-    EaseInOut,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,7 +82,7 @@ impl Transition {
                         value: animatable_value(self.property, self.to),
                     },
                 ],
-                easing: easing(self.easing),
+                easing: self.easing,
             }],
             loop_mode: LoopMode::Once,
             on_complete: None,
@@ -110,8 +103,11 @@ fn transition_property(property: AnimationProperty) -> TransitionProperty {
 fn transition_easing(easing: AnimationEasing) -> Easing {
     match easing {
         AnimationEasing::Linear => Easing::Linear,
+        AnimationEasing::EaseIn => Easing::EaseIn,
         AnimationEasing::EaseOut => Easing::EaseOut,
         AnimationEasing::EaseInOut => Easing::EaseInOut,
+        AnimationEasing::Bounce => Easing::Bounce,
+        AnimationEasing::Spring => Easing::Spring,
     }
 }
 
@@ -137,14 +133,6 @@ fn animatable_value(property: TransitionProperty, value: i32) -> AnimatableValue
         TransitionProperty::OffsetY
         | TransitionProperty::ScalePermille
         | TransitionProperty::SelectionOffset => AnimatableValue::I32(value),
-    }
-}
-
-fn easing(easing: Easing) -> super::Easing {
-    match easing {
-        Easing::Linear => super::Easing::Linear,
-        Easing::EaseOut => super::Easing::EaseOut,
-        Easing::EaseInOut => super::Easing::EaseInOut,
     }
 }
 
