@@ -77,12 +77,10 @@ pub fn scene_for_screen(
 fn with_scene_timelines(defaults: &crate::scene::SceneDefaults, mut scene: Scene) -> Scene {
     let scene_timelines = defaults.scene_timelines(&scene.decks);
     scene.timelines.splice(0..0, scene_timelines);
-    let item_timelines = scene
-        .decks
-        .iter()
-        .enumerate()
-        .flat_map(|(deck_index, deck)| deck.item_timelines(deck_index))
-        .collect::<Vec<_>>();
-    scene.timelines.extend(item_timelines);
+    for (deck_index, deck) in scene.decks.iter().enumerate() {
+        if let Some(timeline) = deck.item_timeline(deck_index) {
+            scene.timelines.push(timeline);
+        }
+    }
     scene
 }

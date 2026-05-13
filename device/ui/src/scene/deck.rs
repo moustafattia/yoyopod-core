@@ -157,18 +157,15 @@ impl Deck {
         }
     }
 
-    pub fn item_timelines(&self, deck_index: usize) -> Vec<Timeline> {
+    pub fn item_timeline(&self, deck_index: usize) -> Option<Timeline> {
         match self.item_anim {
-            DeckItemAnim::BreatheWhenFocused if !self.items.is_empty() => {
-                vec![presets::breathe_focused_item(
-                    deck_index,
-                    self.focused_visible_index(),
-                )]
-            }
+            DeckItemAnim::BreatheWhenFocused if !self.items.is_empty() => Some(
+                presets::breathe_focused_item(deck_index, self.focused_visible_index()),
+            ),
             DeckItemAnim::None
             | DeckItemAnim::ScaleOnFocus { .. }
             | DeckItemAnim::StaggerEnter { .. }
-            | DeckItemAnim::BreatheWhenFocused => Vec::new(),
+            | DeckItemAnim::BreatheWhenFocused => None,
         }
     }
 }
