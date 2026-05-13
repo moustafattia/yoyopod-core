@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::engine::NodeId;
+use crate::render_contract::NodeId;
 use crate::renderer::widgets::WidgetId;
 
 #[derive(Debug, Default)]

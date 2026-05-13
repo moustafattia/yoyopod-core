@@ -5,7 +5,7 @@ use yoyopod_protocol::ui::{
 
 use crate::animation::presets::{SCENE_ENTER_TIMELINE_ID, STAGGER_ENTER_TIMELINE_ID};
 use crate::animation::TimelineRef;
-use crate::engine::DirtyRegion;
+use crate::render_contract::DirtyRegion;
 
 use super::route::{
     BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind, NavigationPolicy,

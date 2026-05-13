@@ -1,5 +1,6 @@
 use crate::animation::{presets, ActorRef, TimelineRef, TrackIndex};
-use crate::engine::{AnimSlot, Element, ElementKind, Key};
+use crate::engine::{AnimSlot, Element, Key};
+use crate::render_contract::ElementKind;
 
 use super::RegionId;
 

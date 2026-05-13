@@ -1,8 +1,6 @@
 use crate::animation::{TimelineRef, TrackIndex};
+use crate::render_contract::ElementKind;
 use crate::scene::RegionId;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeId(pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Key {
@@ -64,14 +62,6 @@ impl Element {
         self.children.push(element);
         self
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ElementKind {
-    Container,
-    Label,
-    Image,
-    Progress,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

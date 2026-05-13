@@ -4,6 +4,7 @@ pub mod components;
 pub mod engine;
 pub mod hardware;
 pub mod input;
+pub mod render_contract;
 pub mod renderer;
 pub mod router;
 pub mod scene;

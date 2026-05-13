@@ -1,4 +1,6 @@
-use super::{ElementProps, PropChange};
+use crate::render_contract::PropChange;
+
+use super::ElementProps;
 
 pub fn diff_props(previous: &ElementProps, next: &ElementProps, out: &mut Vec<PropChange>) {
     if previous.text != next.text {

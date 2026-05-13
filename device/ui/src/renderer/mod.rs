@@ -10,7 +10,7 @@ pub mod widgets;
 
 use anyhow::Result;
 
-use crate::engine::{DirtyRegion, Mutation};
+use crate::render_contract::{DirtyRegion, Mutation};
 use crate::renderer::framebuffer::Framebuffer as RenderFramebuffer;
 
 pub use framebuffer::Framebuffer;

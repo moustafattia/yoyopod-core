@@ -1,6 +1,7 @@
+use crate::render_contract::ElementKind;
 use crate::scene::{Deck, HudScene, Modal, Scene, SceneGraph};
 
-use super::{Element, ElementKind, Key};
+use super::{Element, Key};
 
 pub fn flatten(graph: &SceneGraph) -> Element {
     Element::new(ElementKind::Container, Some("scene_graph"))

@@ -6,7 +6,7 @@ pub mod whisplay;
 
 use anyhow::Result;
 
-use crate::engine::DirtyRegion;
+use crate::render_contract::DirtyRegion;
 use crate::renderer::Framebuffer;
 
 pub trait DisplayDevice {

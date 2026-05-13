@@ -1,4 +1,5 @@
-use crate::engine::{Element, ElementKind};
+use crate::engine::Element;
+use crate::render_contract::ElementKind;
 
 pub fn progress(role: &'static str, value: i32) -> Element {
     let mut element = Element::new(ElementKind::Progress, Some(role));

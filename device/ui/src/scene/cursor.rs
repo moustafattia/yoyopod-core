@@ -1,4 +1,5 @@
-use crate::engine::{Element, ElementKind, Key};
+use crate::engine::{Element, Key};
+use crate::render_contract::ElementKind;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cursor {

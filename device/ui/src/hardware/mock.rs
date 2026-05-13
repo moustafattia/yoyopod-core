@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use crate::engine::DirtyRegion;
 use crate::hardware::{ButtonDevice, DisplayDevice};
+use crate::render_contract::DirtyRegion;
 use crate::renderer::Framebuffer;
 
 #[derive(Debug)]

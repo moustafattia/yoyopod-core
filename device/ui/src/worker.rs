@@ -383,7 +383,7 @@ where
     Ok(screen_changed)
 }
 
-fn render_mode_for_dirty_region(region: Option<crate::engine::DirtyRegion>) -> RenderMode {
+fn render_mode_for_dirty_region(region: Option<crate::render_contract::DirtyRegion>) -> RenderMode {
     match region {
         Some(region) if region == router::status_bar_region() => RenderMode::HudRegion,
         Some(region) => RenderMode::Region(region),

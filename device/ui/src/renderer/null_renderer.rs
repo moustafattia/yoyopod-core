@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::engine::Mutation;
+use crate::render_contract::Mutation;
 use crate::renderer::{Framebuffer, RenderMode, RenderReport, Renderer};
 
 #[derive(Debug, Default)]

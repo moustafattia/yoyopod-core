@@ -1,10 +1,9 @@
 use crate::animation::{AnimatableProp, AnimatableValue, TimelineSampler};
+use crate::render_contract::{Mutation, NodeId, PropChange};
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{
-    props, Element, ElementProps, Layout, Mutation, NodeId, NodeIdAlloc, NodePath, PropChange,
-};
+use super::{props, Element, ElementProps, Layout, NodeIdAlloc, NodePath};
 
 #[derive(Debug, Default)]
 pub struct Reconciler;

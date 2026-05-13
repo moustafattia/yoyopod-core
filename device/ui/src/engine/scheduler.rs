@@ -1,13 +1,14 @@
 use crate::animation::{ClockSource, Timeline, TimelineSampler};
+use crate::render_contract::{DirtyRegion, Mutation};
 use crate::scene::{SceneGraph, SceneId};
 
-use super::{flatten, Mutation, NodeIdAlloc, Reconciler, TreeCache};
+use super::{flatten, NodeIdAlloc, Reconciler, TreeCache};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderMode {
     FullFrame,
     HudRegion,
-    Region(super::DirtyRegion),
+    Region(DirtyRegion),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

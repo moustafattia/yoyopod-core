@@ -7,8 +7,8 @@ use super::whisplay_panel::{
     DEFAULT_BACKLIGHT_ACTIVE_LOW, DEFAULT_BACKLIGHT_GPIO, DEFAULT_BUTTON_ACTIVE_LOW,
     DEFAULT_BUTTON_GPIO, DEFAULT_DC_GPIO, DEFAULT_RESET_GPIO, DEFAULT_SPI_HZ, HEIGHT, WIDTH,
 };
-use crate::engine::DirtyRegion;
 use crate::hardware::{ButtonDevice, DisplayDevice};
+use crate::render_contract::DirtyRegion;
 use crate::renderer::Framebuffer;
 
 const SPI_CHUNK_BYTES: usize = 4096;

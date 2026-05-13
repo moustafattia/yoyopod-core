@@ -4,9 +4,9 @@ use std::path::Path;
 use anyhow::anyhow;
 use anyhow::Result;
 
-use crate::engine::Mutation;
+use crate::render_contract::Mutation;
 #[cfg(feature = "native-lvgl")]
-use crate::engine::{ElementKind, NodeId, PropChange};
+use crate::render_contract::{ElementKind, NodeId, PropChange};
 #[cfg(feature = "native-lvgl")]
 use crate::renderer::lvgl::NativeLvglFacade;
 #[cfg(feature = "native-lvgl")]

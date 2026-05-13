@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use super::{Element, ElementKind, Key, NodeId};
+use crate::render_contract::{ElementKind, NodeId};
+
+use super::{Element, Key};
 
 #[derive(Debug, Default)]
 pub struct TreeCache {
