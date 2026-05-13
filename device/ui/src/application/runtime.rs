@@ -76,6 +76,10 @@ impl UiRuntime {
         had_transitions
     }
 
+    pub fn mark_animation_frame(&mut self) {
+        self.dirty.animation = true;
+    }
+
     pub fn active_screen(&self) -> UiScreen {
         self.active_screen
     }

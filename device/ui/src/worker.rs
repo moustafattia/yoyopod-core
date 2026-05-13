@@ -264,6 +264,9 @@ where
         dispatcher::AppEvent::Tick => {
             let now_ms = outbound::monotonic_millis();
             ui_runtime.advance_animations(now_ms);
+            if render_state.engine.animation_frame_dirty(now_ms) {
+                ui_runtime.mark_animation_frame();
+            }
             handle_button_input(
                 output,
                 button,

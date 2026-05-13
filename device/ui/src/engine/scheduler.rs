@@ -22,6 +22,7 @@ pub struct Engine {
     pub node_alloc: NodeIdAlloc,
     pub mutations: Vec<Mutation>,
     pub timelines: Vec<Timeline>,
+    animation_signature: Option<u64>,
     active_scene: Option<SceneId>,
     reconciler: Reconciler,
 }
@@ -31,6 +32,7 @@ impl Engine {
         self.mutations.clear();
         self.sync_scene_timelines(graph, now_ms);
         let sampler = TimelineSampler::new(&self.timelines, now_ms, now_ms);
+        let animation_signature = sampler.quantized_signature();
         let new_tree = flatten::flatten(graph);
         let next_ids = self.reconciler.diff(
             self.tree_cache.previous(),
@@ -41,6 +43,7 @@ impl Engine {
             &mut self.mutations,
         );
         self.tree_cache.replace(new_tree, next_ids);
+        self.animation_signature = animation_signature;
         &self.mutations
     }
 
@@ -56,12 +59,25 @@ impl Engine {
         let _ = &mut self.reconciler;
     }
 
+    pub fn animation_frame_dirty(&mut self, now_ms: u64) -> bool {
+        if self.timelines.is_empty() {
+            self.animation_signature = None;
+            return false;
+        }
+        let sampler = TimelineSampler::new(&self.timelines, now_ms, now_ms);
+        let next_signature = sampler.quantized_signature();
+        let dirty = next_signature.is_some() && next_signature != self.animation_signature;
+        self.animation_signature = next_signature;
+        dirty
+    }
+
     fn sync_scene_timelines(&mut self, graph: &SceneGraph, now_ms: u64) {
         if self.active_scene == Some(graph.active.id) {
             return;
         }
 
         self.timelines.clear();
+        self.animation_signature = None;
         self.active_scene = Some(graph.active.id);
         for mut timeline in graph.active.timelines.clone() {
             if matches!(timeline.clock, ClockSource::SceneTime) {

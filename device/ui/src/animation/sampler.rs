@@ -62,6 +62,24 @@ impl<'a> TimelineSampler<'a> {
         Some((track.property, value))
     }
 
+    pub fn quantized_signature(&self) -> Option<u64> {
+        let mut signature = 0xcbf2_9ce4_8422_2325u64;
+        let mut sampled = false;
+        for timeline in self.timelines {
+            for index in 0..timeline.tracks.len() {
+                let Some((property, value)) =
+                    self.slot_value(TimelineRef(timeline.id), TrackIndex(index))
+                else {
+                    continue;
+                };
+                sampled = true;
+                signature = mix_signature(signature, property_signature(property));
+                signature = mix_signature(signature, value_signature(value));
+            }
+        }
+        sampled.then_some(signature)
+    }
+
     pub fn is_animating(&self, _target: ActorRef) -> bool {
         !self.timelines.is_empty()
     }
@@ -173,4 +191,37 @@ fn interpolate(from: AnimatableValue, to: AnimatableValue, ratio: f32) -> Option
 
 fn lerp_i32(from: i32, to: i32, ratio: f32) -> i32 {
     (from as f32 + (to - from) as f32 * ratio).round() as i32
+}
+
+fn mix_signature(current: u64, value: u64) -> u64 {
+    current.wrapping_mul(0x100_0000_01b3).wrapping_add(value)
+}
+
+fn property_signature(property: AnimatableProp) -> u64 {
+    match property {
+        AnimatableProp::Opacity => 1,
+        AnimatableProp::X => 2,
+        AnimatableProp::Y => 3,
+        AnimatableProp::Width => 4,
+        AnimatableProp::Height => 5,
+        AnimatableProp::Scale => 6,
+        AnimatableProp::AccentMix => 7,
+        AnimatableProp::BorderWidth => 8,
+        AnimatableProp::ShadowRadius => 9,
+        AnimatableProp::SelectionOffset => 10,
+        AnimatableProp::ProgressPermille => 11,
+    }
+}
+
+fn value_signature(value: AnimatableValue) -> u64 {
+    match value {
+        AnimatableValue::I32(value) => (value / 32) as u64,
+        AnimatableValue::U8(value) => u64::from(value / 32),
+        AnimatableValue::Rgb(value) => {
+            let r = (value >> 16) & 0xff;
+            let g = (value >> 8) & 0xff;
+            let b = value & 0xff;
+            ((r / 32) << 8 | (g / 32) << 4 | (b / 32)) as u64
+        }
+    }
 }
