@@ -2,16 +2,24 @@ use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
 use crate::scene::Scene;
 
-pub fn scene(snapshot: &RuntimeSnapshot) -> Scene {
+pub struct InCallProps {
+    pub title: String,
+    pub body: String,
+}
+
+pub fn props_from(snapshot: &RuntimeSnapshot) -> InCallProps {
     let mute = if snapshot.call.muted { "Muted" } else { "Live" };
-    super::common::call_scene(
-        UiScreen::InCall,
-        call_peer_name(snapshot),
-        format!(
+    InCallProps {
+        title: call_peer_name(snapshot),
+        body: format!(
             "{mute}\n{}\n{}",
             snapshot.call.duration_text, snapshot.call.peer_address
         ),
-    )
+    }
+}
+
+pub fn scene(props: &InCallProps) -> Scene {
+    super::common::call_scene(UiScreen::InCall, props.title.clone(), props.body.clone())
 }
 
 fn call_peer_name(snapshot: &RuntimeSnapshot) -> String {

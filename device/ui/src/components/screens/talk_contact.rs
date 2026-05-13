@@ -3,15 +3,26 @@ use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 use crate::engine::Key;
 use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene};
 
-pub fn scene(
+pub struct TalkContactProps {
+    pub actions: Vec<DeckItem>,
+    pub focus: usize,
+}
+
+pub fn props_from(
     snapshot: &RuntimeSnapshot,
     focus: usize,
     selected_contact: Option<&ListItemSnapshot>,
-) -> Scene {
-    let actions = actions(snapshot, selected_contact);
-    let mut scene = super::common::action_scene(UiScreen::TalkContact, focus);
+) -> TalkContactProps {
+    TalkContactProps {
+        actions: actions(snapshot, selected_contact),
+        focus,
+    }
+}
+
+pub fn scene(props: &TalkContactProps) -> Scene {
+    let mut scene = super::common::action_scene(UiScreen::TalkContact, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
-        deck.items = actions;
+        deck.items = props.actions.clone();
     }
     scene.cursor = Some(crate::scene::Cursor::UnderlineDots {
         count: scene
@@ -19,7 +30,7 @@ pub fn scene(
             .first()
             .map(|deck| deck.items.len())
             .unwrap_or(0),
-        focus,
+        focus: props.focus,
     });
     scene
 }

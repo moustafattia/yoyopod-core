@@ -7,7 +7,19 @@ use crate::scene::{
     Scene, SceneId, Stage,
 };
 
-pub fn scene(snapshot: &RuntimeSnapshot) -> Scene {
+pub struct NowPlayingProps {
+    pub title: String,
+    pub body: String,
+}
+
+pub fn props_from(snapshot: &RuntimeSnapshot) -> NowPlayingProps {
+    NowPlayingProps {
+        title: snapshot.music.title.clone(),
+        body: now_playing_body(snapshot),
+    }
+}
+
+pub fn scene(props: &NowPlayingProps) -> Scene {
     Scene {
         id: SceneId::new(UiScreen::NowPlaying),
         backdrop: Backdrop::Solid(0x2a2d35),
@@ -18,8 +30,8 @@ pub fn scene(snapshot: &RuntimeSnapshot) -> Scene {
             items: vec![DeckItem {
                 key: Key::Static("now_playing"),
                 render: ItemRender::Page(PageModel {
-                    title: snapshot.music.title.clone(),
-                    body: now_playing_body(snapshot),
+                    title: props.title.clone(),
+                    body: props.body.clone(),
                 }),
             }],
             focus_index: 0,

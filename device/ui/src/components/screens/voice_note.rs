@@ -3,11 +3,22 @@ use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 use crate::engine::Key;
 use crate::scene::{ButtonModel, DeckItem, ItemRender, Scene};
 
-pub fn scene(snapshot: &RuntimeSnapshot, focus: usize) -> Scene {
-    let buttons = buttons(snapshot);
-    let mut scene = super::common::action_scene(UiScreen::VoiceNote, focus);
+pub struct VoiceNoteProps {
+    pub buttons: Vec<DeckItem>,
+    pub focus: usize,
+}
+
+pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> VoiceNoteProps {
+    VoiceNoteProps {
+        buttons: buttons(snapshot),
+        focus,
+    }
+}
+
+pub fn scene(props: &VoiceNoteProps) -> Scene {
+    let mut scene = super::common::action_scene(UiScreen::VoiceNote, props.focus);
     if let Some(deck) = scene.decks.first_mut() {
-        deck.items = buttons;
+        deck.items = props.buttons.clone();
     }
     scene.cursor = Some(crate::scene::Cursor::UnderlineDots {
         count: scene
@@ -15,7 +26,7 @@ pub fn scene(snapshot: &RuntimeSnapshot, focus: usize) -> Scene {
             .first()
             .map(|deck| deck.items.len())
             .unwrap_or(0),
-        focus,
+        focus: props.focus,
     });
     scene
 }
