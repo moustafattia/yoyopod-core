@@ -53,6 +53,11 @@ impl Element {
         self
     }
 
+    pub fn scale_permille(mut self, scale_permille: i32) -> Self {
+        self.props.scale_permille = Some(scale_permille);
+        self
+    }
+
     pub fn key(mut self, key: Key) -> Self {
         self.key = Some(key);
         self
@@ -82,6 +87,7 @@ pub struct ElementProps {
     pub selected: Option<bool>,
     pub visible: Option<bool>,
     pub opacity: Option<u8>,
+    pub scale_permille: Option<i32>,
     pub variant: Option<&'static str>,
     pub progress: Option<i32>,
 }

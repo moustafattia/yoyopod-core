@@ -164,9 +164,15 @@ fn deck_item_element(
             timeline: TimelineRef(presets::STAGGER_ENTER_TIMELINE_ID),
             track: TrackIndex(visible_index.min(3)),
         }),
-        DeckItemAnim::None
-        | DeckItemAnim::ScaleOnFocus { .. }
-        | DeckItemAnim::BreatheWhenFocused => element,
+        DeckItemAnim::ScaleOnFocus {
+            from_permille,
+            to_permille,
+        } => element.scale_permille(if selected {
+            i32::from(to_permille)
+        } else {
+            i32::from(from_permille)
+        }),
+        DeckItemAnim::None | DeckItemAnim::BreatheWhenFocused => element,
     }
 }
 
