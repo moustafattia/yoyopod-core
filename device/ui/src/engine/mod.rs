@@ -12,4 +12,4 @@ pub use element::{AnimSlot, Element, ElementKind, ElementProps, Key, Layout, Nod
 pub use mutation::{Mutation, PropChange};
 pub use reconciler::Reconciler;
 pub use scheduler::{Engine, FrameOutcome, RenderMode};
-pub use tree_cache::{NodeIdAlloc, TreeCache};
+pub use tree_cache::{NodeIdAlloc, NodePath, TreeCache};

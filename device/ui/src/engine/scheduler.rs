@@ -32,13 +32,15 @@ impl Engine {
         self.sync_scene_timelines(graph, now_ms);
         let sampler = TimelineSampler::new(&self.timelines, now_ms, now_ms);
         let new_tree = flatten::flatten(graph);
-        self.reconciler.diff(
+        let next_ids = self.reconciler.diff(
             self.tree_cache.previous(),
+            self.tree_cache.ids(),
             &new_tree,
+            &mut self.node_alloc,
             &sampler,
             &mut self.mutations,
         );
-        self.tree_cache.replace(new_tree);
+        self.tree_cache.replace(new_tree, next_ids);
         &self.mutations
     }
 
