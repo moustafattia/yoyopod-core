@@ -1,4 +1,4 @@
-use yoyopod_protocol::ui::AnimationRequest;
+use yoyopod_protocol::ui::{AnimationEasing, AnimationProperty, AnimationRequest, AnimationTarget};
 
 use yoyopod_protocol::ui::UiScreen;
 
@@ -48,43 +48,22 @@ impl Transition {
         focus_index: usize,
         started_at_ms: u64,
     ) -> Self {
-        let id = if request.transition_id.trim().is_empty() {
-            "screen_enter".to_string()
-        } else {
-            request.transition_id
-        };
-        let target = if id.starts_with("selection") {
-            TransitionTarget::Selection {
+        let target = match request.target {
+            AnimationTarget::ActiveScreen => TransitionTarget::Screen(screen),
+            AnimationTarget::FocusedSelection => TransitionTarget::Selection {
                 screen,
                 index: focus_index,
-            }
-        } else if id.starts_with("runtime") {
-            TransitionTarget::Runtime
-        } else {
-            TransitionTarget::Screen(screen)
-        };
-        let property = if id.contains("selection") {
-            TransitionProperty::SelectionOffset
-        } else if id.contains("scale") {
-            TransitionProperty::ScalePermille
-        } else if id.contains("fade") {
-            TransitionProperty::Opacity
-        } else {
-            TransitionProperty::OffsetY
-        };
-        let (from, to) = match property {
-            TransitionProperty::Opacity => (0, 255),
-            TransitionProperty::ScalePermille => (960, 1000),
-            TransitionProperty::OffsetY | TransitionProperty::SelectionOffset => (8, 0),
+            },
+            AnimationTarget::Runtime => TransitionTarget::Runtime,
         };
         Self {
-            id,
+            id: request.id,
             target,
-            property,
-            easing: Easing::EaseOut,
-            from,
-            to,
-            duration_ms: request.duration_ms.max(120),
+            property: transition_property(request.property),
+            easing: transition_easing(request.easing),
+            from: request.from,
+            to: request.to,
+            duration_ms: request.duration_ms,
             started_at_ms,
         }
     }
@@ -116,6 +95,23 @@ impl Transition {
             on_complete: None,
             started_ms: self.started_at_ms,
         }
+    }
+}
+
+fn transition_property(property: AnimationProperty) -> TransitionProperty {
+    match property {
+        AnimationProperty::Opacity => TransitionProperty::Opacity,
+        AnimationProperty::OffsetY => TransitionProperty::OffsetY,
+        AnimationProperty::ScalePermille => TransitionProperty::ScalePermille,
+        AnimationProperty::SelectionOffset => TransitionProperty::SelectionOffset,
+    }
+}
+
+fn transition_easing(easing: AnimationEasing) -> Easing {
+    match easing {
+        AnimationEasing::Linear => Easing::Linear,
+        AnimationEasing::EaseOut => Easing::EaseOut,
+        AnimationEasing::EaseInOut => Easing::EaseInOut,
     }
 }
 

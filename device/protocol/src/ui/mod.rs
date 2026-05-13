@@ -195,10 +195,38 @@ impl UiCommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AnimationRequest {
-    #[serde(default)]
-    pub transition_id: String,
-    #[serde(default)]
+    pub id: String,
+    pub target: AnimationTarget,
+    pub property: AnimationProperty,
+    pub easing: AnimationEasing,
+    pub from: i32,
+    pub to: i32,
     pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnimationTarget {
+    ActiveScreen,
+    FocusedSelection,
+    Runtime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnimationProperty {
+    Opacity,
+    OffsetY,
+    ScalePermille,
+    SelectionOffset,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnimationEasing {
+    Linear,
+    EaseOut,
+    EaseInOut,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -843,7 +871,12 @@ mod tests {
             UiCommand::PollInput,
             UiCommand::Health,
             UiCommand::Animate(AnimationRequest {
-                transition_id: "screen_enter".to_string(),
+                id: "screen_enter".to_string(),
+                target: AnimationTarget::ActiveScreen,
+                property: AnimationProperty::OffsetY,
+                easing: AnimationEasing::EaseOut,
+                from: 8,
+                to: 0,
                 duration_ms: 180,
             }),
             UiCommand::Shutdown,
