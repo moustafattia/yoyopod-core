@@ -270,7 +270,7 @@ impl LvglFacade for NativeLvglFacade {
     fn set_progress(&mut self, widget: WidgetId, value: i32) -> Result<()> {
         let value = value.clamp(0, 1000);
         let node = self.widget_node_mut(widget)?;
-        if node.role == "now_playing_progress_fill" {
+        if node.role == roles::NOW_PLAYING_PROGRESS_FILL {
             let fill_width = (168 * value) / 1000;
             if fill_width <= 0 {
                 styling::hide_widget_raw(node.obj);
@@ -285,8 +285,26 @@ impl LvglFacade for NativeLvglFacade {
             }
             return Ok(());
         }
-        if node.role == "status_battery_fill" {
+        if node.role == roles::STATUS_BATTERY_FILL {
             let fill_width = (12 * value) / 100;
+            if fill_width <= 0 {
+                styling::hide_widget_raw(node.obj);
+            } else {
+                Self::apply_layout_raw(
+                    node.obj,
+                    Layout {
+                        width: fill_width,
+                        ..node.layout
+                    },
+                );
+            }
+            return Ok(());
+        }
+        if matches!(
+            node.role,
+            roles::PROGRESS_SWEEP_FILL | roles::VOICE_METER_LEVEL
+        ) {
+            let fill_width = (node.layout.width * value) / 1000;
             if fill_width <= 0 {
                 styling::hide_widget_raw(node.obj);
             } else {

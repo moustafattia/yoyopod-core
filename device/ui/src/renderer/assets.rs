@@ -307,6 +307,7 @@ fn required_layout_roles() -> Vec<&'static str> {
         roles::POWER_ROW_TITLE,
         roles::POWER_TITLE,
         roles::PROGRESS_SWEEP,
+        roles::PROGRESS_SWEEP_FILL,
         roles::SCENE_BACKDROP,
         roles::SCENE_DECKS,
         roles::SCENE_FX,
@@ -340,6 +341,7 @@ fn required_layout_roles() -> Vec<&'static str> {
         roles::TALK_DOT,
         roles::TALK_TITLE,
         roles::VOICE_METER,
+        roles::VOICE_METER_LEVEL,
     ];
     roles.extend(roles::STATUS_SIGNAL_BARS);
     roles

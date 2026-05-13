@@ -1,15 +1,16 @@
 use crate::components::primitives::{container, image, label};
 use crate::engine::Element;
+use crate::roles;
 use crate::scene::CardModel;
 
 pub fn card(model: &CardModel) -> Element {
-    container("card")
+    container(roles::CARD)
         .accent(model.accent)
         .child(
-            image("card_icon")
+            image(roles::CARD_ICON)
                 .icon(&model.icon_key)
                 .accent(model.accent),
         )
-        .child(label("card_title").text(&model.title))
-        .child(label("card_subtitle").text(&model.subtitle))
+        .child(label(roles::CARD_TITLE).text(&model.title))
+        .child(label(roles::CARD_SUBTITLE).text(&model.subtitle))
 }

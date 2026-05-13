@@ -1,5 +1,6 @@
 use crate::components::primitives::{container, progress};
 use crate::engine::Element;
+use crate::roles;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VoiceMeterProps {
@@ -8,7 +9,7 @@ pub struct VoiceMeterProps {
 }
 
 pub fn voice_meter(props: VoiceMeterProps) -> Element {
-    container("voice_meter")
+    container(roles::VOICE_METER)
         .selected(props.recording)
-        .child(progress("voice_meter_level", props.level_permille))
+        .child(progress(roles::VOICE_METER_LEVEL, props.level_permille))
 }

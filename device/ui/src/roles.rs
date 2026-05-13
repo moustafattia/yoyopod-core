@@ -32,6 +32,7 @@ pub(crate) const PAGE: &str = "page";
 pub(crate) const PAGE_BODY: &str = "page_body";
 pub(crate) const PAGE_TITLE: &str = "page_title";
 pub(crate) const PROGRESS_SWEEP: &str = "progress_sweep";
+pub(crate) const PROGRESS_SWEEP_FILL: &str = "progress_sweep_fill";
 pub(crate) const SCENE_BACKDROP: &str = "scene_backdrop";
 pub(crate) const SCENE_DECKS: &str = "scene_decks";
 pub(crate) const SCENE_FX: &str = "scene_fx";
@@ -39,6 +40,7 @@ pub(crate) const SCENE_GRAPH: &str = "scene_graph";
 pub(crate) const SCENE_ROOT: &str = "scene_root";
 pub(crate) const SCENE_STAGE: &str = "scene_stage";
 pub(crate) const VOICE_METER: &str = "voice_meter";
+pub(crate) const VOICE_METER_LEVEL: &str = "voice_meter_level";
 
 pub(crate) const ASK_ICON: &str = "ask_icon";
 pub(crate) const ASK_ICON_GLOW: &str = "ask_icon_glow";

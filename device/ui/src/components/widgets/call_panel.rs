@@ -1,5 +1,6 @@
 use crate::components::primitives::{container, label};
 use crate::engine::Element;
+use crate::roles;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallPanelProps {
@@ -9,8 +10,8 @@ pub struct CallPanelProps {
 }
 
 pub fn call_panel(props: &CallPanelProps) -> Element {
-    container("call_panel")
-        .child(label("call_title").text(&props.title))
-        .child(label("call_state_label").text(&props.state))
-        .child(label("call_mute_label").text(if props.muted { "Muted" } else { "" }))
+    container(roles::CALL_PANEL)
+        .child(label(roles::CALL_TITLE).text(&props.title))
+        .child(label(roles::CALL_STATE_LABEL).text(&props.state))
+        .child(label(roles::CALL_MUTE_LABEL).text(if props.muted { "Muted" } else { "" }))
 }
