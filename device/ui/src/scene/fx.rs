@@ -6,8 +6,6 @@ use crate::engine::{Element, Key};
 use crate::scene::roles;
 use crate::ElementKind;
 
-use super::RegionId;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FxLayerId(pub u8);
 
@@ -15,7 +13,6 @@ pub struct FxLayerId(pub u8);
 pub struct FxLayer {
     pub halos: Vec<Halo>,
     pub pulses: Vec<PulseRing>,
-    pub particles: Vec<ParticleField>,
     pub glows: Vec<GlowBloom>,
     pub progress_sweeps: Vec<ProgressSweep>,
     pub voice_meters: Vec<VoiceMeter>,
@@ -36,14 +33,6 @@ pub struct PulseRing {
     pub color: u32,
     pub duration_ms: u32,
     pub max_radius: i32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParticleField {
-    pub region: RegionId,
-    pub count: u8,
-    pub color: u32,
-    pub drift_speed_ms: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +57,6 @@ impl FxLayer {
     pub fn element(&self) -> Option<Element> {
         if self.halos.is_empty()
             && self.pulses.is_empty()
-            && self.particles.is_empty()
             && self.glows.is_empty()
             && self.progress_sweeps.is_empty()
             && self.voice_meters.is_empty()
@@ -83,11 +71,6 @@ impl FxLayer {
         }
         for (index, pulse) in self.pulses.iter().enumerate() {
             element = element.child(pulse_element(index, pulse));
-        }
-        for (field_index, field) in self.particles.iter().enumerate() {
-            for index in 0..field.count.min(8) {
-                element = element.child(particle_element(field_index, index, field));
-            }
         }
         for (index, glow) in self.glows.iter().enumerate() {
             element = element.child(glow_element(index, glow));
@@ -120,13 +103,6 @@ fn pulse_element(index: usize, pulse: &PulseRing) -> Element {
     )
     .accent(pulse.color)
     .with_opacity(96)
-}
-
-fn particle_element(field_index: usize, index: u8, field: &ParticleField) -> Element {
-    Element::new(ElementKind::Container, Some(roles::FX_PARTICLE))
-        .key(Key::String(format!("fx:particle:{field_index}:{index}")))
-        .region(field.region)
-        .accent(field.color)
 }
 
 fn glow_element(index: usize, glow: &GlowBloom) -> Element {

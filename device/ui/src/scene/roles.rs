@@ -20,7 +20,6 @@ pub(crate) const DECK_PAGE: &str = "deck_page";
 pub(crate) const DECK_REGION: &str = "deck_region";
 pub(crate) const FX_GLOW: &str = "fx_glow";
 pub(crate) const FX_HALO: &str = "fx_halo";
-pub(crate) const FX_PARTICLE: &str = "fx_particle";
 pub(crate) const FX_PULSE: &str = "fx_pulse";
 pub(crate) const FX_SPINNER: &str = "fx_spinner";
 pub(crate) const HUD: &str = "hud";

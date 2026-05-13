@@ -32,7 +32,6 @@
         (role: "scene_fx"),
         (role: "fx_halo", fill_rgb: Some(3553860), opacity: Some(128), radius: 62),
         (role: "fx_pulse", fill_rgb: Some(3553860), opacity: Some(96), radius: 62),
-        (role: "fx_particle", fill_rgb: Some(4054355), opacity: Some(180), radius: 6),
         (role: "fx_glow", fill_rgb: Some(4054355), opacity: Some(120), radius: 4),
         (role: "fx_spinner", fill_rgb: Some(4054355), opacity: Some(96), radius: 24),
         (role: "card", fill_rgb: Some(3553860), text_rgb: Some(16777215), opacity: Some(255), radius: 16),

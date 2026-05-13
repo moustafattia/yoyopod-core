@@ -18,9 +18,7 @@ pub use deck::{
     PageModel, RowModel,
 };
 pub use defaults::{defaults_for, load_scene_defaults, SceneDefaults, SceneDefaultsCatalog};
-pub use fx::{
-    FxLayer, FxLayerId, GlowBloom, Halo, ParticleField, ProgressSweep, PulseRing, VoiceMeter,
-};
+pub use fx::{FxLayer, FxLayerId, GlowBloom, Halo, ProgressSweep, PulseRing, VoiceMeter};
 pub use graph::{
     ActorState, GlobalClock, RouteParams, SceneCacheEntry, SceneGraph, ScenePushFrame,
 };
