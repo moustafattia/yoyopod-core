@@ -1,4 +1,5 @@
 use crate::animation::{presets, ActorRef, Timeline, TimelineRef, TrackIndex};
+use crate::components::widgets::{card as card_widget, list_row as list_row_widget};
 use crate::engine::{AnimSlot, Element, Key};
 use crate::render_contract::ElementKind;
 use crate::scene::roles;
@@ -178,23 +179,8 @@ fn deck_item_element(
     visible_index: usize,
 ) -> Element {
     let element = match &item.render {
-        ItemRender::Card(card) => Element::new(ElementKind::Container, Some(roles::CARD))
-            .key(item.key.clone())
-            .accent(card.accent)
-            .child(Element::new(ElementKind::Label, Some(roles::CARD_TITLE)).text(&card.title))
-            .child(
-                Element::new(ElementKind::Label, Some(roles::CARD_SUBTITLE)).text(&card.subtitle),
-            )
-            .child(Element::new(ElementKind::Image, Some(roles::CARD_ICON)).icon(&card.icon_key)),
-        ItemRender::Row(row) => Element::new(ElementKind::Container, Some(roles::LIST_ROW))
-            .key(item.key.clone())
-            .selected(row.selected || selected)
-            .child(Element::new(ElementKind::Image, Some(roles::LIST_ROW_ICON)).icon(&row.icon_key))
-            .child(Element::new(ElementKind::Label, Some(roles::LIST_ROW_TITLE)).text(&row.title))
-            .child(
-                Element::new(ElementKind::Label, Some(roles::LIST_ROW_SUBTITLE))
-                    .text(&row.subtitle),
-            ),
+        ItemRender::Card(card) => card_widget(card).key(item.key.clone()),
+        ItemRender::Row(row) => list_row_widget(row, selected, item.key.clone()),
         ItemRender::Page(page) => Element::new(ElementKind::Container, Some(roles::PAGE))
             .key(item.key.clone())
             .child(Element::new(ElementKind::Label, Some(roles::PAGE_TITLE)).text(&page.title))
