@@ -1,34 +1,63 @@
 use crate::animation::{presets, TimelineRef, TrackIndex};
 use crate::render_contract::ElementKind;
-use crate::scene::{Deck, HudScene, Modal, Scene, SceneGraph};
+use crate::scene::{Deck, HudScene, LayerSlot, Modal, Scene, SceneGraph, LAYER_ORDER};
 
 use super::{AnimSlot, Element, Key};
 
 pub fn flatten(graph: &SceneGraph) -> Element {
-    Element::new(ElementKind::Container, Some("scene_graph"))
-        .key(Key::Static("scene_graph"))
-        .child(scene_element(&graph.active))
-        .child(hud_element(&graph.hud))
-        .child(modal_stack_element(&graph.modal_stack))
+    LAYER_ORDER
+        .into_iter()
+        .filter(|slot| slot.is_graph_overlay())
+        .fold(
+            Element::new(ElementKind::Container, Some("scene_graph"))
+                .key(Key::Static("scene_graph"))
+                .child(scene_element(&graph.active)),
+            |element, slot| match graph_overlay_element(graph, slot) {
+                Some(layer) => element.child(layer),
+                None => element,
+            },
+        )
 }
 
 pub fn scene_element(scene: &Scene) -> Element {
-    let mut root = Element::new(ElementKind::Container, Some("scene_root"))
+    let root = Element::new(ElementKind::Container, Some("scene_root"))
         .key(Key::String(format!("scene:{}", scene.id.screen.as_str())))
         .with_anim(AnimSlot {
             timeline: TimelineRef(presets::SCENE_ENTER_TIMELINE_ID),
             track: TrackIndex(0),
         });
-    root = root.child(scene.backdrop.element());
-    root = root.child(stage_element(scene.stage));
-    root = root.child(decks_element(&scene.decks));
-    if let Some(cursor) = &scene.cursor {
-        root = root.child(cursor.element());
+    LAYER_ORDER
+        .into_iter()
+        .filter(|slot| slot.is_scene_owned())
+        .fold(root, |element, slot| {
+            match scene_layer_element(scene, slot) {
+                Some(layer) => element.child(layer),
+                None => element,
+            }
+        })
+}
+
+fn scene_layer_element(scene: &Scene, slot: LayerSlot) -> Option<Element> {
+    match slot {
+        LayerSlot::Backdrop => Some(scene.backdrop.element()),
+        LayerSlot::Stage => Some(stage_element(scene.stage)),
+        LayerSlot::Decks => Some(decks_element(&scene.decks)),
+        LayerSlot::Cursor => scene.cursor.as_ref().map(|cursor| cursor.element()),
+        LayerSlot::Fx => scene.fx.element(),
+        LayerSlot::Hud | LayerSlot::Modal => None,
     }
-    if let Some(fx) = scene.fx.element() {
-        root = root.child(fx);
+}
+
+fn graph_overlay_element(graph: &SceneGraph, slot: LayerSlot) -> Option<Element> {
+    match slot {
+        LayerSlot::Hud => Some(hud_element(&graph.hud)),
+        LayerSlot::Modal => Some(modal_stack_element(&graph.modal_stack)),
+        LayerSlot::Backdrop
+        | LayerSlot::Stage
+        | LayerSlot::Decks
+        | LayerSlot::Cursor
+        | LayerSlot::Fx => None,
     }
-    root
 }
 
 fn stage_element(_stage: crate::scene::Stage) -> Element {

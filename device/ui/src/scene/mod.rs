@@ -5,6 +5,7 @@ pub mod defaults;
 pub mod fx;
 pub mod graph;
 pub mod hud;
+pub mod layers;
 pub mod modal;
 pub mod scene;
 pub mod stage;
@@ -20,6 +21,7 @@ pub use graph::{
     ActorState, GlobalClock, RouteParams, SceneCacheEntry, SceneGraph, ScenePushFrame,
 };
 pub use hud::{FooterBar, HudScene, HudStatus};
+pub use layers::{LayerSlot, LAYER_ORDER};
 pub use modal::Modal;
 pub use scene::{Scene, SceneId};
 pub use stage::{region_rect, LayoutRect, RegionId, Stage};
