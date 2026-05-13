@@ -31,8 +31,6 @@ pub enum SceneDefaultsError {
     UnknownStage { screen: String, value: String },
     #[error("scenes.ron screen {screen} has unknown fx preset {value}")]
     UnknownFx { screen: String, value: String },
-    #[error("scenes.ron screen {screen} has unknown timeline preset {value}")]
-    UnknownTimeline { screen: String, value: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +50,6 @@ pub struct SceneDefaults {
     pub backdrop: BackdropPreset,
     pub stage: Stage,
     pub fx: Vec<FxPreset>,
-    pub on_enter: Option<TimelinePreset>,
 }
 
 impl SceneDefaults {
@@ -74,11 +71,8 @@ impl SceneDefaults {
         layer
     }
 
-    pub fn timelines(&self) -> Vec<Timeline> {
+    pub fn fx_timelines(&self) -> Vec<Timeline> {
         let mut timelines = Vec::new();
-        if let Some(preset) = self.on_enter {
-            timelines.push(preset.timeline());
-        }
         for preset in &self.fx {
             if let Some(timeline) = preset.timeline() {
                 timelines.push(timeline);
@@ -146,21 +140,6 @@ impl FxPreset {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TimelinePreset {
-    SceneEnter,
-    StaggerEnter,
-}
-
-impl TimelinePreset {
-    fn timeline(self) -> Timeline {
-        match self {
-            Self::SceneEnter => presets::scene_enter(),
-            Self::StaggerEnter => presets::stagger_enter(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct SceneAsset {
     scenes: Vec<RawSceneDefaults>,
@@ -173,8 +152,6 @@ struct RawSceneDefaults {
     stage: String,
     #[serde(default)]
     fx: Vec<String>,
-    #[serde(default)]
-    on_enter: Option<String>,
 }
 
 pub fn load_scene_defaults() -> Result<&'static SceneDefaultsCatalog, SceneDefaultsError> {
@@ -209,11 +186,6 @@ fn parse_scene_defaults() -> Result<SceneDefaultsCatalog, SceneDefaultsError> {
                 .iter()
                 .map(|preset| fx_from_key(&raw.screen, preset))
                 .collect::<Result<Vec<_>, _>>()?,
-            on_enter: raw
-                .on_enter
-                .as_deref()
-                .map(|preset| timeline_from_key(&raw.screen, preset))
-                .transpose()?,
         });
     }
     Ok(SceneDefaultsCatalog { scenes })
@@ -300,17 +272,6 @@ fn fx_from_key(screen: &str, key: &str) -> Result<FxPreset, SceneDefaultsError> 
         "call_pulse" => Ok(FxPreset::CallPulse),
         "spinner" => Ok(FxPreset::Spinner),
         value => Err(SceneDefaultsError::UnknownFx {
-            screen: screen.to_string(),
-            value: value.to_string(),
-        }),
-    }
-}
-
-fn timeline_from_key(screen: &str, key: &str) -> Result<TimelinePreset, SceneDefaultsError> {
-    match key {
-        "scene_enter" => Ok(TimelinePreset::SceneEnter),
-        "stagger_enter" => Ok(TimelinePreset::StaggerEnter),
-        value => Err(SceneDefaultsError::UnknownTimeline {
             screen: screen.to_string(),
             value: value.to_string(),
         }),

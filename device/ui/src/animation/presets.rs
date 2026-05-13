@@ -2,7 +2,7 @@ use crate::scene::RegionId;
 
 use super::{
     ActorRef, AnimatableProp, AnimatableValue, ClockSource, Easing, Keyframe, LoopMode, Timeline,
-    TimelineId, Track,
+    TimelineId, TimelineRef, Track,
 };
 
 pub const BREATHE_TIMELINE_ID: TimelineId = TimelineId(10);
@@ -57,5 +57,13 @@ pub fn stagger_enter() -> Timeline {
         loop_mode: LoopMode::Once,
         on_complete: None,
         started_ms: 0,
+    }
+}
+
+pub fn timeline_for_ref(reference: TimelineRef) -> Timeline {
+    match reference.0 {
+        SCENE_ENTER_TIMELINE_ID => scene_enter(),
+        STAGGER_ENTER_TIMELINE_ID => stagger_enter(),
+        TimelineId(value) => panic!("unknown route timeline id {value}"),
     }
 }

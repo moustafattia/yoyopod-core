@@ -61,6 +61,6 @@ pub fn scene(props: &HubProps) -> Scene {
         }),
         fx: defaults.fx_layer(props.accent),
         modal: None,
-        timelines: defaults.timelines(),
+        timelines: defaults.fx_timelines(),
     }
 }

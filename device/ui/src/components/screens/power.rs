@@ -41,7 +41,7 @@ pub fn scene(props: &PowerProps) -> Scene {
         }),
         fx: defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: defaults.timelines(),
+        timelines: defaults.fx_timelines(),
     }
 }
 

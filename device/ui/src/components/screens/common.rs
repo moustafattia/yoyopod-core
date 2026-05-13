@@ -32,7 +32,7 @@ pub fn hero_scene(screen: UiScreen, accent: u32, item_count: usize, focus: usize
         }),
         fx: defaults.fx_layer(accent),
         modal: None,
-        timelines: defaults.timelines(),
+        timelines: defaults.fx_timelines(),
     }
 }
 
@@ -69,7 +69,7 @@ pub fn list_scene(
         cursor: Some(Cursor::RowGlow),
         fx: defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: defaults.timelines(),
+        timelines: defaults.fx_timelines(),
     }
 }
 
@@ -95,7 +95,7 @@ pub fn action_scene(screen: UiScreen, focus: usize) -> Scene {
         cursor: Some(Cursor::UnderlineDots { count: 3, focus }),
         fx: defaults.fx_layer(0x00d4ff),
         modal: None,
-        timelines: defaults.timelines(),
+        timelines: defaults.fx_timelines(),
     }
 }
 
@@ -121,7 +121,7 @@ pub fn call_scene(screen: UiScreen, title: String, body: String) -> Scene {
         cursor: None,
         fx: defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: defaults.timelines(),
+        timelines: defaults.fx_timelines(),
     }
 }
 
@@ -135,7 +135,7 @@ pub fn overlay_scene(screen: UiScreen, modal: crate::scene::Modal) -> Scene {
         cursor: None,
         fx: defaults.fx_layer(0x3ddd53),
         modal: Some(modal),
-        timelines: defaults.timelines(),
+        timelines: defaults.fx_timelines(),
     }
 }
 

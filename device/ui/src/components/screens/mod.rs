@@ -20,6 +20,8 @@ pub mod voice_note;
 
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
+use crate::animation::presets;
+use crate::router;
 use crate::scene::Scene;
 
 pub fn scene_for_screen(
@@ -28,7 +30,7 @@ pub fn scene_for_screen(
     focus: usize,
     selected_contact: Option<&ListItemSnapshot>,
 ) -> Scene {
-    match screen {
+    let scene = match screen {
         UiScreen::Hub => hub::scene(&hub::props_from(snapshot, focus)),
         UiScreen::Listen => listen::scene(&listen::props_from(snapshot, focus)),
         UiScreen::Playlists => playlists::scene(&playlists::props_from(snapshot, focus)),
@@ -48,5 +50,15 @@ pub fn scene_for_screen(
         UiScreen::Power => power::scene(&power::props_from(snapshot, focus)),
         UiScreen::Loading => loading::scene(&loading::props_from(snapshot)),
         UiScreen::Error => error::scene(&error::props_from(snapshot)),
+    };
+    with_route_timelines(screen, scene)
+}
+
+fn with_route_timelines(screen: UiScreen, mut scene: Scene) -> Scene {
+    if let Some(timeline) = router::route_for(screen).on_enter {
+        scene
+            .timelines
+            .insert(0, presets::timeline_for_ref(timeline));
     }
+    scene
 }
