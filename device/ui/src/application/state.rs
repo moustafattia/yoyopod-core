@@ -1,6 +1,7 @@
 use crate::animation::Transition;
 use crate::render_contract::DirtyRegion;
 use crate::router;
+use crate::router::history::HistoryEntry;
 use std::collections::BTreeMap;
 
 use yoyopod_protocol::ui::{
@@ -14,7 +15,7 @@ use super::intents;
 pub struct UiRuntime {
     pub(crate) snapshot: RuntimeSnapshot,
     pub(crate) active_screen: UiScreen,
-    pub(crate) screen_stack: Vec<UiScreen>,
+    pub(crate) screen_stack: Vec<HistoryEntry>,
     pub(crate) focus_index: usize,
     pub(crate) intents: Vec<UiIntent>,
     pub(crate) dirty: DirtyState,

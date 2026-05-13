@@ -311,35 +311,41 @@ fn matches_condition(runtime: &UiRuntime, condition: SnapshotCondition) -> bool 
 }
 
 fn push_screen(runtime: &mut UiRuntime, screen: UiScreen) {
+    let selected_id = runtime
+        .selected_contact
+        .as_ref()
+        .map(|contact| contact.id.clone());
     router::history::push(
         &mut runtime.screen_stack,
         &mut runtime.active_screen,
+        runtime.focus_index,
+        selected_id,
         screen,
     );
     runtime.focus_index = 0;
 }
 
 fn pop_screen_or_hub(runtime: &mut UiRuntime) {
-    router::history::pop_or_hub(&mut runtime.screen_stack, &mut runtime.active_screen);
-    runtime.focus_index = 0;
+    let entry = router::history::pop_or_hub(&mut runtime.screen_stack, &mut runtime.active_screen);
+    runtime.focus_index = entry.map(|entry| entry.focus_index).unwrap_or(0);
 }
 
 fn pop_until_not_call(runtime: &mut UiRuntime) {
-    router::history::pop_until(
+    let entry = router::history::pop_until(
         &mut runtime.screen_stack,
         &mut runtime.active_screen,
         is_call_screen,
     );
-    runtime.focus_index = 0;
+    runtime.focus_index = entry.map(|entry| entry.focus_index).unwrap_or(0);
 }
 
 fn pop_until_not_overlay(runtime: &mut UiRuntime) {
-    router::history::pop_until(
+    let entry = router::history::pop_until(
         &mut runtime.screen_stack,
         &mut runtime.active_screen,
         is_overlay_screen,
     );
-    runtime.focus_index = 0;
+    runtime.focus_index = entry.map(|entry| entry.focus_index).unwrap_or(0);
 }
 
 fn focus_count(runtime: &UiRuntime) -> usize {

@@ -3,6 +3,7 @@ use yoyopod_protocol::ui::{
 };
 
 use crate::animation;
+use crate::router::history::HistoryEntry;
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen};
@@ -97,7 +98,7 @@ impl UiRuntime {
         &self.snapshot
     }
 
-    pub fn stack(&self) -> &[UiScreen] {
+    pub fn stack(&self) -> &[HistoryEntry] {
         &self.screen_stack
     }
 

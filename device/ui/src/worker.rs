@@ -419,11 +419,12 @@ fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
         history: ui_runtime
             .stack()
             .iter()
-            .copied()
-            .map(|route| crate::scene::ScenePushFrame {
-                route,
-                params: crate::scene::RouteParams::default(),
-                cached_state: crate::scene::SceneCacheEntry::Discarded,
+            .map(|entry| crate::scene::ScenePushFrame {
+                route: entry.screen,
+                params: crate::scene::RouteParams {
+                    selected_id: entry.selected_id.clone(),
+                },
+                cached_state: scene_cache_entry(entry),
             })
             .collect(),
         modal_stack,
@@ -431,6 +432,19 @@ fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
             started_ms: 0,
             now_ms,
         },
+    }
+}
+
+fn scene_cache_entry(entry: &router::history::HistoryEntry) -> crate::scene::SceneCacheEntry {
+    match router::route_for(entry.screen).persistence {
+        router::Persistence::Ephemeral => crate::scene::SceneCacheEntry::Discarded,
+        router::Persistence::KeepAlive | router::Persistence::Singleton => {
+            crate::scene::SceneCacheEntry::Retained {
+                actor_state: crate::scene::ActorState {
+                    focus_index: entry.focus_index,
+                },
+            }
+        }
     }
 }
 
