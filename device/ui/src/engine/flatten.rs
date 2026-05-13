@@ -1,4 +1,4 @@
-use crate::scene::{Backdrop, Cursor, Deck, HudScene, Modal, Scene, SceneGraph};
+use crate::scene::{Deck, HudScene, Modal, Scene, SceneGraph};
 
 use super::{Element, ElementKind, Key};
 
@@ -13,25 +13,13 @@ pub fn flatten(graph: &SceneGraph) -> Element {
 pub fn scene_element(scene: &Scene) -> Element {
     let mut root = Element::new(ElementKind::Container, Some("scene_root"))
         .key(Key::String(format!("scene:{}", scene.id.screen.as_str())));
-    root = root.child(backdrop_element(scene.backdrop));
+    root = root.child(scene.backdrop.element());
     root = root.child(stage_element(scene.stage));
     root = root.child(decks_element(&scene.decks));
     if let Some(cursor) = &scene.cursor {
-        root = root.child(cursor_element(cursor));
+        root = root.child(cursor.element());
     }
     root
-}
-
-fn backdrop_element(backdrop: Backdrop) -> Element {
-    let mut element =
-        Element::new(ElementKind::Container, Some("scene_backdrop")).key(Key::Static("backdrop"));
-    element.props.variant = Some(match backdrop {
-        Backdrop::Solid(_) => "solid",
-        Backdrop::Gradient { .. } => "gradient",
-        Backdrop::AccentDrift { .. } => "accent_drift",
-        Backdrop::Vignette { .. } => "vignette",
-    });
-    element
 }
 
 fn stage_element(_stage: crate::scene::Stage) -> Element {
@@ -45,19 +33,6 @@ fn decks_element(decks: &[Deck]) -> Element {
     )
 }
 
-fn cursor_element(cursor: &Cursor) -> Element {
-    match cursor {
-        Cursor::UnderlineDots { count, focus } => {
-            Element::new(ElementKind::Container, Some("cursor_dots"))
-                .key(Key::Static("cursor"))
-                .text(format!("{focus}/{count}"))
-        }
-        Cursor::RowGlow => {
-            Element::new(ElementKind::Container, Some("cursor_row_glow")).key(Key::Static("cursor"))
-        }
-    }
-}
-
 fn hud_element(hud: &HudScene) -> Element {
     hud.element()
 }
@@ -65,21 +40,6 @@ fn hud_element(hud: &HudScene) -> Element {
 fn modal_stack_element(modal_stack: &[Modal]) -> Element {
     modal_stack.iter().enumerate().fold(
         Element::new(ElementKind::Container, Some("modal_stack")).key(Key::Static("modal_stack")),
-        |element, (index, modal)| element.child(modal_element(index, modal)),
+        |element, (index, modal)| element.child(modal.element(index)),
     )
-}
-
-fn modal_element(index: usize, modal: &Modal) -> Element {
-    match modal {
-        Modal::Loading { title, message } => modal_content(index, "loading", title, message),
-        Modal::Error { title, message } => modal_content(index, "error", title, message),
-    }
-}
-
-fn modal_content(index: usize, variant: &'static str, title: &str, message: &str) -> Element {
-    let mut element = Element::new(ElementKind::Container, Some("modal")).key(Key::Indexed(index));
-    element.props.variant = Some(variant);
-    element
-        .child(Element::new(ElementKind::Label, Some("modal_title")).text(title))
-        .child(Element::new(ElementKind::Label, Some("modal_message")).text(message))
 }
