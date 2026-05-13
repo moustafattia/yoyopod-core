@@ -15,6 +15,9 @@ use crate::renderer::node_registry::NodeRegistry;
 use crate::renderer::widgets::{LvglFacade, WidgetId};
 use crate::renderer::{Framebuffer, RenderMode, RenderReport, Renderer};
 
+#[cfg(feature = "native-lvgl")]
+const MAX_ACTIVE_WIDGETS: usize = 60;
+
 #[cfg(not(feature = "native-lvgl"))]
 pub struct LvglRenderer;
 
@@ -39,6 +42,13 @@ impl Renderer for LvglRenderer {
     fn apply(&mut self, mutations: &[Mutation]) -> Result<()> {
         for mutation in mutations {
             apply_mutation(&mut self.facade, &mut self.node_registry, mutation)?;
+        }
+        if self.node_registry.len() > MAX_ACTIVE_WIDGETS {
+            anyhow::bail!(
+                "LVGL widget budget exceeded: {} active widgets, max {}",
+                self.node_registry.len(),
+                MAX_ACTIVE_WIDGETS
+            );
         }
         Ok(())
     }
