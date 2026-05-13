@@ -96,18 +96,6 @@ impl UiRuntime {
         self.dirty.navigation = true;
     }
 
-    pub fn snapshot(&self) -> &RuntimeSnapshot {
-        &self.snapshot
-    }
-
-    pub fn focus_index(&self) -> usize {
-        self.focus_index
-    }
-
-    pub fn selected_contact(&self) -> Option<&yoyopod_protocol::ui::ListItemSnapshot> {
-        self.selected_contact.as_ref()
-    }
-
     pub fn is_dirty(&self) -> bool {
         self.dirty.any()
     }
@@ -159,6 +147,16 @@ impl UiRuntime {
                 now_ms,
             },
         }
+    }
+
+    pub fn active_title(&self) -> String {
+        components::screens::chrome::chrome_for_screen(
+            self.active_screen,
+            &self.snapshot,
+            self.focus_index,
+            self.selected_contact.as_ref(),
+        )
+        .title
     }
 
     pub fn mark_clean(&mut self) {

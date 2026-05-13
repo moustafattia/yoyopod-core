@@ -6,7 +6,6 @@ use anyhow::Result;
 use yoyopod_protocol::ui::{UiError, UiErrorCode, UiEvent, UiHealth, UiScreen, UiScreenChanged};
 
 use crate::application::UiRuntime;
-use crate::components;
 use crate::engine::Engine;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
@@ -409,15 +408,9 @@ fn screen_changed_if_needed(
         .map(|screen| screen != active_screen)
         .unwrap_or(true)
     {
-        let chrome = components::screens::chrome::chrome_for_screen(
-            active_screen,
-            ui_runtime.snapshot(),
-            ui_runtime.focus_index(),
-            ui_runtime.selected_contact(),
-        );
         let event = Some(UiEvent::ScreenChanged(UiScreenChanged {
             screen: active_screen,
-            title: chrome.title,
+            title: ui_runtime.active_title(),
         }));
         *last_active_screen = Some(active_screen);
         return event;
