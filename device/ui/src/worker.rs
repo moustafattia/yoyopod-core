@@ -380,16 +380,17 @@ fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
         ui_runtime.snapshot(),
         ui_runtime.focus_index(),
     );
-    let chrome = components::screens::chrome::chrome_for_screen(
+    let mut chrome = components::screens::chrome::chrome_for_screen(
         ui_runtime.active_screen(),
         ui_runtime.snapshot(),
         ui_runtime.focus_index(),
         ui_runtime.selected_contact(),
     );
+    chrome.status.time = elapsed_time_label(now_ms);
     let modal_stack = active.modal.clone().into_iter().collect();
     SceneGraph {
         hud: HudScene {
-            status_text: chrome.status_text,
+            status: chrome.status,
             footer_text: chrome.footer_text,
         },
         active,
@@ -409,6 +410,13 @@ fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
             now_ms,
         },
     }
+}
+
+fn elapsed_time_label(now_ms: u64) -> String {
+    let total_seconds = now_ms / 1_000;
+    let minutes = (total_seconds / 60).min(99);
+    let seconds = total_seconds % 60;
+    format!("{minutes:02}:{seconds:02}")
 }
 
 fn health_event(ui_runtime: &UiRuntime, render: &RenderState, button_events: usize) -> UiEvent {

@@ -104,8 +104,39 @@ fn cursor_element(cursor: &Cursor) -> Element {
 fn hud_element(hud: &HudScene) -> Element {
     Element::new(ElementKind::Container, Some("hud"))
         .key(Key::Static("hud"))
-        .child(Element::new(ElementKind::Label, Some("status_bar")).text(&hud.status_text))
-        .child(Element::new(ElementKind::Label, Some("footer_bar")).text(&hud.footer_text))
+        .child(
+            Element::new(ElementKind::Container, Some("status_bar"))
+                .key(Key::Static("status_bar"))
+                .child(
+                    Element::new(ElementKind::Label, Some("status_signal"))
+                        .key(Key::Static("status_signal"))
+                        .text(hud.status.signal_strength.to_string()),
+                )
+                .child(
+                    Element::new(ElementKind::Label, Some("status_network"))
+                        .key(Key::Static("status_network"))
+                        .selected(hud.status.network_online),
+                )
+                .child(
+                    Element::new(ElementKind::Label, Some("status_time"))
+                        .key(Key::Static("status_time"))
+                        .text(&hud.status.time),
+                )
+                .child(
+                    Element::new(ElementKind::Label, Some("status_battery_label"))
+                        .key(Key::Static("status_battery_label"))
+                        .text(&hud.status.battery_label),
+                ),
+        )
+        .child(
+            Element::new(ElementKind::Container, Some("footer_bar"))
+                .key(Key::Static("footer_bar"))
+                .child(
+                    Element::new(ElementKind::Label, Some("footer_label"))
+                        .key(Key::Static("footer_label"))
+                        .text(&hud.footer_text),
+                ),
+        )
 }
 
 fn modal_stack_element(modal_stack: &[Modal]) -> Element {

@@ -17,7 +17,7 @@ pub use fx::{FxLayer, FxLayerId, GlowBloom, Halo, ParticleField, PulseRing};
 pub use graph::{
     ActorState, GlobalClock, RouteParams, SceneCacheEntry, SceneGraph, ScenePushFrame,
 };
-pub use hud::HudScene;
+pub use hud::{HudScene, HudStatus};
 pub use modal::Modal;
 pub use scene::{Scene, SceneId};
 pub use stage::{region_rect, LayoutRect, RegionId, Stage};

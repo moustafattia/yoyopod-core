@@ -1,9 +1,11 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
+use crate::scene::HudStatus;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScreenChrome {
     pub title: String,
-    pub status_text: String,
+    pub status: HudStatus,
     pub footer_text: String,
 }
 
@@ -15,7 +17,7 @@ pub fn chrome_for_screen(
 ) -> ScreenChrome {
     ScreenChrome {
         title: title_for_screen(screen, snapshot, focus_index, selected_contact),
-        status_text: status_text(snapshot),
+        status: status_from_snapshot(snapshot),
         footer_text: footer_for_screen(screen, snapshot),
     }
 }
@@ -80,18 +82,17 @@ fn footer_for_screen(screen: UiScreen, snapshot: &RuntimeSnapshot) -> String {
     .to_string()
 }
 
-fn status_text(snapshot: &RuntimeSnapshot) -> String {
-    let network = if snapshot.network.connected {
-        snapshot.network.connection_type.as_str()
-    } else if snapshot.network.enabled {
-        "offline"
-    } else {
-        "disabled"
-    };
-    format!(
-        "{} {}% sig:{}",
-        network, snapshot.power.battery_percent, snapshot.network.signal_strength
-    )
+fn status_from_snapshot(snapshot: &RuntimeSnapshot) -> HudStatus {
+    HudStatus {
+        time: "00:00".to_string(),
+        battery_label: format!("{}%", snapshot.power.battery_percent.clamp(0, 100)),
+        signal_strength: signal_strength(snapshot.network.signal_strength),
+        network_online: snapshot.network.connected,
+    }
+}
+
+fn signal_strength(value: i32) -> u8 {
+    value.clamp(0, 4) as u8
 }
 
 fn talk_contact_title(
