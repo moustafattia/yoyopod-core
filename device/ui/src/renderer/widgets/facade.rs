@@ -1,15 +1,15 @@
 use anyhow::Result;
 
-use super::WidgetId;
+use super::{WidgetId, WidgetRole};
 
 pub trait LvglFacade {
     fn create_root(&mut self) -> Result<WidgetId>;
 
-    fn create_container(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId>;
+    fn create_container(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId>;
 
-    fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId>;
+    fn create_label(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId>;
 
-    fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId>;
+    fn create_image(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId>;
 
     fn reorder_children(&mut self, parent: WidgetId, order: &[WidgetId]) -> Result<()>;
 
@@ -58,7 +58,7 @@ pub trait LvglFacade {
     fn set_variant(
         &mut self,
         widget: WidgetId,
-        variant: &'static str,
+        variant: WidgetRole,
         accent_rgb: u32,
     ) -> Result<()> {
         let _ = (widget, variant, accent_rgb);
@@ -81,15 +81,15 @@ where
         (**self).create_root()
     }
 
-    fn create_container(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+    fn create_container(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId> {
         (**self).create_container(parent, role)
     }
 
-    fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+    fn create_label(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId> {
         (**self).create_label(parent, role)
     }
 
-    fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+    fn create_image(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId> {
         (**self).create_image(parent, role)
     }
 
@@ -147,7 +147,7 @@ where
     fn set_variant(
         &mut self,
         widget: WidgetId,
-        variant: &'static str,
+        variant: WidgetRole,
         accent_rgb: u32,
     ) -> Result<()> {
         (**self).set_variant(widget, variant, accent_rgb)

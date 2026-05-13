@@ -17,7 +17,7 @@ use crate::renderer::styling::style::WidgetStyle;
 use crate::renderer::styling::theme::ThemeResolver;
 use crate::renderer::widgets::factory;
 use crate::renderer::widgets::registry::{Layout, WidgetKind, WidgetNode, WidgetRegistry};
-use crate::renderer::widgets::{LvglFacade, WidgetId};
+use crate::renderer::widgets::{LvglFacade, WidgetId, WidgetRole};
 use crate::scene::roles;
 
 const DEFAULT_WIDTH: i32 = 240;
@@ -49,7 +49,7 @@ impl NativeLvglFacade {
         &mut self,
         obj: NonNull<ffi::lv_obj_t>,
         kind: WidgetKind,
-        role: &'static str,
+        role: WidgetRole,
         parent: Option<WidgetId>,
         layout: Layout,
     ) -> WidgetId {
@@ -119,7 +119,7 @@ impl NativeLvglFacade {
         );
     }
 
-    fn layout_for_role_asset(&self, role: &'static str, occurrence: usize) -> Option<Layout> {
+    fn layout_for_role_asset(&self, role: WidgetRole, occurrence: usize) -> Option<Layout> {
         LayoutResolver::new(&self.render_assets)
             .resolve_role(role, occurrence)
             .map(|layout| Layout {
@@ -146,7 +146,7 @@ impl NativeLvglFacade {
     pub(super) fn next_role_layout(
         &mut self,
         _parent: Option<WidgetId>,
-        role: &'static str,
+        role: WidgetRole,
     ) -> Result<Layout> {
         let occurrence = *self.role_occurrences.entry(role).or_insert(0);
         if let Some(layout) = self.layout_for_role_asset(role, occurrence) {
@@ -157,13 +157,13 @@ impl NativeLvglFacade {
         anyhow::bail!("missing LVGL layout asset for role {role}")
     }
 
-    pub(super) fn style_for_role(&self, role: &'static str) -> Result<WidgetStyle> {
+    pub(super) fn style_for_role(&self, role: WidgetRole) -> Result<WidgetStyle> {
         ThemeResolver::new(&self.render_assets).style_for_role(role)
     }
 
     pub(super) fn style_for_selected_role(
         &self,
-        role: &'static str,
+        role: WidgetRole,
         selected: bool,
     ) -> Result<WidgetStyle> {
         ThemeResolver::new(&self.render_assets).style_for_selected_role(role, selected)
@@ -186,7 +186,7 @@ impl LvglFacade for NativeLvglFacade {
         Ok(id)
     }
 
-    fn create_container(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+    fn create_container(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId> {
         let parent_obj = self.widget_obj(parent)?;
         let obj = factory::create_container_object(parent_obj, role)?;
         let layout = self.next_role_layout(Some(parent), role)?;
@@ -197,7 +197,7 @@ impl LvglFacade for NativeLvglFacade {
         Ok(self.register_widget(obj, WidgetKind::Container, role, Some(parent), layout))
     }
 
-    fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+    fn create_label(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId> {
         let parent_obj = self.widget_obj(parent)?;
         let obj = factory::create_label_object(parent_obj, role)?;
         let layout = self.next_role_layout(Some(parent), role)?;
@@ -208,7 +208,7 @@ impl LvglFacade for NativeLvglFacade {
         Ok(self.register_widget(obj, WidgetKind::Label, role, Some(parent), layout))
     }
 
-    fn create_image(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+    fn create_image(&mut self, parent: WidgetId, role: WidgetRole) -> Result<WidgetId> {
         let parent_obj = self.widget_obj(parent)?;
         let obj = factory::create_image_object(parent_obj, role)?;
         let layout = self.next_role_layout(Some(parent), role)?;
@@ -419,7 +419,7 @@ impl LvglFacade for NativeLvglFacade {
     fn set_variant(
         &mut self,
         widget: WidgetId,
-        variant: &'static str,
+        variant: WidgetRole,
         accent_rgb: u32,
     ) -> Result<()> {
         let node = self.widget_node_mut(widget)?;

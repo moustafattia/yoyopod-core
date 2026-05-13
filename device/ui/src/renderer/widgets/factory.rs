@@ -4,6 +4,7 @@ use std::ptr::{self, NonNull};
 use anyhow::{anyhow, Result};
 
 use crate::renderer::lvgl::ffi;
+use crate::renderer::widgets::WidgetRole;
 pub(crate) fn create_root_object() -> Result<NonNull<ffi::lv_obj_t>> {
     non_null(
         unsafe { ffi::lv_obj_create(ptr::null_mut()) },
@@ -13,7 +14,7 @@ pub(crate) fn create_root_object() -> Result<NonNull<ffi::lv_obj_t>> {
 
 pub(crate) fn create_container_object(
     parent: NonNull<ffi::lv_obj_t>,
-    role: &'static str,
+    role: WidgetRole,
 ) -> Result<NonNull<ffi::lv_obj_t>> {
     non_null(
         unsafe { ffi::lv_obj_create(parent.as_ptr()) },
@@ -23,7 +24,7 @@ pub(crate) fn create_container_object(
 
 pub(crate) fn create_label_object(
     parent: NonNull<ffi::lv_obj_t>,
-    role: &'static str,
+    role: WidgetRole,
 ) -> Result<NonNull<ffi::lv_obj_t>> {
     let obj = non_null(
         unsafe { ffi::lv_label_create(parent.as_ptr()) },
@@ -38,7 +39,7 @@ pub(crate) fn create_label_object(
 
 pub(crate) fn create_image_object(
     parent: NonNull<ffi::lv_obj_t>,
-    role: &'static str,
+    role: WidgetRole,
 ) -> Result<NonNull<ffi::lv_obj_t>> {
     let obj = non_null(
         unsafe { ffi::lv_image_create(parent.as_ptr()) },

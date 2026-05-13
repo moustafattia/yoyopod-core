@@ -4,6 +4,8 @@ pub(crate) mod factory;
 pub mod primitives;
 #[cfg(feature = "native-lvgl")]
 pub(crate) mod registry;
+pub(crate) mod roles;
 
 pub use facade::LvglFacade;
 pub use primitives::WidgetId;
+pub(crate) use roles::WidgetRole;

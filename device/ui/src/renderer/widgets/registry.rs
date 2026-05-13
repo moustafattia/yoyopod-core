@@ -4,7 +4,7 @@ use std::ptr::NonNull;
 use anyhow::{anyhow, Result};
 
 use crate::renderer::lvgl::ffi;
-use crate::renderer::widgets::WidgetId;
+use crate::renderer::widgets::{WidgetId, WidgetRole};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Layout {
@@ -26,7 +26,7 @@ pub(crate) enum WidgetKind {
 pub(crate) struct WidgetNode {
     pub obj: NonNull<ffi::lv_obj_t>,
     pub kind: WidgetKind,
-    pub role: &'static str,
+    pub role: WidgetRole,
     pub parent: Option<WidgetId>,
     pub children: Vec<WidgetId>,
     pub layout: Layout,
@@ -59,7 +59,7 @@ impl WidgetRegistry {
         &mut self,
         obj: NonNull<ffi::lv_obj_t>,
         kind: WidgetKind,
-        role: &'static str,
+        role: WidgetRole,
         parent: Option<WidgetId>,
         layout: Layout,
     ) -> WidgetId {
