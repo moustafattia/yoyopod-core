@@ -1,10 +1,9 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
-use crate::animation::presets;
 use crate::engine::Key;
 use crate::scene::{
-    Backdrop, Deck, DeckItem, DeckItemAnim, DeckKind, FxLayer, ItemRender, PageModel, RegionId,
-    Scene, SceneId, Stage,
+    defaults_for, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId, Scene,
+    SceneId,
 };
 
 pub struct NowPlayingProps {
@@ -20,10 +19,11 @@ pub fn props_from(snapshot: &RuntimeSnapshot) -> NowPlayingProps {
 }
 
 pub fn scene(props: &NowPlayingProps) -> Scene {
+    let defaults = defaults_for(UiScreen::NowPlaying);
     Scene {
         id: SceneId::new(UiScreen::NowPlaying),
-        backdrop: Backdrop::Solid(0x2a2d35),
-        stage: Stage::NowPlayingPanel,
+        backdrop: defaults.backdrop(0x3ddd53),
+        stage: defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::Page,
             region: RegionId::ListBody,
@@ -41,9 +41,9 @@ pub fn scene(props: &NowPlayingProps) -> Scene {
             recycle_window: None,
         }],
         cursor: None,
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }
 

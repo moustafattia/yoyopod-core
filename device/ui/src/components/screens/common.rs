@@ -1,21 +1,18 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, UiScreen};
 
-use crate::animation::presets;
 use crate::engine::Key;
 use crate::router::FocusPolicy;
 use crate::scene::{
-    Backdrop, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FxLayer, ItemRender, PageModel,
-    RegionId, RowModel, Scene, SceneId, Stage,
+    defaults_for, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId,
+    RowModel, Scene, SceneId,
 };
 
 pub fn hero_scene(screen: UiScreen, accent: u32, item_count: usize, focus: usize) -> Scene {
+    let defaults = defaults_for(screen);
     Scene {
         id: SceneId::new(screen),
-        backdrop: Backdrop::AccentDrift {
-            accent,
-            speed_ms: 800,
-        },
-        stage: Stage::CenteredHeroIcon,
+        backdrop: defaults.backdrop(accent),
+        stage: defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::CardRow,
             region: RegionId::HeroIcon,
@@ -33,9 +30,9 @@ pub fn hero_scene(screen: UiScreen, accent: u32, item_count: usize, focus: usize
             count: item_count,
             focus,
         }),
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(accent),
         modal: None,
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }
 
@@ -45,11 +42,12 @@ pub fn list_scene(
     focus: usize,
     focus_policy: FocusPolicy,
 ) -> Scene {
+    let defaults = defaults_for(screen);
     let rows = items.iter().map(row_model).collect::<Vec<_>>();
     Scene {
         id: SceneId::new(screen),
-        backdrop: Backdrop::Solid(0x2a2d35),
-        stage: Stage::ListWithChrome,
+        backdrop: defaults.backdrop(0x3ddd53),
+        stage: defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::List,
             region: RegionId::ListBody,
@@ -69,17 +67,18 @@ pub fn list_scene(
             recycle_window: Some(4),
         }],
         cursor: Some(Cursor::RowGlow),
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }
 
 pub fn action_scene(screen: UiScreen, focus: usize) -> Scene {
+    let defaults = defaults_for(screen);
     Scene {
         id: SceneId::new(screen),
-        backdrop: Backdrop::Solid(0x2a2d35),
-        stage: Stage::TalkActionsGrid,
+        backdrop: defaults.backdrop(0x00d4ff),
+        stage: defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::Buttons,
             region: RegionId::ButtonRow,
@@ -94,17 +93,18 @@ pub fn action_scene(screen: UiScreen, focus: usize) -> Scene {
             recycle_window: None,
         }],
         cursor: Some(Cursor::UnderlineDots { count: 3, focus }),
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(0x00d4ff),
         modal: None,
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }
 
 pub fn call_scene(screen: UiScreen, title: String, body: String) -> Scene {
+    let defaults = defaults_for(screen);
     Scene {
         id: SceneId::new(screen),
-        backdrop: Backdrop::Solid(0x2a2d35),
-        stage: Stage::CallPanel,
+        backdrop: defaults.backdrop(0x3ddd53),
+        stage: defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::Page,
             region: RegionId::ListBody,
@@ -119,22 +119,23 @@ pub fn call_scene(screen: UiScreen, title: String, body: String) -> Scene {
             recycle_window: None,
         }],
         cursor: None,
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }
 
 pub fn overlay_scene(screen: UiScreen, modal: crate::scene::Modal) -> Scene {
+    let defaults = defaults_for(screen);
     Scene {
         id: SceneId::new(screen),
-        backdrop: Backdrop::Solid(0x2a2d35),
-        stage: Stage::OverlayCenter,
+        backdrop: defaults.backdrop(0x3ddd53),
+        stage: defaults.stage,
         decks: Vec::new(),
         cursor: None,
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(0x3ddd53),
         modal: Some(modal),
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }
 

@@ -12,7 +12,7 @@ use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
 use crate::renderer::{Framebuffer, LvglRenderer, RenderMode, Renderer};
 use crate::router;
-use crate::scene::{GlobalClock, HudScene, SceneGraph};
+use crate::scene::{load_scene_defaults, GlobalClock, HudScene, SceneGraph};
 use crate::transport::{codec, dispatcher, handshake, inbound, outbound};
 
 const MANAGER_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -30,6 +30,7 @@ pub struct RenderState {
 
 impl RenderState {
     pub fn open(width: usize, height: usize) -> Result<Self> {
+        load_scene_defaults()?;
         Ok(Self {
             framebuffer: Framebuffer::new(width, height),
             engine: Engine::default(),

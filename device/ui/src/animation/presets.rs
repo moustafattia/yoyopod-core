@@ -23,3 +23,14 @@ pub fn scene_enter() -> Timeline {
         started_ms: 0,
     }
 }
+
+pub fn stagger_enter() -> Timeline {
+    Timeline {
+        id: TimelineId(2),
+        clock: ClockSource::SceneTime,
+        tracks: Vec::new(),
+        loop_mode: LoopMode::Once,
+        on_complete: None,
+        started_ms: 0,
+    }
+}

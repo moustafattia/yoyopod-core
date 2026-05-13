@@ -1,11 +1,10 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
-use crate::animation::presets;
 use crate::engine::Key;
 use crate::router::FocusPolicy;
 use crate::scene::{
-    Backdrop, CardModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FxLayer, ItemRender,
-    RegionId, Scene, SceneId, Stage,
+    defaults_for, CardModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, RegionId,
+    Scene, SceneId,
 };
 
 pub struct HubProps {
@@ -38,13 +37,11 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> HubProps {
 }
 
 pub fn scene(props: &HubProps) -> Scene {
+    let defaults = defaults_for(UiScreen::Hub);
     Scene {
         id: SceneId::new(UiScreen::Hub),
-        backdrop: Backdrop::AccentDrift {
-            accent: props.accent,
-            speed_ms: 800,
-        },
-        stage: Stage::CenteredHeroIcon,
+        backdrop: defaults.backdrop(props.accent),
+        stage: defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::CardRow,
             region: RegionId::HeroIcon,
@@ -62,8 +59,8 @@ pub fn scene(props: &HubProps) -> Scene {
             count: props.card_count,
             focus: props.selected_index,
         }),
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(props.accent),
         modal: None,
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }

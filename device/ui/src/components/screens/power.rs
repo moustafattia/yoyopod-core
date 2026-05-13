@@ -1,10 +1,9 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
-use crate::animation::presets;
 use crate::engine::Key;
 use crate::scene::{
-    Backdrop, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FxLayer, ItemRender, PageModel,
-    RegionId, Scene, SceneId, Stage,
+    defaults_for, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId,
+    Scene, SceneId,
 };
 
 pub struct PowerProps {
@@ -20,11 +19,12 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> PowerProps {
 }
 
 pub fn scene(props: &PowerProps) -> Scene {
+    let defaults = defaults_for(UiScreen::Power);
     let page_count = props.pages.len();
     Scene {
         id: SceneId::new(UiScreen::Power),
-        backdrop: Backdrop::Solid(0x2a2d35),
-        stage: Stage::PagedDetail,
+        backdrop: defaults.backdrop(0x3ddd53),
+        stage: defaults.stage,
         decks: vec![Deck {
             kind: DeckKind::Page,
             region: RegionId::ListBody,
@@ -39,9 +39,9 @@ pub fn scene(props: &PowerProps) -> Scene {
             count: page_count,
             focus: props.focus,
         }),
-        fx: FxLayer::default(),
+        fx: defaults.fx_layer(0x3ddd53),
         modal: None,
-        timelines: vec![presets::scene_enter()],
+        timelines: defaults.timelines(),
     }
 }
 
