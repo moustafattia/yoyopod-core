@@ -5,18 +5,26 @@ use crate::renderer::{Framebuffer, RenderReport, Renderer};
 
 #[derive(Debug, Default)]
 pub struct NullRenderer {
-    mutation_count: usize,
+    mutations: Vec<Mutation>,
 }
 
 impl NullRenderer {
+    pub fn mutations(&self) -> &[Mutation] {
+        &self.mutations
+    }
+
     pub fn mutation_count(&self) -> usize {
-        self.mutation_count
+        self.mutations.len()
+    }
+
+    pub fn clear(&mut self) {
+        self.mutations.clear();
     }
 }
 
 impl Renderer for NullRenderer {
     fn apply(&mut self, mutations: &[Mutation]) -> Result<()> {
-        self.mutation_count += mutations.len();
+        self.mutations.extend_from_slice(mutations);
         Ok(())
     }
 
