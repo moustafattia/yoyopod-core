@@ -1,11 +1,11 @@
-pub mod core;
 pub mod focus;
 pub mod input_router;
 pub mod intents;
 pub mod navigator;
+pub mod runtime;
 pub mod snapshot;
 pub mod state;
 
-pub use core::RenderState;
+pub use runtime::RenderState;
 pub use state::{UiRuntime, UiView};
 pub use yoyopod_protocol::ui::UiScreen;
