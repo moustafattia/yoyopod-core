@@ -1,7 +1,6 @@
 pub mod assets;
 pub mod framebuffer;
 pub mod lvgl;
-pub mod node_registry;
 pub mod null_renderer;
 pub mod styling;
 pub mod widgets;
