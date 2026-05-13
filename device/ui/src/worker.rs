@@ -132,16 +132,16 @@ where
         if matches!(outcome.event, dispatcher::AppEvent::Tick) {
             watchdog.note_tick();
         }
-        if handle_app_event(
-            outcome.event,
+        let mut context = AppEventContext {
             output,
-            &mut display,
-            &mut button,
-            &mut ui_runtime,
-            &mut button_machine,
-            &mut render_state,
-            &mut input_events,
-        )? {
+            display: &mut display,
+            button: &mut button,
+            ui_runtime: &mut ui_runtime,
+            button_machine: &mut button_machine,
+            render_state: &mut render_state,
+            input_events: &mut input_events,
+        };
+        if handle_app_event(outcome.event, &mut context)? {
             shutdown_complete_emitted = true;
             break;
         }
@@ -229,16 +229,19 @@ where
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+struct AppEventContext<'a, W, D, B> {
+    output: &'a mut W,
+    display: &'a mut D,
+    button: &'a mut B,
+    ui_runtime: &'a mut UiRuntime,
+    button_machine: &'a mut OneButtonMachine,
+    render_state: &'a mut RenderState,
+    input_events: &'a mut usize,
+}
+
 fn handle_app_event<W, D, B>(
     event: dispatcher::AppEvent,
-    output: &mut W,
-    display: &mut D,
-    button: &mut B,
-    ui_runtime: &mut UiRuntime,
-    button_machine: &mut OneButtonMachine,
-    render_state: &mut RenderState,
-    input_events: &mut usize,
+    context: &mut AppEventContext<'_, W, D, B>,
 ) -> Result<bool>
 where
     W: Write,
@@ -247,71 +250,77 @@ where
 {
     match event {
         dispatcher::AppEvent::SetBacklight { brightness } => {
-            display.set_backlight(brightness)?;
+            context.display.set_backlight(brightness)?;
         }
         dispatcher::AppEvent::RuntimeSnapshot(snapshot) => {
-            ui_runtime.apply_snapshot(snapshot);
+            context.ui_runtime.apply_snapshot(snapshot);
         }
         dispatcher::AppEvent::RuntimePatch(patch) => {
-            ui_runtime.apply_patch(patch);
+            context.ui_runtime.apply_patch(patch);
         }
         dispatcher::AppEvent::InputAction(action) => {
-            *input_events += 1;
+            *context.input_events += 1;
             let now_ms = outbound::monotonic_millis();
-            outbound::emit_input_action(output, action, "command", now_ms, 0)?;
-            ui_runtime.handle_input(action);
-            outbound::emit_intents(output, ui_runtime.take_intents())?;
+            outbound::emit_input_action(context.output, action, "command", now_ms, 0)?;
+            context.ui_runtime.handle_input(action);
+            outbound::emit_intents(context.output, context.ui_runtime.take_intents())?;
         }
         dispatcher::AppEvent::Tick => {
             let now_ms = outbound::monotonic_millis();
-            ui_runtime.advance_animations(now_ms);
-            if render_state.engine.animation_frame_dirty(now_ms) {
-                ui_runtime.mark_animation_frame();
+            context.ui_runtime.advance_animations(now_ms);
+            if context.render_state.engine.animation_frame_dirty(now_ms) {
+                context.ui_runtime.mark_animation_frame();
             }
             handle_button_input(
-                output,
-                button,
-                button_machine,
-                ui_runtime,
-                input_events,
+                context.output,
+                context.button,
+                context.button_machine,
+                context.ui_runtime,
+                context.input_events,
                 now_ms,
             )?;
-            outbound::emit_intents(output, ui_runtime.take_intents())?;
+            outbound::emit_intents(context.output, context.ui_runtime.take_intents())?;
         }
         dispatcher::AppEvent::PollInput => {
             let now_ms = outbound::monotonic_millis();
             handle_button_input(
-                output,
-                button,
-                button_machine,
-                ui_runtime,
-                input_events,
+                context.output,
+                context.button,
+                context.button_machine,
+                context.ui_runtime,
+                context.input_events,
                 now_ms,
             )?;
-            outbound::emit_intents(output, ui_runtime.take_intents())?;
+            outbound::emit_intents(context.output, context.ui_runtime.take_intents())?;
         }
         dispatcher::AppEvent::Health => {
             outbound::emit_event(
-                output,
-                health_event(ui_runtime, render_state, *input_events),
+                context.output,
+                health_event(
+                    context.ui_runtime,
+                    context.render_state,
+                    *context.input_events,
+                ),
             )?;
         }
         dispatcher::AppEvent::Animate(request) => {
-            ui_runtime.start_animation(request, outbound::monotonic_millis());
+            context
+                .ui_runtime
+                .start_animation(request, outbound::monotonic_millis());
         }
         dispatcher::AppEvent::Shutdown => {
-            handshake::emit_shutdown_complete(output)?;
+            handshake::emit_shutdown_complete(context.output)?;
             return Ok(true);
         }
     }
 
     if let Some(event) = render_if_dirty(
-        ui_runtime,
-        display,
-        render_state,
+        context.ui_runtime,
+        context.display,
+        context.render_state,
         outbound::monotonic_millis(),
     )? {
-        outbound::emit_event(output, event)?;
+        outbound::emit_event(context.output, event)?;
     }
     Ok(false)
 }
