@@ -143,6 +143,10 @@ fn update_widget(
         PropChange::Selected(selected) => facade.set_selected(widget, *selected),
         PropChange::Visible(visible) => facade.set_visible(widget, *visible),
         PropChange::Opacity(opacity) => facade.set_opacity(widget, *opacity),
+        PropChange::OffsetX(offset) => facade.set_x_offset(widget, *offset),
+        PropChange::OffsetY(offset) => facade.set_y_offset(widget, *offset),
+        PropChange::ScalePermille(scale) => facade.set_scale(widget, *scale),
+        PropChange::SelectionOffset(offset) => facade.set_x_offset(widget, *offset),
         PropChange::Variant(variant) => facade.set_variant(widget, variant, 0),
         PropChange::Progress(value) => facade.set_progress(widget, *value),
     }

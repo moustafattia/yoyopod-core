@@ -29,7 +29,9 @@ pub(crate) struct WidgetNode {
     pub role: &'static str,
     pub children: Vec<WidgetId>,
     pub layout: Layout,
+    pub x_offset: i32,
     pub y_offset: i32,
+    pub scale_permille: i32,
 }
 
 #[derive(Debug, Default)]
@@ -69,7 +71,9 @@ impl WidgetRegistry {
                 role,
                 children: Vec::new(),
                 layout,
+                x_offset: 0,
                 y_offset: 0,
+                scale_permille: 1000,
             },
         );
         if let Some(parent) = parent {

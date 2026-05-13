@@ -100,13 +100,20 @@ impl NativeLvglFacade {
     pub(super) fn apply_node_layout_raw(
         obj: NonNull<ffi::lv_obj_t>,
         layout: Layout,
+        x_offset: i32,
         y_offset: i32,
+        scale_permille: i32,
     ) {
+        let scale = scale_permille.max(1);
+        let width = ((layout.width * scale) / 1000).max(1);
+        let height = ((layout.height * scale) / 1000).max(1);
         Self::apply_layout_raw(
             obj,
             Layout {
-                y: layout.y + y_offset,
-                ..layout
+                x: layout.x + x_offset - ((width - layout.width) / 2),
+                y: layout.y + y_offset - ((height - layout.height) / 2),
+                width,
+                height,
             },
         );
     }
@@ -227,12 +234,19 @@ impl LvglFacade for NativeLvglFacade {
     }
 
     fn set_selected(&mut self, _widget: WidgetId, _selected: bool) -> Result<()> {
-        let (obj, role, layout, y_offset) = {
+        let (obj, role, layout, x_offset, y_offset, scale_permille) = {
             let node = self.widget_node_mut(_widget)?;
-            (node.obj, node.role, node.layout, node.y_offset)
+            (
+                node.obj,
+                node.role,
+                node.layout,
+                node.x_offset,
+                node.y_offset,
+                node.scale_permille,
+            )
         };
         styling::apply_style_raw(obj, self.style_for_selected_role(role, _selected)?);
-        Self::apply_node_layout_raw(obj, layout, y_offset);
+        Self::apply_node_layout_raw(obj, layout, x_offset, y_offset, scale_permille);
         Ok(())
     }
 
@@ -300,7 +314,13 @@ impl LvglFacade for NativeLvglFacade {
     fn set_visible(&mut self, widget: WidgetId, visible: bool) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
         if visible {
-            Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+            Self::apply_node_layout_raw(
+                node.obj,
+                node.layout,
+                node.x_offset,
+                node.y_offset,
+                node.scale_permille,
+            );
         } else {
             styling::hide_widget_raw(node.obj);
         }
@@ -315,17 +335,55 @@ impl LvglFacade for NativeLvglFacade {
         Ok(())
     }
 
+    fn set_x_offset(&mut self, widget: WidgetId, offset: i32) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        node.x_offset = offset;
+        Self::apply_node_layout_raw(
+            node.obj,
+            node.layout,
+            node.x_offset,
+            node.y_offset,
+            node.scale_permille,
+        );
+        Ok(())
+    }
+
     fn set_y_offset(&mut self, widget: WidgetId, offset: i32) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
         node.y_offset = offset;
-        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+        Self::apply_node_layout_raw(
+            node.obj,
+            node.layout,
+            node.x_offset,
+            node.y_offset,
+            node.scale_permille,
+        );
+        Ok(())
+    }
+
+    fn set_scale(&mut self, widget: WidgetId, scale_permille: i32) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        node.scale_permille = scale_permille.clamp(100, 4000);
+        Self::apply_node_layout_raw(
+            node.obj,
+            node.layout,
+            node.x_offset,
+            node.y_offset,
+            node.scale_permille,
+        );
         Ok(())
     }
 
     fn set_y(&mut self, widget: WidgetId, y: i32) -> Result<()> {
         let node = self.widget_node_mut(widget)?;
         node.layout.y = y;
-        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+        Self::apply_node_layout_raw(
+            node.obj,
+            node.layout,
+            node.x_offset,
+            node.y_offset,
+            node.scale_permille,
+        );
         Ok(())
     }
 
@@ -344,7 +402,13 @@ impl LvglFacade for NativeLvglFacade {
             width,
             height,
         };
-        Self::apply_node_layout_raw(node.obj, node.layout, node.y_offset);
+        Self::apply_node_layout_raw(
+            node.obj,
+            node.layout,
+            node.x_offset,
+            node.y_offset,
+            node.scale_permille,
+        );
         Ok(())
     }
 

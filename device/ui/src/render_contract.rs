@@ -87,6 +87,10 @@ pub enum PropChange {
     Selected(bool),
     Visible(bool),
     Opacity(u8),
+    OffsetX(i32),
+    OffsetY(i32),
+    ScalePermille(i32),
+    SelectionOffset(i32),
     Variant(&'static str),
     Progress(i32),
 }

@@ -254,6 +254,14 @@ fn prop_change_for_animation(
 ) -> Option<PropChange> {
     match (property, value) {
         (AnimatableProp::Opacity, AnimatableValue::U8(value)) => Some(PropChange::Opacity(value)),
+        (AnimatableProp::X, AnimatableValue::I32(value)) => Some(PropChange::OffsetX(value)),
+        (AnimatableProp::Y, AnimatableValue::I32(value)) => Some(PropChange::OffsetY(value)),
+        (AnimatableProp::Scale, AnimatableValue::I32(value)) => {
+            Some(PropChange::ScalePermille(value))
+        }
+        (AnimatableProp::SelectionOffset, AnimatableValue::I32(value)) => {
+            Some(PropChange::SelectionOffset(value))
+        }
         (AnimatableProp::ProgressPermille, AnimatableValue::I32(value)) => {
             Some(PropChange::Progress(value))
         }
