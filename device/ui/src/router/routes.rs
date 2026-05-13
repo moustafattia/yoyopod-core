@@ -41,8 +41,12 @@ pub const ROUTES: [Route; UiScreen::ALL.len()] = [
     route(UiScreen::Error),
 ];
 
-pub const fn route_for(screen: UiScreen) -> Route {
-    ROUTES[screen_index(screen)]
+pub fn route_for(screen: UiScreen) -> Route {
+    ROUTES
+        .iter()
+        .copied()
+        .find(|route| route.screen == screen)
+        .unwrap_or_else(|| panic!("missing route for {}", screen.as_str()))
 }
 
 const fn route(screen: UiScreen) -> Route {
@@ -57,28 +61,6 @@ const fn route(screen: UiScreen) -> Route {
         back: back_policies(screen),
         on_enter: None,
         on_exit: None,
-    }
-}
-
-const fn screen_index(screen: UiScreen) -> usize {
-    match screen {
-        UiScreen::Hub => 0,
-        UiScreen::Listen => 1,
-        UiScreen::Playlists => 2,
-        UiScreen::RecentTracks => 3,
-        UiScreen::NowPlaying => 4,
-        UiScreen::Ask => 5,
-        UiScreen::Talk => 6,
-        UiScreen::Contacts => 7,
-        UiScreen::CallHistory => 8,
-        UiScreen::TalkContact => 9,
-        UiScreen::VoiceNote => 10,
-        UiScreen::IncomingCall => 11,
-        UiScreen::OutgoingCall => 12,
-        UiScreen::InCall => 13,
-        UiScreen::Power => 14,
-        UiScreen::Loading => 15,
-        UiScreen::Error => 16,
     }
 }
 
