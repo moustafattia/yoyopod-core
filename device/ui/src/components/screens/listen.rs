@@ -36,30 +36,34 @@ pub fn items(_snapshot: &RuntimeSnapshot) -> Vec<ListItemSnapshot> {
 }
 
 pub fn scene(props: &ListenProps, defaults: &SceneDefaults) -> Scene {
+    let deck = Deck {
+        kind: DeckKind::List,
+        region: RegionId::ListBody,
+        items: props
+            .rows
+            .iter()
+            .map(|row| DeckItem {
+                key: crate::engine::Key::String(row.id.clone()),
+                render: ItemRender::Row(row.clone()),
+            })
+            .collect(),
+        focus_index: props.focus,
+        focus_policy: FocusPolicy::Wrap,
+        item_anim: DeckItemAnim::StaggerEnter {
+            delay_per_index_ms: 40,
+        },
+        swap_anim: None,
+        recycle_window: Some(4),
+    };
+    let cursor_index = deck.focused_visible_index();
     Scene {
         id: SceneId::new(UiScreen::Listen),
         backdrop: defaults.backdrop(0x3ddd53),
         stage: defaults.stage,
-        decks: vec![Deck {
-            kind: DeckKind::List,
-            region: RegionId::ListBody,
-            items: props
-                .rows
-                .iter()
-                .map(|row| DeckItem {
-                    key: crate::engine::Key::String(row.id.clone()),
-                    render: ItemRender::Row(row.clone()),
-                })
-                .collect(),
-            focus_index: props.focus,
-            focus_policy: FocusPolicy::Wrap,
-            item_anim: DeckItemAnim::StaggerEnter {
-                delay_per_index_ms: 40,
-            },
-            swap_anim: None,
-            recycle_window: Some(4),
-        }],
-        cursor: Some(Cursor::RowGlow),
+        decks: vec![deck],
+        cursor: Some(Cursor::RowGlow {
+            index: cursor_index,
+        }),
         fx: defaults.fx_layer(0x3ddd53),
         modal: None,
         timelines: defaults.fx_timelines(),

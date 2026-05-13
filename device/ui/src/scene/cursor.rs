@@ -4,7 +4,7 @@ use crate::render_contract::ElementKind;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cursor {
     UnderlineDots { count: usize, focus: usize },
-    RowGlow,
+    RowGlow { index: usize },
 }
 
 impl Cursor {
@@ -24,8 +24,11 @@ impl Cursor {
                     },
                 )
             }
-            Self::RowGlow => Element::new(ElementKind::Container, Some("cursor_row_glow"))
-                .key(Key::Static("cursor")),
+            Self::RowGlow { index } => {
+                Element::new(ElementKind::Container, Some("cursor_row_glow"))
+                    .key(Key::Static("cursor"))
+                    .offset_y((*index as i32) * 36)
+            }
         }
     }
 }

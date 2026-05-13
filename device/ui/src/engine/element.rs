@@ -58,6 +58,11 @@ impl Element {
         self
     }
 
+    pub fn offset_y(mut self, offset: i32) -> Self {
+        self.props.offset_y = Some(offset);
+        self
+    }
+
     pub fn key(mut self, key: Key) -> Self {
         self.key = Some(key);
         self
@@ -87,6 +92,7 @@ pub struct ElementProps {
     pub selected: Option<bool>,
     pub visible: Option<bool>,
     pub opacity: Option<u8>,
+    pub offset_y: Option<i32>,
     pub scale_permille: Option<i32>,
     pub variant: Option<&'static str>,
     pub progress: Option<i32>,

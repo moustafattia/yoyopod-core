@@ -131,6 +131,13 @@ impl Deck {
         start..start + window
     }
 
+    pub fn focused_visible_index(&self) -> usize {
+        let range = self.visible_range();
+        self.focus_index
+            .min(self.items.len().saturating_sub(1))
+            .saturating_sub(range.start)
+    }
+
     pub fn enter_timeline(&self) -> Option<Timeline> {
         match self.item_anim {
             DeckItemAnim::StaggerEnter { delay_per_index_ms } => {

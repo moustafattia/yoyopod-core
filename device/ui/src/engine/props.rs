@@ -33,6 +33,11 @@ pub fn diff_props(previous: &ElementProps, next: &ElementProps, mut emit: impl F
             emit(PropChange::Opacity(value));
         }
     }
+    if previous.offset_y != next.offset_y {
+        if let Some(value) = next.offset_y {
+            emit(PropChange::OffsetY(value));
+        }
+    }
     if previous.scale_permille != next.scale_permille {
         if let Some(value) = next.scale_permille {
             emit(PropChange::ScalePermille(value));
