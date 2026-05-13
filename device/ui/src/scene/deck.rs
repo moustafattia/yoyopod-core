@@ -88,7 +88,8 @@ impl Deck {
             .key(Key::Indexed(index))
             .child(
                 Element::new(ElementKind::Container, Some("deck_region"))
-                    .key(Key::Static("deck_region")),
+                    .key(Key::Static("deck_region"))
+                    .region(self.region),
             );
         for (visible_index, (item_index, item)) in self.visible_items().enumerate() {
             element = element.child(deck_item_element(
