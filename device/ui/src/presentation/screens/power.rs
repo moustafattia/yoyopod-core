@@ -1,6 +1,4 @@
-use crate::application::UiView;
 use crate::presentation::screens::{chrome, ListRowModel, PowerViewModel};
-use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,32 +31,6 @@ pub fn model(snapshot: &RuntimeSnapshot, focus_index: usize) -> PowerViewModel {
             .collect(),
         current_page_index: active_index,
         total_pages: pages.len(),
-    }
-}
-
-pub fn view(snapshot: &RuntimeSnapshot, focus_index: usize) -> UiView {
-    let pages = pages(snapshot);
-    let active_index = active_page_index(&pages, focus_index);
-    let page = &pages[active_index];
-    UiView {
-        screen: UiScreen::Power,
-        title: page.title.clone(),
-        subtitle: String::new(),
-        footer: "Tap page / Hold back".to_string(),
-        items: page
-            .rows
-            .iter()
-            .enumerate()
-            .map(|(index, row)| {
-                ListItemSnapshot::new(
-                    format!("setup-{active_index}-{index}"),
-                    row.clone(),
-                    "",
-                    page.icon_key.clone(),
-                )
-            })
-            .collect(),
-        focus_index: active_index,
     }
 }
 

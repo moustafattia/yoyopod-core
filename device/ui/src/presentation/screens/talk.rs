@@ -1,6 +1,4 @@
-use crate::application::UiView;
 use crate::presentation::screens::{chrome, ListScreenModel};
-use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn model(snapshot: &RuntimeSnapshot, focus_index: usize) -> ListScreenModel {
@@ -9,17 +7,6 @@ pub fn model(snapshot: &RuntimeSnapshot, focus_index: usize) -> ListScreenModel 
         title: "Talk".to_string(),
         subtitle: "Calls and notes".to_string(),
         rows: chrome::list_rows(&items(), focus_index),
-    }
-}
-
-pub fn view(focus_index: usize) -> UiView {
-    UiView {
-        screen: UiScreen::Talk,
-        title: "Talk".to_string(),
-        subtitle: "Calls and notes".to_string(),
-        footer: "Tap = Next | 2x Tap = Open | Hold = Back".to_string(),
-        items: items(),
-        focus_index,
     }
 }
 

@@ -1,8 +1,6 @@
-use crate::application::UiView;
 use crate::presentation::screens::{
     chrome, AskViewModel, TalkActionButtonModel, TalkActionsViewModel,
 };
-use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
 
 pub fn ask_model(snapshot: &RuntimeSnapshot) -> AskViewModel {
@@ -83,53 +81,6 @@ pub fn voice_note_model(
             "voice_note",
             3,
         ),
-    }
-}
-
-pub fn ask_view(snapshot: &RuntimeSnapshot, focus_index: usize) -> UiView {
-    UiView {
-        screen: UiScreen::Ask,
-        title: snapshot.voice.headline.clone(),
-        subtitle: snapshot.voice.body.clone(),
-        footer: "2x Tap = Ask | Hold = Back".to_string(),
-        items: Vec::new(),
-        focus_index,
-    }
-}
-
-pub fn voice_note_view(
-    snapshot: &RuntimeSnapshot,
-    focus_index: usize,
-    selected_contact: Option<&ListItemSnapshot>,
-) -> UiView {
-    let model = voice_note_model(snapshot, focus_index, selected_contact);
-    let title = model.contact_name.clone();
-    let subtitle = model.status.clone();
-    let footer = model.chrome.footer.clone();
-    let selected_index = model.selected_index;
-    UiView {
-        screen: UiScreen::VoiceNote,
-        title,
-        subtitle,
-        footer,
-        items: if model.layout_kind == 1 {
-            Vec::new()
-        } else {
-            model
-                .buttons
-                .iter()
-                .enumerate()
-                .map(|(index, button)| {
-                    ListItemSnapshot::new(
-                        format!("voice_note_action_{index}"),
-                        button.title.clone(),
-                        "",
-                        button.icon_key.clone(),
-                    )
-                })
-                .collect()
-        },
-        focus_index: selected_index,
     }
 }
 

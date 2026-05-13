@@ -1,41 +1,9 @@
 pub mod screens;
 pub mod view_models;
 
-use crate::application::UiView;
 use view_models::ScreenModel;
 use yoyopod_protocol::ui::UiScreen;
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
-
-pub fn view_for_screen(
-    screen: UiScreen,
-    snapshot: &RuntimeSnapshot,
-    focus_index: usize,
-    selected_contact: Option<&ListItemSnapshot>,
-) -> UiView {
-    match screen {
-        UiScreen::TalkContact => {
-            screens::call::talk_contact_view(snapshot, focus_index, selected_contact)
-        }
-        UiScreen::VoiceNote => {
-            screens::ask::voice_note_view(snapshot, focus_index, selected_contact)
-        }
-        UiScreen::Hub => screens::hub::view(snapshot, focus_index),
-        UiScreen::Listen => screens::listen::view(snapshot, focus_index),
-        UiScreen::Playlists => screens::music::playlists_view(snapshot, focus_index),
-        UiScreen::RecentTracks => screens::music::recent_tracks_view(snapshot, focus_index),
-        UiScreen::NowPlaying => screens::music::now_playing_view(snapshot, focus_index),
-        UiScreen::Ask => screens::ask::ask_view(snapshot, focus_index),
-        UiScreen::Talk => screens::talk::view(focus_index),
-        UiScreen::Contacts => screens::call::contacts_view(snapshot, focus_index),
-        UiScreen::CallHistory => screens::call::call_history_view(snapshot, focus_index),
-        UiScreen::IncomingCall => screens::call::incoming_view(snapshot, focus_index),
-        UiScreen::OutgoingCall => screens::call::outgoing_view(snapshot, focus_index),
-        UiScreen::InCall => screens::call::in_call_view(snapshot, focus_index),
-        UiScreen::Power => screens::power::view(snapshot, focus_index),
-        UiScreen::Loading => screens::overlay::loading_view(snapshot),
-        UiScreen::Error => screens::overlay::error_view(snapshot),
-    }
-}
 
 pub fn screen_model_for_screen(
     screen: UiScreen,

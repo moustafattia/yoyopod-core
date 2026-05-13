@@ -1,7 +1,5 @@
-use crate::application::UiView;
 use crate::presentation::screens::{chrome, HubCardModel, HubViewModel};
-use yoyopod_protocol::ui::UiScreen;
-use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot};
+use yoyopod_protocol::ui::RuntimeSnapshot;
 
 pub fn model(snapshot: &RuntimeSnapshot, focus_index: usize) -> HubViewModel {
     HubViewModel {
@@ -32,32 +30,4 @@ pub fn focused_title(model: &HubViewModel) -> &str {
     focused_card(model)
         .map(|card| card.title.as_str())
         .unwrap_or("Listen")
-}
-
-pub fn view(snapshot: &RuntimeSnapshot, focus_index: usize) -> UiView {
-    let cards = snapshot.hub.cards.clone();
-    let focused = cards.get(focus_index).or_else(|| cards.first());
-
-    UiView {
-        screen: UiScreen::Hub,
-        title: focused
-            .map(|card| card.title.clone())
-            .unwrap_or_else(|| "Listen".to_string()),
-        subtitle: focused
-            .map(|card| card.subtitle.clone())
-            .unwrap_or_default(),
-        footer: "Tap = Next | 2x Tap = Open".to_string(),
-        items: cards
-            .iter()
-            .map(|card| {
-                ListItemSnapshot::new(
-                    card.key.clone(),
-                    card.title.clone(),
-                    card.subtitle.clone(),
-                    card.key.clone(),
-                )
-            })
-            .collect(),
-        focus_index,
-    }
 }
