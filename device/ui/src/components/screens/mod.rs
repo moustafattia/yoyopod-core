@@ -20,15 +20,15 @@ pub mod voice_note;
 
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
-use crate::scene::{defaults_for, Scene};
+use crate::scene::{Scene, SceneDefaults};
 
 pub fn scene_for_screen(
     screen: UiScreen,
     snapshot: &RuntimeSnapshot,
     focus: usize,
     selected_contact: Option<&ListItemSnapshot>,
+    defaults: SceneDefaults,
 ) -> Scene {
-    let defaults = defaults_for(screen);
     let scene = match screen {
         UiScreen::Hub => hub::scene(&hub::props_from(snapshot, focus, defaults.clone())),
         UiScreen::Listen => listen::scene(&listen::props_from(snapshot, focus, defaults.clone())),

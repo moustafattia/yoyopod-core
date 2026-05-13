@@ -6,7 +6,7 @@ use crate::animation;
 use crate::components;
 use crate::render_contract::DirtyRegion;
 use crate::router::history::HistoryEntry;
-use crate::scene::{GlobalClock, HudScene, SceneGraph, SceneId};
+use crate::scene::{defaults_for, GlobalClock, HudScene, SceneGraph, SceneId};
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen};
@@ -104,11 +104,13 @@ impl UiRuntime {
     }
 
     pub fn scene_graph(&self, now_ms: u64) -> SceneGraph {
+        let defaults = defaults_for(self.active_screen);
         let mut active = components::screens::scene_for_screen(
             self.active_screen,
             &self.snapshot,
             self.focus_index,
             self.selected_contact.as_ref(),
+            defaults,
         );
         active.id = SceneId::with_route_key(self.active_screen, self.active_route_key());
         active.timelines.extend(
