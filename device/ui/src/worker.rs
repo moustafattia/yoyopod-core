@@ -22,7 +22,7 @@ const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 pub struct RenderState {
     framebuffer: Framebuffer,
     engine: Engine,
-    renderer: Box<dyn Renderer>,
+    renderer: Box<LvglRenderer>,
     frames: usize,
     last_active_screen: Option<UiScreen>,
     last_ui_renderer: String,
