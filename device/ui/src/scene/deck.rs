@@ -180,6 +180,12 @@ impl Deck {
             | DeckItemAnim::BreatheWhenFocused => None,
         }
     }
+
+    pub fn swap_timeline(&self) -> Option<Timeline> {
+        self.swap_anim
+            .as_ref()
+            .map(|transition| transition.timeline())
+    }
 }
 
 fn deck_item_element(

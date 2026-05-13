@@ -78,6 +78,9 @@ fn with_scene_timelines(defaults: &crate::scene::SceneDefaults, mut scene: Scene
     let scene_timelines = defaults.scene_timelines(&scene.decks);
     scene.timelines.splice(0..0, scene_timelines);
     for (deck_index, deck) in scene.decks.iter().enumerate() {
+        if let Some(timeline) = deck.swap_timeline() {
+            scene.timelines.push(timeline);
+        }
         if let Some(timeline) = deck.item_timeline(deck_index) {
             scene.timelines.push(timeline);
         }
