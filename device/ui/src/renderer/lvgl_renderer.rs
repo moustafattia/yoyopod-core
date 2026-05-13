@@ -2,11 +2,11 @@ use std::path::Path;
 
 use anyhow::Result;
 
-#[path = "pipeline/list_view.rs"]
+#[path = "lvgl_list_view.rs"]
 mod list_view;
-#[path = "pipeline/scene.rs"]
+#[path = "lvgl_scene.rs"]
 pub mod scene;
-#[path = "pipeline/scene_controller.rs"]
+#[path = "lvgl_scene_controller.rs"]
 mod scene_controller;
 
 use crate::animation::TransitionSampler;
