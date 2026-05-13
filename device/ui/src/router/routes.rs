@@ -6,9 +6,8 @@ use yoyopod_protocol::ui::{
 use crate::engine::DirtyRegion;
 
 use super::route::{
-    BackPolicy, ControllerKind, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind,
-    NativeRenderScene, NavigationPolicy, PassthroughPolicy, Persistence, RenderScene, Route,
-    ScreenModelKind, SelectionTarget, SnapshotCondition,
+    BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind, NavigationPolicy,
+    PassthroughPolicy, Persistence, Route, SelectionTarget, SnapshotCondition,
 };
 
 const STATUS_BAR_REGION: DirtyRegion = DirtyRegion {
@@ -46,14 +45,9 @@ const fn route(screen: UiScreen) -> Route {
     Route {
         screen,
         title: screen.as_str(),
-        model_kind: model_kind(screen),
-        controller_kind: controller_kind(screen),
-        native_controller_kind: native_controller_kind(screen),
         focus_policy: focus_policy(screen),
         nav_policy: navigation_policy(screen),
         persistence: persistence(screen),
-        render_scene: render_scene(screen),
-        native_scene: native_scene(screen),
         select: select_targets(screen),
         passthrough: passthrough_policies(screen),
         back: back_policies(screen),
@@ -394,77 +388,6 @@ pub fn static_intent_template(template: IntentTemplate) -> Option<UiIntent> {
     }
 }
 
-const fn model_kind(screen: UiScreen) -> ScreenModelKind {
-    match screen {
-        UiScreen::Hub => ScreenModelKind::Hub,
-        UiScreen::Listen
-        | UiScreen::Playlists
-        | UiScreen::RecentTracks
-        | UiScreen::Talk
-        | UiScreen::Contacts
-        | UiScreen::CallHistory => ScreenModelKind::List,
-        UiScreen::NowPlaying => ScreenModelKind::NowPlaying,
-        UiScreen::Ask => ScreenModelKind::Ask,
-        UiScreen::TalkContact | UiScreen::VoiceNote => ScreenModelKind::TalkActions,
-        UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall => ScreenModelKind::Call,
-        UiScreen::Power => ScreenModelKind::Power,
-        UiScreen::Loading | UiScreen::Error => ScreenModelKind::Overlay,
-    }
-}
-
-const fn controller_kind(screen: UiScreen) -> ControllerKind {
-    match screen {
-        UiScreen::Hub => ControllerKind::Hub,
-        UiScreen::Listen
-        | UiScreen::Playlists
-        | UiScreen::RecentTracks
-        | UiScreen::Talk
-        | UiScreen::Contacts
-        | UiScreen::CallHistory => ControllerKind::List,
-        UiScreen::NowPlaying => ControllerKind::NowPlaying,
-        UiScreen::Ask => ControllerKind::Ask,
-        UiScreen::TalkContact | UiScreen::VoiceNote => ControllerKind::TalkActions,
-        UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall => ControllerKind::Call,
-        UiScreen::Power => ControllerKind::Power,
-        UiScreen::Loading | UiScreen::Error => ControllerKind::Overlay,
-    }
-}
-
-const fn native_controller_kind(screen: UiScreen) -> ControllerKind {
-    match screen {
-        UiScreen::Hub => ControllerKind::Hub,
-        UiScreen::Listen => ControllerKind::Listen,
-        UiScreen::Playlists
-        | UiScreen::RecentTracks
-        | UiScreen::Contacts
-        | UiScreen::CallHistory => ControllerKind::Playlist,
-        UiScreen::NowPlaying => ControllerKind::NowPlaying,
-        UiScreen::Ask => ControllerKind::Ask,
-        UiScreen::Talk => ControllerKind::Talk,
-        UiScreen::TalkContact | UiScreen::VoiceNote => ControllerKind::TalkActions,
-        UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall => ControllerKind::Call,
-        UiScreen::Power => ControllerKind::Power,
-        UiScreen::Loading | UiScreen::Error => ControllerKind::Overlay,
-    }
-}
-
-pub const fn controller_kind_for_native_scene(scene: NativeRenderScene) -> ControllerKind {
-    match scene {
-        NativeRenderScene::Hub => ControllerKind::Hub,
-        NativeRenderScene::Listen => ControllerKind::Listen,
-        NativeRenderScene::Playlist => ControllerKind::Playlist,
-        NativeRenderScene::NowPlaying => ControllerKind::NowPlaying,
-        NativeRenderScene::Talk => ControllerKind::Talk,
-        NativeRenderScene::TalkActions => ControllerKind::TalkActions,
-        NativeRenderScene::IncomingCall
-        | NativeRenderScene::OutgoingCall
-        | NativeRenderScene::InCall => ControllerKind::Call,
-        NativeRenderScene::Ask => ControllerKind::Ask,
-        NativeRenderScene::Power => ControllerKind::Power,
-        NativeRenderScene::Overlay => ControllerKind::Overlay,
-    }
-}
-
 const fn focus_policy(screen: UiScreen) -> FocusPolicy {
     match screen {
         UiScreen::Hub
@@ -503,43 +426,5 @@ const fn persistence(screen: UiScreen) -> Persistence {
         UiScreen::NowPlaying => Persistence::KeepAlive,
         UiScreen::Loading | UiScreen::Error => Persistence::Singleton,
         _ => Persistence::Ephemeral,
-    }
-}
-
-const fn render_scene(screen: UiScreen) -> RenderScene {
-    match screen {
-        UiScreen::Hub => RenderScene::Hub,
-        UiScreen::Listen
-        | UiScreen::Playlists
-        | UiScreen::RecentTracks
-        | UiScreen::Talk
-        | UiScreen::Contacts
-        | UiScreen::CallHistory => RenderScene::List,
-        UiScreen::NowPlaying => RenderScene::NowPlaying,
-        UiScreen::Ask => RenderScene::Ask,
-        UiScreen::TalkContact | UiScreen::VoiceNote => RenderScene::TalkActions,
-        UiScreen::IncomingCall | UiScreen::OutgoingCall | UiScreen::InCall => RenderScene::Call,
-        UiScreen::Power => RenderScene::Power,
-        UiScreen::Loading | UiScreen::Error => RenderScene::Overlay,
-    }
-}
-
-const fn native_scene(screen: UiScreen) -> NativeRenderScene {
-    match screen {
-        UiScreen::Hub => NativeRenderScene::Hub,
-        UiScreen::Listen => NativeRenderScene::Listen,
-        UiScreen::Playlists
-        | UiScreen::RecentTracks
-        | UiScreen::Contacts
-        | UiScreen::CallHistory => NativeRenderScene::Playlist,
-        UiScreen::NowPlaying => NativeRenderScene::NowPlaying,
-        UiScreen::Talk => NativeRenderScene::Talk,
-        UiScreen::TalkContact | UiScreen::VoiceNote => NativeRenderScene::TalkActions,
-        UiScreen::IncomingCall => NativeRenderScene::IncomingCall,
-        UiScreen::OutgoingCall => NativeRenderScene::OutgoingCall,
-        UiScreen::InCall => NativeRenderScene::InCall,
-        UiScreen::Ask => NativeRenderScene::Ask,
-        UiScreen::Power => NativeRenderScene::Power,
-        UiScreen::Loading | UiScreen::Error => NativeRenderScene::Overlay,
     }
 }
