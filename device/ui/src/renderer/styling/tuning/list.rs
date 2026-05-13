@@ -1,12 +1,13 @@
 use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
+use crate::roles;
 
 pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
     const SELECTOR: ffi::LvStyleSelector = 0;
     unsafe {
         match role {
-            "hub_title" | "power_title" => {
+            roles::HUB_TITLE | roles::POWER_TITLE => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_24,
@@ -14,7 +15,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "hub_subtitle" => {
+            roles::HUB_SUBTITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -23,28 +24,28 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "listen_title" => {
+            roles::LISTEN_TITLE => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_24,
                     SELECTOR,
                 );
             }
-            "listen_subtitle" => {
+            roles::LISTEN_SUBTITLE => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_12,
                     SELECTOR,
                 );
             }
-            "listen_row_icon" | "playlist_row_icon" => {
+            roles::LISTEN_ROW_ICON | roles::PLAYLIST_ROW_ICON => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_18,
                     SELECTOR,
                 );
             }
-            "listen_row_title" | "playlist_row_title" => {
+            roles::LISTEN_ROW_TITLE | roles::PLAYLIST_ROW_TITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -52,7 +53,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                     SELECTOR,
                 );
             }
-            "listen_row_subtitle" | "playlist_row_subtitle" => {
+            roles::LISTEN_ROW_SUBTITLE | roles::PLAYLIST_ROW_SUBTITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -60,7 +61,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                     SELECTOR,
                 );
             }
-            "listen_empty_icon" | "playlist_empty_icon" => {
+            roles::LISTEN_EMPTY_ICON | roles::PLAYLIST_EMPTY_ICON => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_24,
@@ -68,7 +69,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "listen_empty_title" | "playlist_empty_title" => {
+            roles::LISTEN_EMPTY_TITLE | roles::PLAYLIST_EMPTY_TITLE => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_18,
@@ -76,7 +77,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "now_playing_icon_label" => {
+            roles::NOW_PLAYING_ICON_LABEL => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_24,
@@ -85,7 +86,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
                 ffi::lv_obj_center(obj.as_ptr());
             }
-            "now_playing_state_label" => {
+            roles::NOW_PLAYING_STATE_LABEL => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_12,

@@ -1,12 +1,13 @@
 use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
+use crate::roles;
 
 pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
     const SELECTOR: ffi::LvStyleSelector = 0;
     unsafe {
         match role {
-            "now_playing_title" => {
+            roles::NOW_PLAYING_TITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -16,7 +17,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
                 ffi::lv_obj_set_style_text_line_space(obj.as_ptr(), -2, SELECTOR);
             }
-            "now_playing_artist" => {
+            roles::NOW_PLAYING_ARTIST => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -25,7 +26,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "listen_empty_subtitle" | "playlist_empty_subtitle" => {
+            roles::LISTEN_EMPTY_SUBTITLE | roles::PLAYLIST_EMPTY_SUBTITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -34,7 +35,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "ask_title" => {
+            roles::ASK_TITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -43,7 +44,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "ask_subtitle" => {
+            roles::ASK_SUBTITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_WRAP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -52,7 +53,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "footer_label" => {
+            roles::FOOTER_LABEL => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -61,12 +62,11 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "status_network"
-            | "status_signal"
-            | "status_battery"
-            | "status_wifi"
-            | "status_time"
-            | "status_battery_label" => {
+            roles::STATUS_NETWORK
+            | roles::STATUS_SIGNAL
+            | roles::STATUS_WIFI
+            | roles::STATUS_TIME
+            | roles::STATUS_BATTERY_LABEL => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -75,7 +75,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "power_icon" => {
+            roles::POWER_ICON => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_24,
@@ -84,7 +84,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
                 ffi::lv_obj_align(obj.as_ptr(), ffi::LV_ALIGN_CENTER, 0, 0);
             }
-            "power_row_title" => {
+            roles::POWER_ROW_TITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_CLIP);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),

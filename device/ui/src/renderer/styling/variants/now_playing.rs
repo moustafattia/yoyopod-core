@@ -2,6 +2,7 @@ use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
 use crate::renderer::styling::style as theme;
+use crate::roles;
 
 use crate::renderer::styling::mix_u24;
 
@@ -14,7 +15,7 @@ pub(crate) fn apply(
     const SELECTOR: ffi::LvStyleSelector = 0;
     unsafe {
         match (role, variant) {
-            ("now_playing_icon_halo", "now_playing_playing") => {
+            (roles::NOW_PLAYING_ICON_HALO, "now_playing_playing") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 80)),
@@ -27,7 +28,7 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("now_playing_icon_halo", "now_playing_paused" | "now_playing_stopped") => {
+            (roles::NOW_PLAYING_ICON_HALO, "now_playing_paused" | "now_playing_stopped") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(
@@ -44,7 +45,7 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("now_playing_icon_halo", "now_playing_offline") => {
+            (roles::NOW_PLAYING_ICON_HALO, "now_playing_offline") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 82)),
@@ -57,7 +58,10 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("now_playing_icon_label" | "now_playing_state_label", "now_playing_playing") => {
+            (
+                roles::NOW_PLAYING_ICON_LABEL | roles::NOW_PLAYING_STATE_LABEL,
+                "now_playing_playing",
+            ) => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(accent_rgb),
@@ -65,7 +69,7 @@ pub(crate) fn apply(
                 );
             }
             (
-                "now_playing_icon_label" | "now_playing_state_label",
+                roles::NOW_PLAYING_ICON_LABEL | roles::NOW_PLAYING_STATE_LABEL,
                 "now_playing_paused" | "now_playing_stopped",
             ) => {
                 ffi::lv_obj_set_style_text_color(
@@ -74,21 +78,21 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("now_playing_icon_label", "now_playing_offline") => {
+            (roles::NOW_PLAYING_ICON_LABEL, "now_playing_offline") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(theme::INK_RGB),
                     SELECTOR,
                 );
             }
-            ("now_playing_state_label", "now_playing_offline") => {
+            (roles::NOW_PLAYING_STATE_LABEL, "now_playing_offline") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(theme::ERROR_RGB),
                     SELECTOR,
                 );
             }
-            ("now_playing_state_chip", "now_playing_playing") => {
+            (roles::NOW_PLAYING_STATE_CHIP, "now_playing_playing") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 65)),
@@ -96,7 +100,7 @@ pub(crate) fn apply(
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            ("now_playing_state_chip", "now_playing_paused" | "now_playing_stopped") => {
+            (roles::NOW_PLAYING_STATE_CHIP, "now_playing_paused" | "now_playing_stopped") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(theme::SURFACE_RAISED_RGB),
@@ -104,7 +108,7 @@ pub(crate) fn apply(
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            ("now_playing_state_chip", "now_playing_offline") => {
+            (roles::NOW_PLAYING_STATE_CHIP, "now_playing_offline") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(theme::ERROR_RGB, theme::BACKGROUND_RGB, 78)),
@@ -112,7 +116,7 @@ pub(crate) fn apply(
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            ("now_playing_progress_fill", "now_playing_playing") => {
+            (roles::NOW_PLAYING_PROGRESS_FILL, "now_playing_playing") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(accent_rgb),
@@ -121,7 +125,7 @@ pub(crate) fn apply(
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
             (
-                "now_playing_progress_fill",
+                roles::NOW_PLAYING_PROGRESS_FILL,
                 "now_playing_paused" | "now_playing_stopped" | "now_playing_offline",
             ) => {
                 ffi::lv_obj_set_style_bg_color(
@@ -131,21 +135,21 @@ pub(crate) fn apply(
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            ("footer_label", "now_playing_playing") => {
+            (roles::FOOTER_LABEL, "now_playing_playing") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::SURFACE_RGB, 55)),
                     SELECTOR,
                 );
             }
-            ("footer_label", "now_playing_paused" | "now_playing_stopped") => {
+            (roles::FOOTER_LABEL, "now_playing_paused" | "now_playing_stopped") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(theme::MUTED_RGB),
                     SELECTOR,
                 );
             }
-            ("footer_label", "now_playing_offline") => {
+            (roles::FOOTER_LABEL, "now_playing_offline") => {
                 ffi::lv_obj_set_style_text_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(theme::MUTED_DIM_RGB),

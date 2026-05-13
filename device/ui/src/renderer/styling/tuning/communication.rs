@@ -1,12 +1,13 @@
 use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
+use crate::roles;
 
 pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
     const SELECTOR: ffi::LvStyleSelector = 0;
     unsafe {
         match role {
-            "talk_actions_header_label" => {
+            roles::TALK_ACTIONS_HEADER_LABEL => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_18,
@@ -15,7 +16,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
                 ffi::lv_obj_center(obj.as_ptr());
             }
-            "talk_actions_header_name" => {
+            roles::TALK_ACTIONS_HEADER_NAME => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -24,7 +25,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "talk_actions_title_label" => {
+            roles::TALK_ACTIONS_TITLE_LABEL => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -33,7 +34,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "talk_actions_button_label" => {
+            roles::TALK_ACTIONS_BUTTON_LABEL => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_18,
@@ -42,7 +43,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
                 ffi::lv_obj_center(obj.as_ptr());
             }
-            "talk_actions_status_label" => {
+            roles::TALK_ACTIONS_STATUS_LABEL => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_12,
@@ -50,7 +51,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "call_state_icon" => {
+            roles::CALL_STATE_ICON => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_24,
@@ -59,7 +60,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
                 ffi::lv_obj_center(obj.as_ptr());
             }
-            "call_title" => {
+            roles::CALL_TITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
@@ -68,7 +69,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            "call_state_label" | "call_mute_label" => {
+            roles::CALL_STATE_LABEL | roles::CALL_MUTE_LABEL => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_12,

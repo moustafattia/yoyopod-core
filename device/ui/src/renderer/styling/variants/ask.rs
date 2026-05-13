@@ -2,6 +2,7 @@ use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
 use crate::renderer::styling::style as theme;
+use crate::roles;
 
 use crate::renderer::styling::mix_u24;
 
@@ -14,7 +15,7 @@ pub(crate) fn apply(
     const SELECTOR: ffi::LvStyleSelector = 0;
     unsafe {
         match (role, variant) {
-            ("ask_icon_glow", "ask_listening") => {
+            (roles::ASK_ICON_GLOW, "ask_listening") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 76)),
@@ -29,7 +30,7 @@ pub(crate) fn apply(
                 ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 42, SELECTOR);
                 ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 102, SELECTOR);
             }
-            ("ask_icon_glow", "ask_thinking") => {
+            (roles::ASK_ICON_GLOW, "ask_thinking") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 82)),
@@ -44,7 +45,7 @@ pub(crate) fn apply(
                 ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 22, SELECTOR);
                 ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 51, SELECTOR);
             }
-            ("ask_icon_glow", "ask_idle") => {
+            (roles::ASK_ICON_GLOW, "ask_idle") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 82)),
@@ -59,7 +60,7 @@ pub(crate) fn apply(
                 ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 28, SELECTOR);
                 ffi::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
             }
-            ("ask_icon_halo", "ask_listening") => {
+            (roles::ASK_ICON_HALO, "ask_listening") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 68)),
@@ -67,7 +68,7 @@ pub(crate) fn apply(
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            ("ask_icon_halo", "ask_idle" | "ask_thinking") => {
+            (roles::ASK_ICON_HALO, "ask_idle" | "ask_thinking") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
                     ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 74)),
@@ -75,7 +76,7 @@ pub(crate) fn apply(
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            ("ask_title", "ask_reply") => {
+            (roles::ASK_TITLE, "ask_reply") => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_18,
@@ -88,7 +89,7 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("ask_title", "ask_idle" | "ask_listening" | "ask_thinking") => {
+            (roles::ASK_TITLE, "ask_idle" | "ask_listening" | "ask_thinking") => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_24,
@@ -101,7 +102,7 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("ask_subtitle", "ask_reply") => {
+            (roles::ASK_SUBTITLE, "ask_reply") => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_16,
@@ -114,7 +115,7 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("ask_subtitle", "ask_thinking") => {
+            (roles::ASK_SUBTITLE, "ask_thinking") => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_14,
@@ -127,7 +128,7 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            ("ask_subtitle", "ask_idle" | "ask_listening") => {
+            (roles::ASK_SUBTITLE, "ask_idle" | "ask_listening") => {
                 ffi::lv_obj_set_style_text_font(
                     obj.as_ptr(),
                     &ffi::lv_font_montserrat_14,
