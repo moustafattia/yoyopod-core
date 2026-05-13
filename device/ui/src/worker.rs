@@ -337,12 +337,12 @@ where
     W: Write,
     B: ButtonDevice,
 {
-    let pressed = button.pressed()?;
-    let button_events = if ui_runtime.wants_ptt_passthrough() {
-        button_machine.observe_ptt_passthrough(pressed, now_ms)
-    } else {
-        button_machine.observe(pressed, now_ms)
-    };
+    let button_events = crate::input::poll_button_actions(
+        button,
+        button_machine,
+        ui_runtime.wants_ptt_passthrough(),
+        now_ms,
+    )?;
     for event in button_events {
         *input_events += 1;
         outbound::emit_input_action(
