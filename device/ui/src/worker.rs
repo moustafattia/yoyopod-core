@@ -31,10 +31,13 @@ pub struct RenderState {
 impl RenderState {
     pub fn open(width: usize, height: usize) -> Result<Self> {
         load_scene_defaults()?;
+        let framebuffer = Framebuffer::new(width, height);
+        let mut renderer = Box::new(LvglRenderer::open(None)?);
+        renderer.initialize_display(&framebuffer)?;
         Ok(Self {
-            framebuffer: Framebuffer::new(width, height),
+            framebuffer,
             engine: Engine::default(),
-            renderer: Box::new(LvglRenderer::open(None)?),
+            renderer,
             frames: 0,
             last_active_screen: None,
             last_ui_renderer: String::new(),

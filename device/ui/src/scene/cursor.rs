@@ -9,10 +9,8 @@ pub enum Cursor {
 impl Cursor {
     pub fn element(&self) -> Element {
         match self {
-            Self::UnderlineDots { count, focus } => {
-                Element::new(ElementKind::Container, Some("cursor_dots"))
-                    .key(Key::Static("cursor"))
-                    .text(format!("{focus}/{count}"))
+            Self::UnderlineDots { .. } => {
+                Element::new(ElementKind::Container, Some("cursor_dots")).key(Key::Static("cursor"))
             }
             Self::RowGlow => Element::new(ElementKind::Container, Some("cursor_row_glow"))
                 .key(Key::Static("cursor")),

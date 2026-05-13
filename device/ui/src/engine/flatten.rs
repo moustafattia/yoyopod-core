@@ -15,6 +15,9 @@ pub fn scene_element(scene: &Scene) -> Element {
         .key(Key::String(format!("scene:{}", scene.id.screen.as_str())));
     root = root.child(scene.backdrop.element());
     root = root.child(stage_element(scene.stage));
+    if let Some(fx) = scene.fx.element() {
+        root = root.child(fx);
+    }
     root = root.child(decks_element(&scene.decks));
     if let Some(cursor) = &scene.cursor {
         root = root.child(cursor.element());

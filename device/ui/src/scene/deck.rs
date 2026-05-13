@@ -84,7 +84,6 @@ impl Deck {
     pub fn element(&self, index: usize) -> Element {
         let mut element = Element::new(ElementKind::Container, Some(deck_role(self.kind)))
             .key(Key::Indexed(index))
-            .selected(!self.items.is_empty())
             .child(
                 Element::new(ElementKind::Container, Some("deck_region"))
                     .key(Key::Static("deck_region")),
@@ -129,7 +128,6 @@ fn deck_item_element(item: &DeckItem, selected: bool) -> Element {
     match &item.render {
         ItemRender::Card(card) => Element::new(ElementKind::Container, Some("card"))
             .key(item.key.clone())
-            .selected(selected)
             .accent(card.accent)
             .child(Element::new(ElementKind::Label, Some("card_title")).text(&card.title))
             .child(Element::new(ElementKind::Label, Some("card_subtitle")).text(&card.subtitle))
@@ -142,12 +140,10 @@ fn deck_item_element(item: &DeckItem, selected: bool) -> Element {
             .child(Element::new(ElementKind::Label, Some("list_row_subtitle")).text(&row.subtitle)),
         ItemRender::Page(page) => Element::new(ElementKind::Container, Some("page"))
             .key(item.key.clone())
-            .selected(selected)
             .child(Element::new(ElementKind::Label, Some("page_title")).text(&page.title))
             .child(Element::new(ElementKind::Label, Some("page_body")).text(&page.body)),
         ItemRender::Button(button) => Element::new(ElementKind::Container, Some("button"))
             .key(item.key.clone())
-            .selected(selected)
             .child(Element::new(ElementKind::Image, Some("button_icon")).icon(&button.icon_key))
             .child(Element::new(ElementKind::Label, Some("button_title")).text(&button.title)),
     }

@@ -34,6 +34,13 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
+            "fx_halo" | "fx_pulse" | "fx_glow" | "fx_spinner" => {
+                ffi::lv_obj_set_style_bg_color(
+                    obj.as_ptr(),
+                    ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 70)),
+                    SELECTOR,
+                );
+            }
             "hub_card_panel" | "talk_card_panel" | "call_panel" => {
                 ffi::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
@@ -134,7 +141,8 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
             | "status_voip_dot_left"
             | "status_voip_dot_after_gps"
             | "status_battery_fill"
-            | "status_battery_tip" => {
+            | "status_battery_tip"
+            | "fx_particle" => {
                 ffi::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }

@@ -1,4 +1,5 @@
 use crate::animation::ActorRef;
+use crate::engine::{Element, ElementKind, Key};
 
 use super::RegionId;
 
@@ -43,4 +44,75 @@ pub struct GlowBloom {
     pub target: ActorRef,
     pub blur: u8,
     pub intensity: u8,
+}
+
+impl FxLayer {
+    pub fn element(&self) -> Option<Element> {
+        if self.halos.is_empty()
+            && self.pulses.is_empty()
+            && self.particles.is_empty()
+            && self.glows.is_empty()
+        {
+            return None;
+        }
+
+        let mut element =
+            Element::new(ElementKind::Container, Some("scene_fx")).key(Key::Static("scene_fx"));
+        for (index, halo) in self.halos.iter().enumerate() {
+            element = element.child(halo_element(index, halo));
+        }
+        for (index, pulse) in self.pulses.iter().enumerate() {
+            element = element.child(pulse_element(index, pulse));
+        }
+        for (field_index, field) in self.particles.iter().enumerate() {
+            for index in 0..field.count.min(8) {
+                element = element.child(particle_element(field_index, index, field));
+            }
+        }
+        for (index, glow) in self.glows.iter().enumerate() {
+            element = element.child(glow_element(index, glow));
+        }
+        Some(element)
+    }
+}
+
+fn halo_element(index: usize, halo: &Halo) -> Element {
+    Element::new(ElementKind::Container, Some("fx_halo"))
+        .key(Key::String(format!("fx:halo:{index}")))
+        .accent(halo.color)
+        .with_opacity(halo.max_opacity)
+}
+
+fn pulse_element(index: usize, pulse: &PulseRing) -> Element {
+    Element::new(ElementKind::Container, Some("fx_pulse"))
+        .key(Key::String(format!("fx:pulse:{index}")))
+        .accent(pulse.color)
+        .with_opacity(96)
+}
+
+fn particle_element(field_index: usize, index: u8, field: &ParticleField) -> Element {
+    Element::new(ElementKind::Container, Some("fx_particle"))
+        .key(Key::String(format!("fx:particle:{field_index}:{index}")))
+        .accent(field.color)
+}
+
+fn glow_element(index: usize, glow: &GlowBloom) -> Element {
+    let role = match glow.target {
+        ActorRef::Screen => "fx_spinner",
+        _ => "fx_glow",
+    };
+    Element::new(ElementKind::Container, Some(role))
+        .key(Key::String(format!("fx:glow:{index}")))
+        .with_opacity(glow.intensity)
+}
+
+trait FxElementExt {
+    fn with_opacity(self, opacity: u8) -> Self;
+}
+
+impl FxElementExt for Element {
+    fn with_opacity(mut self, opacity: u8) -> Self {
+        self.props.opacity = Some(opacity);
+        self
+    }
 }

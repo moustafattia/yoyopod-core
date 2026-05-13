@@ -35,6 +35,10 @@ impl LvglRenderer {
             node_registry: NodeRegistry::default(),
         })
     }
+
+    pub fn initialize_display(&mut self, framebuffer: &Framebuffer) -> Result<()> {
+        self.facade.ensure_display_registered(framebuffer)
+    }
 }
 
 #[cfg(feature = "native-lvgl")]
@@ -153,6 +157,10 @@ fn widget_for(registry: &NodeRegistry, node: NodeId) -> Result<WidgetId> {
 #[cfg(not(feature = "native-lvgl"))]
 impl LvglRenderer {
     pub fn open(_explicit_source: Option<&Path>) -> Result<Self> {
+        anyhow::bail!("native-lvgl feature is disabled for this build")
+    }
+
+    pub fn initialize_display(&mut self, _framebuffer: &Framebuffer) -> Result<()> {
         anyhow::bail!("native-lvgl feature is disabled for this build")
     }
 }
