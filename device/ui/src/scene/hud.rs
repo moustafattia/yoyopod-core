@@ -1,5 +1,6 @@
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
+use crate::scene::RegionId;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HudScene {
@@ -26,6 +27,7 @@ impl HudScene {
     fn footer_element(&self) -> Element {
         Element::new(ElementKind::Container, Some("footer_bar"))
             .key(Key::Static("footer_bar"))
+            .region(RegionId::Footer)
             .child(
                 Element::new(ElementKind::Label, Some("footer_label"))
                     .key(Key::Static("footer_label"))
@@ -38,6 +40,7 @@ impl HudStatus {
     fn element(&self) -> Element {
         Element::new(ElementKind::Container, Some("status_bar"))
             .key(Key::Static("status_bar"))
+            .region(RegionId::StatusBar)
             .child(
                 Element::new(ElementKind::Label, Some("status_signal"))
                     .key(Key::Static("status_signal"))

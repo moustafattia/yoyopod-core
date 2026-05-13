@@ -42,10 +42,10 @@ pub const fn region_rect(stage: Stage, region: RegionId) -> Option<LayoutRect> {
             h: 280,
         }),
         (_, RegionId::StatusBar) => Some(LayoutRect {
-            x: 0,
-            y: 0,
-            w: 240,
-            h: 32,
+            x: 14,
+            y: 10,
+            w: 212,
+            h: 16,
         }),
         (_, RegionId::Footer) => Some(LayoutRect {
             x: 14,

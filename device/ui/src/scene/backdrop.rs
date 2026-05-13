@@ -1,5 +1,6 @@
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
+use crate::scene::RegionId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backdrop {
@@ -12,7 +13,8 @@ pub enum Backdrop {
 impl Backdrop {
     pub fn element(self) -> Element {
         let mut element = Element::new(ElementKind::Container, Some("scene_backdrop"))
-            .key(Key::Static("backdrop"));
+            .key(Key::Static("backdrop"))
+            .region(RegionId::Backdrop);
         element.props.variant = Some(match self {
             Self::Solid(_) => "solid",
             Self::Gradient { .. } => "gradient",

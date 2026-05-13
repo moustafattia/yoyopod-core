@@ -63,6 +63,11 @@ impl Element {
         self
     }
 
+    pub fn region(mut self, region: RegionId) -> Self {
+        self.layout = Layout::Region(region);
+        self
+    }
+
     pub fn with_anim(mut self, anim: AnimSlot) -> Self {
         self.anim = Some(anim);
         self

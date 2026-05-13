@@ -1,5 +1,6 @@
 use crate::animation::{AnimatableProp, AnimatableValue, TimelineSampler};
 use crate::render_contract::{Mutation, NodeId, PropChange};
+use crate::scene::{region_rect, RegionId, Stage};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -14,6 +15,7 @@ impl Reconciler {
         previous: Option<&Element>,
         previous_ids: &BTreeMap<NodePath, NodeId>,
         next: &Element,
+        stage: Stage,
         node_alloc: &mut NodeIdAlloc,
         sampler: &TimelineSampler<'_>,
         out: &mut Vec<Mutation>,
@@ -29,6 +31,7 @@ impl Reconciler {
             previous_ids,
             &mut next_ids,
             node_alloc,
+            stage,
             sampler,
             out,
         );
@@ -44,6 +47,7 @@ fn diff_element(
     previous_ids: &BTreeMap<NodePath, NodeId>,
     next_ids: &mut BTreeMap<NodePath, NodeId>,
     node_alloc: &mut NodeIdAlloc,
+    stage: Stage,
     sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) -> NodeId {
@@ -59,16 +63,20 @@ fn diff_element(
     next_ids.insert(path.clone(), node);
 
     match previous {
-        None => create_subtree(node, parent, next, path, next_ids, node_alloc, sampler, out),
+        None => create_subtree(
+            node, parent, next, path, next_ids, node_alloc, stage, sampler, out,
+        ),
         Some(previous) if replace => {
             if let Some(previous_node) = previous_node {
                 remove_subtree(previous, path.clone(), previous_node, previous_ids, out);
             }
-            create_subtree(node, parent, next, path, next_ids, node_alloc, sampler, out);
+            create_subtree(
+                node, parent, next, path, next_ids, node_alloc, stage, sampler, out,
+            );
         }
         Some(previous) => {
             emit_prop_updates(node, &previous.props, &next.props, out);
-            emit_place(node, next.layout, out);
+            emit_place(node, next.layout, stage, out);
             emit_animation_updates(node, next, sampler, out);
             diff_children(
                 previous,
@@ -78,6 +86,7 @@ fn diff_element(
                 previous_ids,
                 next_ids,
                 node_alloc,
+                stage,
                 sampler,
                 out,
             );
@@ -93,6 +102,7 @@ fn create_subtree(
     path: NodePath,
     next_ids: &mut BTreeMap<NodePath, NodeId>,
     node_alloc: &mut NodeIdAlloc,
+    stage: Stage,
     sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) {
@@ -104,13 +114,13 @@ fn create_subtree(
         role: element.role,
     });
     emit_prop_updates(node, &ElementProps::default(), &element.props, out);
-    emit_place(node, element.layout, out);
+    emit_place(node, element.layout, stage, out);
     emit_animation_updates(node, element, sampler, out);
     for (index, child) in element.children.iter().enumerate() {
         let child_path = path.child(child, index);
         let child_node = node_alloc.alloc();
         create_subtree(
-            child_node, node, child, child_path, next_ids, node_alloc, sampler, out,
+            child_node, node, child, child_path, next_ids, node_alloc, stage, sampler, out,
         );
     }
 }
@@ -123,6 +133,7 @@ fn diff_children(
     previous_ids: &BTreeMap<NodePath, NodeId>,
     next_ids: &mut BTreeMap<NodePath, NodeId>,
     node_alloc: &mut NodeIdAlloc,
+    stage: Stage,
     sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) {
@@ -150,6 +161,7 @@ fn diff_children(
             previous_ids,
             next_ids,
             node_alloc,
+            stage,
             sampler,
             out,
         );
@@ -194,9 +206,22 @@ fn emit_prop_updates(
     }
 }
 
-fn emit_place(node: NodeId, layout: Layout, out: &mut Vec<Mutation>) {
-    if let Layout::Absolute { x, y, w, h } = layout {
-        out.push(Mutation::Place { node, x, y, w, h });
+fn emit_place(node: NodeId, layout: Layout, stage: Stage, out: &mut Vec<Mutation>) {
+    let Some((x, y, w, h)) = resolve_layout(stage, layout) else {
+        return;
+    };
+    out.push(Mutation::Place { node, x, y, w, h });
+}
+
+fn resolve_layout(stage: Stage, layout: Layout) -> Option<(i32, i32, i32, i32)> {
+    match layout {
+        Layout::Absolute { x, y, w, h } => Some((x, y, w, h)),
+        Layout::Region(RegionId::Auto) => None,
+        Layout::Region(region) => {
+            let rect = region_rect(stage, region)
+                .unwrap_or_else(|| panic!("stage {stage:?} has no rect for region {region:?}"));
+            Some((rect.x, rect.y, rect.w, rect.h))
+        }
     }
 }
 

@@ -39,6 +39,7 @@ impl Engine {
             self.tree_cache.previous(),
             self.tree_cache.ids(),
             &new_tree,
+            graph.active.stage,
             &mut self.node_alloc,
             &sampler,
             &mut self.mutations,
