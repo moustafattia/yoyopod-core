@@ -124,39 +124,27 @@ fn talk_contact_title(
     focus_index: usize,
     selected_contact: Option<&ListItemSnapshot>,
 ) -> String {
-    let actions = talk_contact_actions(
+    let has_latest_note = talk_contact_has_latest_note(
         snapshot,
         selected_contact.or_else(|| snapshot.call.contacts.first()),
     );
-    let selected_index = focus_index.min(actions.len().saturating_sub(1));
-    actions
-        .get(selected_index)
-        .map(|action| action.title.to_string())
-        .unwrap_or_default()
+    match focus_index {
+        0 => "Call",
+        1 => "Voice Note",
+        2 if has_latest_note => "Play Note",
+        _ if has_latest_note => "Play Note",
+        _ => "Voice Note",
+    }
+    .to_string()
 }
 
-fn talk_contact_actions(
+fn talk_contact_has_latest_note(
     snapshot: &RuntimeSnapshot,
     selected_contact: Option<&ListItemSnapshot>,
-) -> Vec<TalkContactAction> {
-    let mut actions = vec![
-        TalkContactAction { title: "Call" },
-        TalkContactAction {
-            title: "Voice Note",
-        },
-    ];
-    if selected_contact
+) -> bool {
+    selected_contact
         .and_then(|contact| snapshot.call.latest_voice_note_by_contact.get(&contact.id))
         .is_some_and(|note| !note.local_file_path.trim().is_empty())
-    {
-        actions.push(TalkContactAction { title: "Play Note" });
-    }
-    actions
-}
-
-#[derive(Debug, Clone, Copy)]
-struct TalkContactAction {
-    title: &'static str,
 }
 
 fn voice_note_title(snapshot: &RuntimeSnapshot, focus_index: usize) -> String {
