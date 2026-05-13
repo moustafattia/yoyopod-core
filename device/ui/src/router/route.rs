@@ -1,6 +1,8 @@
 use yoyopod_protocol::ui::InputAction;
 pub use yoyopod_protocol::ui::UiScreen;
 
+use crate::animation::TimelineRef;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusPolicy {
     None,
@@ -105,4 +107,6 @@ pub struct Route {
     pub select: &'static [SelectionTarget],
     pub back: &'static [BackPolicy],
     pub passthrough: &'static [PassthroughPolicy],
+    pub on_enter: Option<TimelineRef>,
+    pub on_exit: Option<TimelineRef>,
 }

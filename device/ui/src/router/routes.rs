@@ -3,6 +3,8 @@ use yoyopod_protocol::ui::{
     InputAction, IntentKind, RuntimeSnapshotDomain, ScreenCapabilities, UiIntent,
 };
 
+use crate::animation::presets::{SCENE_ENTER_TIMELINE_ID, STAGGER_ENTER_TIMELINE_ID};
+use crate::animation::TimelineRef;
 use crate::engine::DirtyRegion;
 
 use super::route::{
@@ -55,6 +57,8 @@ const fn route(screen: UiScreen) -> Route {
         select: select_targets(screen),
         passthrough: passthrough_policies(screen),
         back: back_policies(screen),
+        on_enter: on_enter_timeline(screen),
+        on_exit: on_exit_timeline(screen),
     }
 }
 
@@ -431,4 +435,19 @@ const fn persistence(screen: UiScreen) -> Persistence {
         UiScreen::Loading | UiScreen::Error => Persistence::Singleton,
         _ => Persistence::Ephemeral,
     }
+}
+
+const fn on_enter_timeline(screen: UiScreen) -> Option<TimelineRef> {
+    match screen {
+        UiScreen::Listen
+        | UiScreen::Playlists
+        | UiScreen::RecentTracks
+        | UiScreen::Contacts
+        | UiScreen::CallHistory => Some(TimelineRef(STAGGER_ENTER_TIMELINE_ID)),
+        _ => Some(TimelineRef(SCENE_ENTER_TIMELINE_ID)),
+    }
+}
+
+const fn on_exit_timeline(_screen: UiScreen) -> Option<TimelineRef> {
+    None
 }
