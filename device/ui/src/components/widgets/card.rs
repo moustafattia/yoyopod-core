@@ -1,12 +1,17 @@
-use crate::components::primitives::{container, image, label};
+use crate::components::primitives::label;
 use crate::engine::Element;
 use crate::scene::roles;
 use crate::scene::CardModel;
 
+use super::{icon_halo, IconHaloProps};
+
 pub fn card(model: &CardModel) -> Element {
-    container(roles::CARD)
-        .accent(model.accent)
-        .child(image(roles::CARD_ICON).icon(&model.icon_key))
-        .child(label(roles::CARD_TITLE).text(&model.title))
-        .child(label(roles::CARD_SUBTITLE).text(&model.subtitle))
+    icon_halo(&IconHaloProps {
+        halo_role: roles::CARD,
+        icon_role: roles::CARD_ICON,
+        icon_key: model.icon_key.clone(),
+        accent: model.accent,
+    })
+    .child(label(roles::CARD_TITLE).text(&model.title))
+    .child(label(roles::CARD_SUBTITLE).text(&model.subtitle))
 }
