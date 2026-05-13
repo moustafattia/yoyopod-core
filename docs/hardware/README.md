@@ -1,10 +1,12 @@
 # Hardware Docs
 
-Device-specific runtime dependencies, audio/power behavior, and board bringup notes live here.
+Device-specific runtime dependencies and audio/power behaviour for
+YoYoPod.
 
-- [`AUDIO_STACK.md`](AUDIO_STACK.md) - ALSA routing, WM8960 headroom, and mpv output behavior
-- [`POWER_MODULE.md`](POWER_MODULE.md) - power, battery, RTC, watchdog, and PiSugar integration
-- [`CUBIE_A7Z_BRINGUP.md`](CUBIE_A7Z_BRINGUP.md) - Radxa Cubie A7Z bringup findings
-- [`CUBIE_A7Z_PIMORONI_SETUP.md`](CUBIE_A7Z_PIMORONI_SETUP.md) - historical Pimoroni HAT setup on Cubie A7Z
+- [`AUDIO_STACK.md`](AUDIO_STACK.md) - ALSA routing, WM8960 headroom,
+  and mpv output behaviour
+- [`POWER_MODULE.md`](POWER_MODULE.md) - power, battery, RTC, watchdog,
+  and PiSugar integration
 
-The current primary hardware target remains Raspberry Pi Zero 2W with the Whisplay prototype path.
+Supported hardware: Raspberry Pi Zero 2W + PiSugar Whisplay HAT +
+PiSugar 3 power module.

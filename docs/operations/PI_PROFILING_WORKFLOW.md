@@ -17,8 +17,9 @@ Use this workflow when you want to answer:
 - is the Pi staying responsive during music, VoIP, and navigation soaks?
 - is memory growth coming from a specific worker or a native dependency?
 
-The Pi Zero 2 W is the source of truth. Desktop simulation is useful as
-a fast triage, not as proof that the Pi will behave the same way.
+The Pi Zero 2 W with the Whisplay HAT and PiSugar 3 is the source of
+truth. There is no off-target profiling shortcut; results must come
+from real hardware.
 
 ## Deploy + capture loop
 

@@ -72,15 +72,12 @@ Tracked authored config must not contain SIP credentials.
 
 Board overlays mirror the same relative path under `config/boards/<board>/`.
 
-Examples:
+Examples (for the only currently supported board, `rpi-zero-2w`):
 
 - `config/boards/rpi-zero-2w/audio/music.yaml`
 - `config/boards/rpi-zero-2w/device/hardware.yaml`
 - `config/boards/rpi-zero-2w/power/backend.yaml`
 - `config/boards/rpi-zero-2w/network/cellular.yaml`
-- `config/boards/radxa-cubie-a7z/audio/music.yaml`
-- `config/boards/radxa-cubie-a7z/device/hardware.yaml`
-- `config/boards/radxa-cubie-a7z/power/backend.yaml`
 
 Future domains should follow the same pattern instead of inventing one-off
 overlay shapes.
