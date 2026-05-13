@@ -27,6 +27,7 @@ pub(crate) struct WidgetNode {
     pub obj: NonNull<ffi::lv_obj_t>,
     pub kind: WidgetKind,
     pub role: &'static str,
+    pub parent: Option<WidgetId>,
     pub children: Vec<WidgetId>,
     pub layout: Layout,
     pub x_offset: i32,
@@ -69,6 +70,7 @@ impl WidgetRegistry {
                 obj,
                 kind,
                 role,
+                parent,
                 children: Vec::new(),
                 layout,
                 x_offset: 0,
@@ -85,6 +87,11 @@ impl WidgetRegistry {
     }
 
     pub fn remove_subtree(&mut self, widget: WidgetId) {
+        if let Some(parent) = self.widgets.get(&widget).and_then(|node| node.parent) {
+            if let Some(parent_node) = self.widgets.get_mut(&parent) {
+                parent_node.children.retain(|child| *child != widget);
+            }
+        }
         if let Some(node) = self.widgets.remove(&widget) {
             for child in node.children {
                 self.remove_subtree(child);
@@ -93,9 +100,26 @@ impl WidgetRegistry {
     }
 
     pub fn reorder_children(&mut self, parent: WidgetId, order: &[WidgetId]) -> Result<()> {
+        let current = self
+            .widgets
+            .get(&parent)
+            .map(|node| node.children.clone())
+            .ok_or_else(|| anyhow!("unknown parent widget {}", parent.raw()))?;
+        if current.len() != order.len() {
+            anyhow::bail!(
+                "reorder for widget {} has {} children, expected {}",
+                parent.raw(),
+                order.len(),
+                current.len()
+            );
+        }
         for child in order {
-            if !self.widgets.contains_key(child) {
-                anyhow::bail!("unknown child widget {}", child.raw());
+            if !current.contains(child) {
+                anyhow::bail!(
+                    "reorder for widget {} referenced non-child widget {}",
+                    parent.raw(),
+                    child.raw()
+                );
             }
         }
         let parent = self.node_mut(parent)?;
