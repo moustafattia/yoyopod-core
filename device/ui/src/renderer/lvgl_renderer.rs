@@ -5,9 +5,9 @@ use anyhow::anyhow;
 use anyhow::Result;
 
 #[cfg(feature = "native-lvgl")]
-use crate::renderer::lvgl::node_registry::NodeRegistry;
-#[cfg(feature = "native-lvgl")]
 use crate::renderer::lvgl::NativeLvglFacade;
+#[cfg(feature = "native-lvgl")]
+use crate::renderer::node_registry::NodeRegistry;
 #[cfg(feature = "native-lvgl")]
 use crate::renderer::widgets::{LvglFacade, WidgetId};
 use crate::renderer::{Framebuffer, RenderReport, Renderer};

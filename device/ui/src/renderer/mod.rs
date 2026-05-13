@@ -1,6 +1,9 @@
 pub mod assets;
 pub mod framebuffer;
+#[cfg(feature = "native-lvgl")]
 pub mod lvgl;
+pub mod lvgl_renderer;
+pub mod node_registry;
 pub mod null_renderer;
 pub mod styling;
 pub mod widgets;
@@ -11,7 +14,7 @@ use crate::renderer::framebuffer::Framebuffer as RenderFramebuffer;
 use crate::{Mutation, RenderMode};
 
 pub use framebuffer::Framebuffer;
-pub use lvgl::LvglRenderer;
+pub use lvgl_renderer::LvglRenderer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderReport {
