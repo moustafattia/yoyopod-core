@@ -80,10 +80,6 @@ impl<'a> TimelineSampler<'a> {
         sampled.then_some(signature)
     }
 
-    pub fn is_animating(&self, _target: ActorRef) -> bool {
-        !self.timelines.is_empty()
-    }
-
     fn elapsed_ms(&self, timeline: &Timeline) -> u32 {
         let base = match timeline.clock {
             ClockSource::GlobalTime => self.global_ms,
@@ -140,7 +136,18 @@ fn normalize_elapsed(elapsed_ms: u32, duration: u32, loop_mode: LoopMode) -> u32
                 t
             }
         }
-        LoopMode::RepeatN(count) => elapsed_ms.min(duration.saturating_mul(u32::from(count))),
+        LoopMode::RepeatN(count) => {
+            let count = u32::from(count);
+            if count == 0 {
+                return duration;
+            }
+            let total = duration.saturating_mul(count);
+            if elapsed_ms >= total {
+                duration
+            } else {
+                elapsed_ms % duration
+            }
+        }
     }
 }
 
