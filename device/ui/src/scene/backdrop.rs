@@ -1,7 +1,7 @@
 use crate::engine::{Element, Key};
-use crate::render_contract::ElementKind;
 use crate::scene::roles;
 use crate::scene::RegionId;
+use crate::ElementKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backdrop {

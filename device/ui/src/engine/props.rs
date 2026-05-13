@@ -1,4 +1,4 @@
-use crate::render_contract::PropChange;
+use crate::PropChange;
 
 use super::ElementProps;
 

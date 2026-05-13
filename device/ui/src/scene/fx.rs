@@ -1,7 +1,7 @@
 use crate::animation::ActorRef;
 use crate::engine::{Element, Key};
-use crate::render_contract::ElementKind;
 use crate::scene::roles;
+use crate::ElementKind;
 
 use super::RegionId;
 

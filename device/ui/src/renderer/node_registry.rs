@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use crate::render_contract::NodeId;
 use crate::renderer::widgets::WidgetId;
+use crate::NodeId;
 
 #[derive(Debug, Default)]
 pub struct NodeRegistry {

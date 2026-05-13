@@ -4,10 +4,6 @@ use std::path::Path;
 use anyhow::anyhow;
 use anyhow::Result;
 
-use crate::render_contract::Mutation;
-use crate::render_contract::RenderMode;
-#[cfg(feature = "native-lvgl")]
-use crate::render_contract::{ElementKind, NodeId, PropChange};
 #[cfg(feature = "native-lvgl")]
 use crate::renderer::lvgl::NativeLvglFacade;
 #[cfg(feature = "native-lvgl")]
@@ -15,6 +11,10 @@ use crate::renderer::node_registry::NodeRegistry;
 #[cfg(feature = "native-lvgl")]
 use crate::renderer::widgets::{LvglFacade, WidgetId};
 use crate::renderer::{Framebuffer, RenderReport, Renderer};
+use crate::Mutation;
+use crate::RenderMode;
+#[cfg(feature = "native-lvgl")]
+use crate::{ElementKind, NodeId, PropChange};
 
 #[cfg(feature = "native-lvgl")]
 const MAX_ACTIVE_WIDGETS: usize = 60;

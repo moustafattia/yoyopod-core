@@ -3,8 +3,8 @@ use yoyopod_protocol::ui::{
     InputAction, IntentKind, RuntimeSnapshotDomain, ScreenCapabilities, UiIntent,
 };
 
-use crate::render_contract::DirtyRegion;
 use crate::scene::FocusPolicy;
+use crate::DirtyRegion;
 
 use super::route::{
     BackPolicy, DynamicActionKind, IntentTemplate, ListKind, NavigationPolicy, PassthroughPolicy,

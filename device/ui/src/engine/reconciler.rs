@@ -1,6 +1,6 @@
 use crate::animation::{AnimatableProp, AnimatableValue, TimelineSampler};
-use crate::render_contract::{Mutation, NodeId, PropChange};
 use crate::scene::{region_rect, RegionId, Stage};
+use crate::{Mutation, NodeId, PropChange};
 
 use std::collections::BTreeMap;
 

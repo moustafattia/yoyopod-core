@@ -4,9 +4,9 @@ use yoyopod_protocol::ui::{
 
 use crate::animation;
 use crate::components;
-use crate::render_contract::DirtyRegion;
 use crate::router::history::HistoryEntry;
 use crate::scene::{defaults_for, GlobalClock, SceneGraph, SceneId};
+use crate::DirtyRegion;
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen};

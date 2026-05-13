@@ -9,11 +9,11 @@ use crate::application::UiRuntime;
 use crate::engine::Engine;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
-use crate::render_contract::RenderMode;
 use crate::renderer::{Framebuffer, LvglRenderer, Renderer};
 use crate::router;
 use crate::scene::load_scene_defaults;
 use crate::transport::{codec, dispatcher, handshake, inbound, outbound};
+use crate::RenderMode;
 
 const MANAGER_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 const RUNTIME_TICK_TIMEOUT: Duration = Duration::from_secs(5);

@@ -1,7 +1,7 @@
 use crate::animation::Transition;
-use crate::render_contract::DirtyRegion;
 use crate::router;
 use crate::router::history::HistoryEntry;
+use crate::DirtyRegion;
 use std::collections::BTreeMap;
 
 use yoyopod_protocol::ui::{

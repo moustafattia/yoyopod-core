@@ -10,8 +10,8 @@ pub mod widgets;
 
 use anyhow::Result;
 
-use crate::render_contract::{Mutation, RenderMode};
 use crate::renderer::framebuffer::Framebuffer as RenderFramebuffer;
+use crate::{Mutation, RenderMode};
 
 pub use framebuffer::Framebuffer;
 pub use lvgl_renderer::LvglRenderer;

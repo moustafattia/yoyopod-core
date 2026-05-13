@@ -8,8 +8,8 @@ use super::whisplay_panel::{
     DEFAULT_BUTTON_GPIO, DEFAULT_DC_GPIO, DEFAULT_RESET_GPIO, DEFAULT_SPI_HZ, HEIGHT, WIDTH,
 };
 use crate::hardware::{ButtonDevice, DisplayDevice};
-use crate::render_contract::DirtyRegion;
 use crate::renderer::Framebuffer;
+use crate::DirtyRegion;
 
 const SPI_CHUNK_BYTES: usize = 4096;
 

@@ -1,6 +1,6 @@
 use crate::animation::{ClockSource, Timeline, TimelineSampler};
-use crate::render_contract::{DirtyRegion, Mutation, RenderMode};
 use crate::scene::{SceneGraph, SceneId};
+use crate::{DirtyRegion, Mutation, RenderMode};
 
 use super::{dirty, flatten, ActiveTimelines, NodeIdAlloc, Reconciler, TreeCache};
 

@@ -1,8 +1,8 @@
 use crate::animation::{presets, ActorRef, Timeline, TimelineRef, TrackIndex};
 use crate::components::widgets::{card as card_widget, list_row as list_row_widget};
 use crate::engine::{AnimSlot, Element, Key};
-use crate::render_contract::ElementKind;
 use crate::scene::roles;
+use crate::ElementKind;
 
 use super::RegionId;
 

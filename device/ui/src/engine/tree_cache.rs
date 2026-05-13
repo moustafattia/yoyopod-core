@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::render_contract::{ElementKind, NodeId};
+use crate::{ElementKind, NodeId};
 
 use super::{Element, Key};
 
