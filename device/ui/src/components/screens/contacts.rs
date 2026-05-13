@@ -1,13 +1,25 @@
-use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::router::FocusPolicy;
 use crate::scene::Scene;
 
-pub fn scene(snapshot: &RuntimeSnapshot, focus: usize) -> Scene {
+pub struct ContactsProps {
+    pub items: Vec<ListItemSnapshot>,
+    pub focus: usize,
+}
+
+pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> ContactsProps {
+    ContactsProps {
+        items: snapshot.call.contacts.clone(),
+        focus,
+    }
+}
+
+pub fn scene(props: &ContactsProps) -> Scene {
     super::common::list_scene(
         UiScreen::Contacts,
-        &snapshot.call.contacts,
-        focus,
+        &props.items,
+        props.focus,
         FocusPolicy::Clamp,
     )
 }
