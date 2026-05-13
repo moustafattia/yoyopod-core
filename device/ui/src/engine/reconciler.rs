@@ -30,7 +30,7 @@ fn diff_element(
     match previous {
         None => create_subtree(node, parent, next, next_id, out),
         Some(previous) if should_replace(previous, next) => {
-            out.push(Mutation::Remove { node });
+            remove_subtree(previous, node, out);
             create_subtree(node, parent, next, next_id, out);
         }
         Some(previous) => {
@@ -76,10 +76,9 @@ fn diff_children(
         let node = diff_element(previous_child, child, parent, next_id, out);
         order.push(node);
     }
-    for _ in next.children.len()..previous.children.len() {
-        out.push(Mutation::Remove {
-            node: alloc(next_id),
-        });
+    for child in previous.children.iter().skip(next.children.len()) {
+        let node = alloc(next_id);
+        *next_id = remove_subtree(child, node, out).0;
     }
     if !order.is_empty() {
         out.push(Mutation::Reorder { parent, order });
@@ -115,6 +114,15 @@ fn emit_place(node: NodeId, layout: Layout, out: &mut Vec<Mutation>) {
     if let Layout::Absolute { x, y, w, h } = layout {
         out.push(Mutation::Place { node, x, y, w, h });
     }
+}
+
+fn remove_subtree(element: &Element, node: NodeId, out: &mut Vec<Mutation>) -> NodeId {
+    let mut next_child = NodeId(node.0.saturating_add(1));
+    for child in &element.children {
+        next_child = remove_subtree(child, next_child, out);
+    }
+    out.push(Mutation::Remove { node });
+    next_child
 }
 
 fn should_replace(previous: &Element, next: &Element) -> bool {
