@@ -11,6 +11,8 @@ use super::{Backdrop, FxLayer, GlowBloom, Halo, ParticleField, PulseRing, Region
 
 const SCENES_RON: &str = include_str!("../../assets/scenes.ron");
 const DEFAULT_SOLID_RGB: u32 = 0x2a2d35;
+const DEFAULT_GRADIENT_ANGLE_DEG: i16 = 180;
+const DEFAULT_VIGNETTE_FALLOFF: u8 = 72;
 const DEFAULT_ACCENT_DRIFT_MS: u32 = 800;
 
 static SCENE_DEFAULTS: OnceLock<SceneDefaultsCatalog> = OnceLock::new();
@@ -60,6 +62,15 @@ impl SceneDefaults {
                 accent,
                 speed_ms: DEFAULT_ACCENT_DRIFT_MS,
             },
+            BackdropPreset::Gradient => Backdrop::Gradient {
+                from: DEFAULT_SOLID_RGB,
+                to: accent,
+                angle_deg: DEFAULT_GRADIENT_ANGLE_DEG,
+            },
+            BackdropPreset::Vignette => Backdrop::Vignette {
+                base: DEFAULT_SOLID_RGB,
+                falloff: DEFAULT_VIGNETTE_FALLOFF,
+            },
         }
     }
 
@@ -86,6 +97,8 @@ impl SceneDefaults {
 pub enum BackdropPreset {
     Solid,
     AccentDrift,
+    Gradient,
+    Vignette,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,6 +254,8 @@ fn backdrop_from_key(screen: &str, key: &str) -> Result<BackdropPreset, SceneDef
     match key {
         "solid" => Ok(BackdropPreset::Solid),
         "accent_drift" => Ok(BackdropPreset::AccentDrift),
+        "gradient" => Ok(BackdropPreset::Gradient),
+        "vignette" => Ok(BackdropPreset::Vignette),
         value => Err(SceneDefaultsError::UnknownBackdrop {
             screen: screen.to_string(),
             value: value.to_string(),
