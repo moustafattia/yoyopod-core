@@ -21,6 +21,12 @@ impl Backdrop {
             Self::AccentDrift { .. } => "accent_drift",
             Self::Vignette { .. } => "vignette",
         });
+        element.props.accent = Some(match self {
+            Self::Solid(rgb) => rgb,
+            Self::Gradient { from, .. } => from,
+            Self::AccentDrift { accent, .. } => accent,
+            Self::Vignette { base, .. } => base,
+        });
         element
     }
 }
