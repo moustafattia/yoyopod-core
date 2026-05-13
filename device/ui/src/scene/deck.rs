@@ -1,5 +1,8 @@
 use crate::animation::{presets, ActorRef, Timeline, TimelineRef, TrackIndex};
-use crate::components::widgets::{card as card_widget, list_row as list_row_widget};
+use crate::components::widgets::{
+    call_panel as call_panel_widget, card as card_widget, list_row as list_row_widget,
+    CallPanelProps,
+};
 use crate::engine::{AnimSlot, Element, Key};
 use crate::scene::roles;
 use crate::ElementKind;
@@ -46,6 +49,7 @@ pub enum ItemRender {
     Row(RowModel),
     Page(PageModel),
     Button(ButtonModel),
+    CallPanel(CallPanelModel),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +79,13 @@ pub struct PageModel {
 pub struct ButtonModel {
     pub title: String,
     pub icon_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallPanelModel {
+    pub title: String,
+    pub state: String,
+    pub muted: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,6 +196,12 @@ fn deck_item_element(
             .key(item.key.clone())
             .child(Element::new(ElementKind::Label, Some(roles::PAGE_TITLE)).text(&page.title))
             .child(Element::new(ElementKind::Label, Some(roles::PAGE_BODY)).text(&page.body)),
+        ItemRender::CallPanel(call) => call_panel_widget(&CallPanelProps {
+            title: call.title.clone(),
+            state: call.state.clone(),
+            muted: call.muted,
+        })
+        .key(item.key.clone()),
         ItemRender::Button(button) => Element::new(ElementKind::Container, Some(roles::BUTTON))
             .key(item.key.clone())
             .child(

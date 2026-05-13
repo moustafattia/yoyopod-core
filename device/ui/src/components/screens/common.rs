@@ -2,8 +2,8 @@ use yoyopod_protocol::ui::{ListItemSnapshot, UiScreen};
 
 use crate::engine::Key;
 use crate::scene::{
-    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FocusPolicy, ItemRender, PageModel, RegionId,
-    RowModel, Scene, SceneDefaults, SceneId,
+    CallPanelModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FocusPolicy, ItemRender,
+    RegionId, RowModel, Scene, SceneDefaults, SceneId,
 };
 
 pub fn hero_scene(
@@ -110,7 +110,8 @@ pub fn call_scene(
     screen: UiScreen,
     defaults: &SceneDefaults,
     title: String,
-    body: String,
+    state: String,
+    muted: bool,
 ) -> Scene {
     Scene {
         id: SceneId::new(screen),
@@ -121,7 +122,11 @@ pub fn call_scene(
             region: RegionId::ListBody,
             items: vec![DeckItem {
                 key: Key::Static("call"),
-                render: ItemRender::Page(PageModel { title, body }),
+                render: ItemRender::CallPanel(CallPanelModel {
+                    title,
+                    state,
+                    muted,
+                }),
             }],
             focus_index: 0,
             focus_policy: FocusPolicy::None,

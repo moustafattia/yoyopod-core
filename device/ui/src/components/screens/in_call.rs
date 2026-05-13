@@ -5,18 +5,19 @@ use crate::scene::{Scene, SceneDefaults};
 pub struct InCallProps {
     pub defaults: SceneDefaults,
     pub title: String,
-    pub body: String,
+    pub state: String,
+    pub muted: bool,
 }
 
 pub fn props_from(snapshot: &RuntimeSnapshot, defaults: SceneDefaults) -> InCallProps {
-    let mute = if snapshot.call.muted { "Muted" } else { "Live" };
     InCallProps {
         defaults,
         title: call_peer_name(snapshot),
-        body: format!(
-            "{mute}\n{}\n{}",
+        state: format!(
+            "{}\n{}",
             snapshot.call.duration_text, snapshot.call.peer_address
         ),
+        muted: snapshot.call.muted,
     }
 }
 
@@ -25,7 +26,8 @@ pub fn scene(props: &InCallProps) -> Scene {
         UiScreen::InCall,
         &props.defaults,
         props.title.clone(),
-        props.body.clone(),
+        props.state.clone(),
+        props.muted,
     )
 }
 

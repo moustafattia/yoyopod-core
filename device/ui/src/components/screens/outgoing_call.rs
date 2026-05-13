@@ -5,14 +5,14 @@ use crate::scene::{Scene, SceneDefaults};
 pub struct OutgoingCallProps {
     pub defaults: SceneDefaults,
     pub title: String,
-    pub body: String,
+    pub state: String,
 }
 
 pub fn props_from(snapshot: &RuntimeSnapshot, defaults: SceneDefaults) -> OutgoingCallProps {
     OutgoingCallProps {
         defaults,
         title: call_peer_name(snapshot),
-        body: format!("Dialing\n{}", snapshot.call.peer_address),
+        state: format!("Dialing\n{}", snapshot.call.peer_address),
     }
 }
 
@@ -21,7 +21,8 @@ pub fn scene(props: &OutgoingCallProps) -> Scene {
         UiScreen::OutgoingCall,
         &props.defaults,
         props.title.clone(),
-        props.body.clone(),
+        props.state.clone(),
+        false,
     )
 }
 
