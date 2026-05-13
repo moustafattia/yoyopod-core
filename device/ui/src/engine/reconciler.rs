@@ -2,7 +2,7 @@ use crate::animation::{AnimatableProp, AnimatableValue, TimelineSampler};
 use crate::render_contract::{Mutation, NodeId, PropChange};
 use crate::scene::{region_rect, RegionId, Stage};
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use super::{props, Element, ElementProps, Layout, NodeIdAlloc, NodePath};
 
@@ -139,14 +139,8 @@ fn diff_children(
     sampler: &TimelineSampler<'_>,
     out: &mut Vec<Mutation>,
 ) {
-    let previous_order = previous
-        .children
-        .iter()
-        .enumerate()
-        .filter_map(|(index, child)| previous_ids.get(&parent_path.child(child, index)).copied())
-        .collect::<Vec<_>>();
     let mut order = Vec::with_capacity(next.children.len());
-    let mut matched_previous = BTreeSet::new();
+    let mut matched_previous = vec![false; previous.children.len()];
     for (index, child) in next.children.iter().enumerate() {
         let child_path = parent_path.child(child, index);
         let previous_match =
@@ -158,7 +152,7 @@ fn diff_children(
                     parent_path.child(previous_child, *previous_index) == child_path
                 });
         let previous_child = previous_match.map(|(previous_index, previous_child)| {
-            matched_previous.insert(previous_index);
+            matched_previous[previous_index] = true;
             previous_child
         });
         let node = diff_element(
@@ -176,7 +170,7 @@ fn diff_children(
         order.push(node);
     }
     for (index, child) in previous.children.iter().enumerate() {
-        if matched_previous.contains(&index) {
+        if matched_previous[index] {
             continue;
         }
         let child_path = parent_path.child(child, index);
@@ -184,9 +178,29 @@ fn diff_children(
             remove_subtree(child, child_path, node, previous_ids, out);
         }
     }
-    if !order.is_empty() && order != previous_order {
+    if !order.is_empty() && child_order_changed(previous, &parent_path, previous_ids, &order) {
         out.push(Mutation::Reorder { parent, order });
     }
+}
+
+fn child_order_changed(
+    previous: &Element,
+    parent_path: &NodePath,
+    previous_ids: &BTreeMap<NodePath, NodeId>,
+    order: &[NodeId],
+) -> bool {
+    if previous.children.len() != order.len() {
+        return true;
+    }
+
+    previous
+        .children
+        .iter()
+        .enumerate()
+        .zip(order.iter().copied())
+        .any(|((index, child), next_node)| {
+            previous_ids.get(&parent_path.child(child, index)).copied() != Some(next_node)
+        })
 }
 
 fn emit_prop_updates(
