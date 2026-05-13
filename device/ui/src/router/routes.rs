@@ -5,6 +5,12 @@ use yoyopod_protocol::ui::{
 
 use crate::engine::DirtyRegion;
 
+use super::route::{
+    BackPolicy, ControllerKind, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind,
+    NativeRenderScene, NavigationPolicy, PassthroughPolicy, Persistence, RenderScene, Route,
+    ScreenModelKind, SelectionTarget, SnapshotCondition,
+};
+
 const STATUS_BAR_REGION: DirtyRegion = DirtyRegion {
     x: 0,
     y: 0,
@@ -12,195 +18,21 @@ const STATUS_BAR_REGION: DirtyRegion = DirtyRegion {
     h: 32,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RenderScene {
-    Hub,
-    List,
-    NowPlaying,
-    Ask,
-    TalkActions,
-    Call,
-    Power,
-    Overlay,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NativeRenderScene {
-    Hub,
-    Listen,
-    Playlist,
-    NowPlaying,
-    Talk,
-    TalkActions,
-    IncomingCall,
-    OutgoingCall,
-    InCall,
-    Ask,
-    Power,
-    Overlay,
-}
-
-impl NativeRenderScene {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Hub => "hub",
-            Self::Listen => "listen",
-            Self::Playlist => "playlist",
-            Self::NowPlaying => "now_playing",
-            Self::Talk => "talk",
-            Self::TalkActions => "talk_actions",
-            Self::IncomingCall => "incoming_call",
-            Self::OutgoingCall => "outgoing_call",
-            Self::InCall => "in_call",
-            Self::Ask => "ask",
-            Self::Power => "power",
-            Self::Overlay => "overlay",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScreenModelKind {
-    Hub,
-    List,
-    NowPlaying,
-    Ask,
-    TalkActions,
-    Call,
-    Power,
-    Overlay,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ControllerKind {
-    Hub,
-    List,
-    Listen,
-    Playlist,
-    NowPlaying,
-    Ask,
-    Talk,
-    TalkActions,
-    Call,
-    Power,
-    Overlay,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FocusPolicy {
-    None,
-    Wrap,
-    Clamp,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NavigationPolicy {
-    Root,
-    Stack,
-    Overlay,
-    Call,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IntentTemplate {
-    MusicShuffleAll,
-    MusicPlayPause,
-    VoiceAskStart,
-    VoiceAskStop,
-    VoiceCaptureStartRecipient,
-    VoiceCaptureStop,
-    VoiceCaptureCancel,
-    VoiceDiscard,
-    CallAnswer,
-    CallReject,
-    CallHangup,
-    CallToggleMute,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ListKind {
-    Playlists,
-    RecentTracks,
-    Contacts,
-    CallHistory,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DynamicActionKind {
-    TalkContact,
-    VoiceNote,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelectionTarget {
-    PushScreen(UiScreen),
-    EmitIntent(IntentTemplate),
-    PushWithIntent {
-        screen: UiScreen,
-        intent: IntentTemplate,
-    },
-    DynamicListItem {
-        kind: ListKind,
-    },
-    DynamicAction {
-        kind: DynamicActionKind,
-    },
-    AdvanceFocus,
-    Noop,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SnapshotCondition {
-    Always,
-    VoiceReady,
-    VoiceRecording,
-    VoiceReviewOrFailedOrSent,
-    VoiceReadyOrRecording,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PassthroughPolicy {
-    pub trigger: InputAction,
-    pub when: SnapshotCondition,
-    pub intent: IntentTemplate,
-    pub captures_button: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BackPolicy {
-    pub when: SnapshotCondition,
-    pub intent: IntentTemplate,
-    pub pop_screen: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ScreenRegistryEntry {
-    pub screen: UiScreen,
-    pub model_kind: ScreenModelKind,
-    pub controller_kind: ControllerKind,
-    pub native_controller_kind: ControllerKind,
-    pub focus_policy: FocusPolicy,
-    pub navigation_policy: NavigationPolicy,
-    pub render_scene: RenderScene,
-    pub native_scene: NativeRenderScene,
-    pub select_targets: &'static [SelectionTarget],
-    pub passthrough_policies: &'static [PassthroughPolicy],
-    pub back_policies: &'static [BackPolicy],
-}
-
-pub const fn screen_entry(screen: UiScreen) -> ScreenRegistryEntry {
-    ScreenRegistryEntry {
+pub const fn route_for(screen: UiScreen) -> Route {
+    Route {
         screen,
+        title: screen.as_str(),
         model_kind: model_kind(screen),
         controller_kind: controller_kind(screen),
         native_controller_kind: native_controller_kind(screen),
         focus_policy: focus_policy(screen),
-        navigation_policy: navigation_policy(screen),
+        nav_policy: navigation_policy(screen),
+        persistence: persistence(screen),
         render_scene: render_scene(screen),
         native_scene: native_scene(screen),
-        select_targets: select_targets(screen),
-        passthrough_policies: passthrough_policies(screen),
-        back_policies: back_policies(screen),
+        select: select_targets(screen),
+        passthrough: passthrough_policies(screen),
+        back: back_policies(screen),
     }
 }
 
@@ -222,27 +54,24 @@ pub fn screen_capabilities() -> Vec<ScreenCapabilities> {
         .iter()
         .copied()
         .map(|screen| {
-            let entry = screen_entry(screen);
+            let entry = route_for(screen);
             let mut supported_intents = Vec::new();
-            for target in entry.select_targets {
+            for target in entry.select {
                 add_selection_intent(*target, &mut supported_intents);
             }
-            for passthrough in entry.passthrough_policies {
+            for passthrough in entry.passthrough {
                 add_intent_kind(
                     template_intent_kind(passthrough.intent),
                     &mut supported_intents,
                 );
             }
-            for back in entry.back_policies {
+            for back in entry.back {
                 add_intent_kind(template_intent_kind(back.intent), &mut supported_intents);
             }
             ScreenCapabilities {
                 screen,
                 supported_intents,
-                passthrough: entry
-                    .passthrough_policies
-                    .first()
-                    .map(|policy| policy.trigger),
+                passthrough: entry.passthrough.first().map(|policy| policy.trigger),
             }
         })
         .collect()
@@ -620,6 +449,14 @@ const fn navigation_policy(screen: UiScreen) -> NavigationPolicy {
             NavigationPolicy::Call
         }
         _ => NavigationPolicy::Stack,
+    }
+}
+
+const fn persistence(screen: UiScreen) -> Persistence {
+    match screen {
+        UiScreen::NowPlaying => Persistence::KeepAlive,
+        UiScreen::Loading | UiScreen::Error => Persistence::Singleton,
+        _ => Persistence::Ephemeral,
     }
 }
 

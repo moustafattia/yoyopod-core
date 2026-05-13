@@ -13,7 +13,7 @@ use super::scene_controller::{controller_for_native_scene, NativeSceneController
 use crate::renderer::widgets::LvglFacade;
 
 const fn native_scene_for_screen(screen: UiScreen) -> NativeRenderScene {
-    router::screen_entry(screen).native_scene
+    router::route_for(screen).native_scene
 }
 
 pub trait SceneBridge {

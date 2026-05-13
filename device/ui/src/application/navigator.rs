@@ -1,8 +1,7 @@
 use crate::presentation::screens;
 use crate::router::{
-    screen_entry, static_intent_template, BackPolicy, DynamicActionKind, FocusPolicy,
-    IntentTemplate, ListKind, NavigationPolicy, PassthroughPolicy, SelectionTarget,
-    SnapshotCondition,
+    route_for, static_intent_template, BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate,
+    ListKind, NavigationPolicy, PassthroughPolicy, SelectionTarget, SnapshotCondition,
 };
 use yoyopod_protocol::ui::{
     CallIntent, ListItemSnapshot, MusicIntent, RuntimeSnapshot, UiIntent, VoiceIntent,
@@ -59,7 +58,7 @@ pub fn apply_app_state_route(
 
 pub fn advance_focus(runtime: &mut UiRuntime) {
     let count = focus_count(runtime);
-    runtime.focus_index = match screen_entry(runtime.active_screen).focus_policy {
+    runtime.focus_index = match route_for(runtime.active_screen).focus_policy {
         FocusPolicy::None => runtime.focus_index,
         FocusPolicy::Wrap => focus::advance(runtime.focus_index, count),
         FocusPolicy::Clamp => focus::advance_clamped(runtime.focus_index, count),
@@ -67,7 +66,7 @@ pub fn advance_focus(runtime: &mut UiRuntime) {
 }
 
 pub fn select_focused(runtime: &mut UiRuntime) {
-    let targets = screen_entry(runtime.active_screen).select_targets;
+    let targets = route_for(runtime.active_screen).select;
     let Some(target) = targets
         .get(runtime.focus_index)
         .or_else(|| targets.last())
@@ -83,7 +82,7 @@ pub fn go_back_or_emit(runtime: &mut UiRuntime) {
         return;
     }
 
-    match screen_entry(runtime.active_screen).navigation_policy {
+    match route_for(runtime.active_screen).nav_policy {
         NavigationPolicy::Root => {}
         NavigationPolicy::Overlay | NavigationPolicy::Stack => pop_screen_or_hub(runtime),
         NavigationPolicy::Call => go_back_from_call_screen(runtime),
@@ -99,8 +98,8 @@ pub fn handle_ptt_release(runtime: &mut UiRuntime) {
 }
 
 pub fn wants_ptt_passthrough(runtime: &UiRuntime) -> bool {
-    screen_entry(runtime.active_screen)
-        .passthrough_policies
+    route_for(runtime.active_screen)
+        .passthrough
         .iter()
         .any(|policy| policy.captures_button && matches_condition(runtime, policy.when))
 }
@@ -210,8 +209,8 @@ fn select_dynamic_action(runtime: &mut UiRuntime, kind: DynamicActionKind) {
 }
 
 fn apply_back_passthrough(runtime: &mut UiRuntime) -> bool {
-    let policy = screen_entry(runtime.active_screen)
-        .back_policies
+    let policy = route_for(runtime.active_screen)
+        .back
         .iter()
         .find(|policy| matches_condition(runtime, policy.when))
         .copied();
@@ -310,8 +309,8 @@ fn select_voice_note(runtime: &mut UiRuntime) {
 }
 
 fn apply_passthrough_trigger(runtime: &mut UiRuntime, trigger: yoyopod_protocol::ui::InputAction) {
-    let policy = screen_entry(runtime.active_screen)
-        .passthrough_policies
+    let policy = route_for(runtime.active_screen)
+        .passthrough
         .iter()
         .find(|policy| policy.trigger == trigger && matches_condition(runtime, policy.when))
         .copied();

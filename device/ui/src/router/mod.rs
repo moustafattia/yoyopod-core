@@ -1,8 +1,12 @@
+pub mod route;
 pub mod routes;
 
+pub use route::{
+    BackPolicy, ControllerKind, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind,
+    NativeRenderScene, NavigationPolicy, PassthroughPolicy, Persistence, RenderScene, Route,
+    ScreenModelKind, SelectionTarget, SnapshotCondition, UiScreen,
+};
 pub use routes::{
-    controller_kind_for_native_scene, dirty_region_for, screen_capabilities, screen_entry,
-    static_intent_template, BackPolicy, ControllerKind, DynamicActionKind, FocusPolicy,
-    IntentTemplate, ListKind, NativeRenderScene, NavigationPolicy, PassthroughPolicy, RenderScene,
-    ScreenModelKind, ScreenRegistryEntry, SelectionTarget, SnapshotCondition, UiScreen,
+    controller_kind_for_native_scene, dirty_region_for, route_for, screen_capabilities,
+    static_intent_template,
 };
