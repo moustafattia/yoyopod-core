@@ -1,4 +1,4 @@
-use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
+use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
 use crate::router::FocusPolicy;
 use crate::scene::{
@@ -13,9 +13,7 @@ pub struct ListenProps {
 
 pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> ListenProps {
     ListenProps {
-        rows: snapshot
-            .music
-            .playlists
+        rows: items(snapshot)
             .iter()
             .map(|item| RowModel {
                 id: item.id.clone(),
@@ -27,6 +25,14 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> ListenProps {
             .collect(),
         focus,
     }
+}
+
+pub fn items(_snapshot: &RuntimeSnapshot) -> Vec<ListItemSnapshot> {
+    vec![
+        ListItemSnapshot::new("playlists", "Playlists", "Saved mixes", "playlist"),
+        ListItemSnapshot::new("recent_tracks", "Recent", "Recently played", "recent"),
+        ListItemSnapshot::new("shuffle", "Shuffle All", "Start music", "shuffle"),
+    ]
 }
 
 pub fn scene(props: &ListenProps) -> Scene {

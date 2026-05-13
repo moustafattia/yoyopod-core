@@ -1,15 +1,18 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
 use crate::animation::presets;
+use crate::engine::Key;
 use crate::router::FocusPolicy;
 use crate::scene::{
-    Backdrop, Cursor, Deck, DeckItemAnim, DeckKind, FxLayer, RegionId, Scene, SceneId, Stage,
+    Backdrop, CardModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FxLayer, ItemRender,
+    RegionId, Scene, SceneId, Stage,
 };
 
 pub struct HubProps {
     pub card_count: usize,
     pub selected_index: usize,
     pub accent: u32,
+    pub cards: Vec<DeckItem>,
 }
 
 pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> HubProps {
@@ -19,6 +22,18 @@ pub fn props_from(snapshot: &RuntimeSnapshot, focus: usize) -> HubProps {
         card_count: cards.len(),
         selected_index: focus,
         accent: selected.map(|card| card.accent).unwrap_or(0x3ddd53),
+        cards: cards
+            .iter()
+            .map(|card| DeckItem {
+                key: Key::String(card.key.clone()),
+                render: ItemRender::Card(CardModel {
+                    title: card.title.clone(),
+                    subtitle: card.subtitle.clone(),
+                    icon_key: card.key.clone(),
+                    accent: card.accent,
+                }),
+            })
+            .collect(),
     }
 }
 
@@ -33,7 +48,7 @@ pub fn scene(props: &HubProps) -> Scene {
         decks: vec![Deck {
             kind: DeckKind::CardRow,
             region: RegionId::HeroIcon,
-            items: Vec::new(),
+            items: props.cards.clone(),
             focus_index: props.selected_index,
             focus_policy: FocusPolicy::Wrap,
             item_anim: DeckItemAnim::ScaleOnFocus {
