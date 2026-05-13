@@ -1,20 +1,24 @@
 # YoYoPod - Agent Instructions
 
-Last Updated: 2026-05-01
+Last Updated: 2026-05-13
 Target Hardware: Raspberry Pi Zero 2W
 Project: Rust-first iPod-inspired VoIP + local music device with small-screen button UI
 
+**CLI rebuild in progress.** The Python operator CLI (`yoyopod_cli/`) was
+deleted 2026-05-13. A new Rust CLI is being built at `cli/` in rounds.
+Many `yoyopod ...` commands are temporarily unavailable. See
+`docs/operations/CLI_REBUILD_ROUNDS.md` for the roadmap and workarounds.
+
 Purpose
 - Keep this file small. It is the always-loaded agent brief, not a full design doc.
-- Current code beats old plans. Treat Python runtime docs as legacy unless the
-  current code still routes through them.
+- Current code beats old plans.
 
 Guidance order
-1. Current Rust code in `device/`
-2. Current deploy/runtime code in `deploy/` and `yoyopod_cli/`
+1. Current Rust code in `device/` (runtime, workers) and `cli/` (operator CLI)
+2. `docs/operations/CLI_REBUILD_ROUNDS.md` for what's broken right now
 3. `README.md`, `docs/README.md`, and current operation docs
 4. `rules/` for constraints and style
-5. `skills/` for deploy/debug playbooks
+5. `skills/` for deploy/debug playbooks (many are stale during the rebuild)
 6. Historical plans only when they match current code
 
 Read these rules first
@@ -27,7 +31,8 @@ Read these rules first
 - `rules/logging.md`
 - `rules/deploy.md`
 
-Canonical deploy/debug skills
+Canonical deploy/debug skills (NOTE: many call deleted yoyopod_cli
+commands during the rebuild — see CLI_REBUILD_ROUNDS.md)
 - `skills/yoyopod-deploy/SKILL.md`
 - `skills/yoyopod-sync/SKILL.md`
 - `skills/yoyopod-logs/SKILL.md`
@@ -38,7 +43,7 @@ Canonical deploy/debug skills
 - `docs/operations/SLOT_DEPLOY.md` for prod slot/OTA-ready flow
 
 Current Runtime Status
-- Rust is the target runtime owner. The top-level Rust entrypoint is
+- Rust is the only runtime. The top-level Rust entrypoint is
   `device/runtime/src/main.rs`, binary `yoyopod-runtime`.
 - `yoyopod-runtime` loads config, owns PID/log lifecycle, supervises worker
   processes, routes worker events, composes app state, and sends UI snapshots.
@@ -51,24 +56,26 @@ Current Runtime Status
 - The Rust UI host contains native Rust LVGL scene controllers for the main
   screen set. The only C dependency in the LVGL display path is the pinned
   upstream LVGL native library.
-- Python is no longer the architectural target for the app runtime. It remains
-  for CLI/deploy tooling.
-- Dev service runs the Rust owner directly through `yoyopod-runtime`.
-  Legacy Python runtime entrypoints have been deleted.
+- The operator CLI is in transition from Python to Rust; see
+  `docs/operations/CLI_REBUILD_ROUNDS.md`. Rust CLI source: `cli/`.
+- Dev service runs the Rust runtime directly through `yoyopod-runtime`.
 
 Pi Lanes And Bootstrap
 - Dev lane: mutable hardware-testing checkout at `/opt/yoyopod-dev/checkout`,
-  venv at `/opt/yoyopod-dev/venv`, service `yoyopod-dev.service`.
+  service `yoyopod-dev.service`.
 - Prod lane: immutable packaged slots under `/opt/yoyopod-prod`, service
-  `yoyopod-prod.service`; use `remote release ...`, not `remote sync`.
-- Check lane ownership first with `yoyopod remote mode status`; dev/prod
+  `yoyopod-prod.service`. New prod release builds are blocked until Round 3
+  of the CLI rebuild (see CLI_REBUILD_ROUNDS.md).
+- Check lane ownership first with `yoyopod target mode status`; dev/prod
   services should not own hardware together.
-- Dev deploy loop: `yoyopod remote mode activate dev`, then
-  `yoyopod remote sync --branch <branch>`. Add `--clean-native` after
-  native/CMake/lib changes or branch switches.
-- Rust binary deploy rule: commit and push first, then use GitHub Actions
-  artifacts for the exact commit under test. Do not build Rust binaries on the
-  Pi Zero 2W unless the user explicitly overrides this rule.
+- Dev deploy loop: `yoyopod target mode activate dev`, then
+  `yoyopod target deploy --branch <branch>`. The deploy command pushes,
+  finds the matching CI artifact, syncs the Pi checkout, installs the
+  binaries, restarts the service, and verifies startup in one step.
+- Rust binary deploy rule: commit and push first; `yoyopod target deploy`
+  always uses GitHub Actions artifacts for the exact commit. Do not build
+  Rust binaries on the Pi Zero 2W unless the user explicitly overrides
+  this rule.
 
 Source Of Truth
 - `device/runtime/`
@@ -79,33 +86,34 @@ Source Of Truth
 - `device/network/`
 - `deploy/systemd/yoyopod-dev.service`
 - `deploy/systemd/yoyopod-prod.service`
-- `yoyopod_cli/main.py`
-- `yoyopod_cli/COMMANDS.md`
+- `cli/` (Rust operator CLI, in-progress)
+- `docs/operations/CLI_REBUILD_ROUNDS.md`
 - `docs/operations/DEV_PROD_LANES.md`
-- `docs/operations/PI_DEV_WORKFLOW.md`
-- `docs/operations/SLOT_DEPLOY.md`
+- `docs/operations/PI_DEV_WORKFLOW.md` (some content stale during rebuild)
+- `docs/operations/SLOT_DEPLOY.md` (stale during rebuild; Round 3)
 - `docs/architecture/DISPLAY_HAL_ARCHITECTURE.md`
 - `docs/design/WHISPLAY_SIMULATION_PARITY_CONTRACT.md`
 - `docs/architecture/SYSTEM_ARCHITECTURE.md`
 
 High-Value Commands
-- Rust workspace check: `cargo check --manifest-path device/Cargo.toml --workspace --locked`
+- Rust device workspace check: `cargo check --manifest-path device/Cargo.toml --workspace --locked`
 - Rust runtime check: `cargo check --manifest-path device/Cargo.toml -p yoyopod-runtime --locked`
 - Rust UI check: `cargo check --manifest-path device/Cargo.toml -p yoyopod-ui --locked`
 - Rust runtime dry run: `cargo run --manifest-path device/Cargo.toml -p yoyopod-runtime -- --config-dir config --dry-run`
-- Build local artifact on development machine: `uv run yoyopod build rust-runtime`
-- Pi lane status: `yoyopod remote mode status`
-- Pi validation: `yoyopod remote validate --branch <branch> --sha <commit>`
-- Remote operations: `yoyopod remote ...`
-- Command reference: `yoyopod_cli/COMMANDS.md`
+- Rust CLI build: `cargo build --manifest-path cli/Cargo.toml --release`
+- Pi lane status: `yoyopod target mode status`
+- Pi deploy + verify: `yoyopod target deploy --branch <branch> [--sha <sha>]`
+- See `cli/README.md` for the full Rust CLI command reference.
 
 Verification Policy
-- Prefer Rust build checks and Pi validation for Rust changes. Run Python
-  lint/type/compile checks when the changed surface is Python CLI/deploy/
-  compatibility code.
-- For hardware work, exact-commit CI artifacts and the Pi result matter more
-  than local Python gates. Always report the commit SHA, artifact names, and
-  hardware command/result.
+- Prefer Rust build checks for code changes (`cargo check`/`cargo test`
+  inside `device/` and `cli/`).
+- For hardware work, exact-commit CI artifacts (`yoyopod-rust-device-arm64-<sha>`)
+  and Pi results matter most. Always report the commit SHA, artifact names,
+  and hardware command/result.
+- Automated on-Pi validation (`yoyopod target validate`) returns in Round 2
+  of the CLI rebuild. Until then, validate manually after `target deploy`
+  via systemd status + journalctl + hardware inspection.
 
 Hardware Modes
 - PiSugar Whisplay: portrait + single button; primary Rust target.

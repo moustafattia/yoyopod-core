@@ -47,15 +47,17 @@ The current prototype runs on a Raspberry Pi Zero 2W and uses the Whisplay HAT b
 
 This repository contains the software that runs the current YoYoPod prototype:
 
-- `device/runtime/` - Rust runtime owner for config, worker supervision, app state, event routing, and UI snapshots.
+- `device/runtime/` - Rust runtime for config, worker supervision, app state, event routing, and UI snapshots.
 - `device/{ui,media,voip,network,cloud,power,speech}/` - Rust domain sidecar hosts for UI, media, VoIP, network, cloud, power, and speech/Ask.
+- `cli/` - Rust operator CLI for dev-machine to Pi orchestration. Under
+  active rebuild (the Python CLI was retired 2026-05-13); see
+  [docs/operations/CLI_REBUILD_ROUNDS.md](docs/operations/CLI_REBUILD_ROUNDS.md).
 - `apps/` - future web and mobile applications.
 - `packages/` - future shared contracts, SDKs, and app packages.
-- `yoyopod_cli/` - developer and device operations tooling for setup, deploy, validation, and diagnostics.
 
-New runtime work should start in `device/`. Python remains important for
-CLI/deploy tooling. The old Python app runtime is retired from
-supported launch paths. If you want the architecture view instead of the product view, start with
+New runtime work should start in `device/`. New operator tooling work
+goes in `cli/`. If you want the architecture view instead of the product
+view, start with
 [docs/architecture/WORK_AREAS.md](docs/architecture/WORK_AREAS.md) and
 [docs/architecture/SYSTEM_ARCHITECTURE.md](docs/architecture/SYSTEM_ARCHITECTURE.md).
 
@@ -70,11 +72,18 @@ This repo is Raspberry Pi hardware-first. To work on the real device path, plan 
 ### Local Developer Setup
 
 ```bash
-uv sync --extra dev
-uv run yoyopod setup host
-uv run yoyopod setup verify-host --with-remote-tools
-uv run yoyopod build rust-runtime
+# Build the Rust operator CLI (single binary `yoyopod`):
+cargo build --manifest-path cli/Cargo.toml --release
+# Optional: install to ~/.cargo/bin/yoyopod
+cargo install --path cli/yoyopod
+
+# Build the Rust runtime locally (or use CI artifacts; see Hardware Validation):
+cargo build --manifest-path device/Cargo.toml --release -p yoyopod-runtime
 ```
+
+Setup tooling (`yoyopod setup host`, `yoyopod setup verify-host`) is on
+the rebuild roadmap. See
+[docs/operations/CLI_REBUILD_ROUNDS.md](docs/operations/CLI_REBUILD_ROUNDS.md).
 
 ### Fresh Raspberry Pi Install
 
@@ -90,23 +99,32 @@ For a first prod slot install from a published artifact:
 curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s -- --release-url=<artifact-url>
 ```
 
+Note: new prod slot artifacts are blocked until Round 3 of the CLI
+rebuild reintroduces the slot builder. Reinstalling a previously-shipped
+artifact still works.
+
 ### Hardware Validation
 
-For PR hardware testing, use the mutable dev lane from your dev machine:
+For PR hardware testing, use the Rust CLI's deploy command from your dev machine:
 
 ```bash
-uv run yoyopod remote mode activate dev
-uv run yoyopod remote validate --branch <branch> --sha <commit> --with-voip
+yoyopod target mode activate dev
+yoyopod target deploy --branch <branch>     # also accepts --sha <commit>
 ```
 
-For packaged prod slot validation, use the immutable prod lane:
+`target deploy` pushes the current branch, finds the matching CI
+artifact, syncs the Pi, installs binaries, restarts the service, and
+verifies startup in one step.
 
-```bash
-uv run yoyopod remote mode activate prod
-uv run yoyopod remote release status
-```
+Automated on-Pi validation (`yoyopod target validate`) returns in Round 2
+of the CLI rebuild. For now, validate manually after deploy via
+`journalctl -u yoyopod-dev.service -f` and hardware inspection.
 
-For deeper deploy, lane, and troubleshooting flows, read [Dev/Prod Lanes](docs/operations/DEV_PROD_LANES.md), [Slot Deploy](docs/operations/SLOT_DEPLOY.md), and [Pi Dev Workflow](docs/operations/PI_DEV_WORKFLOW.md).
+For deeper deploy, lane, and troubleshooting flows, read [CLI Rebuild
+Rounds](docs/operations/CLI_REBUILD_ROUNDS.md), [Dev/Prod
+Lanes](docs/operations/DEV_PROD_LANES.md), [Slot
+Deploy](docs/operations/SLOT_DEPLOY.md), and [Pi Dev
+Workflow](docs/operations/PI_DEV_WORKFLOW.md).
 
 ## Read More
 

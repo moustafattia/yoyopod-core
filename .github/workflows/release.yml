@@ -13,6 +13,13 @@ on:
 
 jobs:
   release:
+    # DISABLED 2026-05-13 during CLI rebuild Round 0.
+    # The release pipeline depends on `yoyopod release build`,
+    # scripts/build_release.py, and the slot-builder Docker image -- all
+    # removed or deprecated in this PR. Round 3 of the rebuild reintroduces
+    # release/slot tooling as Rust and re-enables this job.
+    # See docs/operations/CLI_REBUILD_ROUNDS.md.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
