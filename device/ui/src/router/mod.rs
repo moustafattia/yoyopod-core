@@ -1,4 +1,5 @@
 pub mod guards;
+pub mod history;
 pub mod route;
 pub mod routes;
 

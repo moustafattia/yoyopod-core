@@ -1,6 +1,6 @@
 use crate::presentation::screens;
 use crate::router::{
-    is_call_screen, is_overlay_screen, route_for, runtime_preemption, static_intent_template,
+    self, is_call_screen, is_overlay_screen, route_for, runtime_preemption, static_intent_template,
     BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind, NavigationPolicy,
     PassthroughPolicy, SelectionTarget, SnapshotCondition,
 };
@@ -321,29 +321,34 @@ fn matches_condition(runtime: &UiRuntime, condition: SnapshotCondition) -> bool 
 }
 
 fn push_screen(runtime: &mut UiRuntime, screen: UiScreen) {
-    if runtime.active_screen != screen {
-        runtime.screen_stack.push(runtime.active_screen);
-    }
-    runtime.active_screen = screen;
+    router::history::push(
+        &mut runtime.screen_stack,
+        &mut runtime.active_screen,
+        screen,
+    );
     runtime.focus_index = 0;
 }
 
 fn pop_screen_or_hub(runtime: &mut UiRuntime) {
-    runtime.active_screen = runtime.screen_stack.pop().unwrap_or(UiScreen::Hub);
+    router::history::pop_or_hub(&mut runtime.screen_stack, &mut runtime.active_screen);
     runtime.focus_index = 0;
 }
 
 fn pop_until_not_call(runtime: &mut UiRuntime) {
-    while is_call_screen(runtime.active_screen) {
-        runtime.active_screen = runtime.screen_stack.pop().unwrap_or(UiScreen::Hub);
-    }
+    router::history::pop_until(
+        &mut runtime.screen_stack,
+        &mut runtime.active_screen,
+        is_call_screen,
+    );
     runtime.focus_index = 0;
 }
 
 fn pop_until_not_overlay(runtime: &mut UiRuntime) {
-    while is_overlay_screen(runtime.active_screen) {
-        runtime.active_screen = runtime.screen_stack.pop().unwrap_or(UiScreen::Hub);
-    }
+    router::history::pop_until(
+        &mut runtime.screen_stack,
+        &mut runtime.active_screen,
+        is_overlay_screen,
+    );
     runtime.focus_index = 0;
 }
 
