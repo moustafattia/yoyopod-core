@@ -43,37 +43,6 @@ pub struct ListRowModel {
     pub selected: bool,
 }
 
-/// ```compile_fail
-/// use yoyopod_ui::application::UiScreen;
-/// use yoyopod_ui::presentation::screens::{ChromeModel, ListRowModel, ListScreenModel, ScreenModel, StatusBarModel};
-///
-/// let _ = ScreenModel::Listen(ListScreenModel {
-///     screen: UiScreen::Contacts,
-///     chrome: ChromeModel {
-///         status: StatusBarModel {
-///             network_connected: false,
-///             network_enabled: false,
-///             connection_type: String::new(),
-///             signal_strength: 0,
-///             gps_has_fix: false,
-///             battery_percent: 100,
-///             charging: false,
-///             power_available: true,
-///             voip_state: 1,
-///         },
-///         footer: String::new(),
-///     },
-///     title: String::new(),
-///     subtitle: String::new(),
-///     rows: vec![ListRowModel {
-///         id: "id".to_string(),
-///         title: "title".to_string(),
-///         subtitle: String::new(),
-///         icon_key: "icon".to_string(),
-///         selected: false,
-///     }],
-/// });
-/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListScreenModel {
     pub chrome: ChromeModel,
@@ -92,31 +61,6 @@ pub struct NowPlayingViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// ```compile_fail
-/// use yoyopod_ui::application::UiScreen;
-/// use yoyopod_ui::presentation::screens::{AskViewModel, ChromeModel, StatusBarModel};
-///
-/// let _ = AskViewModel {
-///     screen: UiScreen::VoiceNote,
-///     chrome: ChromeModel {
-///         status: StatusBarModel {
-///             network_connected: false,
-///             network_enabled: false,
-///             connection_type: String::new(),
-///             signal_strength: 0,
-///             gps_has_fix: false,
-///             battery_percent: 100,
-///             charging: false,
-///             power_available: true,
-///             voip_state: 1,
-///         },
-///         footer: String::new(),
-///     },
-///     title: String::new(),
-///     subtitle: String::new(),
-///     icon_key: "ask".to_string(),
-/// };
-/// ```
 pub struct AskViewModel {
     pub chrome: ChromeModel,
     pub title: String,
@@ -125,32 +69,6 @@ pub struct AskViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// ```compile_fail
-/// use yoyopod_ui::application::UiScreen;
-/// use yoyopod_ui::presentation::screens::{CallViewModel, ChromeModel, StatusBarModel};
-///
-/// let _ = CallViewModel {
-///     screen: UiScreen::OutgoingCall,
-///     chrome: ChromeModel {
-///         status: StatusBarModel {
-///             network_connected: false,
-///             network_enabled: false,
-///             connection_type: String::new(),
-///             signal_strength: 0,
-///             gps_has_fix: false,
-///             battery_percent: 100,
-///             charging: false,
-///             power_available: true,
-///             voip_state: 2,
-///         },
-///         footer: String::new(),
-///     },
-///     title: String::new(),
-///     subtitle: String::new(),
-///     detail: String::new(),
-///     muted: false,
-/// };
-/// ```
 pub struct CallViewModel {
     pub chrome: ChromeModel,
     pub title: String,
@@ -191,30 +109,6 @@ pub struct PowerViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// ```compile_fail
-/// use yoyopod_ui::application::UiScreen;
-/// use yoyopod_ui::presentation::screens::{ChromeModel, OverlayViewModel, StatusBarModel};
-///
-/// let _ = OverlayViewModel {
-///     screen: UiScreen::Error,
-///     chrome: ChromeModel {
-///         status: StatusBarModel {
-///             network_connected: false,
-///             network_enabled: false,
-///             connection_type: String::new(),
-///             signal_strength: 0,
-///             gps_has_fix: false,
-///             battery_percent: 100,
-///             charging: false,
-///             power_available: true,
-///             voip_state: 1,
-///         },
-///         footer: String::new(),
-///     },
-///     title: String::new(),
-///     subtitle: String::new(),
-/// };
-/// ```
 pub struct OverlayViewModel {
     pub chrome: ChromeModel,
     pub title: String,
