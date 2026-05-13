@@ -12,5 +12,6 @@ pub use route::{
     PassthroughPolicy, Persistence, Route, SelectionTarget, SnapshotCondition, UiScreen,
 };
 pub use routes::{
-    dirty_region_for, route_for, screen_capabilities, static_intent_template, ROUTES,
+    dirty_region_for, route_for, screen_capabilities, static_intent_template, status_bar_region,
+    ROUTES,
 };

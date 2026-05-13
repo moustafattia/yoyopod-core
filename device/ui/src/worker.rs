@@ -11,6 +11,7 @@ use crate::engine::Engine;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
 use crate::renderer::{Framebuffer, LvglRenderer, RenderMode, Renderer};
+use crate::router;
 use crate::scene::{GlobalClock, HudScene, SceneGraph};
 use crate::transport::{codec, dispatcher, handshake, inbound, outbound};
 
@@ -353,25 +354,34 @@ where
     }
 
     let scene_graph = active_scene_graph(ui_runtime, now_ms);
+    render.engine.tick_clocks(now_ms);
     let mutations = render.engine.render(&scene_graph, now_ms);
     render.renderer.apply(mutations)?;
     let dirty_region = ui_runtime
         .dirty_state()
         .render_region(ui_runtime.active_screen());
-    let mode = dirty_region
-        .map(RenderMode::Region)
-        .unwrap_or(RenderMode::FullFrame);
+    let mode = render_mode_for_dirty_region(dirty_region);
     let report = render.renderer.flush(&mut render.framebuffer, mode)?;
     render.last_ui_renderer = report.renderer.to_string();
-    if let RenderMode::Region(region) = report.mode {
-        display.flush_region(&render.framebuffer, region)?;
-    } else {
-        display.flush_full_frame(&render.framebuffer)?;
+    match report.mode {
+        RenderMode::FullFrame => display.flush_full_frame(&render.framebuffer)?,
+        RenderMode::HudRegion => {
+            display.flush_region(&render.framebuffer, router::status_bar_region())?
+        }
+        RenderMode::Region(region) => display.flush_region(&render.framebuffer, region)?,
     }
     let screen_changed = screen_changed_if_needed(&mut render.last_active_screen, ui_runtime);
     ui_runtime.mark_clean();
     render.frames += 1;
     Ok(screen_changed)
+}
+
+fn render_mode_for_dirty_region(region: Option<crate::engine::DirtyRegion>) -> RenderMode {
+    match region {
+        Some(region) if region == router::status_bar_region() => RenderMode::HudRegion,
+        Some(region) => RenderMode::Region(region),
+        None => RenderMode::FullFrame,
+    }
 }
 
 fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
