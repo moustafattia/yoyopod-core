@@ -115,11 +115,11 @@ Verification Policy
   of the CLI rebuild. Until then, validate manually after `target deploy`
   via systemd status + journalctl + hardware inspection.
 
-Hardware Modes
-- PiSugar Whisplay: portrait + single button; primary Rust target.
-- Pimoroni Display HAT Mini: landscape + four buttons on shared LVGL path.
-- Simulation: shared LVGL/browser preview remains useful for UI comparison but
-  does not replace Whisplay hardware checks.
+Hardware
+- The supported hardware is the Raspberry Pi Zero 2W + PiSugar Whisplay
+  HAT (portrait 240x280, single side button, microphone, speaker) +
+  PiSugar 3 power module. No other displays, input HATs, or boards are
+  supported.
 
 Guardrails
 - Prefer `yoyopod remote` over ad-hoc SSH sequences.
