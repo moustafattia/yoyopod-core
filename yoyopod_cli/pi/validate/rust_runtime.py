@@ -140,8 +140,7 @@ def rust_ui_smoke_check(
             )
         )
         _read_until(supervisor, {"ui.screen_changed"})
-        if hold_seconds > 0:
-            time.sleep(hold_seconds)
+        _pump_ticks(supervisor, hold_seconds)
         health = _request_health(supervisor)
         _require_healthy_ui(health.payload)
         return _CheckResult(
@@ -201,20 +200,20 @@ def rust_ui_navigation_check(
         for cycle in range(max(1, cycles)):
             _send_input(supervisor, "select", f"navigation-{cycle}-select")
             visited.append(_expect_screen(supervisor, expected_selected_screen))
-            _sleep(hold_seconds)
-            _sleep(idle_seconds)
+            _pump_ticks(supervisor, hold_seconds)
+            _pump_ticks(supervisor, idle_seconds)
 
             _send_input(supervisor, "back", f"navigation-{cycle}-back")
             visited.append(_expect_screen(supervisor, "hub"))
-            _sleep(hold_seconds)
+            _pump_ticks(supervisor, hold_seconds)
 
             _send_input(supervisor, "advance", f"navigation-{cycle}-advance")
             health = _request_health(supervisor)
             _require_healthy_ui(health.payload)
             expected_selected_screen = "talk"
-            _sleep(hold_seconds)
+            _pump_ticks(supervisor, hold_seconds)
 
-        _sleep(tail_idle_seconds)
+        _pump_ticks(supervisor, tail_idle_seconds)
         health = _request_health(supervisor)
         _require_healthy_ui(health.payload)
         return _CheckResult(
@@ -282,6 +281,14 @@ def _format_ui_health(worker_path: Path, hardware: str, payload: dict[str, Any])
     )
 
 
-def _sleep(seconds: float) -> None:
-    if seconds > 0:
-        time.sleep(seconds)
+def _pump_ticks(supervisor: RustUiHostSupervisor, seconds: float) -> None:
+    if seconds <= 0:
+        return
+
+    deadline = time.monotonic() + seconds
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.5, remaining))
+        supervisor.send(UiEnvelope.command("ui.tick", request_id="validation-tick"))
