@@ -47,10 +47,7 @@ pub fn scene(props: &HubProps, defaults: &SceneDefaults) -> Scene {
             items: props.cards.clone(),
             focus_index: props.selected_index,
             focus_policy: FocusPolicy::Wrap,
-            item_anim: DeckItemAnim::ScaleOnFocus {
-                from_permille: 960,
-                to_permille: 1000,
-            },
+            item_anim: DeckItemAnim::BreatheWhenFocused,
             swap_anim: None,
             recycle_window: Some(3),
         }],

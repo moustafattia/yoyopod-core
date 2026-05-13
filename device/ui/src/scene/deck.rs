@@ -149,6 +149,21 @@ impl Deck {
             | DeckItemAnim::BreatheWhenFocused => None,
         }
     }
+
+    pub fn item_timelines(&self, deck_index: usize) -> Vec<Timeline> {
+        match self.item_anim {
+            DeckItemAnim::BreatheWhenFocused if !self.items.is_empty() => {
+                vec![presets::breathe_focused_item(
+                    deck_index,
+                    self.focused_visible_index(),
+                )]
+            }
+            DeckItemAnim::None
+            | DeckItemAnim::ScaleOnFocus { .. }
+            | DeckItemAnim::StaggerEnter { .. }
+            | DeckItemAnim::BreatheWhenFocused => Vec::new(),
+        }
+    }
 }
 
 fn deck_item_element(
@@ -197,7 +212,10 @@ fn deck_item_element(
         } else {
             i32::from(from_permille)
         }),
-        DeckItemAnim::None | DeckItemAnim::BreatheWhenFocused => element,
+        DeckItemAnim::BreatheWhenFocused => {
+            element.scale_permille(if selected { 1000 } else { 960 })
+        }
+        DeckItemAnim::None => element,
     }
 }
 

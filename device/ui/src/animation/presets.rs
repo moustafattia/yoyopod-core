@@ -13,6 +13,35 @@ pub const SLIDE_IN_FROM_RIGHT_TIMELINE_ID: TimelineId = TimelineId(4);
 pub const PROGRESS_SWEEP_TIMELINE_ID: TimelineId = TimelineId(5);
 pub const SELECTION_SNAP_TIMELINE_ID: TimelineId = TimelineId(6);
 
+pub fn breathe_focused_item(deck: usize, index: usize) -> Timeline {
+    Timeline {
+        id: TimelineId(100 + deck as u32 * 16 + index as u32),
+        clock: ClockSource::GlobalTime,
+        tracks: vec![Track {
+            target: ActorRef::DeckItem { deck, index },
+            property: AnimatableProp::Scale,
+            keyframes: vec![
+                Keyframe {
+                    at_ms: 0,
+                    value: AnimatableValue::I32(980),
+                },
+                Keyframe {
+                    at_ms: 700,
+                    value: AnimatableValue::I32(1020),
+                },
+                Keyframe {
+                    at_ms: 1_400,
+                    value: AnimatableValue::I32(980),
+                },
+            ],
+            easing: Easing::EaseInOut,
+        }],
+        loop_mode: LoopMode::Loop,
+        on_complete: None,
+        started_ms: 0,
+    }
+}
+
 pub fn breathe_around(region: RegionId) -> Timeline {
     Timeline {
         id: BREATHE_TIMELINE_ID,

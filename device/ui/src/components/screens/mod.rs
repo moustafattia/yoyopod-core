@@ -79,5 +79,12 @@ fn with_route_timelines(screen: UiScreen, mut scene: Scene) -> Scene {
         };
         scene.timelines.insert(0, enter_timeline);
     }
+    let item_timelines = scene
+        .decks
+        .iter()
+        .enumerate()
+        .flat_map(|(deck_index, deck)| deck.item_timelines(deck_index))
+        .collect::<Vec<_>>();
+    scene.timelines.extend(item_timelines);
     scene
 }
