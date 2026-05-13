@@ -43,9 +43,6 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
             | roles::ASK_ICON_GLOW
             | roles::ASK_ICON_HALO
             | roles::CALL_PANEL
-            | roles::CALL_ICON_HALO
-            | roles::CALL_STATE_CHIP
-            | roles::CALL_MUTE_BADGE
             | roles::POWER_ICON_HALO
             | roles::POWER_ROW
             | roles::STATUS_BAR
@@ -73,10 +70,7 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
             roles::STATUS_GPS_TAIL => {
                 ffi::lv_obj_set_style_radius(obj.as_ptr(), 1, SELECTOR);
             }
-            roles::STATUS_VOIP_DOT_LEFT
-            | roles::STATUS_VOIP_DOT_AFTER_GPS
-            | roles::TALK_DOT
-            | roles::POWER_DOT => {
+            roles::STATUS_VOIP_DOT_AFTER_GPS | roles::TALK_DOT | roles::POWER_DOT => {
                 ffi::lv_obj_set_style_radius(obj.as_ptr(), ffi::LV_RADIUS_CIRCLE, SELECTOR);
             }
             roles::HUB_ICON | roles::ASK_ICON => {

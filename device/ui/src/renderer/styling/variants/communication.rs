@@ -98,14 +98,6 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
             }
-            (roles::CALL_ICON_HALO, "call_halo") => {
-                ffi::lv_obj_set_style_bg_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 68)),
-                    SELECTOR,
-                );
-                ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-            }
             (roles::CALL_PANEL, "call_panel_filled") => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
@@ -136,14 +128,6 @@ pub(crate) fn apply(
                     SELECTOR,
                 );
                 ffi::lv_obj_set_style_shadow_width(obj.as_ptr(), 0, SELECTOR);
-            }
-            (roles::CALL_MUTE_BADGE, "call_mute") => {
-                ffi::lv_obj_set_style_bg_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(mix_u24(accent_rgb, theme::BACKGROUND_RGB, 85)),
-                    SELECTOR,
-                );
-                ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
             _ => return false,
         }

@@ -246,7 +246,6 @@ impl LvglFacade for NativeLvglFacade {
                     | roles::NOW_PLAYING_STATE_LABEL
                     | roles::TALK_ACTIONS_HEADER_LABEL
                     | roles::TALK_ACTIONS_BUTTON_LABEL
-                    | roles::CALL_STATE_ICON
                     | roles::CALL_STATE_LABEL
                     | roles::CALL_MUTE_LABEL
             ) {

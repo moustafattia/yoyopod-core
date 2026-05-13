@@ -31,14 +31,6 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 96, SELECTOR);
             }
-            roles::CALL_ICON_HALO => {
-                ffi::lv_obj_set_style_bg_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 68)),
-                    SELECTOR,
-                );
-                ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
-            }
             roles::FX_HALO | roles::FX_PULSE | roles::FX_GLOW | roles::FX_SPINNER => {
                 ffi::lv_obj_set_style_bg_color(
                     obj.as_ptr(),
@@ -71,14 +63,6 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
                     SELECTOR,
                 );
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), 76, SELECTOR);
-            }
-            roles::CALL_STATE_CHIP => {
-                ffi::lv_obj_set_style_bg_color(
-                    obj.as_ptr(),
-                    ffi::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 85)),
-                    SELECTOR,
-                );
-                ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
             roles::NOW_PLAYING_STATE_CHIP => {
                 ffi::lv_obj_set_style_bg_color(
@@ -117,8 +101,7 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
                 ffi::lv_obj_set_style_image_recolor(obj.as_ptr(), accent, SELECTOR);
                 ffi::lv_obj_set_style_image_recolor_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
-            roles::CALL_STATE_ICON
-            | roles::LIST_ROW_ICON
+            roles::LIST_ROW_ICON
             | roles::LISTEN_ROW_ICON
             | roles::PLAYLIST_ROW_ICON
             | roles::NOW_PLAYING_ICON_LABEL
@@ -142,7 +125,6 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
             | roles::POWER_DOT
             | roles::STATUS_GPS_CENTER
             | roles::STATUS_GPS_TAIL
-            | roles::STATUS_VOIP_DOT_LEFT
             | roles::STATUS_VOIP_DOT_AFTER_GPS
             | roles::STATUS_BATTERY_FILL
             | roles::STATUS_BATTERY_TIP

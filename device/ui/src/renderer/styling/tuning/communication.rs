@@ -51,15 +51,6 @@ pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
                 );
                 ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
             }
-            roles::CALL_STATE_ICON => {
-                ffi::lv_obj_set_style_text_font(
-                    obj.as_ptr(),
-                    &ffi::lv_font_montserrat_24,
-                    SELECTOR,
-                );
-                ffi::lv_obj_set_style_text_align(obj.as_ptr(), ffi::LV_TEXT_ALIGN_CENTER, SELECTOR);
-                ffi::lv_obj_center(obj.as_ptr());
-            }
             roles::CALL_TITLE => {
                 ffi::lv_label_set_long_mode(obj.as_ptr(), ffi::LV_LABEL_LONG_MODE_DOTS);
                 ffi::lv_obj_set_style_text_font(
