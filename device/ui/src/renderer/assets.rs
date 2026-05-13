@@ -233,6 +233,7 @@ fn required_layout_roles() -> Vec<&'static str> {
         roles::DECK_REGION,
         roles::FX_GLOW,
         roles::FX_HALO,
+        roles::FX_PARTICLE,
         roles::FX_PULSE,
         roles::FX_SPINNER,
         roles::FOOTER_BAR,

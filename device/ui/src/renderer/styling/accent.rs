@@ -42,7 +42,8 @@ pub(crate) fn apply_accent_raw(obj: NonNull<ffi::lv_obj_t>, role: &'static str, 
             | roles::STATUS_GPS_TAIL
             | roles::STATUS_VOIP_DOT_AFTER_GPS
             | roles::STATUS_BATTERY_FILL
-            | roles::STATUS_BATTERY_TIP => {
+            | roles::STATUS_BATTERY_TIP
+            | roles::FX_PARTICLE => {
                 ffi::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
                 ffi::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
             }
