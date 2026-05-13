@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use crate::render_contract::Mutation;
-use crate::renderer::{Framebuffer, RenderMode, RenderReport, Renderer};
+use crate::render_contract::{Mutation, RenderMode};
+use crate::renderer::{Framebuffer, RenderReport, Renderer};
 
 #[derive(Debug, Default)]
 pub struct NullRenderer {

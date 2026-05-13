@@ -10,7 +10,7 @@ pub mod widgets;
 
 use anyhow::Result;
 
-use crate::render_contract::{DirtyRegion, Mutation};
+use crate::render_contract::{Mutation, RenderMode};
 use crate::renderer::framebuffer::Framebuffer as RenderFramebuffer;
 
 pub use framebuffer::Framebuffer;
@@ -21,13 +21,6 @@ pub struct RenderReport {
     pub renderer: &'static str,
     pub mode: RenderMode,
     pub widget_count: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RenderMode {
-    FullFrame,
-    HudRegion,
-    Region(DirtyRegion),
 }
 
 pub trait Renderer {

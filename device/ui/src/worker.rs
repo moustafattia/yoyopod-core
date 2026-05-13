@@ -10,7 +10,8 @@ use crate::components;
 use crate::engine::Engine;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::input::{ButtonTiming, OneButtonMachine};
-use crate::renderer::{Framebuffer, LvglRenderer, RenderMode, Renderer};
+use crate::render_contract::RenderMode;
+use crate::renderer::{Framebuffer, LvglRenderer, Renderer};
 use crate::router;
 use crate::scene::{load_scene_defaults, GlobalClock, HudScene, SceneGraph};
 use crate::transport::{codec, dispatcher, handshake, inbound, outbound};
@@ -361,14 +362,19 @@ where
     }
 
     let scene_graph = active_scene_graph(ui_runtime, now_ms);
-    render.engine.tick_clocks(now_ms);
-    let mutations = render.engine.render(&scene_graph, now_ms);
-    render.renderer.apply(mutations)?;
     let dirty_region = ui_runtime
         .dirty_state()
         .render_region(ui_runtime.active_screen());
-    let mode = render_mode_for_dirty_region(dirty_region);
-    let report = render.renderer.flush(&mut render.framebuffer, mode)?;
+    let outcome = render.engine.tick(
+        &scene_graph,
+        dirty_region,
+        router::status_bar_region(),
+        now_ms,
+    );
+    render.renderer.apply(outcome.mutations)?;
+    let report = render
+        .renderer
+        .flush(&mut render.framebuffer, outcome.mode)?;
     render.last_ui_renderer = report.renderer.to_string();
     match report.mode {
         RenderMode::FullFrame => display.flush_full_frame(&render.framebuffer)?,
@@ -381,14 +387,6 @@ where
     ui_runtime.mark_clean();
     render.frames += 1;
     Ok(screen_changed)
-}
-
-fn render_mode_for_dirty_region(region: Option<crate::render_contract::DirtyRegion>) -> RenderMode {
-    match region {
-        Some(region) if region == router::status_bar_region() => RenderMode::HudRegion,
-        Some(region) => RenderMode::Region(region),
-        None => RenderMode::FullFrame,
-    }
 }
 
 fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {

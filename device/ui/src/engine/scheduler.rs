@@ -1,20 +1,13 @@
 use crate::animation::{ClockSource, Timeline, TimelineSampler};
-use crate::render_contract::{DirtyRegion, Mutation};
+use crate::render_contract::{DirtyRegion, Mutation, RenderMode};
 use crate::scene::{SceneGraph, SceneId};
 
 use super::{flatten, NodeIdAlloc, Reconciler, TreeCache};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RenderMode {
-    FullFrame,
-    HudRegion,
-    Region(DirtyRegion),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FrameOutcome {
+pub struct FrameOutcome<'a> {
     pub mode: RenderMode,
-    pub mutations: Vec<Mutation>,
+    pub mutations: &'a [Mutation],
 }
 
 #[derive(Debug, Default)]
@@ -29,6 +22,19 @@ pub struct Engine {
 }
 
 impl Engine {
+    pub fn tick(
+        &mut self,
+        graph: &SceneGraph,
+        dirty_region: Option<DirtyRegion>,
+        hud_region: DirtyRegion,
+        now_ms: u64,
+    ) -> FrameOutcome<'_> {
+        self.tick_clocks(now_ms);
+        let mode = render_mode_for_dirty_region(dirty_region, hud_region);
+        let mutations = self.render(graph, now_ms);
+        FrameOutcome { mode, mutations }
+    }
+
     pub fn render(&mut self, graph: &SceneGraph, now_ms: u64) -> &[Mutation] {
         self.mutations.clear();
         self.sync_scene_timelines(graph, now_ms);
@@ -87,5 +93,16 @@ impl Engine {
             }
             self.schedule_timeline(timeline);
         }
+    }
+}
+
+fn render_mode_for_dirty_region(
+    region: Option<DirtyRegion>,
+    hud_region: DirtyRegion,
+) -> RenderMode {
+    match region {
+        Some(region) if region == hud_region => RenderMode::HudRegion,
+        Some(region) => RenderMode::Region(region),
+        None => RenderMode::FullFrame,
     }
 }
