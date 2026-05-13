@@ -13,7 +13,8 @@ pub mod stage;
 pub use backdrop::Backdrop;
 pub use cursor::Cursor;
 pub use deck::{
-    ButtonModel, CardModel, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RowModel,
+    ButtonModel, CardModel, Deck, DeckItem, DeckItemAnim, DeckKind, FocusPolicy, ItemRender,
+    PageModel, RowModel,
 };
 pub use defaults::{defaults_for, load_scene_defaults, SceneDefaults, SceneDefaultsCatalog};
 pub use fx::{FxLayer, FxLayerId, GlowBloom, Halo, ParticleField, PulseRing};

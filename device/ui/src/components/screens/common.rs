@@ -1,10 +1,9 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, UiScreen};
 
 use crate::engine::Key;
-use crate::router::FocusPolicy;
 use crate::scene::{
-    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, PageModel, RegionId, RowModel,
-    Scene, SceneDefaults, SceneId,
+    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FocusPolicy, ItemRender, PageModel, RegionId,
+    RowModel, Scene, SceneDefaults, SceneId,
 };
 
 pub fn hero_scene(

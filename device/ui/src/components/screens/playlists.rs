@@ -1,7 +1,6 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
-use crate::router::FocusPolicy;
-use crate::scene::{Scene, SceneDefaults};
+use crate::scene::{FocusPolicy, Scene, SceneDefaults};
 
 pub struct PlaylistsProps {
     pub defaults: SceneDefaults,

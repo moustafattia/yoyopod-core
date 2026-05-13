@@ -1,9 +1,8 @@
 use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 
-use crate::router::FocusPolicy;
 use crate::scene::{
-    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, RegionId, RowModel, Scene,
-    SceneDefaults, SceneId,
+    Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FocusPolicy, ItemRender, RegionId, RowModel,
+    Scene, SceneDefaults, SceneId,
 };
 
 pub struct ListenProps {

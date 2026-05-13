@@ -1,10 +1,9 @@
 use yoyopod_protocol::ui::{RuntimeSnapshot, UiScreen};
 
 use crate::engine::Key;
-use crate::router::FocusPolicy;
 use crate::scene::{
-    CardModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, ItemRender, RegionId, Scene,
-    SceneDefaults, SceneId,
+    CardModel, Cursor, Deck, DeckItem, DeckItemAnim, DeckKind, FocusPolicy, ItemRender, RegionId,
+    Scene, SceneDefaults, SceneId,
 };
 
 pub struct HubProps {

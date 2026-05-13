@@ -31,7 +31,7 @@ pub fn scene(props: &PowerProps) -> Scene {
             region: RegionId::ListBody,
             items: props.pages.clone(),
             focus_index: props.focus,
-            focus_policy: crate::router::FocusPolicy::Wrap,
+            focus_policy: crate::scene::FocusPolicy::Wrap,
             item_anim: DeckItemAnim::None,
             swap_anim: None,
             recycle_window: None,

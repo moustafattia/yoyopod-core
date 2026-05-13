@@ -2,9 +2,15 @@ use crate::animation::{presets, ActorRef, Timeline, TimelineRef, TrackIndex};
 use crate::engine::{AnimSlot, Element, Key};
 use crate::render_contract::ElementKind;
 use crate::roles;
-use crate::router::FocusPolicy;
 
 use super::RegionId;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FocusPolicy {
+    None,
+    Wrap,
+    Clamp,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Deck {

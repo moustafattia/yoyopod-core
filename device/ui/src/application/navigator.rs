@@ -1,8 +1,9 @@
 use crate::router::{
     self, is_call_screen, is_overlay_screen, route_for, runtime_preemption, static_intent_template,
-    BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind, NavigationPolicy,
-    PassthroughPolicy, SelectionTarget, SnapshotCondition,
+    BackPolicy, DynamicActionKind, IntentTemplate, ListKind, NavigationPolicy, PassthroughPolicy,
+    SelectionTarget, SnapshotCondition,
 };
+use crate::scene::FocusPolicy;
 use yoyopod_protocol::ui::{CallIntent, ListItemSnapshot, MusicIntent, UiIntent, VoiceIntent};
 
 use super::{focus, intents, options, UiRuntime, UiScreen};

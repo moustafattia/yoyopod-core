@@ -4,10 +4,11 @@ use yoyopod_protocol::ui::{
 };
 
 use crate::render_contract::DirtyRegion;
+use crate::scene::FocusPolicy;
 
 use super::route::{
-    BackPolicy, DynamicActionKind, FocusPolicy, IntentTemplate, ListKind, NavigationPolicy,
-    PassthroughPolicy, Persistence, Route, SelectionTarget, SnapshotCondition,
+    BackPolicy, DynamicActionKind, IntentTemplate, ListKind, NavigationPolicy, PassthroughPolicy,
+    Persistence, Route, SelectionTarget, SnapshotCondition,
 };
 
 const STATUS_BAR_REGION: DirtyRegion = DirtyRegion {

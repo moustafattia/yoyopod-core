@@ -2,13 +2,7 @@ use yoyopod_protocol::ui::InputAction;
 pub use yoyopod_protocol::ui::UiScreen;
 
 use crate::animation::TimelineRef;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FocusPolicy {
-    None,
-    Wrap,
-    Clamp,
-}
+use crate::scene::FocusPolicy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NavigationPolicy {

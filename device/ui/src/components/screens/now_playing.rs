@@ -36,7 +36,7 @@ pub fn scene(props: &NowPlayingProps) -> Scene {
                 }),
             }],
             focus_index: 0,
-            focus_policy: crate::router::FocusPolicy::None,
+            focus_policy: crate::scene::FocusPolicy::None,
             item_anim: DeckItemAnim::None,
             swap_anim: None,
             recycle_window: None,
