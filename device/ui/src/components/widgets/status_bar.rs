@@ -1,6 +1,6 @@
+use crate::components::primitives::{container, label};
 use crate::engine::Element;
 use crate::engine::Key;
-use crate::render_contract::ElementKind;
 use crate::roles;
 use crate::scene::RegionId;
 
@@ -14,7 +14,7 @@ pub struct StatusBarProps {
 }
 
 pub fn status_bar(props: &StatusBarProps) -> Element {
-    let mut status_bar = Element::new(ElementKind::Container, Some(roles::STATUS_BAR))
+    let mut status_bar = container(roles::STATUS_BAR)
         .key(Key::Static("status_bar"))
         .region(RegionId::StatusBar);
 
@@ -23,68 +23,62 @@ pub fn status_bar(props: &StatusBarProps) -> Element {
     }
 
     status_bar
-        .child(Element::new(ElementKind::Label, Some(roles::STATUS_WIFI)).icon("network"))
+        .child(label(roles::STATUS_WIFI).icon("network"))
         .child(gps_ring(props.network_online))
         .child(gps_center(props.network_online))
         .child(gps_tail(props.network_online))
         .child(voip_indicator(props.network_online))
         .child(
-            Element::new(ElementKind::Label, Some(roles::STATUS_TIME))
+            label(roles::STATUS_TIME)
                 .key(Key::Static("status_time"))
                 .text(&props.time),
         )
         .child(
-            Element::new(ElementKind::Label, Some(roles::STATUS_BATTERY_LABEL))
+            label(roles::STATUS_BATTERY_LABEL)
                 .key(Key::Static("status_battery_label"))
                 .text(&props.battery_label),
         )
         .child(battery_outline(props.battery_percent))
-        .child(
-            Element::new(ElementKind::Container, Some(roles::STATUS_BATTERY_TIP))
-                .key(Key::Static("battery_tip")),
-        )
+        .child(container(roles::STATUS_BATTERY_TIP).key(Key::Static("battery_tip")))
 }
 
 fn signal_bars(strength: u8) -> [Element; 4] {
     core::array::from_fn(|index| {
-        Element::new(ElementKind::Container, Some(signal_bar_role(index)))
+        container(signal_bar_role(index))
             .key(Key::Indexed(index))
             .visible(index < usize::from(strength.min(4)))
     })
 }
 
 fn gps_ring(active: bool) -> Element {
-    Element::new(ElementKind::Container, Some(roles::STATUS_GPS_RING))
+    container(roles::STATUS_GPS_RING)
         .key(Key::Static("gps_ring"))
         .selected(active)
 }
 
 fn gps_center(active: bool) -> Element {
-    Element::new(ElementKind::Container, Some(roles::STATUS_GPS_CENTER))
+    container(roles::STATUS_GPS_CENTER)
         .key(Key::Static("gps_center"))
         .visible(active)
 }
 
 fn gps_tail(active: bool) -> Element {
-    Element::new(ElementKind::Container, Some(roles::STATUS_GPS_TAIL))
+    container(roles::STATUS_GPS_TAIL)
         .key(Key::Static("gps_tail"))
         .visible(active)
 }
 
 fn voip_indicator(active: bool) -> Element {
-    Element::new(
-        ElementKind::Container,
-        Some(roles::STATUS_VOIP_DOT_AFTER_GPS),
-    )
-    .key(Key::Static("voip_dot"))
-    .visible(active)
+    container(roles::STATUS_VOIP_DOT_AFTER_GPS)
+        .key(Key::Static("voip_dot"))
+        .visible(active)
 }
 
 fn battery_outline(percent: u8) -> Element {
-    Element::new(ElementKind::Container, Some(roles::STATUS_BATTERY_OUTLINE))
+    container(roles::STATUS_BATTERY_OUTLINE)
         .key(Key::Static("battery_outline"))
         .child(
-            Element::new(ElementKind::Container, Some(roles::STATUS_BATTERY_FILL))
+            container(roles::STATUS_BATTERY_FILL)
                 .key(Key::Static("battery_fill"))
                 .progress(i32::from(percent.min(100))),
         )
