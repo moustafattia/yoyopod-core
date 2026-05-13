@@ -1,6 +1,6 @@
 use crate::components::primitives::{container, progress};
 use crate::engine::Element;
-use crate::roles;
+use crate::scene::roles;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VoiceMeterProps {

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::roles;
+use crate::scene::roles;
 
 const LAYOUTS_RON: &str = include_str!("../../assets/layouts.ron");
 const THEME_RON: &str = include_str!("../../assets/theme.ron");

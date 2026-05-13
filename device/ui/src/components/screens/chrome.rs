@@ -3,7 +3,7 @@ use yoyopod_protocol::ui::{ListItemSnapshot, RuntimeSnapshot, UiScreen};
 use crate::components::widgets::{footer_bar, status_bar, FooterBarProps, StatusBarProps};
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
-use crate::roles;
+use crate::scene::roles;
 use crate::scene::{HudScene, HudStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

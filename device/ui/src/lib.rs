@@ -6,7 +6,6 @@ pub mod hardware;
 pub mod input;
 pub mod render_contract;
 pub mod renderer;
-pub(crate) mod roles;
 pub mod router;
 pub mod scene;
 pub mod transport;

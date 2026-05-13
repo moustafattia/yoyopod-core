@@ -2,7 +2,7 @@ use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
 use crate::renderer::styling::style as theme;
-use crate::roles;
+use crate::scene::roles;
 
 use crate::renderer::styling::mix_u24;
 

@@ -7,6 +7,7 @@ pub mod graph;
 pub mod hud;
 pub mod layers;
 pub mod modal;
+pub(crate) mod roles;
 pub mod scene;
 pub mod stage;
 

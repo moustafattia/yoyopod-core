@@ -1,6 +1,6 @@
 use crate::engine::{Element, Key};
 use crate::render_contract::ElementKind;
-use crate::roles;
+use crate::scene::roles;
 use crate::scene::RegionId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

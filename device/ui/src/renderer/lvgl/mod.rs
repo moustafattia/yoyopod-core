@@ -18,7 +18,7 @@ use crate::renderer::styling::theme::ThemeResolver;
 use crate::renderer::widgets::factory;
 use crate::renderer::widgets::registry::{Layout, WidgetKind, WidgetNode, WidgetRegistry};
 use crate::renderer::widgets::{LvglFacade, WidgetId};
-use crate::roles;
+use crate::scene::roles;
 
 const DEFAULT_WIDTH: i32 = 240;
 const DEFAULT_HEIGHT: i32 = 280;

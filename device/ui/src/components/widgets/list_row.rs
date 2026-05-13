@@ -1,7 +1,7 @@
 use crate::components::primitives::{container, label};
 use crate::engine::{Element, Key};
-use crate::roles;
 use crate::scene::deck::RowModel;
+use crate::scene::roles;
 
 pub fn list_row(row: &RowModel, accent: u32) -> Element {
     container(roles::LIST_ROW)

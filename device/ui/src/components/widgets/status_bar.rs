@@ -1,7 +1,7 @@
 use crate::components::primitives::{container, label};
 use crate::engine::Element;
 use crate::engine::Key;
-use crate::roles;
+use crate::scene::roles;
 use crate::scene::RegionId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,6 +1,6 @@
 use crate::animation::{presets, ActorRef, TimelineRef, TrackIndex};
 use crate::render_contract::ElementKind;
-use crate::roles;
+use crate::scene::roles;
 use crate::scene::{Deck, HudScene, LayerSlot, Modal, Scene, SceneGraph, LAYER_ORDER};
 
 use super::{AnimSlot, Element, Key};

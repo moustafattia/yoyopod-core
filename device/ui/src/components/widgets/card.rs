@@ -1,6 +1,6 @@
 use crate::components::primitives::{container, image, label};
 use crate::engine::Element;
-use crate::roles;
+use crate::scene::roles;
 use crate::scene::CardModel;
 
 pub fn card(model: &CardModel) -> Element {

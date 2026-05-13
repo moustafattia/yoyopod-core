@@ -1,7 +1,7 @@
 use std::ptr::NonNull;
 
 use crate::renderer::lvgl::ffi;
-use crate::roles;
+use crate::scene::roles;
 
 pub(crate) fn apply(obj: NonNull<ffi::lv_obj_t>, role: &'static str) -> bool {
     const SELECTOR: ffi::LvStyleSelector = 0;
