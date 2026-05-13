@@ -13,7 +13,7 @@ use crate::input::{ButtonTiming, OneButtonMachine};
 use crate::render_contract::RenderMode;
 use crate::renderer::{Framebuffer, LvglRenderer, Renderer};
 use crate::router;
-use crate::scene::{load_scene_defaults, GlobalClock, HudScene, SceneGraph};
+use crate::scene::load_scene_defaults;
 use crate::transport::{codec, dispatcher, handshake, inbound, outbound};
 
 const MANAGER_HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -361,7 +361,7 @@ where
         return Ok(None);
     }
 
-    let scene_graph = active_scene_graph(ui_runtime, now_ms);
+    let scene_graph = ui_runtime.scene_graph(now_ms);
     let dirty_region = ui_runtime
         .dirty_state()
         .render_region(ui_runtime.active_screen());
@@ -387,72 +387,6 @@ where
     ui_runtime.mark_clean();
     render.frames += 1;
     Ok(screen_changed)
-}
-
-fn active_scene_graph(ui_runtime: &UiRuntime, now_ms: u64) -> SceneGraph {
-    let mut active = components::screens::scene_for_screen(
-        ui_runtime.active_screen(),
-        ui_runtime.snapshot(),
-        ui_runtime.focus_index(),
-        ui_runtime.selected_contact(),
-    );
-    active.timelines.extend(
-        ui_runtime
-            .active_transitions()
-            .iter()
-            .map(|transition| transition.timeline()),
-    );
-    let mut chrome = components::screens::chrome::chrome_for_screen(
-        ui_runtime.active_screen(),
-        ui_runtime.snapshot(),
-        ui_runtime.focus_index(),
-        ui_runtime.selected_contact(),
-    );
-    chrome.status.time = elapsed_time_label(now_ms);
-    let modal_stack = active.modal.clone().into_iter().collect();
-    SceneGraph {
-        hud: HudScene {
-            status: chrome.status,
-            footer_text: chrome.footer_text,
-        },
-        active,
-        history: ui_runtime
-            .stack()
-            .iter()
-            .map(|entry| crate::scene::ScenePushFrame {
-                route: entry.screen,
-                params: crate::scene::RouteParams {
-                    selected_id: entry.selected_id.clone(),
-                },
-                cached_state: scene_cache_entry(entry),
-            })
-            .collect(),
-        modal_stack,
-        global_clock: GlobalClock {
-            started_ms: 0,
-            now_ms,
-        },
-    }
-}
-
-fn scene_cache_entry(entry: &router::history::HistoryEntry) -> crate::scene::SceneCacheEntry {
-    match router::route_for(entry.screen).persistence {
-        router::Persistence::Ephemeral => crate::scene::SceneCacheEntry::Discarded,
-        router::Persistence::KeepAlive | router::Persistence::Singleton => {
-            crate::scene::SceneCacheEntry::Retained {
-                actor_state: crate::scene::ActorState {
-                    focus_index: entry.focus_index,
-                },
-            }
-        }
-    }
-}
-
-fn elapsed_time_label(now_ms: u64) -> String {
-    let total_seconds = now_ms / 1_000;
-    let minutes = (total_seconds / 60).min(99);
-    let seconds = total_seconds % 60;
-    format!("{minutes:02}:{seconds:02}")
 }
 
 fn health_event(ui_runtime: &UiRuntime, render: &RenderState, button_events: usize) -> UiEvent {

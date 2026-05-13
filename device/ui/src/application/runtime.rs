@@ -3,7 +3,9 @@ use yoyopod_protocol::ui::{
 };
 
 use crate::animation;
+use crate::components;
 use crate::router::history::HistoryEntry;
+use crate::scene::{GlobalClock, HudScene, SceneGraph};
 
 use super::state::{DirtyState, UiRuntime};
 use super::{input_router, navigator, snapshot, UiScreen};
@@ -98,10 +100,6 @@ impl UiRuntime {
         &self.snapshot
     }
 
-    pub fn stack(&self) -> &[HistoryEntry] {
-        &self.screen_stack
-    }
-
     pub fn focus_index(&self) -> usize {
         self.focus_index
     }
@@ -118,12 +116,53 @@ impl UiRuntime {
         self.dirty
     }
 
-    pub fn mark_clean(&mut self) {
-        self.dirty = DirtyState::default();
+    pub fn scene_graph(&self, now_ms: u64) -> SceneGraph {
+        let mut active = components::screens::scene_for_screen(
+            self.active_screen,
+            &self.snapshot,
+            self.focus_index,
+            self.selected_contact.as_ref(),
+        );
+        active.timelines.extend(
+            self.transitions
+                .iter()
+                .map(|transition| transition.timeline()),
+        );
+        let mut chrome = components::screens::chrome::chrome_for_screen(
+            self.active_screen,
+            &self.snapshot,
+            self.focus_index,
+            self.selected_contact.as_ref(),
+        );
+        chrome.status.time = elapsed_time_label(now_ms);
+        let modal_stack = active.modal.clone().into_iter().collect();
+        SceneGraph {
+            hud: HudScene {
+                status: chrome.status,
+                footer_text: chrome.footer_text,
+            },
+            active,
+            history: self
+                .screen_stack
+                .iter()
+                .map(|entry| crate::scene::ScenePushFrame {
+                    route: entry.screen,
+                    params: crate::scene::RouteParams {
+                        selected_id: entry.selected_id.clone(),
+                    },
+                    cached_state: scene_cache_entry(entry),
+                })
+                .collect(),
+            modal_stack,
+            global_clock: GlobalClock {
+                started_ms: 0,
+                now_ms,
+            },
+        }
     }
 
-    pub fn active_transitions(&self) -> &[animation::Transition] {
-        &self.transitions
+    pub fn mark_clean(&mut self) {
+        self.dirty = DirtyState::default();
     }
 
     pub fn take_intents(&mut self) -> Vec<UiIntent> {
@@ -133,4 +172,24 @@ impl UiRuntime {
     pub fn wants_ptt_passthrough(&self) -> bool {
         navigator::wants_ptt_passthrough(self)
     }
+}
+
+fn scene_cache_entry(entry: &HistoryEntry) -> crate::scene::SceneCacheEntry {
+    match crate::router::route_for(entry.screen).persistence {
+        crate::router::Persistence::Ephemeral => crate::scene::SceneCacheEntry::Discarded,
+        crate::router::Persistence::KeepAlive | crate::router::Persistence::Singleton => {
+            crate::scene::SceneCacheEntry::Retained {
+                actor_state: crate::scene::ActorState {
+                    focus_index: entry.focus_index,
+                },
+            }
+        }
+    }
+}
+
+fn elapsed_time_label(now_ms: u64) -> String {
+    let total_seconds = now_ms / 1_000;
+    let minutes = (total_seconds / 60).min(99);
+    let seconds = total_seconds % 60;
+    format!("{minutes:02}:{seconds:02}")
 }
