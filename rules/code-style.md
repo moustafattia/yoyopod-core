@@ -2,7 +2,7 @@
 
 The codebase is Rust-only across the runtime (`device/`) and the
 operator CLI (`cli/`). No Python remains as of the Round 0 rebuild
-(`docs/operations/CLI_REBUILD_ROUNDS.md`).
+(`docs/ROADMAP.md`).
 
 ## Rust (device/ and cli/)
 

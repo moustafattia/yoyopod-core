@@ -174,7 +174,7 @@ the runtime/CLI ownership split:
 - target hardware deploy + manual exercise stays behind `yoyopod target deploy`
 - automated on-Pi validation (`yoyopod target validate`) is a Round 2
   deliverable of the CLI rebuild; see
-  [`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md)
+  [`../ROADMAP.md`](../ROADMAP.md)
 
 ## Exemplar: Call + Contacts
 

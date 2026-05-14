@@ -89,5 +89,5 @@ opening it.
 
 Prod slot release commands (`yoyopod target release …`) return in Round
 3 of the CLI rebuild. Until then, prod releases are paused; see
-`docs/operations/CLI_REBUILD_ROUNDS.md`. Reinstalling a previously-shipped
+`docs/ROADMAP.md`. Reinstalling a previously-shipped
 slot can still be done manually via SSH + `install_release.sh`.

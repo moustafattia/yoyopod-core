@@ -53,7 +53,7 @@ journalctl -u yoyopod-dev.service -f
 Exercise the changed surface on the device. Don't claim a hardware pass
 without a real human-eyes check of the running app.
 
-See `docs/operations/CLI_REBUILD_ROUNDS.md`.
+See `docs/ROADMAP.md`.
 
 ## Stable Pi Checkout Path
 

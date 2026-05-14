@@ -14,7 +14,7 @@ use super::TargetContext;
 pub fn run(_ctx: &TargetContext, _args: ValidateArgs) -> Result<i32> {
     eprintln!(
         "target validate: blocked on Round 2 of the CLI rebuild.\n\
-         See docs/operations/CLI_REBUILD_ROUNDS.md.\n\
+         See docs/ROADMAP.md.\n\
          Until then, validate manually after `yoyopod target deploy`:\n\
            journalctl -u yoyopod-dev.service -f\n\
            systemctl status yoyopod-dev.service\n\

@@ -72,7 +72,7 @@ produces a single binary, `yoyopod`, used from the dev machine for
 target orchestration (deploy, restart, logs, screenshot, mode).
 
 The Python CLI was retired in Round 0 of the CLI rebuild; see
-[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).
+[`../ROADMAP.md`](../ROADMAP.md).
 Active code must not depend on a `yoyopod_cli` Python package.
 
 ## Packaging
@@ -87,6 +87,6 @@ When docs disagree, trust sources in this order:
 1. Current Rust runtime and hosts under `device/`
 2. Current operator CLI under `cli/` and deploy tooling under `deploy/`
 3. Current operations and architecture docs (especially
-   [`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md))
+   [`../ROADMAP.md`](../ROADMAP.md))
 4. `rules/`, `AGENTS.md`, and `skills/`
 5. Historical plans and archived material

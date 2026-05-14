@@ -86,7 +86,7 @@ yoyopod target mode activate prod
 
 `yoyopod target release status` (prod slot status) returns in Round 3
 of the CLI rebuild; see
-[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md). Until then, check prod
+[`../ROADMAP.md`](../ROADMAP.md). Until then, check prod
 state directly via `systemctl status yoyopod-prod.service` over SSH.
 
 `yoyopod target mode deactivate` is not yet ported; stop a lane

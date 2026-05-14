@@ -15,7 +15,7 @@ host, SSH user, dev lane checkout, and branch. `yoyopod target restart`
 is a dev-lane helper and expects the selected checkout to match
 `/opt/yoyopod-dev/checkout`. Prod slot management (`target release …`)
 returns in Round 3 of the CLI rebuild; see
-`docs/operations/CLI_REBUILD_ROUNDS.md`.
+`docs/ROADMAP.md`.
 
 If the file does not exist yet, run `yoyopod target config edit` first.
 That command creates `deploy/pi-deploy.local.yaml` automatically before

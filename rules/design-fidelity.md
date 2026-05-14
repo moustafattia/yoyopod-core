@@ -90,7 +90,7 @@ For Whisplay UI work, the standard loop is:
 
 Automated on-Pi validation (`yoyopod target validate`) is a Round 1 stub
 during the CLI rebuild. Validate manually until Round 2 restores it; see
-`docs/operations/CLI_REBUILD_ROUNDS.md`.
+`docs/ROADMAP.md`.
 
 Dirty-tree deploys are not supported by `yoyopod target deploy` — the
 CI-artifact contract requires a pushed commit. If you need to test

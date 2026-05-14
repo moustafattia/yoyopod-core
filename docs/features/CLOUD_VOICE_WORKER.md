@@ -112,4 +112,4 @@ yoyopod target logs --follow --filter speech
 
 Automated on-Pi voice validation (`yoyopod target validate
 --with-cloud-voice`) returns in Round 2 of the CLI rebuild. See
-[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).
+[`../ROADMAP.md`](../ROADMAP.md).

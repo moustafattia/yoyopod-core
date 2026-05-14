@@ -3,7 +3,7 @@
 This document defines the baseline setup contract for YoYoPod Core. As
 of 2026-05-13, automated setup commands (`yoyopod setup …`,
 `yoyopod target setup …`) were deleted in Round 0 of the CLI rebuild;
-see [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md). Until the
+see [`../ROADMAP.md`](../ROADMAP.md). Until the
 relevant rounds restore them, follow the manual steps below.
 
 ## Why this exists
@@ -148,7 +148,7 @@ The tracked deploy contract must stay generic:
 | Round 3 | Prod slot install + release tooling |
 | Round 4+ | `yoyopod target setup` / `verify-setup` style one-shot bootstrap |
 
-See [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+See [`../ROADMAP.md`](../ROADMAP.md).
 
 ## Verification before blaming product code
 

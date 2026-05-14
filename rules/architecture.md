@@ -2,7 +2,7 @@
 
 YoYoPod is Rust-only. The runtime, the workers, and the operator CLI
 are all Rust. The Python operator CLI was retired in Round 0 of the
-CLI rebuild (`docs/operations/CLI_REBUILD_ROUNDS.md`); active code must
+CLI rebuild (`docs/ROADMAP.md`); active code must
 not depend on it.
 
 ```text

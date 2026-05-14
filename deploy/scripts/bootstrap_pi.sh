@@ -180,7 +180,7 @@ Next steps on the dev machine:
 
   # For prod slot installs:
   # The prod release CLI (yoyopod target release ...) returns in Round 3
-  # of the CLI rebuild; see docs/operations/CLI_REBUILD_ROUNDS.md.
+  # of the CLI rebuild; see docs/ROADMAP.md.
   # Reinstalling a previously-shipped slot still works manually via
   # SSH + /opt/yoyopod-prod/bin/install-release.sh.
 
