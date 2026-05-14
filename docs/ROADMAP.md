@@ -1,15 +1,29 @@
-# CLI Rebuild Rounds
+# YoYoPod Roadmap
 
-Status as of 2026-05-13.
+This is the project's living roadmap. It tracks the rounds of the Rust
+CLI rebuild — what's done, what's paused, when each gap closes.
+
+The most recent rebuild milestone is summarised at the top; rounds in
+detail follow.
+
+Status as of 2026-05-14:
+
+| Round | Scope | State |
+|---|---|---|
+| 0 | Demolition + scaffolding | ✅ merged |
+| 1 | Daily dev loop (`yoyopod target …` Rust MVP) | ✅ merged |
+| 2 | Restore hardware validation (`yoyopod target validate`) | ⏳ not started |
+| 3 | Restore prod release pipeline | ⏳ not started |
+| 4+ | Diagnostics (`pi voip/power/network/rust-ui-host`) | ⏳ not started |
 
 ## What happened
 
-The Python operator CLI (`yoyopod_cli/`, ~21k LOC) was deleted in one move.
-A new Rust CLI is being built from scratch at `cli/`, in rounds, on a
-business-need basis. Each round restores a slice of capability.
+The Python operator CLI (`yoyopod_cli/`, ~21k LOC) was deleted in one
+move. A new Rust CLI is being built from scratch at `cli/`, in rounds,
+on a business-need basis. Each round restores a slice of capability.
 
-This document is the honesty doc: what is broken today, what works, when
-it gets fixed.
+This document is the honesty doc: what is broken today, what works,
+when it gets fixed.
 
 ## Why
 
@@ -51,15 +65,15 @@ reality, not historical reality.
 
 ## Rounds
 
-### Round 0 — Demolition + scaffolding (this PR)
+### Round 0 — Demolition + scaffolding ✅
 
-Delete `yoyopod_cli/`, `scripts/build_release.py`, `pyproject.toml`,
-`.python-version`, `scripts/quality.py`. Neuter `install_release.sh`
-preflight. Mark `deploy/docker/slot-builder.Dockerfile` deprecated.
-Disable CI jobs that depended on the deleted code. Scaffold the Rust
-workspace at `cli/`. Write this document.
+Deleted `yoyopod_cli/`, `scripts/build_release.py`, `pyproject.toml`,
+`.python-version`, `scripts/quality.py`. Neutered `install_release.sh`
+preflight. Marked `deploy/docker/slot-builder.Dockerfile` deprecated.
+Disabled CI jobs that depended on the deleted code. Scaffolded the
+Rust workspace at `cli/`. Wrote this document.
 
-### Round 1 — Daily dev loop (this PR)
+### Round 1 — Daily dev loop ✅
 
 Rust binary at `cli/yoyopod/` with nine commands covering the inner
 dev loop:
@@ -72,11 +86,11 @@ yoyopod target {status, restart, logs, screenshot}
 yoyopod target validate   (stub — see Round 2)
 ```
 
-`target deploy` is the centrepiece: it pushes, finds the CI run for the
-exact commit, downloads the `yoyopod-rust-device-arm64-<sha>` artifact,
-syncs the Pi checkout, scps and extracts the binaries, restarts the dev
-service, and verifies startup. Replaces the manual flow that
-`skills/yoyopod-rust-artifact/SKILL.md` used to document.
+`target deploy` is the centrepiece: it pushes, finds the CI run for
+the exact commit, downloads the `yoyopod-rust-device-arm64-<sha>`
+artifact, syncs the Pi checkout, scps and extracts the binaries,
+restarts the dev service, and verifies startup. Replaces the manual
+flow that `skills/yoyopod-rust-artifact/SKILL.md` used to document.
 
 ### Round 2 — Restore hardware validation
 
@@ -117,8 +131,7 @@ painful enough to fix. Each is its own small round.
 
 ## Pointers
 
-- Rust CLI source: `cli/`
-- Rust CLI docs: `cli/README.md`
-- Roadmap (this file): `docs/operations/CLI_REBUILD_ROUNDS.md`
-- Previously authoritative `skills/yoyopod-*` docs are temporarily out
-  of date until each round restores the capability they document.
+- Rust CLI source: [`../cli/`](../cli/)
+- Rust CLI docs: [`../cli/README.md`](../cli/README.md)
+- Paused capability docs: [`operations/archive/`](operations/archive/)
+- This file: `docs/ROADMAP.md`

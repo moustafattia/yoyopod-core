@@ -22,7 +22,7 @@ If you are new here, read in this order:
 
 Automated host setup tooling (`yoyopod setup host` / `verify-host`) was
 deleted in Round 0 of the CLI rebuild and has not yet been ported back.
-See [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md). Until then, install
+See [`../ROADMAP.md`](../ROADMAP.md). Until then, install
 dependencies manually:
 
 - a Rust stable toolchain via `rustup`
@@ -74,7 +74,7 @@ Read:
 1. [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md)
 2. [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md)
 3. [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md)
-4. [`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md)
+4. [`archive/RPI_SMOKE_VALIDATION.md`](archive/RPI_SMOKE_VALIDATION.md)
 5. `rules/deploy.md`
 
 Baseline commands:
@@ -92,7 +92,7 @@ verifies startup in one step.
 
 Automated on-Pi validation (`yoyopod target validate`) is a Round 1
 stub during the CLI rebuild; validate manually after deploy. See
-[`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md).
+[`archive/RPI_SMOKE_VALIDATION.md`](archive/RPI_SMOKE_VALIDATION.md).
 
 ### Docs and contributor guidance work
 
@@ -157,7 +157,7 @@ These are good places to be extra careful:
 - `device/runtime/` — top-level runtime supervision
 - `device/ui/` + LVGL scene controllers — visual fidelity on real hardware
 - `cli/yoyopod/` — operator surface (under active rebuild; see
-  CLI_REBUILD_ROUNDS.md)
+  [`../ROADMAP.md`](../ROADMAP.md))
 - duplicated domain/state models that drift across `device/` crates
 - setup/docs wording that overstates what the rebuilt CLI guarantees today
 

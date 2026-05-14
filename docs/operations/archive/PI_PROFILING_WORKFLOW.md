@@ -6,7 +6,7 @@ The Python profiling helpers (`yoyopod dev profile …`,
 `yoyopod build voice-worker`, `yoyopod remote validate`,
 `yoyopod remote sync`) were deleted in Round 0 of the CLI rebuild.
 Hardware profiling now uses native Rust tools directly. See
-[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+[`../../ROADMAP.md`](../../ROADMAP.md).
 
 ## When to profile
 

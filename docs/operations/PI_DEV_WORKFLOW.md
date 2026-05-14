@@ -5,8 +5,8 @@ This guide covers the normal dev-machine-to-board loop for YoYoPod.
 For fresh-board bootstrap, lane structure, and rollback, read:
 
 - [`DEV_PROD_LANES.md`](DEV_PROD_LANES.md)
-- [`SLOT_DEPLOY.md`](SLOT_DEPLOY.md) (paused; pointer to Round 3 work)
-- [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md) for what's broken
+- [`archive/SLOT_DEPLOY.md`](archive/SLOT_DEPLOY.md) (paused; pointer to Round 3 work)
+- [`../ROADMAP.md`](../ROADMAP.md) for what's broken
   during the CLI rebuild
 
 The default contract is:
@@ -172,10 +172,10 @@ Common causes:
 
 ## Related Docs
 
-- [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md) for the rebuild
+- [`../ROADMAP.md`](../ROADMAP.md) for the rebuild
   roadmap
 - [`DEV_PROD_LANES.md`](DEV_PROD_LANES.md) for lane structure
-- [`SLOT_DEPLOY.md`](SLOT_DEPLOY.md) for the (paused) prod slot flow
+- [`archive/SLOT_DEPLOY.md`](archive/SLOT_DEPLOY.md) for the (paused) prod slot flow
 - [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md) for system dependencies
 - [`QUALITY_GATES.md`](QUALITY_GATES.md) for what passes for
   verification today
