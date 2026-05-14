@@ -51,7 +51,7 @@ This repository contains the software that runs the current YoYoPod prototype:
 - `device/{ui,media,voip,network,cloud,power,speech}/` - Rust domain sidecar hosts for UI, media, VoIP, network, cloud, power, and speech/Ask.
 - `cli/` - Rust operator CLI for dev-machine to Pi orchestration. Under
   active rebuild (the Python CLI was retired 2026-05-13); see
-  [docs/operations/CLI_REBUILD_ROUNDS.md](docs/operations/CLI_REBUILD_ROUNDS.md).
+  [docs/ROADMAP.md](docs/ROADMAP.md).
 - `apps/` - future web and mobile applications.
 - `packages/` - future shared contracts, SDKs, and app packages.
 
@@ -83,7 +83,7 @@ cargo build --manifest-path device/Cargo.toml --release -p yoyopod-runtime
 
 Setup tooling (`yoyopod setup host`, `yoyopod setup verify-host`) is on
 the rebuild roadmap. See
-[docs/operations/CLI_REBUILD_ROUNDS.md](docs/operations/CLI_REBUILD_ROUNDS.md).
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ### Fresh Raspberry Pi Install
 
@@ -121,9 +121,9 @@ of the CLI rebuild. For now, validate manually after deploy via
 `journalctl -u yoyopod-dev.service -f` and hardware inspection.
 
 For deeper deploy, lane, and troubleshooting flows, read [CLI Rebuild
-Rounds](docs/operations/CLI_REBUILD_ROUNDS.md), [Dev/Prod
+Rounds](docs/ROADMAP.md), [Dev/Prod
 Lanes](docs/operations/DEV_PROD_LANES.md), [Slot
-Deploy](docs/operations/SLOT_DEPLOY.md), and [Pi Dev
+Deploy](docs/operations/archive/SLOT_DEPLOY.md), and [Pi Dev
 Workflow](docs/operations/PI_DEV_WORKFLOW.md).
 
 ## Read More
@@ -131,16 +131,16 @@ Workflow](docs/operations/PI_DEV_WORKFLOW.md).
 - [Documentation Guide](docs/README.md)
 - [Contributor Workflow](docs/operations/CONTRIBUTOR_WORKFLOW.md)
 - [Development Guide](docs/operations/DEVELOPMENT_GUIDE.md)
-- [Release Process](docs/operations/RELEASE_PROCESS.md)
-- [Slot Deploy](docs/operations/SLOT_DEPLOY.md)
+- [Release Process](docs/operations/archive/RELEASE_PROCESS.md)
+- [Slot Deploy](docs/operations/archive/SLOT_DEPLOY.md)
 - [Pi Dev Workflow](docs/operations/PI_DEV_WORKFLOW.md)
-- [Pi Smoke Validation](docs/operations/RPI_SMOKE_VALIDATION.md)
+- [Pi Smoke Validation](docs/operations/archive/RPI_SMOKE_VALIDATION.md)
 - [System Architecture](docs/architecture/SYSTEM_ARCHITECTURE.md)
 - [Power Module](docs/hardware/POWER_MODULE.md)
 - [Design Docs](docs/design/README.md)
 - [Feature Docs](docs/features/README.md)
 
-Historical notes are kept under [docs/archive](docs/archive). Current code and current runtime docs are the source of truth when older plans drift.
+When docs disagree, trust current code and the most recently merged PRs. The [`docs/ROADMAP.md`](docs/ROADMAP.md) tracks the current rebuild rounds; paused capability docs live under [`docs/operations/archive/`](docs/operations/archive/README.md).
 
 ## License
 

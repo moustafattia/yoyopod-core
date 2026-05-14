@@ -1,8 +1,13 @@
 # Project Overview
 
-YoYoPod is an iPod-inspired Raspberry Pi application combining SIP calling and mpv-based local music playback behind a small-screen, button-driven UI. Target hardware is Raspberry Pi Zero 2W (416 MB RAM).
+YoYoPod is an iPod-inspired Raspberry Pi application combining SIP
+calling and mpv-based local music playback behind a small-screen,
+button-driven UI.
 
-Three display/input surfaces are supported today: PiSugar Whisplay hardware, Pimoroni/ST7789 hardware, and browser-based simulation. All display rendering runs through the shared LVGL path.
+The target hardware is the Raspberry Pi Zero 2W (416 MB RAM) with the
+PiSugar Whisplay HAT for display + microphone + speaker + side button,
+and a PiSugar 3 power module. Display rendering runs through the
+shared LVGL path.
 
 ## Common Commands
 
@@ -30,7 +35,7 @@ yoyopod target logs --follow
 Host setup, Pi bootstrap, code quality gates, and per-stage on-Pi
 validation (`pi validate deploy/smoke/voip/navigation/stability`) are
 all part of the CLI rebuild roadmap; see
-`docs/operations/CLI_REBUILD_ROUNDS.md`. Until they return, set up host
+`docs/ROADMAP.md`. Until they return, set up host
 dependencies manually and validate Rust changes after `target deploy`
 via `journalctl -u yoyopod-dev.service -f`.
 
@@ -57,4 +62,5 @@ Runtime user data lives under `data/communication/`, `data/media/`, and
 ## Current Gaps
 
 - Settings UI is still not implemented
-- Hardware-required validation still needs real Pi coverage beyond CI and simulation
+- Hardware-required validation still needs real Pi coverage beyond the
+  CI Rust ARM64 build artifact

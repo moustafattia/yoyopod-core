@@ -4,7 +4,7 @@ The slot-deploy foundation was originally designed so a future OTA
 daemon could be added without changing the core deploy pieces. As of
 2026-05-13, slot-deploy itself is paused while the CLI is rebuilt in
 Rust; see
-[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md). Round 3 restores the
+[`../../ROADMAP.md`](../../ROADMAP.md). Round 3 restores the
 slot pipeline. The OTA work below sits on top of Round 3.
 
 ## Recommended build order for OTA (once Round 3 lands)

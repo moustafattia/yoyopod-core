@@ -5,7 +5,7 @@
 Automated hardware validation commands (`yoyopod target validate` and
 the `yoyopod pi validate …` suite) were deleted in Round 0 of the CLI
 rebuild and have not yet been ported back. See
-[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+[`../../ROADMAP.md`](../../ROADMAP.md).
 
 Until Round 2 restores `yoyopod target validate`, validation is split
 between local Rust checks and a manual hardware exercise loop.
@@ -84,11 +84,11 @@ in the report.
 | Round 3 | Slot install preflight (`yoyopod health preflight`) |
 | Round 4+ | Diagnostics (`yoyopod pi voip check`, `pi power battery`, etc.) |
 
-See [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+See [`../../ROADMAP.md`](../../ROADMAP.md).
 
 ## Related Docs
 
-- [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md) for the daily deploy loop
-- [`DEV_PROD_LANES.md`](DEV_PROD_LANES.md) for lane structure
-- [`QUALITY_GATES.md`](QUALITY_GATES.md) for verification policy
-- `rules/deploy.md` for the policy that backs hardware validation
+- [`../PI_DEV_WORKFLOW.md`](../PI_DEV_WORKFLOW.md) for the daily deploy loop
+- [`../DEV_PROD_LANES.md`](../DEV_PROD_LANES.md) for lane structure
+- [`../QUALITY_GATES.md`](../QUALITY_GATES.md) for verification policy
+- `../../../rules/deploy.md` for the policy that backs hardware validation

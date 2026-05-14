@@ -5,7 +5,7 @@
 # reintroduces a Rust slot builder.
 #
 # Do not invoke this file. It is kept in-tree as a reference for the Round 3
-# rewrite. See docs/operations/CLI_REBUILD_ROUNDS.md.
+# rewrite. See docs/ROADMAP.md.
 #
 # The historical contents are preserved below for context but commented out
 # so any accidental `docker build` fails loud rather than producing a broken
@@ -50,4 +50,4 @@
 FROM scratch
 LABEL deprecated="true"
 LABEL replacement="Round 3 of CLI rebuild"
-LABEL see="docs/operations/CLI_REBUILD_ROUNDS.md"
+LABEL see="docs/ROADMAP.md"

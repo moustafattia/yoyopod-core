@@ -1,16 +1,20 @@
 # Design Fidelity Workflow
 
-Applies to: Figma-driven UI work for Whisplay, Whisplay-profile simulation, and LVGL hardware scenes
+Applies to: Figma-driven UI work for Whisplay and LVGL hardware scenes.
 
 ## Goal
 
-When implementing or refining Whisplay UI from Figma, preserve the product's existing screen model and make the real 240x280 device output match the design as closely as possible on actual hardware.
+When implementing or refining Whisplay UI from Figma, preserve the
+product's existing screen model and make the real 240x280 device output
+match the design as closely as possible on actual hardware.
 
 ## Canonical Target
 
-- Whisplay is the canonical small-screen target for this workflow: `240x280` portrait.
-- Treat rounded display corners and edge clipping as real constraints. Leave visual safety margin at the top, sides, and footer.
-- A screen is only "done" after it has been checked on the Pi, not just in local browser preview or LVGL readback output.
+- Whisplay is the canonical small-screen target: `240x280` portrait.
+- Treat rounded display corners and edge clipping as real constraints.
+  Leave visual safety margin at the top, sides, and footer.
+- A screen is only "done" after it has been checked on the Pi, not just
+  in LVGL readback output.
 
 ## Figma Intake Rules
 
@@ -43,7 +47,7 @@ When implementing or refining Whisplay UI from Figma, preserve the product's exi
 4. Update the Rust screen controller in `device/ui/`.
 5. Update the LVGL view layer.
 6. Update the native LVGL scene when hardware parity requires it.
-7. Validate locally with cargo checks and the LVGL simulation preview.
+7. Validate locally with cargo checks (`cargo check`, `cargo test`).
 8. Deploy to the Pi with `yoyopod target deploy` and validate on device.
 
 ## Extraction Heuristics
@@ -86,7 +90,7 @@ For Whisplay UI work, the standard loop is:
 
 Automated on-Pi validation (`yoyopod target validate`) is a Round 1 stub
 during the CLI rebuild. Validate manually until Round 2 restores it; see
-`docs/operations/CLI_REBUILD_ROUNDS.md`.
+`docs/ROADMAP.md`.
 
 Dirty-tree deploys are not supported by `yoyopod target deploy` — the
 CI-artifact contract requires a pushed commit. If you need to test

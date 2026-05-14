@@ -1,4 +1,0 @@
-# Radxa Cubie A7Z board overrides.
-
-audio:
-  music_dir: "/home/radxa/Music"

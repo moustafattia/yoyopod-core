@@ -27,7 +27,7 @@ where a change belongs.
 ## Operator CLI And Deploy Areas
 
 - `cli/` owns the Rust operator CLI (`yoyopod target …`). See
-  [`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md)
+  [`../ROADMAP.md`](../ROADMAP.md)
   for the current rebuild status.
 - `deploy/` owns systemd unit files, installer scripts, and slot/release
   packaging primitives.

@@ -93,13 +93,9 @@ fn resolve_config_board_from_sources(
         .or_else(|| detect_config_board_from_text(model, compatible).map(str::to_string))
 }
 
-fn detect_config_board_from_text(model: &str, compatible: &str) -> Option<&'static str> {
+fn detect_config_board_from_text(model: &str, _compatible: &str) -> Option<&'static str> {
     let model = model.to_ascii_lowercase();
-    let compatible = compatible.to_ascii_lowercase();
 
-    if model.contains("cubie a7z") || compatible.contains("radxa,cubie-a7z") {
-        return Some("radxa-cubie-a7z");
-    }
     if model.contains("raspberry pi zero 2") {
         return Some("rpi-zero-2w");
     }

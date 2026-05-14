@@ -7,7 +7,7 @@ Project: Rust-first iPod-inspired VoIP + local music device with small-screen bu
 **CLI rebuild in progress.** The Python operator CLI (`yoyopod_cli/`) was
 deleted 2026-05-13. A new Rust CLI is being built at `cli/` in rounds.
 Many `yoyopod ...` commands are temporarily unavailable. See
-`docs/operations/CLI_REBUILD_ROUNDS.md` for the roadmap and workarounds.
+`docs/ROADMAP.md` for the roadmap and workarounds.
 
 Purpose
 - Keep this file small. It is the always-loaded agent brief, not a full design doc.
@@ -15,7 +15,7 @@ Purpose
 
 Guidance order
 1. Current Rust code in `device/` (runtime, workers) and `cli/` (operator CLI)
-2. `docs/operations/CLI_REBUILD_ROUNDS.md` for what's broken right now
+2. `docs/ROADMAP.md` for what's broken right now
 3. `README.md`, `docs/README.md`, and current operation docs
 4. `rules/` for constraints and style
 5. `skills/` for deploy/debug playbooks (many are stale during the rebuild)
@@ -32,7 +32,7 @@ Read these rules first
 - `rules/deploy.md`
 
 Canonical deploy/debug skills (NOTE: many call deleted yoyopod_cli
-commands during the rebuild — see CLI_REBUILD_ROUNDS.md)
+commands during the rebuild — see ROADMAP.md)
 - `skills/yoyopod-deploy/SKILL.md`
 - `skills/yoyopod-sync/SKILL.md`
 - `skills/yoyopod-logs/SKILL.md`
@@ -40,7 +40,7 @@ commands during the rebuild — see CLI_REBUILD_ROUNDS.md)
 - `skills/yoyopod-status/SKILL.md`
 - `skills/yoyopod-screenshot/SKILL.md`
 - `skills/yoyopod-rust-artifact/SKILL.md`
-- `docs/operations/SLOT_DEPLOY.md` for prod slot/OTA-ready flow
+- `docs/operations/archive/SLOT_DEPLOY.md` for prod slot/OTA-ready flow
 
 Current Runtime Status
 - Rust is the only runtime. The top-level Rust entrypoint is
@@ -57,7 +57,7 @@ Current Runtime Status
   screen set. The only C dependency in the LVGL display path is the pinned
   upstream LVGL native library.
 - The operator CLI is in transition from Python to Rust; see
-  `docs/operations/CLI_REBUILD_ROUNDS.md`. Rust CLI source: `cli/`.
+  `docs/ROADMAP.md`. Rust CLI source: `cli/`.
 - Dev service runs the Rust runtime directly through `yoyopod-runtime`.
 
 Pi Lanes And Bootstrap
@@ -65,7 +65,7 @@ Pi Lanes And Bootstrap
   service `yoyopod-dev.service`.
 - Prod lane: immutable packaged slots under `/opt/yoyopod-prod`, service
   `yoyopod-prod.service`. New prod release builds are blocked until Round 3
-  of the CLI rebuild (see CLI_REBUILD_ROUNDS.md).
+  of the CLI rebuild (see ROADMAP.md).
 - Check lane ownership first with `yoyopod target mode status`; dev/prod
   services should not own hardware together.
 - Dev deploy loop: `yoyopod target mode activate dev`, then
@@ -87,13 +87,12 @@ Source Of Truth
 - `deploy/systemd/yoyopod-dev.service`
 - `deploy/systemd/yoyopod-prod.service`
 - `cli/` (Rust operator CLI, in-progress)
-- `docs/operations/CLI_REBUILD_ROUNDS.md`
+- `docs/ROADMAP.md`
 - `docs/operations/DEV_PROD_LANES.md`
 - `docs/operations/PI_DEV_WORKFLOW.md` (some content stale during rebuild)
-- `docs/operations/SLOT_DEPLOY.md` (stale during rebuild; Round 3)
-- `docs/architecture/DISPLAY_HAL_ARCHITECTURE.md`
-- `docs/design/WHISPLAY_SIMULATION_PARITY_CONTRACT.md`
+- `docs/operations/archive/SLOT_DEPLOY.md` (stale during rebuild; Round 3)
 - `docs/architecture/SYSTEM_ARCHITECTURE.md`
+- `docs/architecture/CANONICAL_STRUCTURE.md`
 
 High-Value Commands
 - Rust device workspace check: `cargo check --manifest-path device/Cargo.toml --workspace --locked`
@@ -115,11 +114,11 @@ Verification Policy
   of the CLI rebuild. Until then, validate manually after `target deploy`
   via systemd status + journalctl + hardware inspection.
 
-Hardware Modes
-- PiSugar Whisplay: portrait + single button; primary Rust target.
-- Pimoroni Display HAT Mini: landscape + four buttons on shared LVGL path.
-- Simulation: shared LVGL/browser preview remains useful for UI comparison but
-  does not replace Whisplay hardware checks.
+Hardware
+- The supported hardware is the Raspberry Pi Zero 2W + PiSugar Whisplay
+  HAT (portrait 240x280, single side button, microphone, speaker) +
+  PiSugar 3 power module. No other displays, input HATs, or boards are
+  supported.
 
 Guardrails
 - Prefer `yoyopod remote` over ad-hoc SSH sequences.

@@ -6,7 +6,7 @@ The prod slot/OTA CLI commands (`yoyopod target release …`) were
 deleted as part of Round 0 of the CLI rebuild and have not been ported
 back. New prod slot builds and installs through the CLI are blocked
 until Round 3; see
-[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+[`../../ROADMAP.md`](../../ROADMAP.md).
 
 This doc documents the slot layout, services, and rollback wiring that
 remain in place on previously-bootstrapped Pis. The contract is stable
@@ -91,8 +91,7 @@ Round 3 reintroduces:
 
 ## Related Docs
 
-- [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md)
-- [`DEV_PROD_LANES.md`](DEV_PROD_LANES.md)
-- [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md)
+- [`../../ROADMAP.md`](../../ROADMAP.md)
+- [`../DEV_PROD_LANES.md`](../DEV_PROD_LANES.md)
+- [`../PI_DEV_WORKFLOW.md`](../PI_DEV_WORKFLOW.md)
 - [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md)
-- [`DEPLOYED_PI_DEPENDENCIES.md`](../hardware/DEPLOYED_PI_DEPENDENCIES.md)

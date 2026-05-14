@@ -2,7 +2,7 @@
 
 YoYoPod is Rust-only. The runtime, the workers, and the operator CLI
 are all Rust. The Python operator CLI was retired in Round 0 of the
-CLI rebuild (`docs/operations/CLI_REBUILD_ROUNDS.md`); active code must
+CLI rebuild (`docs/ROADMAP.md`); active code must
 not depend on it.
 
 ```text
@@ -40,8 +40,8 @@ yoyopod_rs/runtime        (yoyopod-runtime: orchestrator, config, state, routing
 
 - Rust UI owns scene state and LVGL rendering decisions for the current app.
 - Raw LVGL should stay confined to UI display/binding layers.
-- Hardware details for Whisplay, Pimoroni, PiSugar, modem, and audio devices
-  should remain behind their owning Rust host or narrow CLI hardware operation.
+- Hardware details for Whisplay, PiSugar, the cellular modem, and the
+  audio codec should remain behind their owning Rust host.
 
 ## Dependency Direction
 

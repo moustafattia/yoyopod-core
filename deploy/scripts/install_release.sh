@@ -3,7 +3,7 @@
 #
 # Install one self-contained slot artifact into /opt/yoyopod-prod and flip it live.
 # The artifact is the tar.gz that Round 3 of the CLI rebuild will produce
-# (see docs/operations/CLI_REBUILD_ROUNDS.md). Until then, only
+# (see docs/ROADMAP.md). Until then, only
 # previously-shipped slot tarballs can be reinstalled with this script.
 
 set -euo pipefail
@@ -199,7 +199,7 @@ PY
 _preflight_slot() {
     # Slot preflight was previously a Python check that imported
     # yoyopod_cli.health from the slot's bundled app/. That module no longer
-    # exists; see docs/operations/CLI_REBUILD_ROUNDS.md. Round 3 of the CLI
+    # exists; see docs/ROADMAP.md. Round 3 of the CLI
     # rebuild restores preflight as a Rust binary (yoyopod health preflight)
     # bundled inside future slot tarballs.
     #
