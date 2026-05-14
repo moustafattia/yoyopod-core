@@ -58,7 +58,7 @@ journalctl -u yoyopod-dev.service -f
 
 Exercise the changed surface on the device with human eyes.
 
-See [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+See [`../ROADMAP.md`](../ROADMAP.md).
 
 ## Reporting
 

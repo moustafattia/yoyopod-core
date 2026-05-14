@@ -32,7 +32,7 @@ CLI diagnostics for the power module (`yoyopod pi power battery`,
 `yoyopod pi power rtc …`) were deleted in Round 0 of the CLI rebuild
 and return in Round 4. Until then, query PiSugar state via the
 PiSugar server directly. See
-[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).
+[`../ROADMAP.md`](../ROADMAP.md).
 
 Runtime flow:
 
@@ -210,7 +210,7 @@ CLI helpers for RTC operations (`yoyopod pi power rtc …`,
 `yoyopod target rtc …`) were deleted in Round 0 and return in Round 4
 of the CLI rebuild. Until then, drive the PiSugar RTC directly via the
 `pisugar-server` daemon or the device file under `/dev/`. See
-[`../operations/CLI_REBUILD_ROUNDS.md`](../operations/CLI_REBUILD_ROUNDS.md).
+[`../ROADMAP.md`](../ROADMAP.md).
 
 ## Watchdog Support
 
@@ -352,6 +352,6 @@ Not yet productized:
 ## Related Documents
 
 - `README.md`
-- `docs/operations/RPI_SMOKE_VALIDATION.md`
+- `docs/operations/archive/RPI_SMOKE_VALIDATION.md`
 - `docs/operations/PI_DEV_WORKFLOW.md`
 - `deploy/systemd/yoyopod-prod.service`

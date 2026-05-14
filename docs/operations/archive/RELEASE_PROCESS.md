@@ -3,7 +3,7 @@
 **Status: paused as of 2026-05-13.**
 
 The Python release pipeline was deleted in Round 0 of the CLI rebuild
-([`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md)). New prod slot builds
+([`../../ROADMAP.md`](../../ROADMAP.md)). New prod slot builds
 are blocked until Round 3 reintroduces the Rust slot builder, manifest
 schema, and preflight tooling. CI's `slot-arm64` and `release` jobs are
 disabled (`if: ${{ false }}`) until then.

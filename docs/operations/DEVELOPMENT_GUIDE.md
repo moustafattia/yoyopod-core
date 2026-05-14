@@ -9,7 +9,7 @@ If you are new here, read these first:
 2. [`README.md`](../README.md)
 3. [`CONTRIBUTOR_WORKFLOW.md`](CONTRIBUTOR_WORKFLOW.md)
 4. [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md)
-5. [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md)
+5. [`../ROADMAP.md`](../ROADMAP.md)
 
 ## Source of truth
 
@@ -20,7 +20,7 @@ For current behaviour, trust:
 - this guide for setup and workflow
 - [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md) for
   runtime topology
-- [`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md) for what's broken
+- [`../ROADMAP.md`](../ROADMAP.md) for what's broken
   during the CLI rebuild
 - [`../AGENTS.md`](../../AGENTS.md) and `rules/` for repo guidance
 
@@ -62,7 +62,7 @@ Core Raspberry Pi packages and services:
 
 Automated host/Pi setup commands (`yoyopod setup …`) were deleted in
 Round 0 of the CLI rebuild; install manually until they return. See
-[`CLI_REBUILD_ROUNDS.md`](CLI_REBUILD_ROUNDS.md).
+[`../ROADMAP.md`](../ROADMAP.md).
 
 ## Configuration
 
@@ -192,8 +192,8 @@ environment has seen brief `github.com` reachability blips.
 The detailed deploy and validation flows live in:
 
 - [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md)
-- [`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md)
-- `rules/deploy.md`
+- [`archive/RPI_SMOKE_VALIDATION.md`](archive/RPI_SMOKE_VALIDATION.md)
+- `../../rules/deploy.md`
 
 ## Logging
 
@@ -251,9 +251,9 @@ Current contributor, runtime, and setup docs:
 - `docs/operations/CONTRIBUTOR_WORKFLOW.md`
 - `docs/operations/QUALITY_GATES.md`
 - `docs/operations/SETUP_CONTRACT.md`
-- `docs/operations/CLI_REBUILD_ROUNDS.md`
+- `docs/ROADMAP.md`
 - `docs/operations/PI_DEV_WORKFLOW.md`
-- `docs/operations/RPI_SMOKE_VALIDATION.md`
+- `docs/operations/archive/RPI_SMOKE_VALIDATION.md`
 - `docs/architecture/SYSTEM_ARCHITECTURE.md`
 - `docs/hardware/POWER_MODULE.md`
 - `docs/features/LOCAL_FIRST_MUSIC_PLAN.md`

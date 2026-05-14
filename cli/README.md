@@ -1,7 +1,7 @@
 # yoyopod CLI (Rust)
 
 The Rust replacement for the retired Python `yoyopod_cli`. See
-[../docs/operations/CLI_REBUILD_ROUNDS.md](../docs/operations/CLI_REBUILD_ROUNDS.md)
+[../docs/ROADMAP.md](../docs/ROADMAP.md)
 for the full rebuild plan; this README covers the **Round 1 MVP**.
 
 ## What's here in Round 1
@@ -170,4 +170,4 @@ preflight) and re-enable the disabled CI jobs.
 Round 4+: on-Pi diagnostics (`pi voip`, `pi power`, `pi network`) as
 needed.
 
-See [../docs/operations/CLI_REBUILD_ROUNDS.md](../docs/operations/CLI_REBUILD_ROUNDS.md).
+See [../docs/ROADMAP.md](../docs/ROADMAP.md).

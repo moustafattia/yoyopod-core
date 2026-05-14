@@ -35,7 +35,7 @@ yoyopod target logs --follow
 Host setup, Pi bootstrap, code quality gates, and per-stage on-Pi
 validation (`pi validate deploy/smoke/voip/navigation/stability`) are
 all part of the CLI rebuild roadmap; see
-`docs/operations/CLI_REBUILD_ROUNDS.md`. Until they return, set up host
+`docs/ROADMAP.md`. Until they return, set up host
 dependencies manually and validate Rust changes after `target deploy`
 via `journalctl -u yoyopod-dev.service -f`.
 
