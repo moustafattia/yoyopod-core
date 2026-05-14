@@ -1,13 +1,14 @@
 # Design Docs
 
-UI design targets and visual references for YoYoPod (Whisplay,
-240x280 portrait).
+UI design targets and visual references for YoYoPod on Whisplay
+(240x280 portrait, single side button).
 
-- [`ASK_SCREEN_DESIGN_SPEC.md`](ASK_SCREEN_DESIGN_SPEC.md) - design
-  target for the unified Ask experience
-- [`previews/`](previews/) - static HTML visual references
+- [`previews/`](previews/) - static HTML visual references for each
+  screen / interaction
 
-For implementation constraints, read
-[`../architecture/DISPLAY_HAL_ARCHITECTURE.md`](../architecture/DISPLAY_HAL_ARCHITECTURE.md),
-[`../architecture/INPUT_HAL_ARCHITECTURE.md`](../architecture/INPUT_HAL_ARCHITECTURE.md),
-and [`../../rules/design-fidelity.md`](../../rules/design-fidelity.md).
+For implementation constraints, read:
+
+- [`../../rules/design-fidelity.md`](../../rules/design-fidelity.md)
+- [`../../rules/lvgl.md`](../../rules/lvgl.md)
+
+For the Whisplay runtime path, see code under `device/ui/`.

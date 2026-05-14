@@ -1,83 +1,93 @@
-# YoYoPod Core Documentation Guide
+# YoYoPod Documentation
 
 This page is the entry point for repo documentation.
 
-If you are new here, read these first:
+If you are new here:
 
 1. [`../README.md`](../README.md) for the repo overview and quick start
-2. [`operations/DEVELOPMENT_GUIDE.md`](operations/DEVELOPMENT_GUIDE.md) for setup, running, validation, and daily workflow
-3. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) for the current runtime shape
-4. [`architecture/WORK_AREAS.md`](architecture/WORK_AREAS.md) for where active Rust-first work belongs
-5. [`architecture/CANONICAL_STRUCTURE.md`](architecture/CANONICAL_STRUCTURE.md) for config and package ownership
+2. [`ROADMAP.md`](ROADMAP.md) for the current rebuild state — which CLI
+   commands work today and which are paused
+3. [`operations/DEVELOPMENT_GUIDE.md`](operations/DEVELOPMENT_GUIDE.md) for setup, running, validation, and daily workflow
+4. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) for the current runtime shape
 
 ## Source Of Truth
 
 When docs disagree, trust sources in this order:
 
-1. Current Rust runtime and host code in `device/`
+1. Current Rust runtime and worker host code in `device/`
 2. Current Rust operator CLI in `cli/` and deploy tooling under `deploy/`
-3. [`operations/CLI_REBUILD_ROUNDS.md`](operations/CLI_REBUILD_ROUNDS.md)
-   for what's currently broken or paused during the CLI rebuild
-4. Current runtime, operations, hardware, feature, and design docs
-   under the folders below
-5. Rules and agent guidance in `../rules/`, `../AGENTS.md`, and
-   `../skills/`
+3. [`ROADMAP.md`](ROADMAP.md) — what's currently broken or paused
+4. Current operations, architecture, hardware, features, and design
+   docs in the folders below
+5. Rules and agent guidance in [`../rules/`](../rules/),
+   [`../AGENTS.md`](../AGENTS.md), and [`../skills/`](../skills/)
 
-The retired Python app runtime and the Python operator CLI have both
-been deleted. The repo is Rust-only.
-
-Plan docs are useful context, but they are not automatically the
-current implementation contract.
+The repo is Rust-only end to end. The retired Python app runtime and
+the Python operator CLI have both been deleted. Plan docs are useful
+context, but they are not automatically the current implementation
+contract.
 
 ## Folder Map
 
-- [`architecture/`](architecture/README.md) - current runtime topology, package/config ownership, event flow, display/input contracts, and cross-screen UI contracts.
-- [`operations/`](operations/README.md) - contributor workflow, setup, quality gates, release flow, dev/prod lanes, Pi validation, profiling, and OTA/deploy operations.
-- [`hardware/`](hardware/README.md) - audio, power, deployed Pi dependencies, and board bringup notes.
-- [`features/`](features/README.md) - cloud provisioning, cloud voice, local music, mpv, and remote playback contracts.
-- [`design/`](design/README.md) - active screen/UI design targets, parity contracts, and visual previews.
-- [`product/`](product/README.md) - product definition, V1 scope, positioning copy, and research material.
-- [`assets/`](assets/) - images and media used by docs.
-- [`../apps/`](../apps/) - future web and mobile applications.
-- [`../packages/`](../packages/) - future shared contracts, SDKs, and app packages.
+- [`architecture/`](architecture/README.md) — runtime topology,
+  package/config ownership, event flow
+- [`operations/`](operations/README.md) — contributor workflow, setup,
+  quality gates, dev/prod lanes, daily Pi workflow
+- [`operations/archive/`](operations/archive/README.md) — paused
+  capability docs (release pipeline, slot deploy, OTA, hardware
+  validation, profiling) — return as rebuild rounds land
+- [`hardware/`](hardware/README.md) — audio and power module
+  integration notes for Pi Zero 2W + Whisplay + PiSugar
+- [`features/`](features/README.md) — cloud provisioning, cloud voice,
+  local music, mpv, and remote playback contracts
+- [`design/`](design/README.md) — UI design targets and visual previews
+- [`product/`](product/README.md) — product definition and positioning
+- [`assets/`](assets/) — images and media used in docs
 
 ## Recommended Reading Paths
 
 ### New Developer
 
 1. [`../README.md`](../README.md)
-2. [`operations/CONTRIBUTOR_WORKFLOW.md`](operations/CONTRIBUTOR_WORKFLOW.md)
-3. [`operations/DEVELOPMENT_GUIDE.md`](operations/DEVELOPMENT_GUIDE.md)
-4. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
-5. [`architecture/CANONICAL_STRUCTURE.md`](architecture/CANONICAL_STRUCTURE.md)
+2. [`ROADMAP.md`](ROADMAP.md)
+3. [`operations/CONTRIBUTOR_WORKFLOW.md`](operations/CONTRIBUTOR_WORKFLOW.md)
+4. [`operations/DEVELOPMENT_GUIDE.md`](operations/DEVELOPMENT_GUIDE.md)
+5. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
 6. [`../rules/project.md`](../rules/project.md)
 
-### Working On Runtime Code
+### Working On Runtime Or Worker Code
 
 1. [`architecture/WORK_AREAS.md`](architecture/WORK_AREAS.md)
 2. [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
 3. [`architecture/RUNTIME_EVENT_FLOW.md`](architecture/RUNTIME_EVENT_FLOW.md)
-4. The subsystem doc under [`architecture/`](architecture/README.md), [`features/`](features/README.md), or [`hardware/`](hardware/README.md)
+4. The subsystem doc under
+   [`features/`](features/README.md) or
+   [`hardware/`](hardware/README.md)
 5. [`../AGENTS.md`](../AGENTS.md)
 6. Relevant files under `device/`
 
+### Working On The Rust CLI
+
+1. [`ROADMAP.md`](ROADMAP.md)
+2. [`../cli/README.md`](../cli/README.md)
+3. Relevant files under `cli/yoyopod/src/`
+
 ### Working On Raspberry Pi Deployment
 
-1. [`operations/CONTRIBUTOR_WORKFLOW.md`](operations/CONTRIBUTOR_WORKFLOW.md)
-2. [`operations/CLI_REBUILD_ROUNDS.md`](operations/CLI_REBUILD_ROUNDS.md) — current rebuild state
+1. [`ROADMAP.md`](ROADMAP.md)
+2. [`operations/CONTRIBUTOR_WORKFLOW.md`](operations/CONTRIBUTOR_WORKFLOW.md)
 3. [`operations/SETUP_CONTRACT.md`](operations/SETUP_CONTRACT.md)
 4. [`operations/DEV_PROD_LANES.md`](operations/DEV_PROD_LANES.md)
 5. [`operations/PI_DEV_WORKFLOW.md`](operations/PI_DEV_WORKFLOW.md)
-6. [`operations/RPI_SMOKE_VALIDATION.md`](operations/RPI_SMOKE_VALIDATION.md)
-7. [`operations/SLOT_DEPLOY.md`](operations/SLOT_DEPLOY.md) — paused; Round 3
+6. Paused docs in [`operations/archive/`](operations/archive/README.md)
+   when their subject matter is your blocker
 
 ### Working On UI Or Design
 
 1. [`design/README.md`](design/README.md)
-2. [`architecture/DISPLAY_HAL_ARCHITECTURE.md`](architecture/DISPLAY_HAL_ARCHITECTURE.md)
-3. [`architecture/INPUT_HAL_ARCHITECTURE.md`](architecture/INPUT_HAL_ARCHITECTURE.md)
-4. [`architecture/CROSS_SCREEN_OVERLAYS.md`](architecture/CROSS_SCREEN_OVERLAYS.md)
-5. [`../rules/design-fidelity.md`](../rules/design-fidelity.md)
+2. [`../rules/design-fidelity.md`](../rules/design-fidelity.md)
+3. [`../rules/lvgl.md`](../rules/lvgl.md)
+4. Relevant files under `device/ui/`
 
 ### Working On Music, Voice, Or Cloud Features
 
@@ -89,20 +99,19 @@ current implementation contract.
 
 ## Current Contracts
 
-These docs describe current implementation contracts:
+Authoritative implementation contracts as of today:
 
-- [`operations/CLI_REBUILD_ROUNDS.md`](operations/CLI_REBUILD_ROUNDS.md)
+- [`ROADMAP.md`](ROADMAP.md)
 - [`architecture/SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md)
 - [`architecture/WORK_AREAS.md`](architecture/WORK_AREAS.md)
 - [`architecture/CANONICAL_STRUCTURE.md`](architecture/CANONICAL_STRUCTURE.md)
 - [`architecture/RUNTIME_EVENT_FLOW.md`](architecture/RUNTIME_EVENT_FLOW.md)
-- [`architecture/DISPLAY_HAL_ARCHITECTURE.md`](architecture/DISPLAY_HAL_ARCHITECTURE.md)
-- [`architecture/INPUT_HAL_ARCHITECTURE.md`](architecture/INPUT_HAL_ARCHITECTURE.md)
+- [`operations/CONTRIBUTOR_WORKFLOW.md`](operations/CONTRIBUTOR_WORKFLOW.md)
+- [`operations/DEVELOPMENT_GUIDE.md`](operations/DEVELOPMENT_GUIDE.md)
 - [`operations/SETUP_CONTRACT.md`](operations/SETUP_CONTRACT.md)
 - [`operations/QUALITY_GATES.md`](operations/QUALITY_GATES.md)
 - [`operations/DEV_PROD_LANES.md`](operations/DEV_PROD_LANES.md)
 - [`operations/PI_DEV_WORKFLOW.md`](operations/PI_DEV_WORKFLOW.md)
-- [`operations/SLOT_DEPLOY.md`](operations/SLOT_DEPLOY.md) (paused; Round 3)
 - [`hardware/POWER_MODULE.md`](hardware/POWER_MODULE.md)
 - [`hardware/AUDIO_STACK.md`](hardware/AUDIO_STACK.md)
 - [`features/CLOUD_PROVISIONING_AND_BACKEND.md`](features/CLOUD_PROVISIONING_AND_BACKEND.md)
@@ -111,5 +120,6 @@ These docs describe current implementation contracts:
 
 ## Historical Context
 
-Historical planning archives were removed from the tracked repo. Use merged PRs
-and current docs for rationale; when docs disagree, trust current code.
+Historical planning archives were removed from the tracked repo. Use
+merged PRs, [`ROADMAP.md`](ROADMAP.md), and current docs for rationale;
+when docs disagree, trust current code.
